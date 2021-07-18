@@ -1,0 +1,7 @@
+import os
+mongo = 'test:test@172.17.0.1:27017'
+mongoDbName = 'hamster'
+rootpath = os.path.dirname(os.path.abspath(__file__))
+storage = os.path.join(rootpath, 'sources')
+secret_key = '!'
+concurrent = 3
