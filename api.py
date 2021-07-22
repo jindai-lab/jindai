@@ -481,7 +481,7 @@ def search():
         ('AccumulateParagraphs', {}),
     ])
     count = task.datasource.count()
-    results = task.execute()
+    results = [dict(r.as_dict() if isinstance(r, DbObject) else r, dataset=dataset) for r in task.execute()]
 
     return {'results': results, 'query': task.datasource.querystr, 'total': count}
 
@@ -524,10 +524,11 @@ def page_image():
 @rest()
 def quick_task():
     j = request.json
-    q = j.get('q', '')
+    q = j.get('query', '')
     raw = j.get('raw', False)
+    mongocollection = j.get('mongocollection', '')
 
-    results = Task(datasource=('DBQueryDataSource', {'query': q, 'raw': raw}), pipeline=[
+    results = Task(datasource=('DBQueryDataSource', {'query': q, 'raw': raw, 'mongocollection': mongocollection}), pipeline=[
         ('AccumulateParagraphs', {}),
     ]).execute()
 
