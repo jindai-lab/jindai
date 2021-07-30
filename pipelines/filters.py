@@ -146,8 +146,20 @@ class SaveParagraph(PipelineStage):
     """保存
     """
 
+    def __init__(self, mongocollection=''):
+        '''
+        Args:
+            mongocollection (str): 数据库目标数据集名称
+        '''
+        self.convert = lambda x: x
+        if mongocollection:
+            class TempParagraph(Paragraph):
+                _collection = mongocollection
+                
+            self.convert = lambda x: TempParagraph(**x.as_dict())
+
     def resolve(self, p : Paragraph):
-        p.save()
+        self.convert(p).save()
         return p
 
 

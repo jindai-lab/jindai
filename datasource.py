@@ -5,4 +5,3 @@ class DataSource:
 
     def fetch(self) -> Iterable[Paragraph]:
         return []
-

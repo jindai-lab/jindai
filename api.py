@@ -16,6 +16,7 @@ from io import BytesIO
 import sys
 import config
 import logging
+from articlecompletion import article_completion
 
 
 class Token(dbo.DbObject):
@@ -335,11 +336,7 @@ def dequeue_task(_id):
 
 @app.route('/api/queue/<path:_id>', methods=['GET'])
 @rest(cache=True)
-def fetch_task(_id):
-    meta = _id.startswith('meta/')
-    if meta:
-        _id = _id[5:]
-        
+def fetch_task(_id):        
     if _id not in tasks_queue.results:
         return Response('No such id: ' + _id, 404)
     r = tasks_queue.results[_id]
@@ -533,6 +530,20 @@ def quick_task():
     ]).execute()
 
     return results
+
+
+@app.route('/api/articlecompletion', methods=['POST'])
+@rest()
+def articlecompletion():
+    n = request.json.get('n', 1)
+    topp = request.json.get('topp', 0.95)
+    prompt = request.json['prompt']
+    return jsonify({
+        "config": {
+            "n": n, "topp": topp, "prompt": prompt
+        },
+        "results": [_[len(prompt):] for _ in article_completion.generate(prompt, n, topp)]
+    })
 
 
 if __name__ == "__main__":

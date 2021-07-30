@@ -5,6 +5,7 @@ sources/
 texts/
 *_models/
 .vsccode/
+gpt.*
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

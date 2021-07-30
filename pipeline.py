@@ -16,7 +16,7 @@ class PipelineStage:
     流程各阶段。返回应同样为一个段落记录（可以不与数据库中的一致）。
     注意，针对段落的处理可能是并发进行的。
     """
-    
+
     def resolve(self, p : Paragraph) -> Paragraph:
         return p
 
