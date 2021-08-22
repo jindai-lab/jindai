@@ -538,12 +538,48 @@ def articlecompletion():
     n = request.json.get('n', 1)
     topp = request.json.get('topp', 0.95)
     prompt = request.json['prompt']
-    return jsonify({
+    return {
         "config": {
             "n": n, "topp": topp, "prompt": prompt
         },
         "results": [_[len(prompt):] for _ in article_completion.generate(prompt, n, topp)]
-    })
+    }
+
+
+@app.route('/api/admin/db', methods=['POST'])
+@rest(user_role='admin')
+def dbconsole():
+
+    from datasources.dbquerydatasource import DBQueryDataSource
+
+    mongocollection = request.json['mongocollection']
+    query = request.json['query']
+    operation = request.json['operation']
+    operation_params = request.json['operation_params']
+    preview = request.json.get('preview', True)
+
+    mongo = Paragraph.db.database[mongocollection]
+    query = DBQueryDataSource.parser.eval(query)
+    operation_params = DBQueryDataSource.parser.eval(operation_params)
+
+    if preview:
+        return {
+            'mongocollection': mongocollection,
+            'query': query,
+            'operation': operation,
+            'operation_params': operation_params
+        }
+    else:
+        r = getattr(mongo, operation)(query, operation_params)
+        if operation in ('deleteMany', 'updateMany'):
+            r = r.modified_count
+        return r
+
+
+@app.route('/api/admin/db/collections', methods=['GET'])
+@rest(user_role='admin')
+def dbconsole_collections():
+    return Paragraph.db.database.list_collection_names()
 
 
 if __name__ == "__main__":
