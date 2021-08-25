@@ -571,8 +571,10 @@ def dbconsole():
         }
     else:
         r = getattr(mongo, operation)(query, operation_params)
-        if operation in ('deleteMany', 'updateMany'):
+        if operation == 'update_many':
             r = r.modified_count
+        elif operation == 'delete_many':
+            r = r.deleted_count
         return r
 
 
