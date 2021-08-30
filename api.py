@@ -9,6 +9,7 @@ from PyMongoWrapper import *
 from collections import defaultdict
 from models import *
 from task import Task
+from pipeline import Pipeline
 import threading
 from collections import deque
 from pdf2image import convert_from_path
@@ -16,7 +17,8 @@ from io import BytesIO
 import sys
 import config
 import logging
-from articlecompletion import article_completion
+import base64
+from datasources.dbquerydatasource import DBQueryDataSource
 
 
 class Token(dbo.DbObject):
@@ -78,6 +80,8 @@ class NumpyEncoder(json.JSONEncoder):
         import numpy as np
         if isinstance(obj, np.ndarray):
             return obj.tolist()
+        if isinstance(obj, Image.Image):
+            return str(obj)
         return je.default(self, obj)
 
 app.json_encoder = NumpyEncoder
@@ -117,7 +121,7 @@ def valid_task(j):
         j['pipeline'] = []
 
     for name, args in j['pipeline']:
-        _valid_args(Task.pipeline_ctx[name], args)
+        _valid_args(Pipeline.pipeline_ctx[name], args)
 
     return j
 
@@ -280,6 +284,11 @@ def create_task():
     return task.id
 
 
+@app.route('/api/tasks/shortcuts', methods=['GET'])
+@rest()
+def list_tasks_shortcuts():
+    return list(TaskDBO.query(F.shortcut_map != {}))
+
 @app.route('/api/tasks/<id>', methods=['DELETE'])
 @rest()
 def delete_task(id):
@@ -353,7 +362,7 @@ def fetch_task(_id):
         if isinstance(r, dict) and '__file_ext__' in r and 'data' in r:
             buf = BytesIO(r['data'])
             buf.seek(0)
-            return send_file(buf, 'application/octstream')
+            return send_file(buf, 'application/octstream', as_attachment=True, attachment_filename=os.path.basename(_id + '.' + r['__file_ext__']))
         else:
             return jsonify(r)
 
@@ -404,7 +413,7 @@ def help(pipe_or_ds):
             ]
         }
 
-    ctx = Task.pipeline_ctx if pipe_or_ds == 'pipelines' else Task.datasource_ctx
+    ctx = Pipeline.pipeline_ctx if pipe_or_ds == 'pipelines' else Task.datasource_ctx
     r = defaultdict(dict)
     for k, v in ctx.items():
         name = sys.modules[v.__module__].__doc__ or v.__module__.split('.')[-1]
@@ -521,37 +530,28 @@ def page_image():
 @rest()
 def quick_task():
     j = request.json
-    q = j.get('query', '')
+    query = j.get('query', '')
     raw = j.get('raw', False)
     mongocollection = j.get('mongocollection', '')
 
-    results = Task(datasource=('DBQueryDataSource', {'query': q, 'raw': raw, 'mongocollection': mongocollection}), pipeline=[
-        ('AccumulateParagraphs', {}),
-    ]).execute()
+    if query.startswith('datasource='):
+        q = DBQueryDataSource.parser.eval(query)
+        r = Task(datasource=q[0]['datasource'], pipeline=q[1:]).execute()
+    else:
+        r = Task(datasource=('DBQueryDataSource', {'query': query, 'raw': raw, 'mongocollection': mongocollection}), pipeline=[
+            ('AccumulateParagraphs', {}),
+        ]).execute()
 
-    return results
-
-
-@app.route('/api/articlecompletion', methods=['POST'])
-@rest()
-def articlecompletion():
-    n = request.json.get('n', 1)
-    topp = request.json.get('topp', 0.95)
-    prompt = request.json['prompt']
-    return {
-        "config": {
-            "n": n, "topp": topp, "prompt": prompt
-        },
-        "results": [_[len(prompt):] for _ in article_completion.generate(prompt, n, topp)]
-    }
+    if isinstance(r, dict) and '__file_ext__' in r and 'data' in r: # convert to base64
+        r['data'] = base64.b64encode(r['data'])
+        return r
+        
+    return r
 
 
 @app.route('/api/admin/db', methods=['POST'])
 @rest(user_role='admin')
 def dbconsole():
-
-    from datasources.dbquerydatasource import DBQueryDataSource
-
     mongocollection = request.json['mongocollection']
     query = request.json['query']
     operation = request.json['operation']

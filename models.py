@@ -5,9 +5,11 @@ import importlib
 import config
 from hashlib import sha1
 from PIL import Image
-from PyMongoWrapper import *
-from PyMongoWrapper.dbo import *
+from PyMongoWrapper import dbo, F
+from PyMongoWrapper.dbo import DbObject, DbObjectInitiator
+import storage
 dbo.connstr = 'mongodb://' + config.mongo + '/hamster'
+readonly_storage = storage.StorageManager()
 
 
 class Paragraph(DbObject):
@@ -20,12 +22,53 @@ class Paragraph(DbObject):
     content = str
     pagenum = int
     lang = str
+    image_storage = dict
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self._image = None
+        self._image_flag = False
+
+    @property
+    def image(self):
+        if self._image == None and self.image_storage:
+            buf = readonly_storage.read(self.image_storage.get('id', self.id))
+            self._image = Image.open(buf)
+        return self._image
+
+    @image.setter
+    def image_setter(self, value):
+        self._image = value
+        self._image_flag = True
+
+    def as_dict(self, expand=False):
+        d = super().as_dict(expand)
+        for k in [_ for _ in d if _.startswith('_')]:
+            del d[k]
+        return d
+
+    def save(self):
+        im = self._image
+        if self._image_flag:
+            self._image = None
+            if not self.image_storage:
+                self.image_storage = {'id': self.id}
+            else:
+                self.image_storage = {'id': ObjectId()}
+
+            with storage.StorageManager() as mgr:
+                buf = im.tobytes('jpeg')
+                mgr.write(buf, self.id)
+
+        super().save()
+        self._image = im
+        self._image_flag = False
     
 
 class History(DbObject):
 
     user = str
-    created_at = dbo.DbObjectInitiator(datetime.datetime.now)
+    created_at = DbObjectInitiator(datetime.datetime.now)
     querystr = str
 
 
@@ -49,8 +92,9 @@ class TaskDBO(DbObject):
     datasource = str
     datasource_config = dict
     resume_next = bool
-    last_run = dbo.DbObjectInitiator(datetime.datetime.now)
-    concurrent = dbo.DbObjectInitiator(lambda: 3)
+    last_run = DbObjectInitiator(datetime.datetime.now)
+    concurrent = DbObjectInitiator(lambda: 3)
+    shortcut_map = dict
 
 
 class User(DbObject):

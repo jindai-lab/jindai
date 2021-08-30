@@ -11,7 +11,7 @@ class JiayanWordCut(PipelineStage):
     def __init__(self):
         from jiayan import load_lm, CharHMMTokenizer
         if JiayanWordCut.tokenizer is None:
-            JiayanWordCut.tokenizer = CharHMMTokenizer(load_lm(os.path.join(config.rootpath, 'jiayan_models', 'jiayan.klm')))
+            JiayanWordCut.tokenizer = CharHMMTokenizer(load_lm(os.path.join(config.rootpath, 'models_data', 'jiayan.klm')))
 
     def resolve(self, p : Paragraph):
         p.tokens = list(JiayanWordCut.tokenizer.tokenize(p.content))
@@ -25,7 +25,7 @@ class JiayanPOSTagger(PipelineStage):
         from jiayan import CRFPOSTagger
         if JiayanPOSTagger.postagger is None:
             JiayanPOSTagger.postagger = CRFPOSTagger()
-            JiayanPOSTagger.postagger.load(os.path.join(config.rootpath, 'jiayan_models', 'pos_model'))
+            JiayanPOSTagger.postagger.load(os.path.join(config.rootpath, 'models_data', 'pos_model'))
         
     def resolve(self, p : Paragraph):
         p.pos = JiayanPOSTagger.postagger.postag(p.tokens)

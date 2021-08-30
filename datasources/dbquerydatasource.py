@@ -3,6 +3,7 @@
 
 from PyMongoWrapper import F, QueryExprParser
 import jieba
+import re
 from models import Paragraph
 from datasource import DataSource
 
@@ -32,6 +33,8 @@ class DBQueryDataSource(DataSource):
             self.aggregation = False
             if query.startswith('?'):
                 query = query[1:]
+            elif re.search(r'[\,\=\|\%]', query):
+                pass
             else:
                 query = ','.join([f'`{_.strip().lower()}`' for _ in jieba.cut(query) if _.strip()])
             self.querystr = query

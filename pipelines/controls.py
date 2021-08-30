@@ -10,7 +10,7 @@ _p = QueryExprParser(allow_spacing=True)
 
 def build_pipeline(pipeline):
     from task import Task
-    return Pipeline([Task.pipeline_ctx[name](**args) for name, args in pipeline], 1, False)
+    return Pipeline([Pipeline.pipeline_ctx[name](**args) for name, args in pipeline], 1, False)
 
 
 class Repeat(PipelineStage):

@@ -50,11 +50,12 @@ class PDFDataSource(DataSource):
             
             para = ''
             for p in range(min_page, pages):
+                label = doc[p].get_label()
                 lines = doc[p].getText().split('\n')
                 for para in merge_lines(lines, self.lang):
                     try:
                         yield Paragraph(lang=self.lang, content=para.encode('utf-8', errors='ignore').decode('utf-8'), pdffile=pdffile,
-                            pdfpage=p, pagenum=p+1, collection=self.name)
+                            pdfpage=p, pagenum=label or (p+1), collection=self.name)
                     except Exception as e:
                         print(pdffile, p+1, e)
 

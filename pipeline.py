@@ -1,5 +1,5 @@
 from collections import defaultdict
-from typing import Dict, Iterable, List, Tuple, Any
+from typing import Dict, Iterable, List, Tuple, Any, Union
 from PyMongoWrapper import MongoResultSet, F
 from numpy.lib.arraysetops import isin
 from tqdm import tqdm
@@ -25,9 +25,22 @@ class PipelineStage:
 
 
 class Pipeline:
+
+    pipeline_ctx = None
     
-    def __init__(self, stages : List[PipelineStage], concurrent, resume_next):
-        self.stages = stages
+    def __init__(self, stages : List[Union[Tuple, Dict, PipelineStage]], concurrent, resume_next):
+        self.stages = []
+        if stages:
+            for stage in stages:
+                if isinstance(stage, dict):
+                    (name, kwargs), = stage.items()
+                    if name.startswith('$'): name = name[1:]
+                    stage = (name, kwargs)
+                if isinstance(stage, (tuple, list)) and len(stage) == 2 and Pipeline.pipeline_ctx:
+                    name, kwargs = stage
+                    stage = Pipeline.pipeline_ctx[name](**kwargs)
+                self.stages.append(stage)
+
         self.concurrent = concurrent
         self.resume_next = resume_next
 

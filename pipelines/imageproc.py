@@ -125,6 +125,23 @@ class ImageCrop(PipelineStage):
         p.image = p.image.crop((left, top, width - right, height - bottom))
         return p
 
+    
+class ImageRotate(PipelineStage):
+    """图像旋转
+    """
+
+    def __init__(self, degree=90):
+        """
+        Args:
+            degree (int): 旋转的角度，应为90、180、270中的一个
+        """
+        assert degree in (90, 180, 270, 0), "Degree must in (0, 90, 180, 270)"
+        self.degree = degree
+
+    def resolve(self, p):
+        p.image = image.rotate(90, Image.NEAREST, expand=1)
+        return p
+
 
 class DumpImages(PipelineStage):
     """保存图像
@@ -146,3 +163,5 @@ class DumpImages(PipelineStage):
         f = os.path.join(self.folder, f)
         p.image.save(f)
         delattr(p, 'image')
+        return p
+    

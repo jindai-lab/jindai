@@ -162,9 +162,8 @@ class Export(PipelineStage):
                 if isinstance(r[0], DbObject):
                     r = [_.as_dict() for _ in r]
                 if isinstance(r[0], dict):
-                    h = list(r[0].keys())
+                    h = [_ for _ in r[0].keys() if not _.startswith('_')]
                     if 'keywords' in h: h.remove('keywords')
-                    if '_id' in h: h.remove('_id')
                     r = [[_.get(k) for k in h] for _ in r]
                 else:
                     h = []

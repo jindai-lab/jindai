@@ -163,6 +163,31 @@ class SaveParagraph(PipelineStage):
         return p
 
 
+class FieldIncresement(PipelineStage):
+    """对字段进行自增操作
+    """
+
+    def __init__(self, field, inc_value):
+        '''
+        Args:
+            field (str): 字段名称
+            inc_value (str): 自增的值，或以 $ 开头的另一字段名
+        '''
+        self.field = field
+        if inc_value.startswith('$'):
+            self.inc_field = inc_value[1:]
+            self.inc_value = ''
+        else:
+            self.inc_value = expand_literal(inc_value)
+            self.inc_field = ''
+
+    def resolve(self, p : Paragraph):
+        v = getattr(p, self.field)
+        v += self.inc_value if self.inc_value else getattr(self, self.inc_field)
+        setattr(p, v)
+        return p
+
+
 class OutlineFilter(PipelineStage):
     """中英文大纲序号识别
     """
