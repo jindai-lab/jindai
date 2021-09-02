@@ -39,7 +39,7 @@ class PDFDataSource(DataSource):
             pdffile_ = pdffile
             if pdffile.startswith('sources/'):
                 pdffile = pdffile[len('sources/'):]
-            for a in Paragraph.aggregator.match(F.pdffile == pdffile).group(_id=1, pages=Fn.max(Var.pdfpage)).perform(raw=True):
+            for a in Paragraph.aggregator.match(F.source.file == pdffile).group(_id=1, pages=Fn.max(Var.pdfpage)).perform(raw=True):
                 min_page = a['pages'] + 1
                 break
             else:
@@ -54,8 +54,8 @@ class PDFDataSource(DataSource):
                 lines = doc[p].getText().split('\n')
                 for para in merge_lines(lines, self.lang):
                     try:
-                        yield Paragraph(lang=self.lang, content=para.encode('utf-8', errors='ignore').decode('utf-8'), pdffile=pdffile,
-                            pdfpage=p, pagenum=label or (p+1), collection=self.name)
+                        yield Paragraph(lang=self.lang, content=para.encode('utf-8', errors='ignore').decode('utf-8'), source={'file': pdffile,
+                            'page': p}, pagenum=label or (p+1), collection=self.name)
                     except Exception as e:
                         print(pdffile, p+1, e)
 
@@ -78,5 +78,5 @@ class PDFImageDataSource(DataSource):
             logging.info('processing', pdffile)
             images = convert_from_path(pdffile, 300, first_page=0, last_page=self.limit)
             for page, i in enumerate(images):
-                yield Paragraph(image=i, pdffile=pdffile, pdfpage=page)
+                yield Paragraph(image=i, source={'file': pdffile, 'page': page})
                 

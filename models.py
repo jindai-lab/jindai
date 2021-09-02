@@ -8,16 +8,15 @@ from PIL import Image
 from PyMongoWrapper import dbo, F
 from PyMongoWrapper.dbo import DbObject, DbObjectInitiator
 import storage
-dbo.connstr = 'mongodb://' + config.mongo + '/hamster'
+dbo.connstr = 'mongodb://' + config.mongo + '/' + config.mongoDbName
 readonly_storage = storage.StorageManager()
 
 
 class Paragraph(DbObject):
     collection = str
-    pdffile = str
-    pdfpage = int
+    source = dict
     keywords = list
-    year = int
+    pdate = str
     outline = str
     content = str
     pagenum = int
@@ -52,9 +51,9 @@ class Paragraph(DbObject):
         if self._image_flag:
             self._image = None
             if not self.image_storage:
-                self.image_storage = {'id': self.id}
+                self.image_storage = {'blocks': True}
             else:
-                self.image_storage = {'id': ObjectId()}
+                self.image_storage = {'blocks': ObjectId()}
 
             with storage.StorageManager() as mgr:
                 buf = im.tobytes('jpeg')
@@ -75,9 +74,9 @@ class History(DbObject):
 class Meta(DbObject):
 
     users = list
-    pdffiles = dict
     rootpath = str
     collections = list
+    datasets = list
 
     def __init__(self, **kwargs):
         for k in kwargs:
@@ -126,8 +125,11 @@ def get_context(directory : str, parent_class : Type) -> Dict:
             ]
     ctx = {}
     for m in modules:
-        m = importlib.import_module(m)
-        for k in m.__dict__:
-            if k != parent_class.__name__ and not k.startswith('_') and isinstance(m.__dict__[k], type) and issubclass(m.__dict__[k], parent_class):
-                ctx[k] = m.__dict__[k]
+        try:
+            m = importlib.import_module(m)
+            for k in m.__dict__:
+                if k != parent_class.__name__ and not k.startswith('_') and isinstance(m.__dict__[k], type) and issubclass(m.__dict__[k], parent_class):
+                    ctx[k] = m.__dict__[k]
+        except ImportError as ie:
+            print(ie)
     return ctx

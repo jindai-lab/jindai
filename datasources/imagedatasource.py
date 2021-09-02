@@ -27,4 +27,4 @@ class ImageDataSource(DataSource):
     def fetch(self):
         for fp, imfile in self.files:
             i = Image.open(fp)
-            yield Paragraph(pdffile=imfile, image=i)
+            yield Paragraph(source={'file': imfile}, _image=i)

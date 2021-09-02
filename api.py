@@ -3,7 +3,7 @@ from flask import Flask, Response, render_template, jsonify, request, session, s
 from bson import ObjectId
 import datetime
 import inspect
-import atexit
+import hashlib
 import traceback
 from PyMongoWrapper import *
 from collections import defaultdict
@@ -505,25 +505,33 @@ def update_meta():
     return Meta.query({}).update(Fn.set(j)).acknowledged
 
 
-@app.route("/api/pdfimage")
+@app.route("/api/image")
 @rest(cache=True)
 def page_image():
-    pdffile, pdfpage = request.args['pdffile'], int(
-        request.args.get('pdfpage', '0'))
+    file, pdfpage, storage_id = request.args['file'], int(
+        request.args.get('page', '0')), request.args.get('id', '')
     pdfpage += 1
-    pdffile = f'sources/{pdffile}'
-    if not os.path.exists(pdffile):
-        return 'Not found', 404
+    buf = BytesIO()
+    
+    if file.endswith('.pdf'):
+        file = f'sources/{file}'
+        if not os.path.exists(file):
+            return 'Not found', 404
 
-    img, = convert_from_path(pdffile, 120, first_page=pdfpage,
-                            last_page=pdfpage, fmt='png') or [None]
-    if img:
-        buf = BytesIO()
-        img.save(buf, format='png')
-        buf.seek(0)
+        img, = convert_from_path(file, 120, first_page=pdfpage,
+                                last_page=pdfpage, fmt='png') or [None]
+        if img:
+            img.save(buf, format='png')
+            buf.seek(0)
         return Response(buf, mimetype='image/png')
+    elif file == 'blocks.h5':
+        try:
+            buf = readonly_storage.read(storage_id)
+        except OSError:
+            return Response('Not found', 404)
+        return Response(buf, mimetype='image/octstream')
     else:
-        return 'Err', 500
+        return Response('Err', 500)
 
 
 @app.route('/api/quicktask', methods=['POST'])
@@ -547,6 +555,61 @@ def quick_task():
         return r
         
     return r
+
+
+@app.route('/api/gallery/star', methods=['POST'])
+@rest()
+def gallery_star():
+    j = request.json
+    selected = [ObjectId(i) for i in j.get('selected', [])]
+    inc = j.get('inc', 1)
+    if selected:
+        Paragraph.query(F.id.in_(selected)).update(Fn.inc(rating=inc))
+        return selected
+    else:
+        return {'error': 'selected ids are required'}
+
+
+@app.route('/api/gallery/tag', methods=['POST'])
+@rest()
+def gallery_tag():
+    j = request.json
+    selected = [ObjectId(i) for i in j.get('selected', [])]
+    field = j.get('field', 'keywords')
+    delete = j.get('delete', False)
+    fn = Fn.pull if delete else Fn.push
+    modified = []
+    if selected:
+        for tag in j.get('tag', []):
+            position = {field: tag}
+            modified.append(Paragraph.query(F.id.in_(selected)).update(fn(**position)).modified_count)
+    return modified
+
+
+@app.route('/api/gallery/group', methods=['POST'])
+@rest()
+def gallery_group():
+    j = request.json
+    selected = [ObjectId(i) for i in j.get('selected', [])]
+    if selected:
+        new_group = '#' + hashlib.sha256(str(min(selected)).encode('utf-8')).hexdigest()[-9:]
+        groups = [_['_id'] for _ in Paragraph.aggregator.match(F.id.in_(selected)).unwind('$groups').group(_id=Var.groups).perform(raw=True)]
+        new_group = min([new_group] + groups)
+        Paragraph.query(F.groups.in_(groups)).update(Fn.set(groups=[new_group]))
+        return new_group
+    return ''
+       
+
+@app.route('/api/gallery/delete', methods=['POST'])
+@rest()
+def gallery_delete():
+    j = request.json
+    selected = [ObjectId(i) for i in j.get('selected', [])]
+    if selected:
+        Paragraph.query(F.id.in_(selected)).delete()
+        return selected
+    else:
+        return {'error': 'selected ids are required'}
 
 
 @app.route('/api/admin/db', methods=['POST'])

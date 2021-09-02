@@ -5,7 +5,9 @@ from bson import ObjectId
 from models import Paragraph
 from pipeline import Pipeline, PipelineStage
 from PyMongoWrapper import QueryExprParser
+from PyMongoWrapper.dbo import mongodb
 from .utils import execute_query_expr
+
 
 class Limit(PipelineStage):
     """限制返回的结果数量
@@ -23,6 +25,25 @@ class Limit(PipelineStage):
         v = next(self.counter)
         if v < self.limit:
             return p
+        
+        
+class FilterDuplication(PipelineStage):
+    """过滤已经存储在指定数据库中的段落
+    """
+    
+    def __init__(self, field, mongocollection='') -> None:
+        """
+        Args:
+            mongocollection (str): 数据库数据集
+            field (str): 要去重的字段值
+        """
+        self.mongocollection = mongocollection or 'paragraph'
+        self.field = field
+        
+    def resolve(self, p: Paragraph) -> Paragraph:
+        f = mongodb(self.mongocollection).find({self.field : getattr(p, self.field)}).first()
+        if f: return
+        return p
 
 
 class RegexReplace(PipelineStage):
@@ -166,6 +187,7 @@ class SaveParagraph(PipelineStage):
 class FieldIncresement(PipelineStage):
     """对字段进行自增操作
     """
+    _parser = QueryExprParser(allow_spacing=True)
 
     def __init__(self, field, inc_value):
         '''
@@ -178,7 +200,7 @@ class FieldIncresement(PipelineStage):
             self.inc_field = inc_value[1:]
             self.inc_value = ''
         else:
-            self.inc_value = expand_literal(inc_value)
+            self.inc_value = self._parser.expand_literals(inc_value)
             self.inc_field = ''
 
     def resolve(self, p : Paragraph):

@@ -1,2 +1,0 @@
-model_checkpoint_path: "gpt.ckpt"
-all_model_checkpoint_paths: "gpt.ckpt"

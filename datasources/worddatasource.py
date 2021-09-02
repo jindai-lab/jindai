@@ -38,7 +38,7 @@ class WordDataSource(DataSource):
             doc = self.call_abiword(f)
             if doc:
                 p = Paragraph(
-                    lang=self.lang, content=doc, pdffile=f, pdfpage=0, pagenum=1,
+                    lang=self.lang, content=doc, source={'file': f}, pagenum=1,
                     collection=self.name, outline=''
                 )
                 yield p

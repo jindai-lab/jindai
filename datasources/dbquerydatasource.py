@@ -40,6 +40,7 @@ class DBQueryDataSource(DataSource):
             self.querystr = query
 
         self.query = DBQueryDataSource.parser.eval(self.querystr)
+        
         if req:
             self.query = {'$and': [self.query, req]}
         self.limit = limit
