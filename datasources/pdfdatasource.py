@@ -35,17 +35,17 @@ class PDFDataSource(DataSource):
                     return True
             return False
 
-        for _, pdffile in self.files:
-            pdffile_ = pdffile
-            if pdffile.startswith('sources/'):
-                pdffile = pdffile[len('sources/'):]
-            for a in Paragraph.aggregator.match(F.source.file == pdffile).group(_id=1, pages=Fn.max(Var.pdfpage)).perform(raw=True):
+        for _, pdf in self.files:
+            pdffile = pdf
+            if pdf.startswith('sources/'):
+                pdf = pdf[len('sources/'):]
+            for a in Paragraph.aggregator.match(F.source.file == pdf).group(_id=1, pages=Fn.max(Var.pdfpage)).perform(raw=True):
                 min_page = a['pages'] + 1
                 break
             else:
                 min_page = 0
             
-            doc = fitz.open(pdffile_)
+            doc = fitz.open(pdffile)
             pages = doc.pageCount
             
             para = ''
@@ -54,7 +54,7 @@ class PDFDataSource(DataSource):
                 lines = doc[p].getText().split('\n')
                 for para in merge_lines(lines, self.lang):
                     try:
-                        yield Paragraph(lang=self.lang, content=para.encode('utf-8', errors='ignore').decode('utf-8'), source={'file': pdffile,
+                        yield Paragraph(lang=self.lang, content=para.encode('utf-8', errors='ignore').decode('utf-8'), source={'file': pdf,
                             'page': p}, pagenum=label or (p+1), collection=self.name)
                     except Exception as e:
                         print(pdffile, p+1, e)

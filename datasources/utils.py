@@ -8,6 +8,7 @@ import re
 import glob
 import time
 import requests
+from io import BytesIO
 from models import Paragraph
 
 
@@ -54,17 +55,20 @@ def merge_lines(lines, lang):
 
 def expand_file_patterns(patterns):
     for pattern in patterns:
-        if not pattern.startswith('sources/'):
-            pattern = 'sources/' + pattern
-        for f in glob.glob(pattern):
-            if f.endswith('.zip') or f.endswith('.epub'):
-                with zipfile.ZipFile(f) as z:                    
-                    for f_ in z.filelist:
-                        yield z.open(f_), f + '#' + f_.filename
-            elif os.path.isdir(f):
-                patterns.append(f + '/*')
-            else:
-                yield open(f, 'rb'), f
+        if pattern.startswith('https://') or pattern.startswith('http://'):
+            yield BytesIO(try_download(pattern, '/'.join(pattern.split('/')[:-1]))), pattern
+        else:
+            if not pattern.startswith('sources/'):
+                pattern = 'sources/' + pattern
+            for f in glob.glob(pattern):
+                if f.endswith('.zip') or f.endswith('.epub'):
+                    with zipfile.ZipFile(f) as z:                    
+                        for f_ in z.filelist:
+                            yield z.open(f_), f + '#' + f_.filename
+                elif os.path.isdir(f):
+                    patterns.append(f + '/*')
+                else:
+                    yield open(f, 'rb'), f
 
 
 def try_download(url: str, referer: str = '', attempts: int = 3, proxies = {}) -> Union[bytes, None]:
