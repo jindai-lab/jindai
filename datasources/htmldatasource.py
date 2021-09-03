@@ -9,7 +9,7 @@ from urllib.parse import urljoin
 
 
 class HTMLDataSource(DataSource):
-    """从HTML网页中读取语段，每个文件计作一个语段
+    """从HTML网页中读取语段，每个网页计作一个语段
     """
 
     def __init__(self, collection_name, lang, files):
@@ -27,7 +27,7 @@ class HTMLDataSource(DataSource):
         def import_html_src(fname, html, outline=''):
             b = B(html, 'lxml')
             p = Paragraph(
-                lang=self.lang, content=b.text.strip(), source={'file': fname}, pagenum=1,
+                lang=self.lang, content=b.text.strip(), source={'url' if '://' in fn else 'file': fname}, pagenum=1,
                 collection=self.name, outline=outline
             )
             p.content = str(b.find('body'))
@@ -58,7 +58,7 @@ class TextDataSource(DataSource):
     def fetch(self):
         for fp, fn in expand_file_patterns(self.files):
             for i, l in enumerate(fp):
-                yield Paragraph(content=codecs.decode(l), source={'file': fn}, collection=self.name, lang=self.lang, outline=f'{i+1:06d}')
+                yield Paragraph(content=codecs.decode(l), source={'url' if '://' in fn else 'file': fn}, collection=self.name, lang=self.lang, outline=f'{i+1:06d}')
 
 
 
@@ -81,7 +81,7 @@ class LinesDataSource(DataSource):
         return self.lines
 
 
-class HtmlImageDataSource(DataSource):
+class HTMLImageDataSource(DataSource):
     """从网页中获得图像
     """
 

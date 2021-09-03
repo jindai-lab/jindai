@@ -18,7 +18,8 @@ import sys
 import config
 import logging
 import base64
-from datasources.dbquerydatasource import DBQueryDataSource
+from flask_sockets import Sockets
+ws_clients = []
 
 
 class Token(dbo.DbObject):
@@ -26,6 +27,20 @@ class Token(dbo.DbObject):
     user = str
     token = str
     expire = float
+
+    _cache = {}
+
+    @staticmethod
+    def check(token_string):
+        t = Token._cache.get(token_string)
+        if t and t.expire > time.time():
+            return t
+        else:
+            t = Token.first((F.token == token_string) & (F.expire > time.time()))
+            if t:
+                Token._cache[token_string] = t
+                return t
+        return None
 
 
 class TasksQueue:
@@ -41,6 +56,20 @@ class TasksQueue:
         self._workingThread = threading.Thread(target=self.working)
         self._workingThread.start()
 
+    @property
+    def status(self):
+        return {
+            'running': self.running_task,
+            'finished': [{
+                'id': k,
+                'name': k.split('/', 1)[-1].split('_')[0],
+                'viewable': isinstance(v, list) or (isinstance(v, dict) and 'exception' in v),
+                'last_run': datetime.datetime.fromtimestamp(int(k.split('_')[-1])).strftime('%Y-%m-%d %H:%M:%S'),
+                'file_ext': 'json' if not isinstance(v, dict) else v.get('__file_ext__', 'json')
+            } for k, v in self.results.items()],
+            'waiting': len(self)
+        }
+
     def working(self):
         while self.running:
             if self._q:
@@ -49,8 +78,9 @@ class TasksQueue:
                     self.results[self.running_task] = task.execute()
                 except Exception as ex:
                     self.results[self.running_task] = {'exception': str(ex), 'tracestack': traceback.format_tb(ex.__traceback__)}
-                    
                 self.running_task = ''
+                
+                sockets_send('queue', self.status)
             else:
                 self.running = False
 
@@ -73,7 +103,9 @@ class TasksQueue:
 
 
 app = Flask(__name__)
+app.config['SECRET_KEY'] = config.secret_key
 je = dbo.create_dbo_json_encoder(json.JSONEncoder)
+
 
 class NumpyEncoder(json.JSONEncoder):
     def default(self, obj):
@@ -84,12 +116,15 @@ class NumpyEncoder(json.JSONEncoder):
             return str(obj)
         return je.default(self, obj)
 
+
 app.json_encoder = NumpyEncoder
+sockets = Sockets(app)
+
 tasks_queue = TasksQueue()
 
 
 def logined():
-    t = Token.first((F.token == request.headers.get('X-Authentication-Token')) & (F.expire > time.time()))
+    t = Token.check(request.headers.get('X-Authentication-Token'))
     if t:
         return t.user
     
@@ -370,17 +405,7 @@ def fetch_task(_id):
 @app.route('/api/queue/', methods=['GET'])
 @rest()
 def list_queue():
-    return {
-        'running': tasks_queue.running_task,
-        'finished': [{
-            'id': k,
-            'name': k.split('/', 1)[-1].split('_')[0],
-            'viewable': isinstance(v, list) or (isinstance(v, dict) and 'exception' in v),
-            'last_run': datetime.datetime.fromtimestamp(int(k.split('_')[-1])).strftime('%Y-%m-%d %H:%M:%S'),
-            'file_ext': 'json' if not isinstance(v, dict) else v.get('__file_ext__', 'json')
-        } for k, v in tasks_queue.results.items()],
-        'waiting': len(tasks_queue)
-    }
+    return tasks_queue.status
 
 
 @app.route('/api/help/<pipe_or_ds>')
@@ -543,7 +568,7 @@ def quick_task():
     mongocollection = j.get('mongocollection', '')
 
     if query.startswith('datasource='):
-        q = DBQueryDataSource.parser.eval(query)
+        q = parser.eval(query)
         r = Task(datasource=q[0]['datasource'], pipeline=q[1:]).execute()
     else:
         r = Task(datasource=('DBQueryDataSource', {'query': query, 'raw': raw, 'mongocollection': mongocollection}), pipeline=[
@@ -622,8 +647,8 @@ def dbconsole():
     preview = request.json.get('preview', True)
 
     mongo = Paragraph.db.database[mongocollection]
-    query = DBQueryDataSource.parser.eval(query)
-    operation_params = DBQueryDataSource.parser.eval(operation_params)
+    query = parser.eval(query)
+    operation_params = parser.eval(operation_params)
 
     if preview:
         return {
@@ -647,7 +672,41 @@ def dbconsole_collections():
     return Paragraph.db.database.list_collection_names()
 
 
+def sockets_send(event, bundle=None, to=None):
+    if to is None:
+        to = ws_clients
+    elif not isinstance(to, list):
+        to = [to]
+    for ws in to:
+        ws.send({
+            'event': event,
+            'data': bundle
+        })
+
+
+@sockets.route('/api/socket')
+def sockets_serve(ws):
+    ws_clients.append(ws)
+    while not ws.closed:
+        try:
+            message = ws.receive().decode('utf-8')
+            if not message:
+                continue
+            message = json.decode(message)
+            if not isinstance(message, dict):
+                continue
+            event = message.get('event', '')
+            bundle = message.get('data', None)
+
+            # handle events
+            print(event, bundle)
+
+        except OSError:
+            pass
+    ws_clients.remove(ws)
+
+
 if __name__ == "__main__":
     app.debug = True
     app.env = 'development'
-    app.run(host='0.0.0.0', port=8370)
+    sockets.run(app, host='0.0.0.0', port=8370)

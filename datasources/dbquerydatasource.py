@@ -4,15 +4,13 @@
 from PyMongoWrapper import F, QueryExprParser
 import jieba
 import re
-from models import Paragraph
+from models import Paragraph, parser
 from datasource import DataSource
 
 
 class DBQueryDataSource(DataSource):
     """从系统自身的数据库进行查询
     """
-
-    parser = QueryExprParser(abbrev_prefixes={None: 'keywords='}, allow_spacing=True)
 
     def __init__(self, query, mongocollection='', req={}, limit=0, skip=0, sort='', raw=False):
         """
@@ -39,7 +37,7 @@ class DBQueryDataSource(DataSource):
                 query = ','.join([f'`{_.strip().lower()}`' for _ in jieba.cut(query) if _.strip()])
             self.querystr = query
 
-        self.query = DBQueryDataSource.parser.eval(self.querystr)
+        self.query = parser.eval(self.querystr)
         
         if req:
             self.query = {'$and': [self.query, req]}

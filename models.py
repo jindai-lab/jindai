@@ -5,11 +5,12 @@ import importlib
 import config
 from hashlib import sha1
 from PIL import Image
-from PyMongoWrapper import dbo, F
+from PyMongoWrapper import dbo, F, QueryExprParser
 from PyMongoWrapper.dbo import DbObject, DbObjectInitiator
 import storage
 dbo.connstr = 'mongodb://' + config.mongo + '/' + config.mongoDbName
 readonly_storage = storage.StorageManager()
+parser = QueryExprParser(abbrev_prefixes={None: 'keywords='}, allow_spacing=True)
 
 
 class Paragraph(DbObject):

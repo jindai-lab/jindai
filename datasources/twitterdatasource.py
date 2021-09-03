@@ -1,4 +1,4 @@
-from models import Paragraph
+from models import Paragraph, parser
 from datasource import DataSource
 import datetime
 import time
@@ -7,8 +7,6 @@ import re
 from collections import defaultdict
 from typing import List, Union
 import twitter
-from datasources.dbquerydatasource import DBQueryDataSource
-parser = DBQueryDataSource.parser
 
 
 def twitter_id_from_timestamp(ts: float) -> int:

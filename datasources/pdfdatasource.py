@@ -39,7 +39,7 @@ class PDFDataSource(DataSource):
             pdffile_ = pdffile
             if pdffile.startswith('sources/'):
                 pdffile = pdffile[len('sources/'):]
-            for a in Paragraph.aggregator.match(F.source.file == pdffile).group(_id=1, pages=Fn.max(Var.pdfpage)).perform(raw=True):
+            for a in Paragraph.aggregator.match(F['source.file'] == pdffile).group(_id=1, pages=Fn.max(Var.pdfpage)).perform(raw=True):
                 min_page = a['pages'] + 1
                 break
             else:
