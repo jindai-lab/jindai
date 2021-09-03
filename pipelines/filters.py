@@ -41,8 +41,8 @@ class FilterDuplication(PipelineStage):
         self.field = field
         
     def resolve(self, p: Paragraph) -> Paragraph:
-        f = mongodb(self.mongocollection).find({self.field : getattr(p, self.field)}).first()
-        if f: return
+        for _ in mongodb(self.mongocollection).find({self.field : getattr(p, self.field)}):
+            return
         return p
 
 

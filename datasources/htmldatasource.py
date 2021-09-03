@@ -2,7 +2,7 @@
 """
 import codecs
 from bs4 import BeautifulSoup as B
-from models import Paragraph
+from models import Paragraph, try_download
 from datasource import DataSource
 from .utils import *
 from urllib.parse import urljoin

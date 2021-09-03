@@ -98,25 +98,26 @@ class TwitterDataSource(DataSource):
                     yield Paragraph(image_storage={'url': m.media_url_https}, **p)
 
     def _get_tweets(self) -> Paragraph:
-        o = self.time_before
+        o = twitter_id_from_timestamp(self.time_before)
         while o > self.time_after:
             tl = self.api.GetUserTimeline(
-                screen_name=self.import_username, count=100, max_id=twitter_id_from_timestamp(o))
+                screen_name=self.import_username, count=100, max_id=o)
             for st in tl:
                 if st.created_at_in_seconds < self.time_after:
                     break
                 yield from self._parse_status(st)
-                o = min(o, st.created_at_in_seconds)
+                o = min(o, st.id)
     
     def _get_timeline(self) -> Paragraph:
-        o = self.time_before
+        o = twitter_id_from_timestamp(self.time_before)
         
-        for _i in range(5):
+        for _i in range(1):
             time.sleep(0.5)
-            tl = self.api.GetHomeTimeline(count=100, max_id=twitter_id_from_timestamp(o))
+            print('twi', o)
+            tl = self.api.GetHomeTimeline(count=100, max_id=o)
             for st in tl:
                 if st.created_at_in_seconds < self.time_after:
                     break
                 yield from self._parse_status(st)
-                o = min(o, st.created_at_in_seconds)
+                o = min(o, st.id)
            

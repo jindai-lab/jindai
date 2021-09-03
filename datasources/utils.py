@@ -9,7 +9,7 @@ import glob
 import time
 import requests
 from io import BytesIO
-from models import Paragraph
+from models import Paragraph, try_download
 
 
 def paragraph_finished(t):
@@ -69,41 +69,3 @@ def expand_file_patterns(patterns):
                     patterns.append(f + '/*')
                 else:
                     yield open(f, 'rb'), f
-
-
-def try_download(url: str, referer: str = '', attempts: int = 3, proxies = {}) -> Union[bytes, None]:
-    """Try download from url
-
-    Args:
-        url (str): url
-        referer (str, optional): referer url. Defaults to ''.
-        attempts (int, optional): max attempts. Defaults to 3.
-        ctx (PluginContext, optional): plugin context. Defaults to None.
-
-    Returns:
-        Union[bytes, None]: response content or None if failed
-    """
-
-    buf = None
-    for itry in range(attempts):
-        try:
-            if '://' not in url and os.path.exists(url):
-                buf = open(url, 'rb').read()
-            else:
-                code = -1
-                if isinstance(url, tuple):
-                    url, referer = url
-                headers = {
-                    "user-agent": "Mozilla/5.1 (Windows NT 6.0) Gecko/20180101 Firefox/23.5.1", "referer": referer.encode('utf-8')}
-                try:
-                    r = requests.get(url, headers=headers, cookies={},
-                                     proxies=proxies, verify=False, timeout=60)
-                    buf = r.content
-                    code = r.status_code
-                except requests.exceptions.ProxyError:
-                    buf = None
-            if code != -1:
-                break
-        except Exception as ex:
-            time.sleep(1)
-    return buf

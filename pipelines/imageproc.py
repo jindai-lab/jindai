@@ -1,14 +1,12 @@
 """图像相关的简单处理
 """
 
+from storage import StorageManager
 from pipeline import PipelineStage
 import numpy as np
 from PIL import Image, ImageOps
 import os
-import logging
-from PyMongoWrapper import QueryExprParser
-_p = QueryExprParser()
-
+from models import parser, try_download
 
 class ImageGrayScale(PipelineStage):
     """图像灰度化
@@ -69,7 +67,7 @@ class ImageEnhance(PipelineStage):
             args (str): 调用的参数，以回车分隔，类型将自动转换
         """
         self.method = method
-        self.args = [_p.expand_literal(l) for l in args.split('\n')] if args else []
+        self.args = [parser.expand_literal(l) for l in args.split('\n')] if args else []
 
     def resolve(self, p):
         p.image = getattr(ImageOps, self.method)(p.image, *self.args)
@@ -165,3 +163,21 @@ class DumpImages(PipelineStage):
         delattr(p, 'image')
         return p
     
+    
+class DownloadImages(PipelineStage):
+    """根据 image_storage.url 下载图像
+    """
+    
+    def __init__(self) -> None:
+        self.mgr = StorageManager()
+    
+    def resolve(self, p):
+        if not p.image_storage or 'url' not in p.image_storage:
+            return
+        with self.mgr:
+            content = try_download(p.image_storage['url'], p.source.get('url', ''))
+            if not content: return
+            self.mgr.write(content, str(self.id))
+        p.image_storage['blocks'] = True
+        p.save()
+        return p
