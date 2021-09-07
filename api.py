@@ -1,8 +1,12 @@
 from functools import wraps
 from flask import Flask, Response, render_template, jsonify, request, session, send_file, json
+from  geventwebsocket.websocket import WebSocketError
+from  geventwebsocket.handler import WebSocketHandler
+from  gevent.pywsgi import WSGIServer
 from bson import ObjectId
 import datetime
 import inspect
+import logging
 import hashlib
 import traceback
 from PyMongoWrapper import *
@@ -18,8 +22,7 @@ import sys
 import config
 import logging
 import base64
-from flask_sockets import Sockets
-ws_clients = []
+ws_clients = {}
 
 
 class Token(dbo.DbObject):
@@ -73,22 +76,25 @@ class TasksQueue:
     def working(self):
         while self.running:
             if self._q:
-                self.running_task, task = self._q.popleft()
-                sockets_send('queue', self.status)
-        
+                self.running_task, t = self._q.popleft()
+                # emit('queue', self.status)
+
+                task = Task(datasource=(t.datasource, t.datasource_config), pipeline=t.pipeline, concurrent=t.concurrent, resume_next=t.resume_next)
+                # emit('debug', 'task inited')
+       
                 try:
                     self.results[self.running_task] = task.execute()
                 except Exception as ex:
                     self.results[self.running_task] = {'exception': str(ex), 'tracestack': traceback.format_tb(ex.__traceback__)}
                 self.running_task = ''
                 
-                sockets_send('queue', self.status)
+                # emit('queue', self.status)
             else:
                 self.running = False
 
     def enqueue(self, key, val):
         self._q.append((key, val))
-        sockets_send('queue', self.status)
+        # emit('queue', self.status)
 
     def stop(self):
         self.running = False
@@ -102,7 +108,7 @@ class TasksQueue:
         else:
             return False
         self._q.remove(todel)
-        sockets_send('queue', self.status)
+        # emit('queue', self.status)
         
         return True
 
@@ -123,13 +129,12 @@ class NumpyEncoder(json.JSONEncoder):
 
 
 app.json_encoder = NumpyEncoder
-sockets = Sockets(app)
 
 tasks_queue = TasksQueue()
 
 
 def logined():
-    t = Token.check(request.headers.get('X-Authentication-Token'))
+    t = Token.check(request.headers.get('X-Authentication-Token', request.cookies.get('token')))
     if t:
         return t.user
     
@@ -365,8 +370,7 @@ def enqueue_task():
     assert t, 'No such task.'
     t.last_run = datetime.datetime.now()
     t.save()
-    task = Task(datasource=(t.datasource, t.datasource_config), pipeline=t.pipeline, concurrent=t.concurrent, resume_next=t.resume_next)
-    tasks_queue.enqueue(f'{t.id}/{t.name}_{int(time.time())}', task)
+    tasks_queue.enqueue(f'{t.id}/{t.name}_{int(time.time())}', t)
     if not tasks_queue.running:
         logging.info('start background thread')
         tasks_queue.start()
@@ -378,6 +382,7 @@ def enqueue_task():
 def dequeue_task(_id):
     if _id in tasks_queue.results:
         del tasks_queue.results[_id]
+        # emit('queue', tasks_queue.status)
         return True
     else:
         return tasks_queue.remove(_id)
@@ -677,61 +682,39 @@ def dbconsole_collections():
     return Paragraph.db.database.list_collection_names()
 
 
-def sockets_send(event, bundle=None, to=None):
-    if to is None:
-        to = ws_clients
-    elif not isinstance(to, list):
-        to = [to]
-    for ws in to:
-        ws.send(json.dumps({
-            'event': event,
-            'data': bundle
-        }))
+@app.route('/api/socket/<auth>')
+def ws_serve(auth):    
+    t = Token.check(auth)
+    if t:
+        ws_clients[auth] = {
+            'user': t.user
+        }
+    else:
+        return 'Auth failure', 403
+        
+    user_socket = request.environ.get("wsgi.websocket")
+    if not user_socket:
+        return 'HTTP OK, Upgrade'
 
-
-@sockets.route('/api/socket')
-def sockets_serve(ws):
-    ws_clients.append(ws)
-    auth = False
-    while not ws.closed:
+    print(user_socket)
+    while True:
         try:
-            message = ws.receive()
-            if not message:
-                continue
-            message = json.loads(message)
-            if not isinstance(message, dict):
-                continue
-            event = message.get('event', '')
-            if event == 'auth':
-                token = message.get('token')
-                if Token.check(token):
-                    auth = True
-                else:
-                    break
-            if auth:
-                if event == 'ping':
-                    sockets_send('pong')
-                elif event == 'queue':
-                    sockets_send('queue', tasks_queue.status)
-            else:
-                break
-        except:
+            
+            message = json.loads(user_socket.receive())
+            if 'event' not in message: continue
+            if message['event'] == 'queue':
+                user_socket.send(json.dumps(tasks_queue.status))
+            elif message['event'] == 'ping':
+                user_socket.send('{"event": "pong"}')
+            
+        except WebSocketError as e:
+            print(e)
             break
-    ws_clients.remove(ws)
+    
+    if auth in ws_clients:
+        del ws_clients[auth]
 
 
 if __name__ == "__main__":
-    from werkzeug.serving import run_with_reloader
-    from gevent import pywsgi
-    from geventwebsocket.handler import WebSocketHandler
-    
-    @run_with_reloader
-    def run_server():
-
-        app.debug = True
-        app.env = 'development'
-        server = pywsgi.WSGIServer(('0.0.0.0', 8370), app, handler_class=WebSocketHandler)
-        server.serve_forever()
-
-    run_server()
-    
+    http_serve=WSGIServer(("0.0.0.0", 8370), app, handler_class=WebSocketHandler)
+    http_serve.serve_forever()
