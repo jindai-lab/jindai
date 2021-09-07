@@ -111,7 +111,7 @@ class TwitterDataSource(DataSource):
     def _get_timeline(self) -> Paragraph:
         o = twitter_id_from_timestamp(self.time_before)
         
-        for _i in range(1):
+        for _i in range(10):
             time.sleep(0.5)
             print('twi', o)
             tl = self.api.GetHomeTimeline(count=100, max_id=o)

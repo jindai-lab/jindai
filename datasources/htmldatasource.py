@@ -78,7 +78,7 @@ class LinesDataSource(DataSource):
         self.lines = lines.split('\n')
 
     def fetch(self):
-        return self.lines
+        return map(lambda x: Paragraph(content=x, lang=self.lang), self.lines)
 
 
 class HTMLImageDataSource(DataSource):

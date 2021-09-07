@@ -172,12 +172,16 @@ class DownloadImages(PipelineStage):
         self.mgr = StorageManager()
     
     def resolve(self, p):
+        if not p.id:
+            p.save()
+        print(p.id, p.image_storage)
         if not p.image_storage or 'url' not in p.image_storage:
             return
+        content = try_download(p.image_storage['url'], p.source.get('url', ''))
+        if not content: return    
         with self.mgr:
-            content = try_download(p.image_storage['url'], p.source.get('url', ''))
-            if not content: return
             self.mgr.write(content, str(self.id))
+            print(self.id, len(content))
         p.image_storage['blocks'] = True
         p.save()
         return p
