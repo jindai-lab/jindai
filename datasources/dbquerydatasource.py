@@ -38,8 +38,11 @@ class DBQueryDataSource(DataSource):
             self.querystr = query
 
         self.query = parser.eval(self.querystr)
+        if self.aggregation and len(self.query) > 1 and isinstance(self.query[0], str) and self.query[0].startswith('from'):
+            self.mongocollection = self.query[0][4:]
+            self.query = self.query[1:]
         
-        if req:
+        if req and not self.aggregation:
             self.query = {'$and': [self.query, req]}
         self.limit = limit
         self.skip = skip

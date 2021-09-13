@@ -1,5 +1,6 @@
 from models import Paragraph
 from pipeline import PipelineStage
+from .utils import language_iso639
 
 import re
 spliter = re.compile(r'[^\w]')
@@ -9,18 +10,25 @@ class WesternStemmer(PipelineStage):
     """附加词干到 tokens 中（需要先进行切词）
     """
 
-    def __init__(self, language, append=True):
+    _language_stemmers = {}
+
+    @staticmethod
+    def get_stemmer(lang):
+        from nltk.stem.snowball import SnowballStemmer 
+        if lang not in WesternStemmer._language_stemmers:
+            stemmer = SnowballStemmer(language_iso639.get(lang, lang).lower())
+            WesternStemmer._language_stemmers[lang] = stemmer
+        return WesternStemmer._language_stemmers[lang]
+
+    def __init__(self, append=True):
         """
         Args:
-            language (Arabic|Danish|Dutch|English|Finnish|French|German|Hungarian|Italian|Norwegian|Portuguese|Romanian|Russian|Spanish|Swedish): 指定语言
-            append (bool): 是添加到结尾还是覆盖
+            append (bool): 将词干添加到结尾，否则直接覆盖
         """
-        from nltk.stem.snowball import SnowballStemmer 
-        self.stemmer = SnowballStemmer(language.lower())
         self.append = append
 
     def resolve(self, p : Paragraph) -> Paragraph:
-        tokens = [self.stemmer.stem(_) for _ in p.tokens]
+        tokens = [WesternStemmer.get_stemmer(p.lang).stem(_) for _ in p.tokens]
         if self.append:
             p.tokens += tokens
         else:

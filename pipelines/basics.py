@@ -8,10 +8,9 @@ from itertools import count as iter_count
 from bson import ObjectId
 import jieba
 import numpy as np
-import openpyxl
+import pandas
 from models import Paragraph
 from opencc import OpenCC
-from openpyxl.cell.cell import ILLEGAL_CHARACTERS_RE
 from pipeline import *
 from PyMongoWrapper.dbo import DbObject
 
@@ -104,8 +103,6 @@ class Export(PipelineStage):
     """结果导出为文件
     """
 
-    re_excel_illegal_chars = re.compile(ILLEGAL_CHARACTERS_RE)
-
     def __init__(self, format='xlsx', limit=0) -> None:
         """导出结果
 
@@ -124,85 +121,28 @@ class Export(PipelineStage):
             except:
                 return str(v)
 
-        def _value_for_excel(x):
-            if isinstance(x, str):
-                x = Export.re_excel_illegal_chars.sub('', x)
-                if x.startswith('='):
-                    x = "'" + x
-            elif isinstance(x, ObjectId):
-                return str(x)
-            elif x is None or isinstance(x, (int, float)):
-                pass
-            elif isinstance(x, list):
-                x = ','.join([str(_value_for_excel(_)) for _ in x])
-            else:
-                x = json_dump(x)
-            return x
-
-        def _value_for_csv(x):
-            if x is None:
-                return ""
-            elif isinstance(x, ObjectId):
-                return str(x)
-            elif isinstance(x, (int, float)):
-                return str(x)
-            if not isinstance(x, str): x = str(x)
-            if ',' in x:
-                x = x.replace('"', '""')
-                x = '"' + x + '"'
-            return x.replace('\n', '')
-        
-        def _get_header_and_records(r):
-            if isinstance(r, dict):
-                return [], r.items()
-            else:
-                r = list(r)
-                if not r:
-                    return [], []
-                if isinstance(r[0], DbObject):
-                    r = [_.as_dict() for _ in r]
-                if isinstance(r[0], dict):
-                    h = [_ for _ in r[0].keys() if not _.startswith('_')]
-                    if 'keywords' in h: h.remove('keywords')
-                    r = [[_.get(k) for k in h] for _ in r]
-                else:
-                    h = []
-                return h, r
+        r = [_.as_dict() if isinstance(_, DbObject) else _ for _ in r ]
 
         if self.format == 'json':
             return {
                 '__file_ext__': 'json',
-                'data': BytesIO(json_dump(r).encode('utf-8'))
+                'data': json_dump(r).encode('utf-8')
             }
-        
-        elif self.format == 'csv':
-            h, r = _get_header_and_records(r)
-            if h: r.insert(0, h)
 
-            s = ''
-            for l in r:
-                s += ','.join([_value_for_csv(_) for _ in l]) + '\n'
+        elif self.format == 'csv':
+            b = BytesIO()
+            pandas.DataFrame(r).to_csv(b)
             return {
                 '__file_ext__': 'csv',
-                'data': BytesIO(s.encode('utf-8'))
+                'data': b.get_value()
             }
 
         elif self.format == 'xlsx':
-            h, r = _get_header_and_records(r)
-
-            wb = openpyxl.Workbook()
-            ws = wb.active
-
-            if h:
-                ws.append(h)
-            for l in r:
-                ws.append([_value_for_excel(_) for _ in l])
-
-            buf = BytesIO()
-            wb.save(buf)
+            b = BytesIO()
+            pandas.DataFrame(r).to_excel(b, engine='xlsxwriter')
             return {
                 '__file_ext__': 'xlsx',
-                'data': buf.getvalue()
+                'data': b.getvalue()
             }
 
 

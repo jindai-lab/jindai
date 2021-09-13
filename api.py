@@ -79,10 +79,9 @@ class TasksQueue:
                 self.running_task, t = self._q.popleft()
                 # emit('queue', self.status)
 
-                task = Task(datasource=(t.datasource, t.datasource_config), pipeline=t.pipeline, concurrent=t.concurrent, resume_next=t.resume_next)
-                # emit('debug', 'task inited')
-       
                 try:
+                    task = Task(datasource=(t.datasource, t.datasource_config), pipeline=t.pipeline, concurrent=t.concurrent, resume_next=t.resume_next)
+                    # emit('debug', 'task inited') 
                     self.results[self.running_task] = task.execute()
                 except Exception as ex:
                     self.results[self.running_task] = {'exception': str(ex), 'tracestack': traceback.format_tb(ex.__traceback__)}
@@ -121,6 +120,8 @@ je = dbo.create_dbo_json_encoder(json.JSONEncoder)
 class NumpyEncoder(json.JSONEncoder):
     def default(self, obj):
         import numpy as np
+        if isinstance(obj, bytes):
+            return f'{base64.b64encode(obj).decode("ascii")}'
         if isinstance(obj, np.ndarray):
             return obj.tolist()
         if isinstance(obj, Image.Image):
@@ -584,11 +585,7 @@ def quick_task():
         r = Task(datasource=('DBQueryDataSource', {'query': query, 'raw': raw, 'mongocollection': mongocollection}), pipeline=[
             ('AccumulateParagraphs', {}),
         ]).execute()
-
-    if isinstance(r, dict) and '__file_ext__' in r and 'data' in r: # convert to base64
-        r['data'] = base64.b64encode(r['data'])
-        return r
-        
+    
     return r
 
 

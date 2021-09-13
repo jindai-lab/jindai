@@ -125,14 +125,14 @@ def get_context(directory : str, parent_class : Type) -> Dict:
                 for f in glob.glob(os.path.join(os.path.dirname(__file__), directory, "*.py"))
             ]
     ctx = {}
-    for m in modules:
+    for mm in modules:
         try:
-            m = importlib.import_module(m)
+            m = importlib.import_module(mm)
             for k in m.__dict__:
                 if k != parent_class.__name__ and not k.startswith('_') and isinstance(m.__dict__[k], type) and issubclass(m.__dict__[k], parent_class):
                     ctx[k] = m.__dict__[k]
-        except ImportError as ie:
-            print(ie)
+        except Exception as ie:
+            print('Error while importing', mm, ':', ie)
     return ctx
 
 
