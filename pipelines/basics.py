@@ -51,7 +51,7 @@ class JiebaCut(PipelineStage):
         return p
 
 
-class WesternCut(PipelineStage):
+class WordCut(PipelineStage):
     """西文分词
     """
     
@@ -165,6 +165,17 @@ class AutoSummary(PipelineStage):
             for item in tr4s.get_key_sentences(num=self.count)
         ])
         return p
+
+
+class Coocurrence(PipelineStage):
+    """从 tokens 生成共现词对
+    """
+    
+    def resolve(self, p: Paragraph) -> Paragraph:
+        tokens = list(set(p.tokens))
+        for i, t in enumerate(tokens):
+            for q in tokens[i+1:]:
+                p.tokens.append(f'{t}::{q}')
 
 
 class Counter:

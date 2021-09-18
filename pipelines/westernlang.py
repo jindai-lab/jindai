@@ -6,7 +6,7 @@ import re
 spliter = re.compile(r'[^\w]')
 
 
-class WesternStemmer(PipelineStage):
+class WordStemmer(PipelineStage):
     """附加词干到 tokens 中（需要先进行切词）
     """
 
@@ -15,10 +15,10 @@ class WesternStemmer(PipelineStage):
     @staticmethod
     def get_stemmer(lang):
         from nltk.stem.snowball import SnowballStemmer 
-        if lang not in WesternStemmer._language_stemmers:
+        if lang not in WordStemmer._language_stemmers:
             stemmer = SnowballStemmer(language_iso639.get(lang, lang).lower())
-            WesternStemmer._language_stemmers[lang] = stemmer
-        return WesternStemmer._language_stemmers[lang]
+            WordStemmer._language_stemmers[lang] = stemmer
+        return WordStemmer._language_stemmers[lang]
 
     def __init__(self, append=True):
         """
@@ -28,7 +28,7 @@ class WesternStemmer(PipelineStage):
         self.append = append
 
     def resolve(self, p : Paragraph) -> Paragraph:
-        tokens = [WesternStemmer.get_stemmer(p.lang).stem(_) for _ in p.tokens]
+        tokens = [WordStemmer.get_stemmer(p.lang).stem(_) for _ in p.tokens]
         if self.append:
             p.tokens += tokens
         else:
@@ -36,7 +36,7 @@ class WesternStemmer(PipelineStage):
         return p
 
 
-class RussianTransliterate(PipelineStage):
+class LatinTransliterate(PipelineStage):
     """转写为拉丁字母的单词（需要先进行切词）
     """
     def __init__(self, language, append=True):

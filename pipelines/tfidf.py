@@ -10,15 +10,15 @@ class TermFreq(PipelineStage):
     """
 
     def __init__(self):
-        self.tf = Counter()
+        self.tf = defaultdict(list)
         self.result = {}
 
     def resolve(self, p : Paragraph):
         for w in p.tokens:
-            self.tf[w].inc()
+            self.tf[w].append(p)
 
     def summarize(self, returned):
-        final_words = list(sorted(self.tf.as_dict().items(), key=lambda x: x[1], reverse=True))
+        final_words = sorted([{'word': k, 'count': len(v), 'paragraphs': v} for k, v in self.tf.items()], key=lambda x: x['count'], reverse=True)
         return final_words
 
 
@@ -33,29 +33,29 @@ class TFIDFWordFetch(PipelineStage):
             min_df (float, optional): 最小的文档频率. 
         """
         self.min_df = min_df
-        self.df = Counter()
+        self.df = defaultdict(list)
+        self.docs = Counter()
         self.tf = Counter()
         self.result = {}
 
     def resolve(self, p : Paragraph):
-        self.df[''].inc()
+        self.docs[''].inc()
         for w in p.tokens:
             self.tf[w].inc()
         for w in set(p.tokens):
-            self.df[w].inc()
+            self.df[w].append(p)
     
     def summarize(self, returned):
-        self.df, self.tf = self.df.as_dict(), self.tf.as_dict()
-        num_docs = self.df['']
+        self.tf = self.tf.as_dict()
+        num_docs = self.docs.as_dict()['']
         min_df = self.min_df * num_docs
         tfidf = defaultdict(float)
         for w in self.df:
-            if not w: continue
-            tf, df = self.tf[w], self.df[w]
+            tf, df = self.tf[w], len(self.df[w])
             if df < min_df: continue
             tfidf[w] = tf * math.log2(num_docs / df)
 
-        final_words = list(sorted(tfidf.items(), key=lambda x: x[1], reverse=True))
+        final_words = sorted([{'word': k, 'tfidf': v, 'paragraphs': self.df[k][:50]} for k, v in tfidf.items()], key=lambda x: x['tfidf'], reverse=True)
 
         self.result['tfidf_words'] = final_words
         return final_words

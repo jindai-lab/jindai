@@ -2,7 +2,7 @@
 """
 import codecs
 from bs4 import BeautifulSoup as B
-from models import Paragraph, try_download
+from models import Paragraph, try_download, parser
 from datasource import DataSource
 from .utils import *
 from urllib.parse import urljoin
@@ -12,25 +12,46 @@ class HTMLDataSource(DataSource):
     """从HTML网页中读取语段，每个网页计作一个语段
     """
 
-    def __init__(self, collection_name, lang, files):
+    def __init__(self, collection_name, lang, files, fields='content=//text'):
         """
         Args:
             collection_name (str): 集合名称
             lang (chs|cht|en|de|fr|ru|es|ja|kr|vn): 语言标识
             files (str): HTML或包含HTML的ZIP压缩包文件列表
+            fields (str): 字段与搜索字符串的关系，形如 field=.css-selector//attribute
         """
         self.name = collection_name
         self.lang = lang
         self.files = files.split('\n')
+        self.fields = parser.eval('[]=>' + fields)
 
     def fetch(self):
         def import_html_src(fname, html, outline=''):
             b = B(html, 'lxml')
             p = Paragraph(
-                lang=self.lang, content=b.text.strip(), source={'url' if '://' in fn else 'file': fname}, pagenum=1,
+                lang=self.lang, content='', source={'url' if '://' in fn else 'file': fname}, pagenum=1,
                 collection=self.name, outline=outline
             )
-            p.content = str(b.find('body'))
+            
+            for finfo in self.fields:
+                if not finfo: continue
+                (field_name, field_path), = finfo.items()
+                if '//' in field_path:
+                    field_path, field_attr = field_path.rsplit('//', 1)
+                else:
+                    field_attr = 'text'
+                els = [b]
+                if field_path: els = b.select(field_path)
+                value = ''
+                for el in els:
+                    if field_attr == 'text':
+                        value += el.text + '\n'
+                    elif field_attr == 'html':
+                        value += str(el) + '\n'
+                    elif field_attr in el.attrs:
+                        value += el.attrs[field_attr] + '\n'
+                setattr(p, field_name, value)
+
             del b
             return p
 
