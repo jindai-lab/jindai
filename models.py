@@ -5,12 +5,25 @@ import importlib
 import config
 from hashlib import sha1
 from PIL import Image
-from PyMongoWrapper import dbo, F, QueryExprParser
+from PyMongoWrapper import dbo, F, Fn, QueryExprParser, MongoOperand
 from PyMongoWrapper.dbo import DbObject, DbObjectInitiator
 import storage
 dbo.connstr = 'mongodb://' + config.mongo + '/' + config.mongoDbName
 readonly_storage = storage.StorageManager()
-parser = QueryExprParser(abbrev_prefixes={None: 'keywords='}, allow_spacing=True)
+
+
+def _expr_groupby(params):
+    if isinstance(params, MongoOperand):
+        params = params()
+    if 'id' in params:
+        params['_id'] = {k[1:]: k for k in params['id']}
+        del params['id']
+    return Fn.group(orig=Fn.first('$$ROOT'), **params), Fn.replaceRoot(newRoot=Fn.mergeObjects('$orig', {'group_id': '$_id'}, {k: f'${k}' for k in params if k != '_id'}))
+
+
+parser = QueryExprParser(abbrev_prefixes={None: 'keywords='}, allow_spacing=True, functions={
+    'groupby': _expr_groupby
+})
 
 
 class Paragraph(DbObject):

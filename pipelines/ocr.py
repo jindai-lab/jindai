@@ -13,12 +13,8 @@ class TesseractOCR(PipelineStage):
         Args:
             langs (str): 识别的语言，可用“,”连接多种语言。常用：chi_sim, chi_tra_vert, eng, rus, jpn。
         """
-        self.langs = langs.replace(',', '+')
-        self.lang = langs.split(',')[0]
-        self.lang = {'chi_sim': 'chs',
-                     'chi_tra': 'cht',
-                     'chi_tra_vert': 'cht', 
-                     'jpn': 'ja'}.get(self.lang, self.lang[:2])
+        self.langs = '+'.join([{'chs': 'chi_sim', 'cht': 'chi_tra', 'cht-vert': 'chi_tra_vert', 'en': 'eng', 'ru': 'rus', 'ja': 'jpn'}.get(l, l) for l in langs.split(',')])
+        self.lang = langs.split(',')[0].split('-')[0]
 
     def resolve(self, p):
         p.content = pytesseract.image_to_string(p.image).encode("utf-8")

@@ -41,6 +41,10 @@ class DBQueryDataSource(DataSource):
         if self.aggregation and len(self.query) > 1 and isinstance(self.query[0], str) and self.query[0].startswith('from'):
             self.mongocollection = self.query[0][4:]
             self.query = self.query[1:]
+
+        if self.aggregation and len(self.query) > 1 and '$raw' in self.query[-1]:
+            self.raw = self.query[-1]['$raw']
+            self.query = self.query[:-1]
         
         if req and not self.aggregation:
             self.query = {'$and': [self.query, req]}
@@ -57,7 +61,7 @@ class DBQueryDataSource(DataSource):
             rs = Paragraph
         
         if self.aggregation:
-            rs = rs.aggregate(self.query if isinstance(self.query, list) else [self.query], raw=self.raw)
+            rs = rs.aggregate(self.query if isinstance(self.query, list) else [self.query], raw=self.raw, allowDiskUse=True)
         else:
             rs = rs.query(self.query)
             if self.sort:
@@ -69,4 +73,7 @@ class DBQueryDataSource(DataSource):
         return rs
 
     def count(self):
-        return self.fetch().count()
+        try:
+            return self.fetch().count()
+        except:
+            return -1
