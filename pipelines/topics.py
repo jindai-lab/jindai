@@ -79,48 +79,39 @@ class LDA(PipelineStage):
 
 class Word2Vec(PipelineStage):
     """根据不同语言自动进行 Word2Vec 向量化
-    注意：对于中文文本，进行的是字符级别的向量化，因此无需分词。对其他语种，需要事先进行分词。
+    （调用 transformers 的 paraphrase-multilingual-MiniLM-L12-v2 模型）
     """
-
-    _lang_dicts = {}
-
-    def __init__(self, ch_classical=False):
-        '''
-        Args:
-            ch_classical (bool): 中文内容为文言文
-        '''
-        self.ch_classical = ch_classical
-
-    @staticmethod
-    def _load_vec(datafile):
-        datafile = os.path.join(os.path.dirname(os.path.abspath(__file__)), '../vectors_data', datafile)
-        d = {}
-        with open(datafile) as f:
-            for l in f:
-                r = l.split()
-                d[r[0]] = np.array([float(_) for _ in r[1:]])
-        return d
-
-    @staticmethod
-    def _get_lang_config(lang, ch_classical):
-        if lang in Word2Vec._lang_dicts:
-            return Word2Vec._lang_dicts[lang]
-        d = {}
-        if lang == 'chs':
-            d = Word2Vec._load_vec('ch_classical_chars300.txt') if ch_classical else Word2Vec._load_vec('ch_modern_chars300.txt')
-        elif lang in ('en', 'de', 'fr', 'ru', 'ja'):
-            d = Word2Vec._load_vec(lang + '-vec.txt')
-        Word2Vec._lang_dicts[lang] = d
-        return d
+    def __init__(self):
+        import text2vec
+        self.bert = text2vec.SBert()
 
     def resolve(self, p : Paragraph) -> Paragraph:
-        arr = list(filter(lambda w: w is not None, 
-                        [Word2Vec._get_lang_config(p.lang, self.ch_classical).get(t) for t in (p.content if p.lang.startswith('ch') else p.tokens)]
-                    ))
-        if len(arr) > 0:
-            p.vec = np.average(arr, axis=0)
-            return p
-
+        p.vec = self.bert.encode(p.content)
+        return p
+    
+    
+class WordsBagVec(PipelineStage):
+    """使用词袋模型进行 0/1 编码的向量化
+    """
+    def __init__(self, dims=100000) -> None:
+        """
+        Args:
+            dims (int, optional): 维数
+        """        
+        self.words = {}
+        self.dims = dims
+    
+    def resolve(self, p: Paragraph) -> Paragraph:
+        p.vec = np.zeros(self.dims, float)
+        for t in p.tokens:
+            if t not in self.words:
+                if len(self.words) < self.dims:
+                    self.words[t] = len(self.words)
+                    p.vec[self.words[t]] = 1
+            else:
+                p.vec[self.words[t]] += 1
+        return p
+    
 
 class CosSimFSClassifier(AccumulateParagraphs):
     """基于余弦相似度的小样本分类
@@ -139,7 +130,6 @@ class CosSimFSClassifier(AccumulateParagraphs):
         self.vecs_cnt = defaultdict(int)
 
     def resolve(self, p : Paragraph) -> Paragraph:
-        super().resolve(p)
         label = getattr(p, self.label_field, '')
         if label:
             if label in self.vecs:

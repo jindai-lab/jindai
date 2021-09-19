@@ -1,5 +1,6 @@
 from functools import wraps
 from flask import Flask, Response, render_template, jsonify, request, session, send_file, json
+from pandas.io.clipboards import read_clipboard
 from  geventwebsocket.websocket import WebSocketError
 from  geventwebsocket.handler import WebSocketHandler
 from  gevent.pywsgi import WSGIServer
@@ -118,11 +119,17 @@ je = dbo.create_dbo_json_encoder(json.JSONEncoder)
 
 
 class NumpyEncoder(json.JSONEncoder):
+    def __init__(self, **kwargs):
+        kwargs['ensure_ascii'] = False
+        super().__init__(**kwargs)
+
     def default(self, obj):
         import numpy as np
         if isinstance(obj, bytes):
             return f'{base64.b64encode(obj).decode("ascii")}'
         if isinstance(obj, np.ndarray):
+            return obj.tolist()
+        if isinstance(obj, np.int32):
             return obj.tolist()
         if isinstance(obj, Image.Image):
             return str(obj)
@@ -490,9 +497,9 @@ def search():
             if len(r) == 0:
                 return '[]'
             elif len(r) == 1:
-                return '[] => ' + _stringify(r[0])
+                return '[];' + _stringify(r[0])
             else:
-                return ' => '.join([_stringify(x) for x in r])
+                return ';'.join([_stringify(x) for x in r])
         else:
             return '_json(`' + json.dumps(r, ensure_ascii=False) + '`)'
 
@@ -504,7 +511,7 @@ def search():
     skip = j.get('offset', 0)
     dataset = j.get('dataset', '')
     
-    History(user=logined(), querystr='?' + q + (',' + _stringify(req) if req else ''), created_at=datetime.datetime.now()).save()
+    History(user=logined(), querystr= q + (',' + _stringify(req) if req else ''), created_at=datetime.datetime.now()).save()
 
     params = {
         'query': q,
@@ -713,5 +720,7 @@ def ws_serve(auth):
 
 
 if __name__ == "__main__":
-    http_serve=WSGIServer(("0.0.0.0", 8370), app, handler_class=WebSocketHandler)
-    http_serve.serve_forever()
+    # http_serve=WSGIServer(("0.0.0.0", 8370), app, handler_class=WebSocketHandler)
+    # http_serve.serve_forever()
+    os.environ['FLASK_ENV'] = 'development'
+    app.run(debug=True, host='0.0.0.0', port=8370)

@@ -21,7 +21,7 @@ class PipelineStage:
         return p
 
     def summarize(self, r) -> Any:
-        pass
+        return r
 
 
 class Pipeline:
