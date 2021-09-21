@@ -140,23 +140,25 @@ class GraphicClustering(PipelineStage):
     def summarize(self, returned):
         import networkx as nx
         g = nx.Graph()
-        for (a, b), v in sorted(returned, key=lambda x: x[1], reversed=True)[:self.topk]:
+        for (a, b), v in sorted(returned, key=lambda x: x[1], reverse=True)[:self.topk]:
             for i in (a, b):
                 if i not in g.nodes:
                     g.add_node(i)
             g.add_edge(a, b, weight=v)
             print(a,b,v)
         
-        pl = nx.draw(g, with_labels=True)
-        buf = BytesIO()
-        pl.savefig(buf, format='png')
-        
         meta = ''
         for i, c in enumerate(nx.connected_components(g)):
             meta += f'{i+1}\t' + '; '.join(c) + '\n'
             
+        print(meta)
+        
+        nx.draw(g, with_labels=True)
+        buf = BytesIO()
+        plt.savefig(buf, format='png')
+            
         return {
-            '_file_ext__': 'png',
+            '__file_ext__': 'png',
             'data': buf.getvalue(),
             'meta': meta
         }

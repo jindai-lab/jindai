@@ -175,17 +175,6 @@ class AutoSummary(PipelineStage):
         return p
 
 
-class Coocurrence(PipelineStage):
-    """从 tokens 生成共现词对
-    """
-    
-    def resolve(self, p: Paragraph) -> Paragraph:
-        tokens = list(set(p.tokens))
-        for i, t in enumerate(tokens):
-            for q in tokens[i+1:]:
-                p.tokens.append(f'{t}::{q}')
-
-
 class Counter:
 
     class _CounterNum:
