@@ -81,9 +81,13 @@ class Word2Vec(PipelineStage):
     """根据不同语言自动进行 Word2Vec 向量化
     （调用 transformers 的 paraphrase-multilingual-MiniLM-L12-v2 模型）
     """
-    def __init__(self):
+    def __init__(self, model_name='paraphrase-multilingual-MiniLM-L12-v2'):
+        '''
+        Args:
+            model_name (str): 模型名称，默认为多语言小模型
+        '''
         import text2vec
-        self.bert = text2vec.SBert()
+        self.bert = text2vec.SBert(model_name)
 
     def resolve(self, p : Paragraph) -> Paragraph:
         p.vec = self.bert.encode(p.content)
@@ -97,7 +101,7 @@ class WordsBagVec(PipelineStage):
         """
         Args:
             dims (int, optional): 维数
-        """        
+        """
         self.words = {}
         self.dims = dims
     
@@ -130,6 +134,7 @@ class CosSimFSClassifier(AccumulateParagraphs):
         self.vecs_cnt = defaultdict(int)
 
     def resolve(self, p : Paragraph) -> Paragraph:
+        super().resolve(p)
         label = getattr(p, self.label_field, '')
         if label:
             if label in self.vecs:
@@ -161,4 +166,33 @@ class CosSimFSClassifier(AccumulateParagraphs):
         for p in self.paragraphs:
             if not hasattr(p, self.label_field):
                 setattr(p, self.label_field, self._infer(p.vec))
+        return self.paragraphs
+
+
+class CosSimClustering(AccumulateParagraphs):
+
+    def __init__(self, min_community_size=10, threshold=0.75, label_field='label'):
+        '''
+        Args:
+            min_community_size (int): 最少的聚类数量
+            threshold (float): 相似度阈值
+            label_field (str): 生成的标签字段名
+        '''
+        self.min_community_size = 10
+        self.threshold = threshold
+        self.vecs = []
+        self.label_field = label_field
+
+    def resolve(self, p):
+        super().resolve(p)
+        self.vecs.append(p.vec)
+        return p
+
+    def summarize(self, *args):
+        from sentence_transformers import util
+        vecs = np.array(self.vecs)
+        clusters = util.community_detection(vecs, min_community_size=self.min_community_size, threshold=self.threshold)
+        for i, c in enumerate(clusters):
+            for idx in c:
+                setattr(self.paragraphs[idx], self.label_field, i+1)
         return self.paragraphs

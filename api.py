@@ -464,6 +464,14 @@ def help(pipe_or_ds):
     return r
 
 
+@app.route('/api/refresh_context')
+@rest()
+def refresh_context():
+    Pipeline.pipeline_ctx = get_context('pipelines', PipelineStage)
+    Task.datasource_ctx = get_context('datasources', DataSource)
+    return True
+
+
 @app.route('/api/history')
 @rest()
 def history():
