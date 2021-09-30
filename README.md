@@ -2,8 +2,6 @@
 
 a platform for customizable multilingual text analysis
 
-数字人文视野下可定制的多语种文本利用平台
-
 - Multilingual full-text search (currently supports: Chinese Simplified & Traditional, English, German, French, Japanese, Russian)
 - PDF/EPUB/HTML text extraction
 - Data storing & exporting
