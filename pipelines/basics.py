@@ -1,4 +1,4 @@
-"""基本操作"""
+f"""基本操作"""
 
 import json
 import os
@@ -308,6 +308,7 @@ class RegexFilter(PipelineStage):
             source (str): 匹配的字段，默认为内容
             target (str): 要提取入的字段名称
             filter_out (bool): 过滤未匹配到的语段
+            continuous (bool): 未匹配到的语段自动使用上次的值
         """
         self.re = re.compile(pattern)
         self.source = source
@@ -319,7 +320,7 @@ class RegexFilter(PipelineStage):
     def resolve(self, p : Paragraph) -> Paragraph:
         match = self.re.search(str(getattr(p, self.source, '')))
         if match:
-            self.value = match.group(0)
+            self.value = match.group(1) or match.group(0)
         if match or self.continuous:
             setattr(p, self.target, self.value)
         else:
@@ -404,6 +405,8 @@ class SaveParagraph(PipelineStage):
             mongocollection (str): 数据库目标数据集名称
         '''
         self.convert = lambda x: x
+        self.mongocollection = mongocollection
+        self.collections = defaultdict(set)
         if mongocollection:
             class TempParagraph(Paragraph):
                 _collection = mongocollection
@@ -412,7 +415,17 @@ class SaveParagraph(PipelineStage):
 
     def resolve(self, p : Paragraph):
         self.convert(p).save()
+        self.collections[p.collection].add(p.source.get('file'))
         return p
+
+    def summarize(self, returned):
+        for c, sources in self.collections.items():
+            coll = Collection.first((F.name == c) & (F.mongocollection == self.mongocollection)) \
+                    or Collection(name=c, sources=[], mongocollection=self.mongocollection, order_weight=999)
+            for s in sources:
+                if s not in coll.sources:
+                    coll.sources.append(s)
+            coll.save()
 
 
 class FieldIncresement(PipelineStage):

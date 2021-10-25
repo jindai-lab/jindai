@@ -85,17 +85,13 @@ class History(DbObject):
     querystr = str
 
 
-class Meta(DbObject):
+class Collection(DbObject):
 
-    users = list
-    rootpath = str
-    collections = list
-    datasets = list
-
-    def __init__(self, **kwargs):
-        for k in kwargs:
-            setattr(self, k, '')
-        super().__init__(**kwargs)
+    allowed_users = list
+    order_weight = int
+    mongocollection = str
+    name = str
+    sources = list
 
 
 class TaskDBO(DbObject):
@@ -130,6 +126,27 @@ class User(DbObject):
             return u
         else:
             return None
+
+
+class Token(DbObject):
+    
+    user = str
+    token = str
+    expire = float
+
+    _cache = {}
+
+    @staticmethod
+    def check(token_string):
+        t = Token._cache.get(token_string)
+        if t and t.expire > time.time():
+            return t
+        else:
+            t = Token.first((F.token == token_string) & (F.expire > time.time()))
+            if t:
+                Token._cache[token_string] = t
+                return t
+        return None
 
 
 def get_context(directory : str, parent_class : Type) -> Dict:

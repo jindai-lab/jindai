@@ -1,9 +1,6 @@
 from functools import wraps
 from flask import Flask, Response, render_template, jsonify, request, session, send_file, json
 from pandas.io.clipboards import read_clipboard
-from  geventwebsocket.websocket import WebSocketError
-from  geventwebsocket.handler import WebSocketHandler
-from  gevent.pywsgi import WSGIServer
 from bson import ObjectId
 import datetime
 import inspect
@@ -23,28 +20,6 @@ import sys
 import config
 import logging
 import base64
-ws_clients = {}
-
-
-class Token(dbo.DbObject):
-    
-    user = str
-    token = str
-    expire = float
-
-    _cache = {}
-
-    @staticmethod
-    def check(token_string):
-        t = Token._cache.get(token_string)
-        if t and t.expire > time.time():
-            return t
-        else:
-            t = Token.first((F.token == token_string) & (F.expire > time.time()))
-            if t:
-                Token._cache[token_string] = t
-                return t
-        return None
 
 
 class TasksQueue:
@@ -66,9 +41,9 @@ class TasksQueue:
             'running': self.running_task,
             'finished': [{
                 'id': k,
-                'name': k.split('/', 1)[-1].split('_')[0],
+                'name': k.split('@')[0],
                 'viewable': isinstance(v, list) or (isinstance(v, dict) and 'exception' in v),
-                'last_run': datetime.datetime.fromtimestamp(int(k.split('_')[-1])).strftime('%Y-%m-%d %H:%M:%S'),
+                'last_run': datetime.datetime.strptime(k.split('@')[-1], '%Y%m%d %H%M%S').strftime('%Y-%m-%d %H:%M:%S'),
                 'file_ext': 'json' if not isinstance(v, dict) else v.get('__file_ext__', 'json')
             } for k, v in self.results.items()],
             'waiting': len(self)
@@ -378,7 +353,7 @@ def enqueue_task():
     assert t, 'No such task.'
     t.last_run = datetime.datetime.now()
     t.save()
-    tasks_queue.enqueue(f'{t.id}/{t.name}_{int(time.time())}', t)
+    tasks_queue.enqueue(f'{t.name}@{datetime.datetime.now().strftime("%Y%m%d %H%M%S")}', t)
     if not tasks_queue.running:
         logging.info('start background thread')
         tasks_queue.start()
@@ -543,17 +518,71 @@ def search():
     return {'results': results, 'query': task.datasource.querystr, 'total': count}
 
 
-@app.route('/api/meta')
+@app.route('/api/collections')
 @rest()
-def get_meta():
-    return Meta.first({})
+def get_collections():
+    return list(Collection.query({}).sort(F.order_weight, F.name))
 
 
-@app.route('/api/meta', methods=['POST'])
+@app.route('/api/collections', methods=['POST'])
 @rest()
-def update_meta():
+def set_collections():
+
+    def _get_object(coll):
+        if coll.mongocollection:
+            class TempParagraph(Paragraph):
+                _collection = coll.mongocollection
+            rs = TempParagraph
+        else:
+            rs = Paragraph
+        return rs
+
     j = request.json
-    return Meta.query({}).update(Fn.set(j)).acknowledged
+    if 'collection' in j:
+        j = j['collection']
+        if j.get('_id'):
+            c = Collection.query(F.id == j['_id'])
+            del j['_id']
+            c.update(Fn.set(**j))
+        else:
+            Collection(**j).save()
+
+    elif 'collections' in j:
+        for jc in j['collections']:
+            jset = {k: v for k, v in jc.items() if k != '_id' and v is not None}
+            if '_id' in jc:
+                c = Collection.query(F.id == jc['_id']).update(Fn.set(**jset))
+            else:
+                Collection(**jset).save()
+
+    elif 'rename' in j:
+        j = j['rename']
+        coll = Collection.first(F.name == j['from'])
+        if not coll:
+            return False
+
+        rs = _get_object(coll)
+        rs.query(F.collection == coll.name).update(Fn.set(collection=j['to']))
+        coll.delete()
+
+        new_coll = Collection.first(F.name == j['to']) or Collection(name=j['to'], sources=[], order_weight=coll.order_weight)
+        new_coll.sources = sorted(set(new_coll.sources + coll.sources))
+        new_coll.save()
+
+    elif 'sources' in j:
+        j = j['sources']
+        coll = Collection.first(F.id == j['_id'])
+        if not coll:
+            return False
+
+        rs = _get_object(coll)
+        rs = rs.aggregator.match(F.collection == coll.name).group(_id='$collection', sources=addToSet('$source.file'))
+        coll.sources = []
+        for r in rs.perform(raw=True):
+            coll.sources += r['sources']
+        coll.save()
+
+    return True
 
 
 @app.route("/api/image")
@@ -694,41 +723,6 @@ def dbconsole_collections():
     return Paragraph.db.database.list_collection_names()
 
 
-@app.route('/api/socket/<auth>')
-def ws_serve(auth):    
-    t = Token.check(auth)
-    if t:
-        ws_clients[auth] = {
-            'user': t.user
-        }
-    else:
-        return 'Auth failure', 403
-        
-    user_socket = request.environ.get("wsgi.websocket")
-    if not user_socket:
-        return 'HTTP OK, Upgrade'
-
-    print(user_socket)
-    while True:
-        try:
-            
-            message = json.loads(user_socket.receive())
-            if 'event' not in message: continue
-            if message['event'] == 'queue':
-                user_socket.send(json.dumps(tasks_queue.status))
-            elif message['event'] == 'ping':
-                user_socket.send('{"event": "pong"}')
-            
-        except WebSocketError as e:
-            print(e)
-            break
-    
-    if auth in ws_clients:
-        del ws_clients[auth]
-
-
 if __name__ == "__main__":
-    # http_serve=WSGIServer(("0.0.0.0", 8370), app, handler_class=WebSocketHandler)
-    # http_serve.serve_forever()
     os.environ['FLASK_ENV'] = 'development'
     app.run(debug=True, host='0.0.0.0', port=8370)
