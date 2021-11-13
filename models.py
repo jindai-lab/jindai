@@ -140,6 +140,7 @@ class Token(DbObject):
     def check(token_string):
         t = Token._cache.get(token_string)
         if t and t.expire > time.time():
+            t.expire = time.time() + 86400
             return t
         else:
             t = Token.first((F.token == token_string) & (F.expire > time.time()))

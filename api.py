@@ -43,6 +43,7 @@ class TasksQueue:
                 'id': k,
                 'name': k.split('@')[0],
                 'viewable': isinstance(v, list) or (isinstance(v, dict) and 'exception' in v),
+                'isnull': v is None,
                 'last_run': datetime.datetime.strptime(k.split('@')[-1], '%Y%m%d %H%M%S').strftime('%Y-%m-%d %H:%M:%S'),
                 'file_ext': 'json' if not isinstance(v, dict) else v.get('__file_ext__', 'json')
             } for k, v in self.results.items()],
@@ -576,7 +577,7 @@ def set_collections():
             return False
 
         rs = _get_object(coll)
-        rs = rs.aggregator.match(F.collection == coll.name).group(_id='$collection', sources=addToSet('$source.file'))
+        rs = rs.aggregator.match(F.collection == coll.name).group(_id='$collection', sources=Fn.addToSet('$source.file'))
         coll.sources = []
         for r in rs.perform(raw=True):
             coll.sources += r['sources']

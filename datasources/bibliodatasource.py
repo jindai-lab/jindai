@@ -7,6 +7,8 @@ from .utils import expand_file_patterns
 
 
 class BiblioDataSource(DataSource):
+    """从 endnote 文献条目产生语段
+    """
     
     def __init__(self, bibfiles, collection, format='endnote') -> None:
         """
@@ -27,7 +29,9 @@ class BiblioDataSource(DataSource):
         field = ''
         for l in lines:
             if not l.strip():
-                if d: yield Paragraph(collection=self.collection, **d)
+                print(d)
+                if d:
+                    yield Paragraph(collection=self.collection, **d)
                 d = {}
             else:
                 l = l.decode('utf-8').strip()
@@ -44,19 +48,19 @@ class BiblioDataSource(DataSource):
                         '%T': 'title',
                         '%N': 'issue',
                         '%K': 'tags',
-                        '%X': 'abstract',
+                        '%X': 'content',
                         '%P': 'pages',
                         '%@': 'issn',
                         '%L': 'cn_publishing_number',
                         '%W': 'catalog'
                     }.get(field.upper(), f'field_{field[1:]}')
                 
-                if ';' in value and field != 'abstract':
+                if ';' in value and field != 'content':
                     value = [_ for _ in value.split(';') if _]
                 if field == 'authors' and not isinstance(value, list):
                     value = [value]
                 if field in d:
-                    if field == 'abstract':
+                    if field == 'content':
                         d[field] += value
                     else:
                         d[field] = [d[field]]
