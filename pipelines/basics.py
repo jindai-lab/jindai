@@ -15,11 +15,11 @@ import json, yaml
 import itertools
 from opencc import OpenCC
 
-from PyMongoWrapper import QueryExprParser
+from PyMongoWrapper import QueryExprParser, F
 from PyMongoWrapper.dbo import mongodb, DbObject
 from .utils import execute_query_expr, language_iso639
 
-from models import Paragraph
+from models import Paragraph, Collection
 from pipeline import Pipeline, PipelineStage
 
 
