@@ -6,9 +6,7 @@ from collections import defaultdict
 from typing import List, Union
 import twitter
 
-from databackend import Post, Item, F, Fn, Var, ObjectId
-from plugin import Plugin, PluginContext
-from helpers import apply_auto_tags, DefaultTools, queryparser
+from gallery import Post, Item, F, Fn, Var, ObjectId, Plugin, PluginContext, apply_auto_tags, DefaultTools, queryparser
 
 
 def find_post(url: str) -> Union[Post, None]:

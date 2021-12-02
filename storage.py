@@ -7,7 +7,7 @@ import h5py
 
 class StorageManager:
 
-    files = [h5py.File(g, 'r') for g in glob.glob('blocks?*.h5')]
+    files = [h5py.File(g, 'r') for g in glob.glob('blocks?*.h5') + glob.glob('blocks/*.h5')]
     base = 'blocks.h5'
     f = None
     write_counter = 0

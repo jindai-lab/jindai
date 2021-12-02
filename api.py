@@ -629,6 +629,20 @@ def dbconsole_collections():
     return Paragraph.db.database.list_collection_names()
 
 
+@app.route('/<path:p>', methods=['GET'])
+def index(p='index.html'):
+    p = p or 'index.html'
+    for path in [
+        p,
+        p + '.html',
+        os.path.join('ui/dist', p)
+    ]:
+        if os.path.exists(path) and os.path.isfile(path):
+            return serve_file(path)
+
+    return serve_file('ui/dist/index.html')
+
+
 import gallery
 gallery.init(app)
 

@@ -3,9 +3,14 @@
 config.py
 sources/
 texts/
-*_models/
+models_data
 .vsccode/
 gpt.*
+.DS_*
+
+*.zip
+blocks*
+plugins
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

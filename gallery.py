@@ -18,11 +18,11 @@ from urllib.parse import quote, unquote
 import datetime
 from typing import IO, Any, Callable, List, Dict, Iterable, Tuple, Union
 import json
-import base64
+import base64, random
 from bson import ObjectId
 import config
 from plugin import PluginContext, Plugin
-from models import AutoTag, Post, Item, MongoJSONEncoder, Token, User
+from models import AutoTag, Post, Item, MongoJSONEncoder, Token, User, try_download
 from storage import StorageManager
 
 # prepare environment for requests
@@ -161,76 +161,6 @@ def tmap(action: Callable, iterable: Iterable[Any], pool_size: int = 10) -> Tupl
                 yield from zip(r, p.map(_action, r))
         except KeyboardInterrupt:
             return
-
-
-def serve_file(p: Union[str, IO], ext: str = '', file_size: int = 0) -> Response:
-    """Serve static file or buffer
-
-    Args:
-        p (Union[str, IO]): file name or buffer
-        ext (str, optional): extension name. Defaults to '' for auto.
-        file_size (int, optional): file size. Defaults to 0 for auto.
-
-    Returns:
-        Response: a flask response object
-    """
-    if isinstance(p, str):
-        f = open(p, 'rb')
-        ext = p.rsplit('.', 1)[-1]
-        file_size = os.stat(p).st_size
-    else:
-        f = p
-
-    mimetype = {
-        'html': 'text/html',
-                'htm': 'text/html',
-                'png': 'image/png',
-                'jpg': 'image/jpeg',
-                'gif': 'image/gif',
-                'json': 'application/json',
-                'css': 'text/css',
-                'js': 'application/javascript',
-                'mp4': 'video/mp4'
-    }.get(ext, 'text/plain')
-
-    start, length = 0, 1 << 20
-    range_header = request.headers.get('Range')
-    if file_size and file_size > 10 << 20:
-        start = 0
-        if range_header:
-            # example: 0-1000 or 1250-
-            m = re.search('([0-9]+)-([0-9]*)', range_header)
-            g = m.groups()
-            byte1, byte2 = 0, None
-            if g[0]:
-                byte1 = int(g[0])
-            if g[1]:
-                byte2 = int(g[1])
-            if byte1 < file_size:
-                start = byte1
-            if byte2:
-                length = byte2 + 1 - byte1
-            else:
-                length = file_size - start
-        else:
-            length = file_size
-
-        def _generate_chunks():
-            l = length
-            with f:
-                f.seek(start)
-                while l > 0:
-                    chunk = f.read(min(l, 1 << 20))
-                    l -= len(chunk)
-                    yield chunk
-
-        rv = Response(stream_with_context(_generate_chunks()), 206,
-                      content_type=mimetype, direct_passthrough=True)
-        rv.headers.add(
-            'Content-Range', 'bytes {0}-{1}/{2}'.format(start, start + length - 1, file_size))
-        return rv
-    else:
-        return send_file(f, mimetype=mimetype, conditional=True)
 
 
 def thumb(p: Union[str, IO], size: int) -> bytes:
@@ -847,7 +777,7 @@ def init(app):
     app.filters = []
     
     # STATIC AND RESOURCES PROVIDERS
-    @app.route('/block/<id>.<ext>')
+    @app.route('/api/gallery/block/<id>.<ext>')
     def block(id, ext=''):
         """Serve binary data in h5 files
 
@@ -863,10 +793,8 @@ def init(app):
         try:
             p = readonly_mgr.read(id)
             length = len(p.getvalue())
-        except AssertionError:
-            if len(id) == 24:
-                Item.query(F.id == ObjectId(id)).update(Fn.set(storage=False))
-                abort(404)
+        except OSError:
+            abort(404)
 
         if arg('enhance', ''):
             img = Image.open(p)
@@ -889,29 +817,6 @@ def init(app):
         return resp
 
 
-    @app.route('/', methods=["GET", "POST"])
-    @app.route('/<path:p>', methods=["GET", "POST"])
-    def index(p='index.html'):
-        """Serve static files in the working directory
-
-        Args:
-            p (str, optional): path. Defaults to 'thumbs.html'.
-
-        Returns:
-            Response: the file, or return 404 if not found
-        """
-
-        for path in [
-            p,
-            p + '.html',
-            os.path.join('gallery-ui/dist', p)
-        ]:
-            if os.path.exists(path):
-                return serve_file(path)
-
-        return '', 404
-
-
     # ITEM OPERATIONS
     @app.route('/api/gallery/item/rating', methods=["GET", "POST"])
     @rest()
@@ -921,6 +826,8 @@ def init(app):
         Returns:
             Response: 'OK' if succeeded
         """
+        
+        items = list(Item.query(F.id.in_([ObjectId(_) if len(_) == 24 else _ for _ in items])))
         for i in items:
             if i is None: continue
             i.rating = int(i.rating + inc) if inc else val
@@ -940,6 +847,8 @@ def init(app):
         Returns:
             Response: 'OK' if succeeded
         """
+        
+        items = list(Item.query(F.id.in_([ObjectId(_) if len(_) == 24 else _ for _ in items])))
         for i in items:
             i.storage = not i.storage
             i.save()
@@ -978,7 +887,6 @@ def init(app):
     @app.route('/api/gallery/item/delete', methods=["POST"])
     @rest()
     def delete_item(post_items: dict):
-
         for pid, items in post_items.items():
             p = Post.first(F.id == ObjectId(pid))
             if p is None: continue
@@ -1007,8 +915,9 @@ def init(app):
 
         Returns:
             Response: 'OK' if succeeded
-        """
-        
+        """        
+        posts = list(Post.query(F.id.in_([ObjectId(_) if len(_) == 24 else _ for _ in posts])))
+
         if request.path.endswith('/split'):
             for p in posts:
                 for i in p.items:
@@ -1042,6 +951,8 @@ def init(app):
             Response: 'OK' if succeeded
         """
         def gh(x): return hashlib.sha256(x.encode('utf-8')).hexdigest()[-9:]
+        
+        posts = list(Post.query(F.id.in_([ObjectId(_) if len(_) == 24 else _ for _ in posts])))
 
         if delete:
             group_id = ''
@@ -1093,6 +1004,7 @@ def init(app):
             Response: 'OK' if succeeded
         """
         
+        posts = list(Post.query(F.id.in_([ObjectId(_) if len(_) == 24 else _ for _ in posts])))
         for p in posts:
             for t in delete:
                 if t in p.tags:
@@ -1139,7 +1051,7 @@ def init(app):
             delete (bool): remove the rule if true
         """
         assert tag and (pattern or from_tag), 'Must specify tag with pattern or from tag'
-        AutoTag.query(pattern=pattern, from_tag=from_tag, tag=tag).delete()
+        AutoTag.query(F.pattern.eq(pattern) & F.from_tag.eq(from_tag) & F.tag.eq(tag)).delete()
         AutoTag(pattern=pattern, from_tag=from_tag, tag=tag).save()
         posts = Post.query(F.source_url.regex(pattern)) if pattern else Post.query(F.tags == from_tag)
         apply_auto_tags(posts)
@@ -1159,7 +1071,7 @@ def init(app):
             AutoTag.query(F.id.in_([ObjectId(_) for _ in ids])).delete()
             return True
         else:
-            return [_.as_dict() for _ in AutoTag.query({}).sort([('_id', -1)])]
+            return [_.as_dict() for _ in AutoTag.query({}).sort(-F.id)]
 
 
     @app.route('/api/gallery/get', methods=["GET", "POST"])
