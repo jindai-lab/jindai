@@ -1,11 +1,8 @@
-from functools import wraps
-from flask import Flask, Response, render_template, jsonify, request, session, send_file, json
-from pandas.io.clipboards import read_clipboard
+from flask import Flask, Response, jsonify, request, send_file, json
 from bson import ObjectId
 import datetime
 import inspect
 import logging
-import hashlib
 import traceback
 from PyMongoWrapper import *
 from collections import defaultdict
@@ -20,6 +17,7 @@ import sys
 import config
 import logging
 import base64
+from helpers import *
 
 
 class TasksQueue:
@@ -109,18 +107,14 @@ class NumpyEncoder(json.JSONEncoder):
             return obj.tolist()
         if isinstance(obj, Image.Image):
             return str(obj)
+        if isinstance(obj, datetime.datetime):
+            return obj.strftime('%Y-%m-%d %H:%M:%S')
         return je.default(self, obj)
 
 
 app.json_encoder = NumpyEncoder
 
 tasks_queue = TasksQueue()
-
-
-def logined():
-    t = Token.check(request.headers.get('X-Authentication-Token', request.cookies.get('token')))
-    if t:
-        return t.user
     
 
 def valid_task(j):
@@ -155,39 +149,13 @@ def valid_task(j):
     return j
 
 
-def rest(login=True, cache=False, user_role=''):
-    def do_rest(func):
-        @wraps(func)
-        def wrapped(*args, **kwargs):
-            try:
-                if (login and not logined()) or \
-                    (user_role and not User.first((F.roles == user_role) & (F.username == logined()))):
-                    raise Exception('Forbidden.')
-                
-                f = func(*args, **kwargs)
-                if isinstance(f, Response): return f
-                resp = jsonify({'result': f})
-            except Exception as ex:
-                resp = jsonify({'exception': str(ex), 'tracestack': traceback.format_tb(ex.__traceback__)})
-            
-            resp.headers.add("Access-Control-Allow-Origin", "*")
-            if cache:
-                resp.headers.add("Cache-Control", "public,max-age=86400")
-            return resp
-        return wrapped
-
-    return do_rest
-
-
 @app.route('/api/authenticate', methods=['POST'])
 @rest(login=False)
-def authenticate():
-    j = request.json
-    u, p = j['username'], j['password']
-    if User.authenticate(u, p):
-        Token.query(F.user==u).delete()
+def authenticate(username, password, **kws):
+    if User.authenticate(username, password):
+        Token.query(F.user==username).delete()
         token = User.encrypt_password(str(time.time()), str(time.time_ns()))
-        Token(user=u, token=token, expire=time.time() + 86400).save()
+        Token(user=username, token=token, expire=time.time() + 86400).save()
         return token
     raise Exception("Wrong user name/password.")
 
@@ -202,18 +170,24 @@ def whoami():
     return None
 
 
+@app.route('/api/authenticate', methods=['DELETE'])
+@rest()
+def log_out():
+    Token.uncheck(logined())
+    return True
+
+
 @app.route('/api/users/')
 @app.route('/api/users/<user>', methods=['GET', 'POST'])
 @rest(user_role='admin')
-def admin_users(user=''):
+def admin_users(user='', password=None, roles=None, **kws):
     if user:
-        j = request.json
         u = User.first(F.username == user)
         if not u: return 'No such user.', 404
-        if 'password' in j:
-            u.set_password(j['password'])
-        if 'roles' in j:
-            u.roles = j['roles']
+        if password is not None:
+            u.set_password(password)
+        if roles is not None:
+            u.roles = roles
         u.save()
     else:
         return list(User.query({}))
@@ -221,12 +195,11 @@ def admin_users(user=''):
 
 @app.route('/api/users/', methods=['PUT'])
 @rest(user_role='admin')
-def admin_users_add():
-    j = request.json
-    if User.first(F.username == j['username']):
+def admin_users_add(username, password, **kws):
+    if User.first(F.username == username):
         raise Exception('User already exists: ' + str(j['username']))
-    u = User(username=j['username'])
-    u.set_password(j['password'])
+    u = User(username=username)
+    u.set_password(password)
     u.save()
     u = u.as_dict()
     del u['password']
@@ -235,11 +208,10 @@ def admin_users_add():
 
 @app.route('/api/account/', methods=['POST'])
 @rest()
-def user_change_password():
-    j = request.json
+def user_change_password(old_password='', password='', **kws):
     u = User.first(F.username == logined())
-    assert User.authenticate(logined(), j['old_password']), '原密码错误'
-    u.set_password(j['password'])
+    assert User.authenticate(logined(), old_password), '原密码错误'
+    u.set_password(password)
     u.save()
     u = u.as_dict()
     del u['password']
@@ -290,11 +262,11 @@ def write_storage(dir=''):
 
 @app.route('/api/paragraphs/<id>', methods=['POST'])
 @rest()
-def modify_paragraph(id):
+def modify_paragraph(id, **kws):
     id = ObjectId(id)
     p = Paragraph.first(F.id == id)
     if p:
-        for f, v in request.json.items():
+        for f, v in kws.items():
             if f in ('_id', 'matched_content'): continue
             if v is None and hasattr(p, f):
                 delattr(p, f)
@@ -306,9 +278,9 @@ def modify_paragraph(id):
 
 @app.route('/api/tasks/', methods=['PUT'])
 @rest()
-def create_task():
-    j = valid_task(request.json)
-    task = TaskDBO(**j)
+def create_task(**task):
+    task = valid_task(task)
+    task = TaskDBO(**task)
     task.save()
     return task.id
 
@@ -327,11 +299,11 @@ def delete_task(id):
 
 @app.route('/api/tasks/<id>', methods=['POST'])
 @rest()
-def update_task(id):
+def update_task(id, **task):
     _id = ObjectId(id)
-    j = valid_task(request.json)
-    if '_id' in j: del j['_id']
-    return {'acknowledged': TaskDBO.query(F.id == _id).update(Fn.set(j)).acknowledged, 'updated': j}
+    task = valid_task(task)
+    if '_id' in task: del task['_id']
+    return {'acknowledged': TaskDBO.query(F.id == _id).update(Fn.set(j)).acknowledged, 'updated': task}
 
 
 @app.route('/api/tasks/<id>', methods=['GET'])
@@ -348,8 +320,7 @@ def list_task(id='', offset=0, limit=10):
 
 @app.route('/api/queue/', methods=['PUT'])
 @rest()
-def enqueue_task():
-    _id = ObjectId(request.json['id'])
+def enqueue_task(_id=''):
     t = TaskDBO.first(F.id == _id)
     assert t, 'No such task.'
     t.last_run = datetime.datetime.now()
@@ -456,7 +427,7 @@ def history():
 
 @app.route('/api/search', methods=['POST'])
 @rest()
-def search():
+def search(q='', req={}, sort='', limit=100, skip=0, dataset='', **kws):
 
     def _stringify(r):
         if not r: return ''
@@ -487,15 +458,13 @@ def search():
         else:
             return '_json(`' + json.dumps(r, ensure_ascii=False) + '`)'
 
-    j = request.json
-    q = j.get('q', '')
-    req = j.get('req', {})
-    sort = j.get('sort', '')
-    limit = j.get('limit', 100)
-    skip = j.get('offset', 0)
-    dataset = j.get('dataset', '')
+    qstr = q
+    if q and req:
+        qstr += ','
+    if req:
+        qstr += _stringify(req)
     
-    History(user=logined(), querystr= q + (',' + _stringify(req) if req else ''), created_at=datetime.datetime.now()).save()
+    History(user=logined(), querystr=qstr, created_at=datetime.datetime.now()).save()
 
     params = {
         'query': q,
@@ -509,6 +478,11 @@ def search():
         params['req'] = req
     if skip:
         params['skip'] = skip
+
+    if not req and not q:
+        return {
+            'results': [], 'query': '', 'total': 0
+        }
 
     task = Task(datasource=('DBQueryDataSource', params), pipeline=[
         ('AccumulateParagraphs', {}),
@@ -527,7 +501,7 @@ def get_collections():
 
 @app.route('/api/collections', methods=['POST'])
 @rest()
-def set_collections():
+def set_collections(collection=None, collections=None, rename=None, **j):
 
     def _get_object(coll):
         if coll.mongocollection:
@@ -537,27 +511,24 @@ def set_collections():
         else:
             rs = Paragraph
         return rs
-
-    j = request.json
-    if 'collection' in j:
-        j = j['collection']
-        if j.get('_id'):
-            c = Collection.query(F.id == j['_id'])
+    
+    if collection is not None:
+        if collection.get('_id'):
+            c = Collection.query(F.id == collection['_id'])
             del j['_id']
-            c.update(Fn.set(**j))
+            c.update(Fn.set(**collection))
         else:
-            Collection(**j).save()
+            Collection(**collection).save()
 
-    elif 'collections' in j:
-        for jc in j['collections']:
+    elif collections is not None:
+        for jc in collections:
             jset = {k: v for k, v in jc.items() if k != '_id' and v is not None}
             if '_id' in jc:
                 c = Collection.query(F.id == jc['_id']).update(Fn.set(**jset))
             else:
                 Collection(**jset).save()
 
-    elif 'rename' in j:
-        j = j['rename']
+    elif rename is not None:
         coll = Collection.first(F.name == j['from'])
         if not coll:
             return False
@@ -617,12 +588,7 @@ def page_image():
 
 @app.route('/api/quicktask', methods=['POST'])
 @rest()
-def quick_task():
-    j = request.json
-    query = j.get('query', '')
-    raw = j.get('raw', False)
-    mongocollection = j.get('mongocollection', '')
-
+def quick_task(query='', raw=False, mongocollection=''):
     if query.startswith('datasource='):
         q = parser.eval(query)
         r = Task(datasource=q[0]['datasource'], pipeline=q[1:]).execute()
@@ -634,70 +600,9 @@ def quick_task():
     return r
 
 
-@app.route('/api/gallery/star', methods=['POST'])
-@rest()
-def gallery_star():
-    j = request.json
-    selected = [ObjectId(i) for i in j.get('selected', [])]
-    inc = j.get('inc', 1)
-    if selected:
-        Paragraph.query(F.id.in_(selected)).update(Fn.inc(rating=inc))
-        return selected
-    else:
-        return {'error': 'selected ids are required'}
-
-
-@app.route('/api/gallery/tag', methods=['POST'])
-@rest()
-def gallery_tag():
-    j = request.json
-    selected = [ObjectId(i) for i in j.get('selected', [])]
-    field = j.get('field', 'keywords')
-    delete = j.get('delete', False)
-    fn = Fn.pull if delete else Fn.push
-    modified = []
-    if selected:
-        for tag in j.get('tag', []):
-            position = {field: tag}
-            modified.append(Paragraph.query(F.id.in_(selected)).update(fn(**position)).modified_count)
-    return modified
-
-
-@app.route('/api/gallery/group', methods=['POST'])
-@rest()
-def gallery_group():
-    j = request.json
-    selected = [ObjectId(i) for i in j.get('selected', [])]
-    if selected:
-        new_group = '#' + hashlib.sha256(str(min(selected)).encode('utf-8')).hexdigest()[-9:]
-        groups = [_['_id'] for _ in Paragraph.aggregator.match(F.id.in_(selected)).unwind('$groups').group(_id=Var.groups).perform(raw=True)]
-        new_group = min([new_group] + groups)
-        Paragraph.query(F.groups.in_(groups)).update(Fn.set(groups=[new_group]))
-        return new_group
-    return ''
-       
-
-@app.route('/api/gallery/delete', methods=['POST'])
-@rest()
-def gallery_delete():
-    j = request.json
-    selected = [ObjectId(i) for i in j.get('selected', [])]
-    if selected:
-        Paragraph.query(F.id.in_(selected)).delete()
-        return selected
-    else:
-        return {'error': 'selected ids are required'}
-
-
 @app.route('/api/admin/db', methods=['POST'])
 @rest(user_role='admin')
-def dbconsole():
-    mongocollection = request.json['mongocollection']
-    query = request.json['query']
-    operation = request.json['operation']
-    operation_params = request.json['operation_params']
-    preview = request.json.get('preview', True)
-
+def dbconsole(mongocollection='', query='', operation='', operation_params={}, preview=True):
     mongo = Paragraph.db.database[mongocollection]
     query = parser.eval(query)
     operation_params = parser.eval(operation_params)
@@ -722,6 +627,10 @@ def dbconsole():
 @rest(user_role='admin')
 def dbconsole_collections():
     return Paragraph.db.database.list_collection_names()
+
+
+import gallery
+gallery.init(app)
 
 
 if __name__ == "__main__":
