@@ -1,15 +1,20 @@
 import time
-from typing import Dict, Type, Union
-import glob, os, re, datetime
+from typing import Dict, Type, Union, Any
+import glob, os, re, datetime, json
 import importlib
+import requests
 import config
 from hashlib import sha1
 from PIL import Image
 from PyMongoWrapper import dbo, F, Fn, QueryExprParser, MongoOperand
 from PyMongoWrapper.dbo import DbObject, DbObjectInitiator
-import storage
+from plugin import PluginContext
+from storage import StorageManager
+
 dbo.connstr = 'mongodb://' + config.mongo + '/' + config.mongoDbName
-readonly_storage = storage.StorageManager()
+readonly_storage = StorageManager()
+
+MongoJSONEncoder = dbo.create_dbo_json_encoder(json.JSONEncoder)
 
 
 def _expr_groupby(params):
@@ -149,6 +154,34 @@ class Token(DbObject):
                 return t
         return None
 
+    @staticmethod
+    def uncheck(user):
+        for t in Token._cache.values():
+            if t.user == user:
+                t.expire = 0
+        Token.query(F.user==user).delete()
+
+
+class Auditor:
+    """Auditor
+    """    
+    
+    fp = open('auditor.log', 'a', encoding='utf-8')
+    jsonenc = MongoJSONEncoder(ensure_ascii=False)
+
+    @staticmethod
+    def log(oper : str, bundle : Any) -> None:
+        """Log updates
+
+        Args:
+            oper (str): operation
+            bundle (Any): bundle data
+        """        
+        try:
+            Auditor.fp.write('\t'.join(['%.3f' % time.time(), oper, Auditor.jsonenc.encode(bundle)]) + '\n')
+        except:
+            pass
+
 
 def get_context(directory : str, parent_class : Type) -> Dict:
     modules = [
@@ -167,7 +200,7 @@ def get_context(directory : str, parent_class : Type) -> Dict:
     return ctx
 
 
-def try_download(url: str, referer: str = '', attempts: int = 3, proxies = {}) -> Union[bytes, None]:
+def try_download(url: str, referer: str = '', attempts: int = 3, proxies = {}, ctx : PluginContext = None) -> Union[bytes, None]:
     """Try download from url
 
     Args:
@@ -196,10 +229,145 @@ def try_download(url: str, referer: str = '', attempts: int = 3, proxies = {}) -
                                      proxies=proxies, verify=False, timeout=60)
                     buf = r.content
                     code = r.status_code
+                    if ctx: ctx.log(url, len(buf))
                 except requests.exceptions.ProxyError:
                     buf = None
+                    if ctx: ctx.log(url, 'error')
             if code != -1:
                 break
         except Exception as ex:
             time.sleep(1)
     return buf
+
+
+class Item(dbo.DbObject):
+    """Item Object"""
+
+    DELETED = 255
+    CORRUPTED = 10
+    NORMAL = 0
+
+    IMAGE = 1
+    VIDEO = 2
+    AUDIO = 3
+    PDF = 4
+    TEXT = 5
+
+    url = str
+    flag = int
+    rating = int
+    width = int
+    height = int
+    dhash = str
+    whash = str
+    ftype = int
+    
+    storage = dbo.DbObjectInitiator(lambda: None)
+    thumbnail = dbo.DbObjectInitiator(lambda: None)
+
+    @classmethod
+    def valid_item(cls) -> MongoOperand:
+        """Returns condition for valid items (storage not null, flag == 0)
+
+        Returns:
+            MongoOperand: condition for valid items
+        """        
+        return (F.storage != None) & (F.flag == 0)
+
+    def __repr__(self):
+        return f'<Item {self.url}>'
+
+    def read_image(self):
+        if not self.url or not self.storage: return
+        vt = self.id
+        if self.url.endswith('.mp4') or self.url.endswith('.avi'):
+            if not hasattr(self, 'thumbnail') or not self.thumbnail:
+                try:
+                    self.generate_thumbnail()
+                except:
+                    pass
+            vt = self.thumbnail
+        if vt:
+            return StorageManager().read(vt)
+
+    def generate_thumbnail(self, file_path=''):
+        import cv2, os
+
+        self.thumbnail = None
+        p = file_path
+
+        try:
+            if not p:
+                if self.storage:
+                    p = f'_vtt{str(self.id)}'
+                    with StorageManager() as mgr:
+                        with open(p, 'wb') as fo:
+                            blen = fo.write(mgr.read(self.id).read())
+                    if not blen:
+                        os.unlink(p)
+                        return
+                else:
+                    p = self.url
+
+            cap = cv2.VideoCapture(p)
+
+            if cap.isOpened():
+                cap.set(cv2.CAP_PROP_POS_FRAMES, int(cap.get(cv2.CAP_PROP_FRAME_COUNT) * 0.5))
+                rval, frame = cap.read()
+                cap.release()
+                if rval:
+                    rval, npa = cv2.imencode('.jpg', frame)
+                    pic = npa.tobytes()
+                    with StorageManager() as mgr:
+                        vt = mgr.write(pic, f'{self.id}.thumb.jpg')
+                    self.thumbnail = f'{self.id}.thumb.jpg'
+                    self.save()
+        except Exception as ex:
+            print(ex)
+
+        if p.startswith('_vtt') and os.path.exists(p):
+            os.unlink(p)
+
+    def delete(self):
+        storages = []
+        if self.storage:
+            storages.append(self.id)
+        if self.thumbnail:
+            storages.append(self.thumbnail)
+        Auditor.log('delete:item', self.id)
+        super().delete()
+
+    def save(self):
+        Auditor.log('update:item' if self.id else 'insert:item', self.as_dict())
+        super().save()
+
+
+class Post(dbo.DbObject):
+    """Post Object"""
+    
+    source_url = str
+    author = str
+    liked_at = dbo.DbObjectInitiator(lambda: int(time.time()))
+    created_at = dbo.DbObjectInitiator(lambda: int(time.time()))
+    tags = list
+    items = dbo.DbObjectCollection(Item)
+    
+    def __repr__(self):
+        return f'<Post {self.source_url}>'
+
+    def save(self):
+        self.tags = list(set(self.tags))
+        Auditor.log('update:post' if self.id else 'insert:post', self.as_dict())
+        super().save()
+
+    def delete(self):
+        Auditor.log('delete:post', self.id)
+        super().delete()
+
+
+class AutoTag(dbo.DbObject):
+    """Auto Tagging Object"""
+    
+    from_tag = str
+    pattern = str
+    tag = str
