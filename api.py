@@ -299,6 +299,8 @@ def modify_paragraph(id, **kws):
 @rest()
 def create_task(**task):
     task = valid_task(task)
+    task.pop('shortcut_map', None)
+    print(task)
     task = TaskDBO(**task)
     task.save()
     return task.id

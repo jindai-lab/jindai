@@ -1,4 +1,5 @@
 """图集数据源"""
+import datetime
 import glob
 import os
 import re
@@ -259,12 +260,14 @@ class ImageImportDataSource(DataSource):
         self.tags = tags.split('\n')
 
         locs = locs.split('\n')
-        local_locs = [_ for _ in locs if not weburl.match(_)]
-        web_locs = [_ for _ in locs if weburl.match(_)]
-        if local_locs:
-            yield from self.import_local(local_locs)
-        if web_locs:
-            yield from self.import_page(web_locs)
+        self.local_locs = [_ for _ in locs if not weburl.match(_)]
+        self.web_locs = [_ for _ in locs if weburl.match(_)]
+
+    def fetch(self):
+        if self.local_locs:
+            yield from self.import_local(self.local_locs)
+        if self.web_locs:
+            yield from self.import_page(self.web_locs)
 
     def import_local(self, locs) -> List[Album]:
         zips = []
@@ -312,10 +315,10 @@ class ImageImportDataSource(DataSource):
                 ftime = __get_mtime(_f)+8*3600
 
                 p = albums[pu]
-                if not p.source['url']:
+                if not p.source:
                     p.source = {'url': pu}
                     p.tags += self.tags
-                    p.pdate = ftime
+                    p.pdate = datetime.datetime.fromtimestamp(ftime)
 
                 i = ImageItem(source={'url': _f})
                 fn = __expand_zip(_f)
