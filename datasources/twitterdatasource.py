@@ -193,11 +193,11 @@ class TwitterDataSource(DataSource):
                 screen_name=user, count=100, max_id=max_id)
             for st in tl:
                 p = self.parse_status(st, allow_video=self.allow_video)
-                before = min(before, p.pdate)
+                before = min(before, p.pdate.timestamp())
                 max_id = min(max_id, st.id)
                 if p.author != '@' + st.user.screen_name and not self.allow_retweet:
                     continue
-                if p.items and not p.id and p.pdate > after:
+                if p.items and not p.id and p.pdate.timestamp() > after:
                     albums.append(p)
             
             yield from albums
@@ -205,12 +205,13 @@ class TwitterDataSource(DataSource):
     def import_twitl(self):
         after, before = self.time_after, self.time_before
         if after == 0:
-            after = Album.query(F.source_url.regex(r'twitter\.com') & ~F.source_url.regex(
-                r'/i/invalid')).sort(-F.pdate).limit(1).first().pdate.timestamp()
+            after = Album.query(F.source_url.regex(r'twitter\.com')).sort(-F.pdate).limit(1).first().pdate.timestamp()
         
         albums = []
         o = twitter_id_from_timestamp(before or time.time())
         p = None
+
+        self.logger('twitl', o, after)
 
         for _i in range(100):
             time.sleep(0.5)

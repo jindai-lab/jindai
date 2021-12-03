@@ -263,7 +263,7 @@ class ImageItem(Paragraph):
 class Album(Paragraph):    
 
     author = str
-    liked_at = DbObjectInitiator(datetime.datetime.now)
+    liked_at = DbObjectInitiator(lambda: datetime.datetime.utcnow())
     tags = list
     items = dbo.DbObjectCollection(ImageItem)
 
