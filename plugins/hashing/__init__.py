@@ -1,12 +1,11 @@
 import struct
 
 import imagehash
-from tqdm import tqdm
-from PIL import Image
-
 from gallery import *
-from storage import *
 from plugin import Plugin
+from storage import *
+from tqdm import tqdm
+
 
 def dhash(im):
     dh = imagehash.dhash(im)
@@ -49,7 +48,7 @@ class Hashing(Plugin):
                     ids.add(id1)
                     ids.add(id2)
                 items = {}
-                for i in Item.query(F.flag.eq(0) & F.id.in_([ObjectId(_) for _ in ids])):
+                for i in ImageItem.query(F.flag.eq(0) & F.id.in_([ObjectId(_) for _ in ids])):
                     items[str(i.id)] = i
                 return items
 
@@ -67,40 +66,8 @@ class Hashing(Plugin):
         def _compare_html():
             return serve_file(os.path.join(os.path.dirname(__file__), 'compare.html'))
 
-
-    def check_images_callback(self, ctx, items):
-        for i in tqdm(items):
-            ctx.log(i.id)
-            if not i.storage: continue
-            try:
-                dh, wh = i.dhash, i.whash
-                if dh and wh: continue
-
-                try: f = i.read_image()
-                except: f = None
-                if not f: continue
-
-                if not dh:
-                    f.seek(0)
-                    im = Image.open(f)
-                    dh = dhash(im) or ''
-                if not wh:
-                    f.seek(0)
-                    im = Image.open(f)
-                    wh = whash(im) or ''
-
-                i.dhash, i.whash = dh, wh
-                i.save()
-            except IOError:
-                pass
-            except AssertionError:
-                i.storage = None
-                i.save()
-            except KeyboardInterrupt:
-                break
-
     def get_tools(self):
-        return ['hash', 'hash-compare']
+        return ['hash-compare']
     
     def get_special_pages(self):
         return ['sim', 'group_ratings']
@@ -109,7 +76,7 @@ class Hashing(Plugin):
         return ['check-images']
 
     def hash(self, ctx):
-        self.check_images_callback(ctx, Item.query(Item.valid_item() & F.storage.eq(True) & (F[self.method].eq('') | F[self.method].empty())))
+        self.check_images_callback(ctx, ImageItem.query(ImageItem.valid_item() & F.storage.eq(True) & (F[self.method].eq('') | F[self.method].empty())))
         
     def hash_compare(self, ctx, tspan=''):
 
@@ -140,7 +107,7 @@ class Hashing(Plugin):
         d = set()
         d2 = defaultdict(list)
     
-        for i in tqdm(Item.query(F[self.method].exists(1) & ~F[self.method].empty() & F.flag.eq(0) & (F.width > 0) & F.url.regex(r'\.(jpe?g|gif|png|tiff)$'))):
+        for i in tqdm(ImageItem.query(F[self.method].exists(1) & ~F[self.method].empty() & F.flag.eq(0) & (F.width > 0) & F.url.regex(r'\.(jpe?g|gif|png|tiff)$'))):
             if not i[self.method]: continue
             dha = _tod(i.dhash)
             dhb = _tod(i.whash)
@@ -166,45 +133,44 @@ class Hashing(Plugin):
                         fo.write(r + '\n')
         fo.close()
 
-    def special_page(self, rs, params, **vars):
-        groups = params['groups']
-        archive = params['archive']
-        post1 = params['post']
-        limit, offset = int(params['limit']), int(params['order'].get('offset', 0))
+    def special_page(self, ds, post_args):
+        groups = ds.groups
+        archive = ds.archive
+        limit, offset = ds.limit, ds.order.get('offset', 0)
 
-        if post1.split('/')[0] not in ('sim', 'group_ratings'):
+        if post_args[0] not in ('sim', 'group_ratings'):
             return
 
-        iid = post1.split('/')[1]
+        iid = post_args[1]
 
         def _v(x):
             if isinstance(x, bytes): return struct.unpack('>q', x)[0]
             return int(x, 16) if isinstance(x, str) else x
 
-        if post1.startswith('sim/'):
+        if post_args[0] == 'sim':
             if groups:
                 return single_item('', iid), None, None
             else:
-                iid = ObjectId(iid) if len(iid) == 24 else iid
-                it = Item.first(F._id == iid)
+                it = ImageItem.first(F.id == iid)
                 if not hasattr(it, self.method): return
-                pgroups = [g for g in (Post.first(F.items == iid) or Post()).tags if g.startswith('*')]
+                pgroups = [g for g in (Album.first(F.items == ObjectId(iid)) or Album()).tags if g.startswith('*')]
                 dha, dhb = _v(it.dhash), _v(it.whash)
                 results = []
                 groupped = {}
-
-                for p in rs.perform():
+                ds.raw = False
+                
+                for p in ds.fetch():
                     for i in p.items:
                         if i.id == it.id: continue
                         if i.flag != 0 or i[self.method] is None or i[self.method] == '': continue
                         dha1, dhb1 = _v(i.dhash), _v(i.whash)
                         i.score = bitcount(dha ^ dha1) + bitcount(dhb ^ dhb1)
-                        po = Post(**p.as_dict())
+                        po = Album(**p.as_dict())
                         po.items = [i]
                         po.score = i.score
                         if archive:
                             pgs = [g for g in p.tags if g.startswith('*')]
-                            for g in pgs or [po.source_url]:
+                            for g in pgs or [po.source['url']]:
                                 if g not in pgroups and (g not in groupped or groupped[g].score > po.score):
                                     groupped[g] = po
                         else:
@@ -212,27 +178,28 @@ class Hashing(Plugin):
 
                 if archive:
                     results = list(groupped.values())
+                
                 results = sorted(results, key=lambda x: x.score)[offset:offset + limit]
                 return results, {'offset': max(offset - limit, 0), 'limit': limit}, {'offset': offset + limit,
                                                                                     'limit': limit}
 
-        elif post1.startswith('group_ratings/'):
+        elif post_args[0] == 'group_ratings':
             if groups:
                 return [], {}, {}
-            return Post.aggregator.match(F.tags.regex(r'^\*')).lookup(
+            return Album.aggregator.match(F.tags.regex(r'^\*')).lookup(
                 from_=F.item, localField=F.items, foreignField=F._id, as_=F.items2
             ).addFields(
                 group_id=Fn.filter(input=Var.tags, as_='t', cond=Fn.substrCP(Var._t, 0, 1) == '*')
             ).unwind(
                 path=Var.group_id
             ).addFields(
-                group_id=Fn.ifNull(Var.group_id, Var.source_url)
+                group_id=Fn.ifNull(Var.group_id, Var.source)
             ).group(
                 _id=Var.group_id,
                 id=Fn.first(Var._id),
                 liked_at=Fn.first(Var.liked_at),
                 created_at=Fn.first(Var.created_at),
-                source_url=Fn.first(Var.source_url),
+                source=Fn.first(Var.source),
                 items=Fn.push(Var.items),
                 tags=Fn.first(Var.tags),
                 counts=Fn.sum(Fn.size(Var.items))
@@ -241,4 +208,3 @@ class Hashing(Plugin):
             ).addFields(
                 ratings=Fn.sum(Var['items.rating'])
             ).sort(ratings=-1).limit(100).perform(), {}, {}
-                

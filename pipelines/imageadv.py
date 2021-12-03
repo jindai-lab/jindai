@@ -49,18 +49,3 @@ class Hashing(PipelineStage):
             f.seek(0)
             im = Image.open(f)
             p.whash = whash(im)
-
-
-class AutoRating(PipelineStage):
-    """应用特定模型对图像进行打分
-    """
-
-    def __init__(self, target_field='rating', model='autorating_best_state.pth'):
-        from autorating.inference_model import InferenceModel, load_state
-        state = load_state(os.path.join(config.rootpath, 'models_data', model))
-        self.model = InferenceModel(state)
-        self.target_field = target_field
-
-    def resolve(self, p):
-        setattr(p, self.target_field, float(model.predict_from_pil_image(p.image).numpy()[0]))
-        return p

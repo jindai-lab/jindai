@@ -381,8 +381,8 @@
                 };
                 disp[0].innerHTML += ('<div class="pair">{diff}</div>'.format(o));
                 var pair = disp.children()[disp.children().length - 1]
-                pair.innerHTML += ('<div class="post item ' + (o.diff <= 1 ? "selected" : "") + '" data-id="{id1}">{id1}<img src="/block/{id1}.jpg?w=400" /></div>'.format(o));
-                pair.innerHTML += ('<div class="post item" data-id="{id2}">{id2}<img src="/block/{id2}.jpg?w=400" /></div><br>'.format(o));
+                pair.innerHTML += ('<div class="post item ' + (o.diff <= 1 ? "selected" : "") + '" data-id="{id1}">{id1}<img src="/api/gallery/block/{id1}.jpg?w=400" /></div>'.format(o));
+                pair.innerHTML += ('<div class="post item" data-id="{id2}">{id2}<img src="/api/gallery/block/{id2}.jpg?w=400" /></div><br>'.format(o));
             }
             location.hash = '#' + (offset);
             window.scrollTo(0, 0);
@@ -431,7 +431,7 @@
                     var ids = $('.selected').toArray().map(x => [$(x).siblings().data('id'), $(x).data('id')]);
                     if (lastkey == e.key)
                         $.post({
-                            url: '/api/item/merge',
+                            url: '/api/gallery/imageitem/merge',
                             data: JSON.stringify({
                                 'pairs': ids
                             }),

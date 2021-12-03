@@ -1,38 +1,37 @@
 # facedet
-from PIL import Image
-from io import BytesIO
-from tqdm import tqdm
-from PyMongoWrapper import ObjectId, F, Fn, Var
-import struct
 import base64
+import struct
+from io import BytesIO
 
-from gallery import single_item, Item, Post
-from plugin import Plugin, PluginContext
-from plugins.hashing import whash, bitcount
+from gallery import Album, ImageItem, single_item
+from PIL import Image
+from plugin import Plugin
+from plugins.hashing import bitcount, whash
+from PyMongoWrapper import F, Fn, ObjectId, Var
 
 
 class FaceDet(Plugin):
     
     def __init__(self, app, **config):
-        if 'faces' not in Item.fields:
-            Item._fields.append('faces')
-        setattr(Item, 'faces', lambda: None)
+        if 'faces' not in ImageItem.fields:
+            ImageItem._fields.append('faces')
+        setattr(ImageItem, 'faces', lambda: None)
 
-    def get_callbacks(self):
-        return ['check-images']
-    
-    def get_tools(self):
-        return ['faces']
-    
     def get_special_pages(self):
         return ['face']
     
-    def faces(self, ctx, *args):
-        self.check_images_callback(ctx,
-            Item.aggregator.match(
-                (F.flag == 0) & (F.storage == True) & (F.faces == None) & F.url.regex(r'\.jpe?g$')
-            ).perform()
-        )
+    def faces(self, i):
+        if hasattr(i, 'faces') and i.faces is not None:
+            return i
+
+        f = i.read_image()
+        if not f: return
+        i.faces = []
+        for face in self.crop_faces(f):
+            i.faces.append(whash(face))
+
+        i.save()
+        return i
 
     def crop_faces(self, buf):
         from . import facedetectcnn
@@ -42,30 +41,8 @@ class FaceDet(Plugin):
             if confi < 75: continue
             bufi = image.crop((x, y, x + w, y + h))
             yield bufi
-
-    def check_images_callback(self, ctx, items):
        
-        for i in tqdm(items):
-            if hasattr(i, 'faces') and i.faces is not None:
-                return
-
-            try:
-                f = i.read_image()
-                if not f: return
-                i.faces = []
-                for face in self.crop_faces(f):
-                    ctx.log(i.id, 'found face')
-                    i.faces.append(whash(face))
-
-                i.save()
-
-            except KeyboardInterrupt:
-                exit()
-
-            except Exception as ex:
-                ctx.log(ex)
-
-    def special_page(self, aggregate, params, orders_params, **vars):
+    def special_page(self, ds, post_args):
         
         def _v(x):
             if isinstance(x, bytes):
@@ -77,36 +54,23 @@ class FaceDet(Plugin):
             else:
                 raise TypeError(x)
 
-        post1 = params['post']
-        groups = params['groups']
-        archive = params['archive']
+        groups = ds.groups
+        archive = ds.archive
 
-        offset = params['order'].get('offset', 0)
-        limit = params['limit']
+        offset = ds.order.get('offset', 0)
+        limit = ds.limit
+        ds.raw = False
 
-        if post1 == 'face/':
-            aggregate = aggregate.project(
-                _id=1, liked_at=1, created_at=1, source_url=1, tags=1,
+        if len(post_args) == 1:
+            ds.aggregator.addFields(
                 items=Fn.filter(input=Var.items, as_='item', cond=Fn.size(Fn.ifNull('$$item.faces', [])))
             ).match(F.items != [])            
 
-            if orders_params:
-                order_conds = orders_params['order_conds']
-                orders = orders_params['orders']
-                
-                if order_conds:
-                    aggregate.match(order_conds[0])
-
-                aggregate.sort(orders)
-                if offset:
-                    aggregate.skip(offset)
-                
-                aggregate.limit(limit)
-            rs = aggregate.perform()
+            rs = ds.fetch()
             return rs, {}, {}
 
-        elif post1.startswith('face/'):
-            dots = post1.split('/')[1].split('.')
+        else:
+            dots = post_args[1].split('.')
             fid = 0
             if len(dots) == 1:
                 iid = dots[0]
@@ -118,16 +82,15 @@ class FaceDet(Plugin):
             iid = ObjectId(iid)
             if groups:
                 ps = single_item('', iid)
-
                 p = ps[0]
                 for face in self.crop_faces(p.items[0].read_image()):
                     saved = BytesIO()
                     face.save(saved, format='JPEG')
                     ps.append(
-                        Post(
+                        Album(
                             _id=p.id,
                             items=[
-                                Item(url='data:image/jpeg;base64,' + base64.b64encode(saved.getvalue()).decode('ascii'))
+                                ImageItem(source={'url': 'data:image/jpeg;base64,' + base64.b64encode(saved.getvalue()).decode('ascii')})
                             ]
                         )
                     )
@@ -136,24 +99,24 @@ class FaceDet(Plugin):
 
                 return ps, {}, {}
             else:
-                fdh = [_v(f) for f in Item.first(F.id == iid).faces]
+                fdh = [_v(f) for f in ImageItem.first(F.id == iid).faces]
                 if fid: fdh = [fdh[fid-1]]
                 if not fdh: return [], {}, {}
 
                 groupped = {}
                 results = []
-                for rp in aggregate.perform():
+                for rp in ds.fetch():
                     for ri in rp.items:
-                        if not ri or not isinstance(ri, Item) or ri.flag != 0 or not ri.faces or ri.id == iid: continue
+                        if not ri or not isinstance(ri, ImageItem) or ri.flag != 0 or not ri.faces or ri.id == iid: continue
                         ri.score = min([
                             min([bitcount(_v(i) ^ j) for j in fdh])
                             for i in ri.faces
                         ])
-                        rpo = Post(**rp.as_dict())
+                        rpo = Album(**rp.as_dict())
                         rpo.items = [ri]
                         if archive:
                             pgs = [g for g in rp.tags if g.startswith('*')]
-                            for g in pgs or [rp.source_url]:
+                            for g in pgs or [rp.source['url']]:
                                 if g not in groupped or groupped[g][0] > ri.score:
                                     groupped[g] = (ri.score, rpo)
                         else:

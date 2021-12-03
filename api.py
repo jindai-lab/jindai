@@ -8,7 +8,8 @@ from PyMongoWrapper import *
 from collections import defaultdict
 from models import *
 from task import Task
-from pipeline import Pipeline
+from pipeline import Pipeline, PipelineStage
+from datasource import DataSource
 import threading
 from collections import deque
 from pdf2image import convert_from_path
@@ -108,11 +109,29 @@ class NumpyEncoder(json.JSONEncoder):
         if isinstance(obj, Image.Image):
             return str(obj)
         if isinstance(obj, datetime.datetime):
-            return obj.strftime('%Y-%m-%d %H:%M:%S')
+            return obj.isoformat()
+
         return je.default(self, obj)
 
 
+class JsonDecoder(json.JSONDecoder):
+    def __init__(self, *args, **kargs):
+        _ = kargs.pop('object_hook', None)
+        super().__init__(object_hook=self.decoder, *args, **kargs)
+
+    def decoder(self, d):
+        import dateutil.parser
+        updt = {}
+        for k, v in d.items():
+            if isinstance(v, str):
+                if re.match(r'^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?Z?$', v):
+                    updt[k] = dateutil.parser.isoparse(v)
+        if updt: d.update(**updt)
+        return d
+
+
 app.json_encoder = NumpyEncoder
+app.json_decoder = JsonDecoder
 
 tasks_queue = TasksQueue()
     
@@ -153,7 +172,7 @@ def valid_task(j):
 @rest(login=False)
 def authenticate(username, password, **kws):
     if User.authenticate(username, password):
-        Token.query(F.user==username).delete()
+        Token.query((F.user==username) & (F.expire < time.time())).delete()
         token = User.encrypt_password(str(time.time()), str(time.time_ns()))
         Token(user=username, token=token, expire=time.time() + 86400).save()
         return token
@@ -197,7 +216,7 @@ def admin_users(user='', password=None, roles=None, **kws):
 @rest(user_role='admin')
 def admin_users_add(username, password, **kws):
     if User.first(F.username == username):
-        raise Exception('User already exists: ' + str(j['username']))
+        raise Exception('User already exists: ' + str(username))
     u = User(username=username)
     u.set_password(password)
     u.save()
@@ -303,7 +322,7 @@ def update_task(id, **task):
     _id = ObjectId(id)
     task = valid_task(task)
     if '_id' in task: del task['_id']
-    return {'acknowledged': TaskDBO.query(F.id == _id).update(Fn.set(j)).acknowledged, 'updated': task}
+    return {'acknowledged': TaskDBO.query(F.id == _id).update(Fn.set(task)).acknowledged, 'updated': task}
 
 
 @app.route('/api/tasks/<id>', methods=['GET'])
@@ -320,8 +339,8 @@ def list_task(id='', offset=0, limit=10):
 
 @app.route('/api/queue/', methods=['PUT'])
 @rest()
-def enqueue_task(_id=''):
-    t = TaskDBO.first(F.id == _id)
+def enqueue_task(id=''):
+    t = TaskDBO.first(F.id == id)
     assert t, 'No such task.'
     t.last_run = datetime.datetime.now()
     t.save()
@@ -329,7 +348,7 @@ def enqueue_task(_id=''):
     if not tasks_queue.running:
         logging.info('start background thread')
         tasks_queue.start()
-    return _id
+    return id
 
 
 @app.route('/api/queue/<path:_id>', methods=['DELETE'])
@@ -447,7 +466,7 @@ def search(q='', req={}, sort='', limit=100, skip=0, dataset='', **kws):
         elif isinstance(r, (int, float)):
             return str(r)
         elif isinstance(r, datetime.datetime):
-            return r.strftime('%Y-%m-%d %H:%M:%S')
+            return r.isoformat()
         elif isinstance(r, list):
             if len(r) == 0:
                 return '[]'
@@ -629,8 +648,28 @@ def dbconsole_collections():
     return Paragraph.db.database.list_collection_names()
 
 
+@app.route('/api/meta', methods=['GET'])
+@rest(login=False)
+def get_meta():
+    r = Meta.first(F.app_title.exists(1)) or Meta()
+    return r
+        
+
+@app.route('/api/meta', methods=['POST'])
+@rest(user_role='admin')
+def set_meta(**vals):
+    r = Meta.first(F.app_title.exists(1)) or Meta()
+    for k, v in vals.items():
+        setattr(r, k, v)
+    r.save()
+    return True
+
+
 @app.route('/<path:p>', methods=['GET'])
+@app.route('/', methods=['GET'])
 def index(p='index.html'):
+    if p.startswith('api/'):
+        return '', 404
     p = p or 'index.html'
     for path in [
         p,
@@ -649,4 +688,5 @@ gallery.init(app)
 
 if __name__ == "__main__":
     os.environ['FLASK_ENV'] = 'development'
-    app.run(debug=True, host='0.0.0.0', port=8370)
+    port = os.environ.get('PORT', 8370)
+    app.run(debug=True, host='0.0.0.0', port=int(port))
