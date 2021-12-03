@@ -16,7 +16,7 @@ import itertools
 from opencc import OpenCC
 
 from PyMongoWrapper import QueryExprParser, F
-from PyMongoWrapper.dbo import mongodb, DbObject
+from PyMongoWrapper.dbo import mongodb, DbObject, DbObjectCollection
 from .utils import execute_query_expr, language_iso639
 
 from models import Paragraph, Collection
@@ -174,6 +174,31 @@ class AutoSummary(PipelineStage):
         ])
         return p
 
+
+class ArrayField(PipelineStage):
+    """操作数组字段"""
+
+    def __init__(self, field, pull=True, elements='') -> None:
+        """
+        Args:
+            field (str): 字段名
+            pull (bool): 添加（true）或删除（false）
+            elements (str): 添加或删除的元素；使用分号分隔，作为表达式运算
+        """
+        self.field = field
+        self.elements = QueryExprParser(allow_spacing=True).eval(elements)
+        self.pull = pull
+
+    def resolve(self, p: Paragraph) -> Paragraph:
+        if not isinstance(p[self.field], (list, DbObjectCollection)): return p
+        for ele in self.elements:
+            if self.pull:
+                p[self.field].append(ele)
+            else:
+                if ele in p[self.field]:
+                    p[self.field].remove(ele)
+        return p
+        
 
 class Counter:
 
@@ -527,7 +552,7 @@ class OutlineFilter(PipelineStage):
         outline = self.check_outline(p)
 
         if outline and outline[5] != '-':
-            # print(content[:20], outline)
+            # self.logger(content[:20], outline)
             if outline.startswith('book '):
                 nnums = [outline[5:], '00', '00']
             elif outline.startswith('chap '):

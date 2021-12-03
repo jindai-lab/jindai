@@ -134,7 +134,7 @@ class TwitterDataSource(DataSource):
                         continue  # skip videos
                     url = m.video_info['variants'][-1]['url'].split('?')[0]
                     if url.endswith('.m3u8'):
-                        print('found m3u8, pass', url)
+                        self.logger('found m3u8, pass', url)
                         continue
                     p.items.append(ImageItem(source={'url': url}))
                 else:
@@ -154,14 +154,13 @@ class TwitterDataSource(DataSource):
     def import_twiimg(self, ls: List[str]):
         """Import twitter posts from url strings
         Args:
-            ctx (PluginContext): plugin context
             ls (List[str]): urls
         """
         albums = []
         for l in ls:
             if 'twitter.com' not in l or '/status/' not in l:
                 continue
-            print(l)
+            self.logger(l)
 
             stid = l.split('/')
             stid = stid[stid.index('status') + 1]
@@ -230,7 +229,7 @@ class TwitterDataSource(DataSource):
                 if p and p.pdate.timestamp() < after:
                     break
             except Exception as ex:
-                print('exception', ex.__class__.__name__, ex)
+                self.logger('exception', ex.__class__.__name__, ex)
                 break
 
         yield from albums
@@ -250,7 +249,7 @@ class TwitterDataSource(DataSource):
                             f'^https://twitter.com/{u}/')).sort(-F.pdate).first()
                         if last_updated:
                             after = last_updated.pdate.timestamp()
-                    print(u)
+                    self.logger(u)
                     yield from self.import_twiuser(u, after=after, before=before)
             else:
                 for u in args:

@@ -1,6 +1,9 @@
+import threading
+import traceback
 from models import Paragraph, get_context
 from datasource import DataSource
 from pipeline import PipelineStage, Pipeline
+from queue import Queue
 
 class Task:
 
@@ -14,11 +17,40 @@ class Task:
             name, args = datasource
         self.datasource = Task.datasource_ctx[name](**args)
         self.pipeline = Pipeline(pipeline, concurrent, resume_next)
+        self.queue = Queue()
+        self.alive = True
+        self.returned = None
+
+        self.datasource.logger = self.log
+        self.pipeline.logger = self.log
 
     def execute(self):
         rs = self.datasource.fetch()
         for _ in self.pipeline.applyParagraphs(rs): pass
         return self.pipeline.summarize()
+
+    def log(self, *args):
+        s = ' '.join(map(str, args))
+        print(s)
+        self.queue.put(s)
+        
+    def run(self):
+        def _run():
+            try:
+                self.returned = self.execute()
+            except Exception as ex:
+                self.log('Error:', ex)
+                self.log(traceback.format_exc())
+            self.alive = False
+        
+        self.alive = True
+        thr = threading.Thread(target=_run)
+        thr.start()
+        return thr
+    
+    def fetch_log(self):
+        while not self.queue.empty():
+            yield self.queue.get() + '\n'
 
 
 Pipeline.pipeline_ctx = get_context('pipelines', PipelineStage)

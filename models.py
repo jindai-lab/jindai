@@ -15,7 +15,6 @@ from PyMongoWrapper import F, Fn, MongoOperand, QueryExprParser, dbo
 from PyMongoWrapper.dbo import DbObject, DbObjectInitiator
 
 import config
-from plugin import PluginContext
 from storage import StorageManager
 
 dbo.connstr = 'mongodb://' + config.mongo + '/' + config.mongoDbName

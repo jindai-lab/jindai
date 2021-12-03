@@ -2,7 +2,7 @@ import json
 import os
 
 from flask import jsonify, request
-from gallery import Plugin, arg, rest, tools
+from gallery import Plugin, arg, rest
 from models import F, Meta
 
 
@@ -33,13 +33,10 @@ class Shortcuts(Plugin):
                 r.save()
                 return 'OK'
 
-    def get_tools(self):
-        return ['routine']
-
     def get_callbacks(self):
         return ['css']
 
-    def css_callback(self, ctx):
+    def css_callback(self):
         return ','.join(
             ['.v-card .t_' + v for k, v in read_shortcuts().items() if not v.startswith('(') and '&' not in v]) + '{ color:orange!important; }' + '''
             #shortcuts-input #hints {
@@ -49,13 +46,6 @@ class Shortcuts(Plugin):
                 margin: 20px auto;
             }
             '''
-            
-    def routine(self, ctx, routine_name):
-        p = read_shortcuts()
-        v = p['::routine-' + routine_name]
-        for l in v.split('&'):
-            l = l.split(' ')
-            tools[l[0]].run_tool(ctx, *l)
     
     def get_special_pages(self):
         return list(self.shortcut_pages.keys())

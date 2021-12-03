@@ -29,7 +29,7 @@ class BiblioDataSource(DataSource):
         field = ''
         for l in lines:
             if not l.strip():
-                print(d)
+                self.logger(d)
                 if d:
                     yield Paragraph(collection=self.collection, **d)
                 d = {}
