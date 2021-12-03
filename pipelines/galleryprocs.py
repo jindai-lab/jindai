@@ -2,6 +2,7 @@
 """
 from pipeline import PipelineStage
 from models import Album, AutoTag
+import re
 
 
 class ApplyAutoTags(PipelineStage):

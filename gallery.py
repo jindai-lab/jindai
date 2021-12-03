@@ -188,7 +188,6 @@ def apply_auto_tags(albums):
     Args:
         albums (Iterable[Album]): album objects
     """
-    log = print if ctx else print
     m = list(AutoTag.query({}))
     if not m:
         return

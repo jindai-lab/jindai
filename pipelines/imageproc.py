@@ -89,6 +89,7 @@ class ImageHashDuplications(ImageOrAlbumStage):
     
     def __init__(self) -> None:
         from plugins.hashing import v
+        from queue import Queue
         self.d2 = defaultdict(list)
     
         for i in tqdm(ImageItem.query(F.dhash.exists(1) & ~F.dhash.empty() & F.flag.eq(0) & (F.width > 0) & F.url.regex(r'\.(jpe?g|gif|png|tiff)$'))):
@@ -97,6 +98,7 @@ class ImageHashDuplications(ImageOrAlbumStage):
             dhb = v(i.whash)
             self.d2[dha].append((i.id, i.width, i.height, dhb))
         
+        self.results = Queue()
         self.fo = open('compare.tsv', 'w')
 
     def resolve_image(self, i: ImageItem):
@@ -114,10 +116,12 @@ class ImageHashDuplications(ImageOrAlbumStage):
                     if w1 * h1 < w2 * h2: b, a = a, b
                     r = '{}\t{}\t{}'.format(a, b, sc + bitcount(dhb1 ^ dhb2))
                     self.logger(r)
-                    self.fo.write(r + '\n')
+                    self.results.put(r + '\n')
         return i
 
     def summarize(self, r):
+        while not self.results.empty():
+            self.fo.write(self.results.get())
         self.fo.close()
         return {'redirect': '/api/gallery/compare'}
         
