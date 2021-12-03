@@ -166,6 +166,6 @@ class HTMLImageDataSource(DataSource):
                 elif '/thumbs/' in imgurl or '/graphics/' in imgurl:
                     continue
                 if imgurl not in imgset:
-                    yield Paragraph(url=url, collection=self.collection, content=title, keywords=title.split(), image_source=imgurl, source={'url': url})
+                    yield Paragraph(source={'url': url}, collection=self.collection, content=title, keywords=title.split())
                     imgset.add(imgurl)
     

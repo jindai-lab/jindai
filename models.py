@@ -1,13 +1,20 @@
-import time
-from typing import Dict, Type, Union, Any
-import glob, os, re, datetime, json
+import datetime
+import glob
 import importlib
-import requests
-import config
+import json
+import os
+import re
+import time
 from hashlib import sha1
+from typing import Any, Dict, Type, Union
+
+import requests
+from bson import ObjectId
 from PIL import Image
-from PyMongoWrapper import dbo, F, Fn, QueryExprParser, MongoOperand
+from PyMongoWrapper import F, Fn, MongoOperand, QueryExprParser, dbo
 from PyMongoWrapper.dbo import DbObject, DbObjectInitiator
+
+import config
 from plugin import PluginContext
 from storage import StorageManager
 
@@ -32,6 +39,7 @@ parser = QueryExprParser(abbrev_prefixes={None: 'keywords='}, allow_spacing=True
 
 
 class Paragraph(DbObject):
+
     collection = str
     source = dict
     keywords = list
@@ -61,7 +69,7 @@ class Paragraph(DbObject):
 
     def as_dict(self, expand=False):
         d = super().as_dict(expand)
-        for k in [_ for _ in d if _.startswith('_')]:
+        for k in [_ for _ in d if _.startswith('_') and _ != '_id']:
             del d[k]
         return d
 
@@ -74,7 +82,7 @@ class Paragraph(DbObject):
             else:
                 self.image_storage = {'blocks': ObjectId()}
 
-            with storage.StorageManager() as mgr:
+            with StorageManager() as mgr:
                 buf = im.tobytes('jpeg')
                 mgr.write(buf, self.id)
 
@@ -88,6 +96,11 @@ class History(DbObject):
     user = str
     created_at = DbObjectInitiator(datetime.datetime.now)
     querystr = str
+
+
+class Meta(DbObject):
+
+    app_title = str
 
 
 class Collection(DbObject):
@@ -162,105 +175,14 @@ class Token(DbObject):
         Token.query(F.user==user).delete()
 
 
-class Auditor:
-    """Auditor
-    """    
-    
-    fp = open('auditor.log', 'a', encoding='utf-8')
-    jsonenc = MongoJSONEncoder(ensure_ascii=False)
+class ImageItem(Paragraph):
 
-    @staticmethod
-    def log(oper : str, bundle : Any) -> None:
-        """Log updates
-
-        Args:
-            oper (str): operation
-            bundle (Any): bundle data
-        """        
-        try:
-            Auditor.fp.write('\t'.join(['%.3f' % time.time(), oper, Auditor.jsonenc.encode(bundle)]) + '\n')
-        except:
-            pass
-
-
-def get_context(directory : str, parent_class : Type) -> Dict:
-    modules = [
-                directory + '.' + os.path.basename(f)[:-3] 
-                for f in glob.glob(os.path.join(os.path.dirname(__file__), directory, "*.py"))
-            ]
-    ctx = {}
-    for mm in modules:
-        try:
-            m = importlib.import_module(mm)
-            for k in m.__dict__:
-                if k != parent_class.__name__ and not k.startswith('_') and isinstance(m.__dict__[k], type) and issubclass(m.__dict__[k], parent_class):
-                    ctx[k] = m.__dict__[k]
-        except Exception as ie:
-            print('Error while importing', mm, ':', ie)
-    return ctx
-
-
-def try_download(url: str, referer: str = '', attempts: int = 3, proxies = {}, ctx : PluginContext = None) -> Union[bytes, None]:
-    """Try download from url
-
-    Args:
-        url (str): url
-        referer (str, optional): referer url. Defaults to ''.
-        attempts (int, optional): max attempts. Defaults to 3.
-        ctx (PluginContext, optional): plugin context. Defaults to None.
-
-    Returns:
-        Union[bytes, None]: response content or None if failed
-    """
-
-    buf = None
-    for itry in range(attempts):
-        try:
-            if '://' not in url and os.path.exists(url):
-                buf = open(url, 'rb').read()
-            else:
-                code = -1
-                if isinstance(url, tuple):
-                    url, referer = url
-                headers = {
-                    "user-agent": "Mozilla/5.1 (Windows NT 6.0) Gecko/20180101 Firefox/23.5.1", "referer": referer.encode('utf-8')}
-                try:
-                    r = requests.get(url, headers=headers, cookies={},
-                                     proxies=proxies, verify=False, timeout=60)
-                    buf = r.content
-                    code = r.status_code
-                    if ctx: ctx.log(url, len(buf))
-                except requests.exceptions.ProxyError:
-                    buf = None
-                    if ctx: ctx.log(url, 'error')
-            if code != -1:
-                break
-        except Exception as ex:
-            time.sleep(1)
-    return buf
-
-
-class Item(dbo.DbObject):
-    """Item Object"""
-
-    DELETED = 255
-    CORRUPTED = 10
-    NORMAL = 0
-
-    IMAGE = 1
-    VIDEO = 2
-    AUDIO = 3
-    PDF = 4
-    TEXT = 5
-
-    url = str
     flag = int
     rating = int
     width = int
     height = int
     dhash = str
     whash = str
-    ftype = int
     
     storage = dbo.DbObjectInitiator(lambda: None)
     thumbnail = dbo.DbObjectInitiator(lambda: None)
@@ -275,12 +197,12 @@ class Item(dbo.DbObject):
         return (F.storage != None) & (F.flag == 0)
 
     def __repr__(self):
-        return f'<Item {self.url}>'
+        return f'<ImageItem {self.source["url"]}>'
 
     def read_image(self):
-        if not self.url or not self.storage: return
+        if not self.source.get('url') or not self.storage: return
         vt = self.id
-        if self.url.endswith('.mp4') or self.url.endswith('.avi'):
+        if self.source['url'].endswith('.mp4') or self.source['url'].endswith('.avi'):
             if not hasattr(self, 'thumbnail') or not self.thumbnail:
                 try:
                     self.generate_thumbnail()
@@ -291,7 +213,9 @@ class Item(dbo.DbObject):
             return StorageManager().read(vt)
 
     def generate_thumbnail(self, file_path=''):
-        import cv2, os
+        import os
+
+        import cv2
 
         self.thumbnail = None
         p = file_path
@@ -307,7 +231,7 @@ class Item(dbo.DbObject):
                         os.unlink(p)
                         return
                 else:
-                    p = self.url
+                    p = self.source['url']
 
             cap = cv2.VideoCapture(p)
 
@@ -334,40 +258,83 @@ class Item(dbo.DbObject):
             storages.append(self.id)
         if self.thumbnail:
             storages.append(self.thumbnail)
-        Auditor.log('delete:item', self.id)
         super().delete()
 
-    def save(self):
-        Auditor.log('update:item' if self.id else 'insert:item', self.as_dict())
-        super().save()
 
+class Album(Paragraph):    
 
-class Post(dbo.DbObject):
-    """Post Object"""
-    
-    source_url = str
     author = str
-    liked_at = dbo.DbObjectInitiator(lambda: int(time.time()))
-    created_at = dbo.DbObjectInitiator(lambda: int(time.time()))
+    liked_at = DbObjectInitiator(datetime.datetime.now)
     tags = list
-    items = dbo.DbObjectCollection(Item)
-    
+    items = dbo.DbObjectCollection(ImageItem)
+
     def __repr__(self):
-        return f'<Post {self.source_url}>'
+        return f'<Album {self.source["url"]}>'
 
     def save(self):
         self.tags = list(set(self.tags))
-        Auditor.log('update:post' if self.id else 'insert:post', self.as_dict())
+        for i in self.items:
+            if isinstance(i, DbObject) and i.id is None: i.save()
         super().save()
 
-    def delete(self):
-        Auditor.log('delete:post', self.id)
-        super().delete()
 
-
-class AutoTag(dbo.DbObject):
+class AutoTag(DbObject):
     """Auto Tagging Object"""
     
     from_tag = str
     pattern = str
     tag = str
+
+
+def get_context(directory : str, parent_class : Type) -> Dict:
+    modules = [
+                directory + '.' + os.path.basename(f)[:-3] 
+                for f in glob.glob(os.path.join(os.path.dirname(__file__), directory, "*.py"))
+            ]
+    ctx = {}
+    for mm in modules:
+        try:
+            m = importlib.import_module(mm)
+            for k in m.__dict__:
+                if k != parent_class.__name__ and not k.startswith('_') and isinstance(m.__dict__[k], type) and issubclass(m.__dict__[k], parent_class):
+                    ctx[k] = m.__dict__[k]
+        except Exception as ie:
+            print('Error while importing', mm, ':', ie)
+    return ctx
+
+
+def try_download(url: str, referer: str = '', attempts: int = 3, proxies = {}) -> Union[bytes, None]:
+    """Try download from url
+
+    Args:
+        url (str): url
+        referer (str, optional): referer url. Defaults to ''.
+        attempts (int, optional): max attempts. Defaults to 3.
+
+    Returns:
+        Union[bytes, None]: response content or None if failed
+    """
+
+    buf = None
+    for itry in range(attempts):
+        try:
+            if '://' not in url and os.path.exists(url):
+                buf = open(url, 'rb').read()
+            else:
+                code = -1
+                if isinstance(url, tuple):
+                    url, referer = url
+                headers = {
+                    "user-agent": "Mozilla/5.1 (Windows NT 6.0) Gecko/20180101 Firefox/23.5.1", "referer": referer.encode('utf-8')}
+                try:
+                    r = requests.get(url, headers=headers, cookies={},
+                                     proxies=proxies, verify=False, timeout=60)
+                    buf = r.content
+                    code = r.status_code
+                except requests.exceptions.ProxyError:
+                    buf = None
+            if code != -1:
+                break
+        except Exception as ex:
+            time.sleep(1)
+    return buf
