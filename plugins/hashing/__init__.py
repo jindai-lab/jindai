@@ -23,6 +23,26 @@ def bitcount(x):
     return bin(x).count('1')
 
 
+def v(x):
+    if isinstance(x, bytes): return struct.unpack('>q', x)[0]
+    return int(x, 16) if isinstance(x, str) else x
+
+
+def flip(x, i):
+    x ^= 1 << i
+    return x
+
+
+def flips(x, n, lm=0):
+    for i in range(lm, 64):
+        _x = flip(x, i)
+        if n == 1:
+            yield _x
+        else:
+            for __x in flips(_x, n - 1, i + 1):
+                yield __x
+
+
 class Hashing(Plugin):
 
     def __init__(self, app, method='dhash'):
@@ -65,74 +85,10 @@ class Hashing(Plugin):
         @app.route('/api/gallery/compare')
         def _compare_html():
             return serve_file(os.path.join(os.path.dirname(__file__), 'compare.html'))
-
-    def get_tools(self):
-        return ['hash-compare']
     
     def get_special_pages(self):
         return ['sim', 'group_ratings']
     
-    def get_callbacks(self):
-        return ['check-images']
-
-    def hash(self, ctx):
-        self.check_images_callback(ctx, ImageItem.query(ImageItem.valid_item() & F.storage.eq(True) & (F[self.method].eq('') | F[self.method].empty())))
-        
-    def hash_compare(self, ctx, tspan=''):
-
-        if tspan == '':
-            tspan = 0
-        else:
-            tspan = queryparser.parse_dt_span(tspan)
-        min_id = ObjectId.from_datetime(datetime.datetime.fromtimestamp(tspan))
-        ctx.log('min_id', min_id)
-                
-        def _tod(x):
-            return x if isinstance(x, int) else int(x, 16) if x else -1
-    
-        def _flip(x, i):
-            x ^= 1 << i
-            return x
-
-        def _flips(x, n, lm=0):
-            for i in range(lm, 64):
-                _x = _flip(x, i)
-                if n == 1:
-                    yield _x
-                else:
-                    for __x in _flips(_x, n - 1, i + 1):
-                        yield __x
-
-        from collections import defaultdict
-        d = set()
-        d2 = defaultdict(list)
-    
-        for i in tqdm(ImageItem.query(F[self.method].exists(1) & ~F[self.method].empty() & F.flag.eq(0) & (F.width > 0) & F.url.regex(r'\.(jpe?g|gif|png|tiff)$'))):
-            if not i[self.method]: continue
-            dha = _tod(i.dhash)
-            dhb = _tod(i.whash)
-            if i.id > min_id:
-                d.add(dha)
-            d2[dha].append((i.id, i.width, i.height, dhb))
-        total = len(d2)
-        ctx.log(total)
-        ctx.log('loaded {} unique hashes, {} to compare'.format(len(d2), len(d)))
-
-        fo = open('compare.tsv', 'w')
-        for dh2 in tqdm(d):
-            ls2 = d2[dh2]
-            for id2, w2, h2, dhb2 in ls2:
-                for dh1, sc in [(dh2, 0)] + list(zip(_flips(dh2, 1), [1] * 64)) + list(zip(_flips(dh2, 2), [2] * 2080)):
-                    if dh1 not in d2: continue
-                    for id1, w1, h1, dhb1 in d2[dh1]:
-                        if id1 >= id2 or w1 == 0: continue
-                        a, b = id2, id1
-                        if w1 * h1 < w2 * h2: b, a = a, b
-                        r = '{}\t{}\t{}'.format(a, b, sc + bitcount(dhb1 ^ dhb2))
-                        ctx.log(r)
-                        fo.write(r + '\n')
-        fo.close()
-
     def special_page(self, ds, post_args):
         groups = ds.groups
         archive = ds.archive
@@ -143,10 +99,6 @@ class Hashing(Plugin):
 
         iid = post_args[1]
 
-        def _v(x):
-            if isinstance(x, bytes): return struct.unpack('>q', x)[0]
-            return int(x, 16) if isinstance(x, str) else x
-
         if post_args[0] == 'sim':
             if groups:
                 return single_item('', iid), None, None
@@ -154,7 +106,7 @@ class Hashing(Plugin):
                 it = ImageItem.first(F.id == iid)
                 if not hasattr(it, self.method): return
                 pgroups = [g for g in (Album.first(F.items == ObjectId(iid)) or Album()).tags if g.startswith('*')]
-                dha, dhb = _v(it.dhash), _v(it.whash)
+                dha, dhb = v(it.dhash), v(it.whash)
                 results = []
                 groupped = {}
                 ds.raw = False
@@ -163,7 +115,7 @@ class Hashing(Plugin):
                     for i in p.items:
                         if i.id == it.id: continue
                         if i.flag != 0 or i[self.method] is None or i[self.method] == '': continue
-                        dha1, dhb1 = _v(i.dhash), _v(i.whash)
+                        dha1, dhb1 = v(i.dhash), v(i.whash)
                         i.score = bitcount(dha ^ dha1) + bitcount(dhb ^ dhb1)
                         po = Album(**p.as_dict())
                         po.items = [i]

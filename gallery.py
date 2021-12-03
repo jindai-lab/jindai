@@ -24,7 +24,7 @@ import config
 from datasources.gallerydatasource import GalleryAlbumDataSource, queryparser
 from helpers import *
 from models import Album, AutoTag, ImageItem, MongoJSONEncoder
-from plugin import Plugin, PluginContext
+from plugin import Plugin
 from storage import StorageManager
 
 # prepare environment for requests
@@ -228,54 +228,8 @@ def Q(tags: str) -> Iterable[Album]:
     return ag
 
 
-# PLUGINS
-class DefaultTools(Plugin):
-    """Plugin for default tools."""
-
-    instance = None
-
-    def __init__(self, app, **config):
-        super().__init__(app, **config)
-        DefaultTools.instance = self
-
-    def get_tools(self) -> List[str]:
-        """Return list of tools
-
-        Returns:
-            List[str]: tools
-        """
-        return [
-            'tags-batch',
-            'long-lasting'
-        ]
-
-    def tags_batch(self, ctx: PluginContext, q: str, tags: str):
-        """Batch tagging albums
-
-        Args:
-            ctx (PluginContext): plugin context
-            q (str): query string
-            tags (str): tags string
-        """
-        q = F.id.in_([p.id for p in Q(q)])
-        for t in tags.split(','):
-            if t.startswith('~'):
-                tparam = queryparser.eval(t[1:])
-                ret = Album.query(q).update(Fn.pull(tparam))
-            else:
-                ret = Album.query(q & F.tags.ne(t)).update(Fn.push(tags=t))
-            print('updated', ret.modified_count)
-
-    def long_lasting(self, ctx : PluginContext):
-        for _ in range(100):
-            print(_)
-            print(_)
-            time.sleep(1)
-
-
 # prepare plugins
 plugins = []
-tools = {}
 special_pages = {}
 callbacks = defaultdict(list)
 
@@ -288,7 +242,7 @@ def register_plugins(app):
     """
     import plugins as _plugins
 
-    for pl in config.gallery.get('plugins') + [DefaultTools]:
+    for pl in config.gallery.get('plugins'):
         if isinstance(pl, tuple) and len(pl) == 2:
             pl, kwargs = pl
         else:
@@ -305,9 +259,6 @@ def register_plugins(app):
                 pl = getattr(_plugins, pl)
         try:
             pl = pl(app, **kwargs)
-
-            for name in pl.get_tools():
-                tools[name] = pl
 
             for name in pl.get_callbacks():
                 callbacks[name].append(pl)
@@ -421,7 +372,7 @@ def init(app):
                     items=[ObjectId(rese)])
                 for pd in Album.query(F.items == dele.id):
                     pr.tags += pd.tags
-                    if (not pr.source['url'] or 'restored' in pr.source['url']) and pd.source['url']:
+                    if (not pr.source.get('url') or 'restored' in pr.source['url']) and pd.source.get('url'):
                         pr.source = pd.source
                     
                 pr.save()
@@ -727,7 +678,7 @@ def init(app):
         Returns:
             Response: css document
         """
-        css = '\n'.join([p.run_callback(PluginContext(), 'css')
+        css = '\n'.join([p.run_callback('css')
                         for p in callbacks['css']])
         return Response(css, mimetype='text/css')
 
@@ -738,7 +689,7 @@ def init(app):
         Returns:
             Response: js document
         """
-        js = '\n'.join([p.run_callback(PluginContext(), 'js')
+        js = '\n'.join([p.run_callback('js')
                     for p in callbacks['js']])
         return Response(js, mimetype='text/javascript')
 
@@ -749,83 +700,4 @@ def init(app):
         """
         return list(special_pages.keys())
 
-    @app.route('/api/gallery/plugins/tool', methods=["GET", "POST"])
-    @rest()
-    def tools_view(action='', args=[]):
-        """Call tools
-
-        Returns:
-            Response: json document for a list of tools
-
-        Yields:
-            str: output logs of the running tool
-        """
-        if not action:
-            return sorted(tools.keys())
-
-        if action not in tools:
-            abort(404)
-
-        args = [queryparser.expand_literals(_) for _ in args if _]
-
-        def generate():
-            """Generate log text from plugin context
-
-            Yields:
-                str: log text
-            """
-            f = tools[action]
-            yield 'args: ' + str(args) + '\n\n'
-
-            ctx = PluginContext(action)
-            ctx.run(f.run_tool, action, *args)
-            while ctx.alive:
-                yield from ctx.fetch()
-                time.sleep(0.1)
-
-            yield from ctx.fetch()
-            yield 'returned: ' + MongoJSONEncoder(ensure_ascii=False).encode(ctx.ret) + '\n'
-
-            yield 'finished.\n'
-
-        return Response(stream_with_context(generate()), status=200,
-                        mimetype="text/plain",
-                        content_type="text/event-stream"
-                        )
-
-    @app.route('/api/gallery/stats')
-    @rest()
-    def stats():
-        """Print out statistics
-
-        Returns:
-            Response: json document of statistics
-        """
-        return {
-            'albums': Album.query({}).count(),
-            'items': ImageItem.query({}).count(),
-            'items_saved': ImageItem.query({'storage': True}).count(),
-        }
-
     register_plugins(app)
-
-
-def main():
-    import sys
-    register_plugins(None)
-    ctx = PluginContext('cmdline', join=True, logging_hook=print)
-    
-    if sys.argv[1] in tools:
-        tool_func = tools[sys.argv[1]]
-        if isinstance(tool_func, Plugin):
-            tool_func.run_tool(ctx, *sys.argv[1:])
-        else:
-            tool_func(*sys.argv[2:])
-
-    else:
-        print('unknown command', sys.argv[1])
-
-
-if __name__ == '__main__':
-    main()
-

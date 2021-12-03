@@ -145,13 +145,13 @@ class GraphicClustering(PipelineStage):
                 if i not in g.nodes:
                     g.add_node(i)
             g.add_edge(a, b, weight=v)
-            print(a,b,v)
+            self.logger(a,b,v)
         
         meta = ''
         for i, c in enumerate(nx.connected_components(g)):
             meta += f'{i+1}\t' + '; '.join(c) + '\n'
             
-        print(meta)
+        self.logger(meta)
         
         nx.draw(g, with_labels=True)
         buf = BytesIO()

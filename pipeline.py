@@ -49,6 +49,7 @@ class Pipeline:
             return p
         
         for stage in self.stages:
+            stage.logger = self.logger
             try:
                 p = stage.resolve(p)
                 if not p: return

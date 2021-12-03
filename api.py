@@ -28,6 +28,7 @@ class TasksQueue:
         self.running = False
         self.running_task = ''
         self.results = {}
+        self.taskdbo = None
 
     def start(self):
         self.running = True
@@ -52,13 +53,16 @@ class TasksQueue:
     def working(self):
         while self.running:
             if self._q:
-                self.running_task, t = self._q.popleft()
+                self.running_task, self.taskdbo = self._q.popleft()
+                t = self.taskdbo
                 # emit('queue', self.status)
 
                 try:
                     task = Task(datasource=(t.datasource, t.datasource_config), pipeline=t.pipeline, concurrent=t.concurrent, resume_next=t.resume_next)
                     # emit('debug', 'task inited') 
-                    self.results[self.running_task] = task.execute()
+                    t._task = task
+                    task.run().join()
+                    self.results[self.running_task] = task.returned
                 except Exception as ex:
                     self.results[self.running_task] = {'exception': str(ex), 'tracestack': traceback.format_tb(ex.__traceback__)}
                 self.running_task = ''
@@ -73,6 +77,16 @@ class TasksQueue:
 
     def stop(self):
         self.running = False
+
+    def find(self, key):
+        if self.running_task == key:
+            return self.taskdbo
+        else:
+            for k, v in self._q:
+                if k == key:
+                    return v
+
+        return None
 
     def __len__(self):
         return len(self._q)
@@ -346,11 +360,23 @@ def enqueue_task(id=''):
     assert t, 'No such task.'
     t.last_run = datetime.datetime.now()
     t.save()
-    tasks_queue.enqueue(f'{t.name}@{datetime.datetime.now().strftime("%Y%m%d %H%M%S")}', t)
+    t._task = None
+    key = f'{t.name}@{datetime.datetime.now().strftime("%Y%m%d %H%M%S")}'
+    tasks_queue.enqueue(key, t)
     if not tasks_queue.running:
         logging.info('start background thread')
         tasks_queue.start()
-    return id
+    return key
+
+
+@app.route('/api/queue/logs/<path:key>', methods=['GET'])
+@rest()
+def logs_task(key):
+    t = tasks_queue.find(key)
+    if t:
+        return logs_view(t)
+    else:
+        abort(404)
 
 
 @app.route('/api/queue/<path:_id>', methods=['DELETE'])

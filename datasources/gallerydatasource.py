@@ -27,7 +27,8 @@ def _groupby(params):
 
 
 queryparser = QueryExprParser(abbrev_prefixes={'_': 'items.', None: 'tags=', '?': 'source.url%'}, functions={
-    'groupby': _groupby
+    'groupby': _groupby,
+    'now': lambda x: MongoOperand(datetime.datetime.now()),
 },
     shortcuts={
     'authored': {'tags': {'$regex': '^@'}},
@@ -67,13 +68,13 @@ class GalleryAlbumDataSource(DataSource):
         if sort_keys and sort_keys != 'random':
             order['keys'] = sort_keys.split(',')
         
-        if len(order['keys']) > 0 and '_id' not in order['keys'] and '-_id' not in order['keys']:
+        if len(order['keys']) > 0 and 'random' not in order['keys'] and '_id' not in order['keys'] and '-_id' not in order['keys']:
             order['keys'].append('_id')
             order['_id'] = ObjectId('00'*12)
         
         self.orders = [
             (o.split('-')[-1], -1 if o.startswith('-') == (direction == 'next') else 1)
-            for o in order['keys']
+            for o in order['keys'] if o != 'random'
         ]
         self.order = order
         self.random = len(self.orders) == 0
@@ -286,12 +287,12 @@ class ImageImportDataSource(DataSource):
                     locs += glob.glob(loc)
                 elif loc.endswith('.zip'):
                     zips.append(loc)
-                    print(loc)
+                    self.logger(loc)
                     with zipfile.ZipFile(loc, 'r') as z:
                         l += [(loc, loc + '#' + _) for _ in z.namelist()]
                         z.extractall('__zip{}'.format(hash(loc)))
                 elif os.path.isdir(loc):
-                    print(loc)
+                    self.logger(loc)
                     l += [(loc, os.path.join(loc, _)) for _ in os.listdir(loc)]
                 elif os.path.isfile(loc):
                     l.append((loc, loc))
@@ -367,7 +368,7 @@ class ImageImportDataSource(DataSource):
                 imgs = [('', url)]
                 title = ''
             else:
-                print(url)
+                self.logger(url)
                 html = try_download(url)
                 assert html, 'Download failed.'
                 try:
@@ -390,7 +391,7 @@ class ImageImportDataSource(DataSource):
                         r'(zoomfile|data-original|data-src|src|file|data-echo)=["\'](.*?)["\']', img)
                 imgs += re.findall(r'<a[^>]+(href)="([^"]*?\.jpe?g)"',
                                    html, flags=re.I)
-                print(len(imgs), 'images found.')
+                self.logger(len(imgs), 'images found.')
 
             for _, img in imgs:
                 imgurl = urljoin(url, img)
@@ -410,7 +411,7 @@ class ImageImportDataSource(DataSource):
                 elif '/thumbs/' in imgurl or '/graphics/' in imgurl:
                     continue
                 if imgurl not in imgset:
-                    print(imgurl)
+                    self.logger(imgurl)
                     i = ImageItem.first(F.source == {'url': imgurl}) or ImageItem(source={'url': imgurl})
                     i.save()
                     p.items.append(i)

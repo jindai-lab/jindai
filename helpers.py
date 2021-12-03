@@ -6,6 +6,8 @@ from PyMongoWrapper import F
 from models import Token, User
 from concurrent.futures import ThreadPoolExecutor
 from typing import IO, Any, Callable, List, Dict, Iterable, Tuple, Union
+import time
+from models import MongoJSONEncoder
 
 
 def rest(login=True, cache=False, user_role=''):
@@ -112,3 +114,28 @@ def serve_file(p: Union[str, IO], ext: str = '', file_size: int = 0) -> Response
         return rv
     else:
         return send_file(f, mimetype=mimetype, conditional=True)
+
+def logs_view(task):
+
+    def generate():
+        """Generate log text from plugin context
+
+        Yields:
+            str: log text
+        """
+        while task._task is None:
+            time.sleep(1)
+
+        while task._task.alive:
+            yield from task._task.fetch_log()
+            time.sleep(0.1)
+
+        yield from task._task.fetch_log()
+        yield 'returned: ' + MongoJSONEncoder(ensure_ascii=False).encode(task._task.returned) + '\n'
+
+        yield 'finished.\n'
+
+    return Response(stream_with_context(generate()), status=200,
+                    mimetype="text/plain",
+                    content_type="text/event-stream"
+                    )

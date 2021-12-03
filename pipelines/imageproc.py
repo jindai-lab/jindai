@@ -7,8 +7,10 @@ import numpy as np
 from PIL import Image, ImageOps
 from typing import Union
 import os
-from models import ImageItem, Album, parser, try_download
+from models import ImageItem, Album, F, parser, try_download
 from plugins.hashing import dhash, whash
+from collections import defaultdict
+from tqdm import tqdm
 
 
 class ImageOrAlbumStage(PipelineStage):
@@ -22,7 +24,7 @@ class ImageOrAlbumStage(PipelineStage):
             try:
                 self.resolve_image(i)
             except Exception as ex:
-                print(i.id, ex)
+                self.logger(i.id, ex)
                 p = None
         return p
 
@@ -46,7 +48,7 @@ class CheckImage(ImageOrAlbumStage):
             p.flag = 10
             p.save()
         except Exception as ex:
-            print(p.id, ex)
+            self.logger(p.id, ex)
 
 
 class ImageHash(ImageOrAlbumStage):
@@ -79,6 +81,45 @@ class ImageHash(ImageOrAlbumStage):
         except AssertionError:
             i.storage = None
             i.save()
+
+
+class ImageHashDuplications(ImageOrAlbumStage):
+    """进行图像哈希去重
+    """
+    
+    def __init__(self) -> None:
+        from plugins.hashing import v
+        self.d2 = defaultdict(list)
+    
+        for i in tqdm(ImageItem.query(F.dhash.exists(1) & ~F.dhash.empty() & F.flag.eq(0) & (F.width > 0) & F.url.regex(r'\.(jpe?g|gif|png|tiff)$'))):
+            if not i.dhash: continue
+            dha = v(i.dhash)
+            dhb = v(i.whash)
+            self.d2[dha].append((i.id, i.width, i.height, dhb))
+        
+        self.fo = open('compare.tsv', 'w')
+
+    def resolve_image(self, i: ImageItem):
+        from plugins.hashing import v, flips, bitcount
+        if not i.dhash: return
+        dh2 = v(i.dhash)
+        if dh2 not in self.d2: return
+        ls2 = self.d2[dh2]
+        for id2, w2, h2, dhb2 in ls2:
+            for dh1, sc in [(dh2, 0)] + list(zip(flips(dh2, 1), [1] * 64)) + list(zip(flips(dh2, 2), [2] * 2080)):
+                if dh1 not in self.d2: continue
+                for id1, w1, h1, dhb1 in self.d2[dh1]:
+                    if id1 >= id2 or w1 == 0: continue
+                    a, b = id2, id1
+                    if w1 * h1 < w2 * h2: b, a = a, b
+                    r = '{}\t{}\t{}'.format(a, b, sc + bitcount(dhb1 ^ dhb2))
+                    self.logger(r)
+                    self.fo.write(r + '\n')
+        return i
+
+    def summarize(self, r):
+        self.fo.close()
+        return {'redirect': '/api/gallery/compare'}
         
 
 class ImageGrayScale(ImageOrAlbumStage):
@@ -255,7 +296,7 @@ class DownloadImages(PipelineStage):
             if not content: return
             with self.mgr:
                 self.mgr.write(content, str(i.id))
-                print(i.id, len(content))
+                self.logger(i.id, len(content))
             i.storage = True
             i.save()
 
