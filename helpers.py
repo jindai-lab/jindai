@@ -8,6 +8,7 @@ from concurrent.futures import ThreadPoolExecutor
 from typing import IO, Any, Callable, List, Dict, Iterable, Tuple, Union
 import time
 from models import MongoJSONEncoder
+import config
 
 
 def rest(login=True, cache=False, user_role=''):
@@ -17,7 +18,7 @@ def rest(login=True, cache=False, user_role=''):
             try:
                 if (login and not logined()) or \
                     (user_role and not User.first((F.roles == user_role) & (F.username == logined()))):
-                    raise Exception('Forbidden.')
+                    raise Exception(f'Forbidden. Client: {request.remote_addr}')
                 if request.json:
                     kwargs.update(**request.json)
                 f = func(*args, **kwargs)
@@ -39,6 +40,8 @@ def logined():
     t = Token.check(request.headers.get('X-Authentication-Token', request.cookies.get('token')))
     if t:
         return t.user
+    if request.remote_addr in config.allowed_ips:
+        return request.remote_addr
 
 
 def tmap(func, iterable, n=10):

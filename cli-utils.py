@@ -95,10 +95,10 @@ def meta(key, value):
         print(r[key] if hasattr(r, key) else '')
 
 
-@click.command('dump')
+@cli.command('dump')
 @click.option('--output', default='')
 @click.argument('colls', nargs=-1)
-def dump(output, *colls):
+def dump(output, colls):
     """Dump the current status of database to a zip file of jsons.
 
     Args:
@@ -107,6 +107,10 @@ def dump(output, *colls):
     """
     if not output:
         output = f'dump-{datetime.datetime.now().strftime("%Y%m%d%H%M%S")}{("," + ",".join(colls)) if colls else ""}.zip'
+    def _hook(s):
+        if isinstance(s, datetime.datetime): return s.isoformat()
+        else: return s
+
     jsonenc = MongoJSONEncoder(ensure_ascii=False)
     with zipfile.ZipFile(output, 'w', zipfile.ZIP_DEFLATED) as z:
         for coll in colls or Meta.db.database.list_collection_names():
@@ -119,11 +123,11 @@ def dump(output, *colls):
         pass
 
 
-@click.command('restore')
+@cli.command('restore')
 @click.option('--infile', default='')
 @click.option('--force', type=bool, default=False)
 @click.argument('colls', nargs=-1)
-def restore(infile, *colls, force):
+def restore(infile, colls, force):
     """Restore the status of database from a zip file of jsons.
 
     Args:

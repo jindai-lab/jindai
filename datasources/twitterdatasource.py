@@ -188,17 +188,22 @@ class TwitterDataSource(DataSource):
         max_id = twitter_id_from_timestamp(before)
 
         while before > after:
+            self.logger('twiuser', max_id, before, after)
+
             albums = []
             tl = self.api.GetUserTimeline(
                 screen_name=user, count=100, max_id=max_id)
             for st in tl:
                 p = self.parse_status(st, allow_video=self.allow_video)
-                before = min(before, p.pdate.timestamp())
+                before = min(before, st.created_at_in_seconds)
                 max_id = min(max_id, st.id)
                 if p.author != '@' + st.user.screen_name and not self.allow_retweet:
                     continue
                 if p.items and not p.id and p.pdate.timestamp() > after:
                     albums.append(p)
+            
+            if not albums:
+                break
             
             yield from albums
 
@@ -211,9 +216,8 @@ class TwitterDataSource(DataSource):
         o = twitter_id_from_timestamp(before or time.time())
         p = None
 
-        self.logger('twitl', o, after)
-
         for _i in range(100):
+            self.logger('twitl', o, after)
             time.sleep(0.5)
             try:
                 tl = self.api.GetHomeTimeline(count=100, max_id=o)
