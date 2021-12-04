@@ -106,6 +106,7 @@ class ImageHashDuplications(ImageOrAlbumStage):
         if not i.dhash: return
         dh2 = v(i.dhash)
         if dh2 not in self.d2: return
+        self.logger(i.id)
         ls2 = self.d2[dh2]
         for id2, w2, h2, dhb2 in ls2:
             for dh1, sc in [(dh2, 0)] + list(zip(flips(dh2, 1), [1] * 64)) + list(zip(flips(dh2, 2), [2] * 2080)):
