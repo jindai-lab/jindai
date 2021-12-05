@@ -188,7 +188,7 @@ def merge_albums(expr=''):
         if len(albums) < 2: return
         albums = sorted(albums, key=lambda p: p.id)
         for p in albums[1:]:
-            albums[0].tags += p.tags
+            albums[0].keywords += p.keywords
             albums[0].items.a += p.items.a
             p.delete()
             p._id = ''
@@ -198,8 +198,8 @@ def merge_albums(expr=''):
     _urls = defaultdict(list)
     _items = defaultdict(list)
     
-    print(queryparser.eval(expr))
-    for p in Album.query(queryparser.eval(expr)):
+    print(parser.eval(expr))
+    for p in Album.query(parser.eval(expr)):
         _urls[p.source['url']].append(p)
         for i in p.items:
             _items[i.id].append(p)

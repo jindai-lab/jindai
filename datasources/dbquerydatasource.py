@@ -1,7 +1,5 @@
 """来自数据库
 """
-
-from PyMongoWrapper import F, QueryExprParser
 import jieba
 import re
 from models import Paragraph, parser

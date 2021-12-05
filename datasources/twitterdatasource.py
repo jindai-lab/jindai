@@ -10,7 +10,7 @@ from datasource import DataSource
 from models import Album, ImageItem, ObjectId, parser
 from PyMongoWrapper import F
 
-from datasources.gallerydatasource import ImageImportDataSource, queryparser
+from datasources.gallerydatasource import ImageImportDataSource, parser
 
 
 def find_post(url: str) -> Union[Album, None]:
@@ -64,7 +64,7 @@ def create_albums(posts_imported: List[Album]):
         p = albums[pu]
         if p.source['url'] != pu:
             author = '@' + fn.split('-')[0]
-            p.tags.append(author)
+            p.keywords.append(author)
             p.source = {'url': pu}
             dtstr = ('--' + fn).rsplit('-', 2)[1].replace('_', '')
             if len(dtstr) == 14:
@@ -146,7 +146,7 @@ class TwitterDataSource(DataSource):
                 else:
                     author = ''
             text = re.sub(r'https?://[^\s]+', '', st.text).strip()
-            p.tags = [author, text] + [t.strip(':').strip('#')
+            p.keywords = [author, text] + [t.strip(':').strip('#')
                                        for t in text.split()] + re.findall(r'(@[a-z_A-Z0-9]+)', text)
             p.author = author
         return p

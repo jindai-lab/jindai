@@ -32,9 +32,19 @@ def _expr_groupby(params):
     return Fn.group(orig=Fn.first('$$ROOT'), **params), Fn.replaceRoot(newRoot=Fn.mergeObjects('$orig', {'group_id': '$_id'}, {k: f'${k}' for k in params if k != '_id'}))
 
 
-parser = QueryExprParser(abbrev_prefixes={None: 'keywords='}, allow_spacing=True, functions={
-    'groupby': _expr_groupby
-})
+def _object_id(params):
+    if isinstance(params, MongoOperand):
+        params = params()
+    if isinstance(params, str):
+        return ObjectId(params)
+    if isinstance(params, datetime.datetime):
+        return ObjectId.from_datetime(params)
+
+
+parser = QueryExprParser(abbrev_prefixes={None: 'keywords=', '_': 'items.', '?': 'source.url%'}, allow_spacing=True, functions={
+    'groupby': _expr_groupby,
+    'objectId': _object_id
+}, force_timestamp=False)
 
 
 class Paragraph(DbObject):
@@ -264,14 +274,13 @@ class Album(Paragraph):
 
     author = str
     liked_at = DbObjectInitiator(lambda: datetime.datetime.utcnow())
-    tags = list
     items = dbo.DbObjectCollection(ImageItem)
 
     def __repr__(self):
         return f'<Album {self.source["url"]}>'
 
     def save(self):
-        self.tags = list(set(self.tags))
+        self.keywords = list(set(self.keywords))
         for i in self.items:
             if isinstance(i, DbObject) and i.id is None: i.save()
         super().save()

@@ -105,7 +105,7 @@ class Hashing(Plugin):
             else:
                 it = ImageItem.first(F.id == iid)
                 if not hasattr(it, self.method): return
-                pgroups = [g for g in (Album.first(F.items == ObjectId(iid)) or Album()).tags if g.startswith('*')]
+                pgroups = [g for g in (Album.first(F.items == ObjectId(iid)) or Album()).keywords if g.startswith('*')]
                 dha, dhb = v(it.dhash), v(it.whash)
                 results = []
                 groupped = {}
@@ -121,7 +121,7 @@ class Hashing(Plugin):
                         po.items = [i]
                         po.score = i.score
                         if archive:
-                            pgs = [g for g in p.tags if g.startswith('*')]
+                            pgs = [g for g in p.keywords if g.startswith('*')]
                             for g in pgs or [po.source['url']]:
                                 if g not in pgroups and (g not in groupped or groupped[g].score > po.score):
                                     groupped[g] = po
@@ -138,10 +138,10 @@ class Hashing(Plugin):
         elif post_args[0] == 'group_ratings':
             if groups:
                 return [], {}, {}
-            return Album.aggregator.match(F.tags.regex(r'^\*')).lookup(
+            return Album.aggregator.match(F.keywords.regex(r'^\*')).lookup(
                 from_=F.item, localField=F.items, foreignField=F._id, as_=F.items2
             ).addFields(
-                group_id=Fn.filter(input=Var.tags, as_='t', cond=Fn.substrCP(Var._t, 0, 1) == '*')
+                group_id=Fn.filter(input=Var.keywords, as_='t', cond=Fn.substrCP(Var._t, 0, 1) == '*')
             ).unwind(
                 path=Var.group_id
             ).addFields(
@@ -153,7 +153,7 @@ class Hashing(Plugin):
                 created_at=Fn.first(Var.created_at),
                 source=Fn.first(Var.source),
                 items=Fn.push(Var.items),
-                tags=Fn.first(Var.tags),
+                keywords=Fn.first(Var.keywords),
                 counts=Fn.sum(Fn.size(Var.items))
             ).addFields(
                 items=Fn.cond(Var.items2 == [], Var.items, Var.items2)
