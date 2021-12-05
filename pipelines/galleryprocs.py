@@ -15,9 +15,9 @@ class ApplyAutoTags(PipelineStage):
     def resolve(self, p : Album) -> Album:
         for i in self.ats:
             pattern, from_tag, tag = i.pattern, i.from_tag, i.tag
-            if (from_tag and from_tag in p.tags) or (pattern and re.search(pattern, p.source['url'])):
-                if tag not in p.tags:
-                    p.tags.append(tag)
+            if (from_tag and from_tag in p.keywords) or (pattern and re.search(pattern, p.source['url'])):
+                if tag not in p.keywords:
+                    p.keywords.append(tag)
                 if tag.startswith('@'):
                     p.author = tag
         p.save()

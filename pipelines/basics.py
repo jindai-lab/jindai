@@ -1,7 +1,6 @@
 f"""基本操作"""
 
 import json
-import os
 import re
 import threading
 from collections import defaultdict
@@ -9,18 +8,17 @@ from io import BytesIO
 from itertools import count as iter_count
 from bson import ObjectId
 import jieba
-import numpy as np
 import pandas
-import json, yaml
+import json
 import itertools
 from opencc import OpenCC
 
-from PyMongoWrapper import QueryExprParser, F
+from PyMongoWrapper import F, QueryExprParser
 from PyMongoWrapper.dbo import mongodb, DbObject, DbObjectCollection
 from .utils import execute_query_expr, language_iso639
 
-from models import Paragraph, Collection
-from pipeline import Pipeline, PipelineStage
+from models import Paragraph, Collection, parser
+from pipeline import PipelineStage
 
 
 class Passthrough(PipelineStage):
@@ -186,7 +184,7 @@ class ArrayField(PipelineStage):
             elements (str): 添加或删除的元素；使用分号分隔，作为表达式运算
         """
         self.field = field
-        self.elements = QueryExprParser(allow_spacing=True).eval(elements)
+        self.elements = parser.eval(elements)
         self.pull = pull
 
     def resolve(self, p: Paragraph) -> Paragraph:
@@ -363,7 +361,6 @@ class FieldAssignment(PipelineStage):
             field (str): 新的字段名
             value (str): 以 $ 开头的字段名，或常数值（类型将自动匹配），或 $$oid 表示一个新的 ObjectId
         """
-        self._parser = QueryExprParser()
         self.field = field
         self.specials = {
             '$$oid': lambda: ObjectId()
@@ -375,7 +372,7 @@ class FieldAssignment(PipelineStage):
             self.valueField = value[1:]
             self.valueLiteral = None
         else:
-            self.valueLiteral = self._parser.expand_literals(value)
+            self.valueLiteral = parser.expand_literals(value)
             self.valueField = None
 
     def value(self, p : Paragraph):
@@ -456,7 +453,6 @@ class SaveParagraph(PipelineStage):
 class FieldIncresement(PipelineStage):
     """对字段进行自增操作
     """
-    _parser = QueryExprParser(allow_spacing=True)
 
     def __init__(self, field, inc_value):
         '''
@@ -469,7 +465,7 @@ class FieldIncresement(PipelineStage):
             self.inc_field = inc_value[1:]
             self.inc_value = ''
         else:
-            self.inc_value = self._parser.expand_literals(inc_value)
+            self.inc_value = parser.expand_literals(inc_value)
             self.inc_field = ''
 
     def resolve(self, p : Paragraph):

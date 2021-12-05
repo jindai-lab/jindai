@@ -59,7 +59,7 @@ class TasksQueue:
                 # emit('queue', self.status)
 
                 try:
-                    task = Task(datasource=(t.datasource, t.datasource_config), pipeline=t.pipeline, concurrent=t.concurrent, resume_next=t.resume_next)
+                    task = Task.from_dbo(t)
                     # emit('debug', 'task inited') 
                     t._task = task
                     task.run().join()
@@ -115,16 +115,12 @@ class NumpyEncoder(json.JSONEncoder):
 
     def default(self, obj):
         import numpy as np
-        if isinstance(obj, bytes):
-            return f'{base64.b64encode(obj).decode("ascii")}'
         if isinstance(obj, np.ndarray):
             return obj.tolist()
         if isinstance(obj, np.int32):
             return obj.tolist()
         if isinstance(obj, Image.Image):
             return str(obj)
-        if isinstance(obj, datetime.datetime):
-            return obj.isoformat()
 
         return je.default(self, obj)
 

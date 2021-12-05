@@ -115,7 +115,7 @@ class FaceDet(Plugin):
                         rpo = Album(**rp.as_dict())
                         rpo.items = [ri]
                         if archive:
-                            pgs = [g for g in rp.tags if g.startswith('*')]
+                            pgs = [g for g in rp.keywords if g.startswith('*')]
                             for g in pgs or [rp.source['url']]:
                                 if g not in groupped or groupped[g][0] > ri.score:
                                     groupped[g] = (ri.score, rpo)

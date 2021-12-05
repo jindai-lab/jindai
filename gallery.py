@@ -21,9 +21,9 @@ from PyMongoWrapper import F, Fn, Var
 from tqdm import tqdm
 
 import config
-from datasources.gallerydatasource import GalleryAlbumDataSource, queryparser
+from datasources.gallerydatasource import GalleryAlbumDataSource
 from helpers import *
-from models import Album, AutoTag, ImageItem, MongoJSONEncoder
+from models import Album, AutoTag, ImageItem, parser
 from plugin import Plugin
 from storage import StorageManager
 
@@ -194,9 +194,9 @@ def apply_auto_tags(albums):
     for p in tqdm(albums):
         for i in m:
             pattern, from_tag, tag = i.pattern, i.from_tag, i.tag
-            if (from_tag and from_tag in p.tags) or (pattern and re.search(pattern, p.source['url'])):
-                if tag not in p.tags:
-                    p.tags.append(tag)
+            if (from_tag and from_tag in p.keywords) or (pattern and re.search(pattern, p.source['url'])):
+                if tag not in p.keywords:
+                    p.keywords.append(tag)
                 if tag.startswith('@'):
                     p.author = tag
         p.save()
@@ -213,7 +213,7 @@ def Q(tags: str) -> Iterable[Album]:
         Iterable[Album]: albums matching `tags`
     """
     ag = Album.aggregator
-    ands = queryparser.eval(tags)
+    ands = parser.eval(tags)
     match_first = 'items.' not in tags
     if match_first:
         ag.match(ands)
@@ -370,7 +370,7 @@ def init(app):
                 pr = Album.first(F.items == ObjectId(rese)) or Album(
                     items=[ObjectId(rese)])
                 for pd in Album.query(F.items == dele.id):
-                    pr.tags += pd.tags
+                    pr.keywords += pd.keywords
                     if (not pr.source.get('url') or 'restored' in pr.source['url']) and pd.source.get('url'):
                         pr.source = pd.source
                     
@@ -422,17 +422,17 @@ def init(app):
             for p in albums:
                 for i in p.items:
                     pnew = Album(source={'url': p.source['url']}, liked_at=p.liked_at,
-                                pdate=p.pdate, tags=p.tags, items=[i])
+                                pdate=p.pdate, keywords=p.keywords, items=[i])
                     pnew.save()
                 p.delete()
         else:
             if not albums: return False
             
             p0 = albums[0]
-            p0.tags = list(p0.tags)
+            p0.keywords = list(p0.keywords)
             p0.items = list(p0.items)
             for p in albums[1:]:
-                p0.tags += list(p.tags)
+                p0.keywords += list(p.keywords)
                 p0.items += list(p.items)
             p0.save()
             
@@ -457,7 +457,7 @@ def init(app):
         if delete:
             group_id = ''
             for p in albums:
-                p.tags = [_ for _ in p.tags if not _.startswith('*')]
+                p.keywords = [_ for _ in p.keywords if not _.startswith('*')]
                 p.save()
 
         else:
@@ -465,7 +465,7 @@ def init(app):
                 return True
             gids = []
             for p in albums:
-                gids += [_ for _ in p.tags if _.startswith('*')]
+                gids += [_ for _ in p.keywords if _.startswith('*')]
             named = [_ for _ in gids if not _.startswith('*0')]
 
             if group:
@@ -478,18 +478,18 @@ def init(app):
                 group_id = '*0' + gh(min(map(lambda p: str(p.id), albums)))
 
             for p in albums:
-                if group_id not in p.tags:
-                    p.tags.append(group_id)
+                if group_id not in p.keywords:
+                    p.keywords.append(group_id)
                     p.save()
 
             gids = list(set(gids) - set(named))
             if gids:
-                for p in Album.query(F.tags.in_(gids)):
+                for p in Album.query(F.keywords.in_(gids)):
                     for id0 in gids:
-                        if id0 in p.tags:
-                            p.tags.remove(id0)
-                    if group_id not in p.tags:
-                        p.tags.append(group_id)
+                        if id0 in p.keywords:
+                            p.keywords.remove(id0)
+                    if group_id not in p.keywords:
+                        p.keywords.append(group_id)
                     p.save()
 
         return group_id
@@ -507,20 +507,20 @@ def init(app):
         albums = list(Album.query(F.id.in_([ObjectId(_) if len(_) == 24 else _ for _ in albums])))
         for p in albums:
             for t in delete:
-                if t in p.tags:
-                    p.tags.remove(t)
+                if t in p.keywords:
+                    p.keywords.remove(t)
                 if p.author == t:
                     p.author = ''
             for t in append:
                 t = t.strip()
-                if t not in p.tags:
-                    p.tags.append(t)
+                if t not in p.keywords:
+                    p.keywords.append(t)
                 if t.startswith('@'):
                     p.author = t
             p.save()
             
         return {
-            str(p.id): p.tags
+            str(p.id): p.keywords
             for p in albums
         }
 
@@ -553,7 +553,7 @@ def init(app):
         assert tag and (pattern or from_tag), 'Must specify tag with pattern or from tag'
         AutoTag.query(F.pattern.eq(pattern) & F.from_tag.eq(from_tag) & F.tag.eq(tag)).delete()
         AutoTag(pattern=pattern, from_tag=from_tag, tag=tag).save()
-        albums = Album.query(F['source.url'].regex(pattern)) if pattern else Album.query(F.tags == from_tag)
+        albums = Album.query(F['source.url'].regex(pattern)) if pattern else Album.query(F.keywords == from_tag)
         apply_auto_tags(albums)
 
         return True

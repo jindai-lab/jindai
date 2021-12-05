@@ -1,6 +1,6 @@
 import threading
 import traceback
-from models import Paragraph, get_context
+from models import get_context
 from datasource import DataSource
 from pipeline import PipelineStage, Pipeline
 from queue import Queue
@@ -51,6 +51,10 @@ class Task:
     def fetch_log(self):
         while not self.queue.empty():
             yield self.queue.get() + '\n'
+
+    @staticmethod
+    def from_dbo(t):
+        return Task(datasource=(t.datasource, t.datasource_config), pipeline=t.pipeline, concurrent=t.concurrent, resume_next=t.resume_next)
 
 
 Pipeline.pipeline_ctx = get_context('pipelines', PipelineStage)

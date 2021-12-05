@@ -8,34 +8,16 @@ import zipfile
 from collections import defaultdict
 from typing import Iterable, List
 from PIL import Image
-from PyMongoWrapper import F, Fn, MongoOperand, QueryExprParser, Var
+from PyMongoWrapper import F, Fn, Var
 from urllib.parse import urljoin
 from bson import SON
 
 from datasource import DataSource
-from models import Album, AutoTag, ImageItem, ObjectId, Paragraph, try_download
+from models import Album, ImageItem, ObjectId, try_download, parser
 from storage import StorageManager
 from models import try_download
 
 weburl = re.compile('^https?://')
-
-
-def _groupby(params):
-    if isinstance(params, MongoOperand):
-        params = params()
-    return [Fn.group(orig=Fn.first('$$ROOT'), **params), Fn.replaceRoot(newRoot=Fn.mergeObjects('$orig', {'group_id': '$_id'}, {k: f'${k}' for k in params if k != '_id'}))]
-
-
-queryparser = QueryExprParser(abbrev_prefixes={'_': 'items.', None: 'tags=', '?': 'source.url%'}, functions={
-    'groupby': _groupby,
-    'now': lambda x: MongoOperand(datetime.datetime.now()),
-},
-    shortcuts={
-    'authored': {'tags': {'$regex': '^@'}},
-    'groupped': {'tags': {'$regex': r'^\*'}},
-    'fav': ((F.tags == 'fav') | (F['items.rating'] > 0))()
-},
-    force_timestamp=False, allow_spacing=True)
 
 
 class GalleryAlbumDataSource(DataSource):
@@ -54,7 +36,7 @@ class GalleryAlbumDataSource(DataSource):
             raw (bool): 返回字典而非语段对象
         """
         self.cond = cond
-        self.query = queryparser.eval(cond)
+        self.query = parser.eval(cond)
         self.limit = limit
         self.offset = offset
         self.groups = groups
@@ -101,7 +83,7 @@ class GalleryAlbumDataSource(DataSource):
 
         ands = []
 
-        query = queryparser.eval(self.cond)
+        query = parser.eval(self.cond)
 
         if isinstance(query, list) and len(query) > 0:
             ands = [query[0]] if query[0] else []
@@ -170,7 +152,7 @@ class GalleryAlbumDataSource(DataSource):
                 self.orders = [('liked_at', -1)]
 
             self.aggregator.addFields(
-                group_id=Fn.filter(input=Var.tags, as_='t',
+                group_id=Fn.filter(input=Var.keywords, as_='t',
                                 cond=Fn.substrCP(Var._t, 0, 1) == '*')
             ).unwind(
                 path=Var.group_id, preserveNullAndEmptyArrays=archive
@@ -187,7 +169,7 @@ class GalleryAlbumDataSource(DataSource):
                 source=Fn.first(Var.source),
                 items=Fn.addToSet(Var.items),
                 author=Fn.first(Var.author),
-                tags=Fn.first(Var.tags),
+                keywords=Fn.first(Var.keywords),
                 counts=Fn.sum(1),
                 rating=Fn.max(Var['items.rating'])
             ).addFields(
@@ -235,7 +217,7 @@ class GalleryImageItemDataSource(DataSource):
             sort_keys (str): 排序表达式
         """
         self.cond = cond
-        self.query = queryparser.eval(cond)
+        self.query = parser.eval(cond)
         self.raw = raw
         self.sort_keys = sort_keys.split(',')
         self.rs = ImageItem.query(self.query)
@@ -258,7 +240,7 @@ class ImageImportDataSource(DataSource):
             locs (str): 网址或文件通配符，一行一个
             tags (str): 标签，一行一个
         """
-        self.tags = tags.split('\n')
+        self.keywords = tags.split('\n')
 
         locs = locs.split('\n')
         self.local_locs = [_ for _ in locs if not weburl.match(_)]
@@ -318,7 +300,7 @@ class ImageImportDataSource(DataSource):
                 p = albums[pu]
                 if not p.source:
                     p.source = {'url': pu}
-                    p.tags += self.tags
+                    p.keywords += self.keywords
                     p.pdate = datetime.datetime.fromtimestamp(ftime)
 
                 i = ImageItem(source={'url': _f})
@@ -416,7 +398,7 @@ class ImageImportDataSource(DataSource):
                     i.save()
                     p.items.append(i)
                     imgset.add(imgurl)
-            p.tags = list(set(self.tags + title.split(u',')))
+            p.keywords = list(set(self.keywords + title.split(u',')))
             albums.append(p)
         
         yield from albums

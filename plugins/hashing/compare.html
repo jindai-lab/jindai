@@ -403,7 +403,7 @@
             last_selected = thisp;
         })
         $(document).on('dblclick', '.item', function() {
-            $(this).append('<a target="_blank" href="/?query=items%3DObjectId(' + $(this).data('id') + ')"> </a>').find('a')[0].click();
+            $(this).append('<a target="_blank" href="/gallery?query=items%3DObjectId(' + $(this).data('id') + ')"> </a>').find('a')[0].click();
         })
         var lastkey = '';
 
