@@ -98,6 +98,8 @@ class ImageHashDuplications(ImageOrAlbumStage):
             dhb = v(i.whash)
             self.d2[dha].append((i.id, i.width, i.height, dhb))
         
+        print('unique hashes:', len(self.d2))
+        
         self.results = Queue()
         self.fo = open('compare.tsv', 'w')
 
@@ -105,12 +107,10 @@ class ImageHashDuplications(ImageOrAlbumStage):
         from plugins.hashing import v, flips, bitcount
         if not i.dhash: return
         dh2 = v(i.dhash)
-        if dh2 not in self.d2: return
         self.logger(i.id)
         ls2 = self.d2[dh2]
         for id2, w2, h2, dhb2 in ls2:
-            for dh1, sc in [(dh2, 0)] + list(zip(flips(dh2, 1), [1] * 64)) + list(zip(flips(dh2, 2), [2] * 2080)):
-                if dh1 not in self.d2: continue
+            for dh1, sc in [(dh2, 0)] + list(zip(flips(dh2, 1), [1] * 64)) + list(zip(flips(dh2, 2), [2] * 2016)):
                 for id1, w1, h1, dhb1 in self.d2[dh1]:
                     if id1 >= id2 or w1 == 0: continue
                     a, b = id2, id1
@@ -287,8 +287,15 @@ class DownloadImages(PipelineStage):
     """根据 ImageItem 的 source['url'] 下载图像
     """
     
-    def __init__(self) -> None:
+    def __init__(self, proxy='') -> None:
+        """
+        Args:
+            proxy (str): 代理服务器
+        """
         self.mgr = StorageManager()
+        self.proxies = {
+            'http': proxy, 'https': proxy
+        } if proxy else {}
     
     def resolve(self, p):
         items = [p] if isinstance(p, ImageItem) else p.items if isinstance(p, Album) else []
@@ -297,7 +304,7 @@ class DownloadImages(PipelineStage):
             if not i.id:
                 i.save()
                 
-            content = try_download(i.source['url'], p.source.get('url', ''))
+            content = try_download(i.source['url'], p.source.get('url', ''), proxies=self.proxies)
             if not content: return
             with self.mgr:
                 self.mgr.write(content, str(i.id))

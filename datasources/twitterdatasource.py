@@ -212,12 +212,12 @@ class TwitterDataSource(DataSource):
         if after == 0:
             after = Album.query(F.source_url.regex(r'twitter\.com')).sort(-F.pdate).limit(1).first().pdate.timestamp()
         
-        albums = []
         o = twitter_id_from_timestamp(before or time.time())
         p = None
 
         for _i in range(100):
             self.logger('twitl', o, after)
+            albums = []
             time.sleep(0.5)
             try:
                 tl = self.api.GetHomeTimeline(count=100, max_id=o)
@@ -230,14 +230,14 @@ class TwitterDataSource(DataSource):
                         break
                     if p.items and not p.id:
                         albums.append(p)
-
                 if p and p.pdate.timestamp() < after:
                     break
             except Exception as ex:
                 self.logger('exception', ex.__class__.__name__, ex)
                 break
-
-        yield from albums
+            if not albums:
+                break
+            yield from albums
 
     def fetch(self):
         args = self.import_username.split('\n')

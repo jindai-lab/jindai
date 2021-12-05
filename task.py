@@ -25,9 +25,12 @@ class Task:
         self.pipeline.logger = self.log
 
     def execute(self):
-        rs = self.datasource.fetch()
-        for _ in self.pipeline.applyParagraphs(rs): pass
-        return self.pipeline.summarize()
+        try:
+            rs = self.datasource.fetch()
+            for _ in self.pipeline.applyParagraphs(rs): pass
+            return self.pipeline.summarize()
+        except Exception as ex:
+            return {'exception': str(ex), 'tracestack': traceback.format_tb(ex.__traceback__)}
 
     def log(self, *args):
         s = ' '.join(map(str, args))

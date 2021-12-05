@@ -24,12 +24,13 @@ from helpers import *
 
 class TasksQueue:
 
-    def __init__(self):
-        self._q = deque() # deque is documented as thread-safe, so no need to use lock.
-        self.running = False
-        self.running_task = ''
+    def __init__(self, n=3):
+        self._lock = threading.Lock()
+        self.queue = []
         self.results = {}
-        self.taskdbo = None
+        self.taskdbos = {}
+        self.running = False
+        self.n = n
 
     def start(self):
         self.running = True
@@ -39,7 +40,7 @@ class TasksQueue:
     @property
     def status(self):
         return {
-            'running': self.running_task,
+            'running': list(self.taskdbos),
             'finished': [{
                 'id': k,
                 'name': k.split('@')[0],
@@ -53,52 +54,56 @@ class TasksQueue:
 
     def working(self):
         while self.running:
-            if self._q:
-                self.running_task, self.taskdbo = self._q.popleft()
-                t = self.taskdbo
-                # emit('queue', self.status)
-
+            if self.queue and len(self.taskdbos) < self.n: # can run new task
+                with self._lock:
+                    tkey, t = self.queue.pop(0)
+                self.taskdbos[tkey] = t
                 try:
-                    task = Task.from_dbo(t)
-                    # emit('debug', 'task inited') 
-                    t._task = task
-                    task.run().join()
-                    self.results[self.running_task] = task.returned
+                    t._task = Task.from_dbo(t)
+                    t._task.run()
                 except Exception as ex:
-                    self.results[self.running_task] = {'exception': str(ex), 'tracestack': traceback.format_tb(ex.__traceback__)}
-                self.running_task = ''
-                
-                # emit('queue', self.status)
-            else:
+                    self.results[tkey] = {'exception': '初始化任务时出错：' + str(ex), 'tracestack': traceback.format_tb(ex.__traceback__)}
+            
+            elif not self.queue and not self.taskdbos: # all tasks done
                 self.running = False
 
+            else:
+                done = []
+                for k, v in self.taskdbos.items():
+                    if not v._task.alive:
+                        done.append(k)
+                        self.results[k] = v._task.returned
+                for k in done:
+                    self.taskdbos.pop(k)
+            time.sleep(0.5)
+
     def enqueue(self, key, val):
-        self._q.append((key, val))
+        with self._lock:
+            self.queue.append((key, val))
         # emit('queue', self.status)
 
     def stop(self):
         self.running = False
 
     def find(self, key):
-        if self.running_task == key:
-            return self.taskdbo
+        if key in self.taskdbos:
+            return self.taskdbos[key]
         else:
-            for k, v in self._q:
+            for k, v in self.queue:
                 if k == key:
                     return v
-
-        return None
+            return None
 
     def __len__(self):
-        return len(self._q)
+        return len(self.queue)
 
     def remove(self, key):
-        for todel in self._q:
-            if todel[0] == key: break
-        else:
-            return False
-        self._q.remove(todel)
-        # emit('queue', self.status)
+        with self._lock:
+            for todel, _ in self.queue:
+                if todel == key: break
+            else:
+                return False
+            self.queue.remove(todel)
         
         return True
 
@@ -373,7 +378,7 @@ def logs_task(key):
     if t:
         return logs_view(t)
     else:
-        abort(404)
+        return f'No such key: {key}', 404
 
 
 @app.route('/api/queue/<path:_id>', methods=['DELETE'])

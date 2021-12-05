@@ -234,23 +234,31 @@ class ImageImportDataSource(DataSource):
     """从本地文件或网址导入图像到图集
     """
 
-    def __init__(self, locs, tags = ''):
+    def __init__(self, locs, tags='', proxy='', excluding_patterns=''):
         """
         Args:
             locs (str): 网址或文件通配符，一行一个
+            excluding_patterns (str): 排除的图片网址正则表达式，一行一个
             tags (str): 标签，一行一个
+            proxy (str): 代理服务器
         """
         self.keywords = tags.split('\n')
 
         locs = locs.split('\n')
         self.local_locs = [_ for _ in locs if not weburl.match(_)]
         self.web_locs = [_ for _ in locs if weburl.match(_)]
+        self.proxies = {
+            'http': proxy,
+            'https': proxy
+        } if proxy else {}
+        self.excluding_patterns = [re.compile(pattern) for pattern in excluding_patterns.split('\n') if pattern]
 
     def fetch(self):
         if self.local_locs:
             yield from self.import_local(self.local_locs)
         if self.web_locs:
-            yield from self.import_page(self.web_locs)
+            for loc in self.web_locs:
+                yield from self.import_page(loc)
 
     def import_local(self, locs) -> List[Album]:
         zips = []
@@ -337,7 +345,7 @@ class ImageImportDataSource(DataSource):
         rng = ['']
         rngmatch = re.match(r'(.+##.*)\s(\d+)-(\d+)$', path)
         if rngmatch:
-            _, path, rng_start, rng_end = rngmatch.groups()
+            path, rng_start, rng_end = rngmatch.groups()
             rng = range(int(rng_start), int(rng_end)+1)
 
         imgset = set()
@@ -345,13 +353,13 @@ class ImageImportDataSource(DataSource):
         for i in rng:
             url = path.replace('##', str(i))
             p = Album.first(F.source == {'url': url}) or Album(
-                source={'url': url}, items=[])
+                source={'url': url}, items=[], pdate=datetime.datetime.now())
             if url.endswith('.jpg'):
                 imgs = [('', url)]
                 title = ''
             else:
                 self.logger(url)
-                html = try_download(url)
+                html = try_download(url, proxies=self.proxies)
                 assert html, 'Download failed.'
                 try:
                     html = html.decode('utf-8')
@@ -377,21 +385,8 @@ class ImageImportDataSource(DataSource):
 
             for _, img in imgs:
                 imgurl = urljoin(url, img)
-                if '.fc2.com/' in imgurl:
-                    if imgurl.endswith('s.jpg'):
-                        continue
-                elif '/cute-' in imgurl:
-                    imgurl = imgurl.replace('/cute-', '/')
-                elif '/small/' in imgurl:
-                    imgurl = imgurl.replace('/small/', '/big/')
-                elif '.imagebam.com/' in imgurl:
-                    imgfile = imgurl.split('/')[-1].split('.')[0]
-                    html = try_download('http://www.imagebam.com/image/' + imgfile,
-                                        referer='http://www.imagebam.com/').decode('utf-8')
-                    imgurl = html[html.find('"og:image"'):]
-                    imgurl = imgurl[imgurl.find('http://'):imgurl.find('"/>')]
-                elif '/thumbs/' in imgurl or '/graphics/' in imgurl:
-                    continue
+                for rep in self.excluding_patterns:
+                    if rep.search(imgurl): continue
                 if imgurl not in imgset:
                     self.logger(imgurl)
                     i = ImageItem.first(F.source == {'url': imgurl}) or ImageItem(source={'url': imgurl})
