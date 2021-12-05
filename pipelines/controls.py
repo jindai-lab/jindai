@@ -21,6 +21,7 @@ class Repeat(PipelineStage):
         self.pipeline = Pipeline(pipeline, 1, False)
 
     def resolve(self, p):
+        self.pipeline.logger = self.logger
         if self.until:
             while True:
                 p = self.pipeline.apply(p)
@@ -47,6 +48,8 @@ class Condition(PipelineStage):
         self.iffalse = Pipeline(iffalse, 1, False)
 
     def resolve(self, p):
+        self.iftrue.logger = self.logger
+        self.iffalse.logger = self.logger
         if execute_query_expr(self.cond, p):
             p = self.iftrue.apply(p)
         else:
@@ -90,6 +93,7 @@ class CallTask(PipelineStage):
         self.pipeline_only = pipeline_only
 
     def resolve(self, p):
+        self.task.pipeline.logger = self.logger
         if self.pipeline_only:
             return self.task.pipeline.apply(p)
     
@@ -97,4 +101,6 @@ class CallTask(PipelineStage):
         if self.pipeline_only:
             return self.task.pipeline.summarize()
         else:
+            self.task.pipeline.logger = self.logger
+            self.task.datasource.logger = self.logger
             return self.task.execute()
