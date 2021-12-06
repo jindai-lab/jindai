@@ -16,7 +16,7 @@ class HTMLDataSource(DataSource):
         """
         Args:
             collection_name (str): 集合名称
-            lang (chs|cht|en|de|fr|ru|es|ja|kr|vn): 语言标识
+            lang (简体中文:chs|繁体中文:cht|英文:en|德文:de|法文:fr|俄文:ru|西班牙文:es|日文:ja|韩文/朝鲜文:kr|越南文:vn): 语言标识
             files (str): HTML或包含HTML的ZIP压缩包文件列表
             fields (str): 字段与搜索字符串的关系，形如 field=.css-selector//attribute
         """
@@ -69,7 +69,7 @@ class TextDataSource(DataSource):
         """
         Args:
             collection_name (str): 集合名称
-            lang (chs|cht|en|de|fr|ru|es|ja|kr|vn): 语言标识
+            lang (简体中文:chs|繁体中文:cht|英文:en|德文:de|法文:fr|俄文:ru|西班牙文:es|日文:ja|韩文/朝鲜文:kr|越南文:vn): 语言标识
             files (str): HTML或包含HTML的ZIP压缩包文件列表
         """
         self.name = collection_name
@@ -91,7 +91,7 @@ class LinesDataSource(DataSource):
         """
         Args:
             collection_name (str): 集合名称
-            lang (chs|cht|en|de|fr|ru|es|ja|kr|vn): 语言标识
+            lang (简体中文:chs|繁体中文:cht|英文:en|德文:de|法文:fr|俄文:ru|西班牙文:es|日文:ja|韩文/朝鲜文:kr|越南文:vn): 语言标识
             lines (str): 一行一个语段
         """
         self.name = collection_name

@@ -89,15 +89,15 @@ class TwitterDataSource(DataSource):
         """
 
         Args:
-            allow_video (bool, optional): 导入视频. Defaults to False.
-            allow_images (bool, optional): 导入图片. Defaults to True.
-            allow_text (bool, optional): 导入文本. Defaults to True.
-            allow_retweet (bool, optional): 导入转发. Defaults to True.
-            consumer_key (str, optional): API CONSUMER KEY. Defaults to ''.
-            consumer_secret (str, optional): API CONSUMER SECRET. Defaults to ''.
-            access_token_key (str, optional): API ACCESS TOKEN KEY. Defaults to ''.
-            access_token_secret (str, optional): API ACCESS TOKEN SECRET. Defaults to ''.
-            import_username (str, optional): 要导入用户名. Defaults to ''.
+            allow_video (bool, optional): 导入视频
+            allow_images (bool, optional): 导入图片
+            allow_text (bool, optional): 导入文本
+            allow_retweet (bool, optional): 导入转发
+            consumer_key (str, optional): API CONSUMER KEY
+            consumer_secret (str, optional): API CONSUMER SECRET
+            access_token_key (str, optional): API ACCESS TOKEN KEY
+            access_token_secret (str, optional): API ACCESS TOKEN SECRET
+            import_username (str, optional): 要导入用户名
             time_after (str): 时间上限
             time_before (str): 时间下限
         """        

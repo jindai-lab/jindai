@@ -92,7 +92,7 @@ function load() {
             obj[`args${i+1}`] = [arg.type.includes('|') ? {
               type: 'field_dropdown',
               name: arg.name,
-              options: arg.type.split('|').map(x => [x, x])
+              options: arg.type.split('|').map(x => x.includes(':') ? x.split(':') : [x, x])
             } : ['float', 'int'].includes(arg.type) ? {
               type: 'field_number',
               name: arg.name
