@@ -105,7 +105,7 @@ class Hashing(Plugin):
             else:
                 it = ImageItem.first(F.id == iid)
                 if not hasattr(it, self.method): return
-                pgroups = [g for g in (Album.first(F.items == ObjectId(iid)) or Album()).keywords if g.startswith('*')]
+                pgroups = [g for g in (Album.first(F.items == ObjectId(iid)) or Album()).keywords if g.startswith('*')] or [(Album.first(F.items == ObjectId(iid)) or Album()).source.get('url', '')]
                 dha, dhb = v(it.dhash), v(it.whash)
                 results = []
                 groupped = {}
