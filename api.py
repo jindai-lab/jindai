@@ -683,7 +683,7 @@ def dbconsole_collections():
 def get_meta():
     r = Meta.first(F.app_title.exists(1)) or Meta()
     return r
-        
+
 
 @app.route('/api/meta', methods=['POST'])
 @rest(user_role='admin')
@@ -693,6 +693,18 @@ def set_meta(**vals):
         setattr(r, k, v)
     r.save()
     return True
+
+
+# BLOCKLY UI
+@app.route('/api/blockly/<path:p>')
+@app.route('/api/blockly/')
+def blockly_index(p='index.html'):
+    if re.match(r'^[0-9a-f]{24}$', p):
+        p = 'index.html'
+    fp = os.path.join('blockly', p)
+    if os.path.exists(fp) and os.path.isfile(fp):
+        return serve_file(fp)
+    return '', 404
 
 
 @app.route('/<path:p>', methods=['GET'])
