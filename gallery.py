@@ -531,10 +531,10 @@ def init(app):
         if not tag: return []
         tag = re.escape(tag)
         if match_initials: tag = '^' + tag
-        matcher = {'tags': {'$regex': tag, '$options': '-i'}}
+        matcher = {'keywords': {'$regex': tag, '$options': '-i'}}
         return [
                 _['_id'] 
-                for _ in Album.aggregator.match(matcher).unwind('$tags').match(matcher).group(_id='$tags').perform(raw=True)
+                for _ in Album.aggregator.match(matcher).unwind('$keywords').match(matcher).group(_id='$keywords').perform(raw=True)
                 if len(_['_id']) < 15
             ]
 
