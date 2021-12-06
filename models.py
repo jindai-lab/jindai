@@ -316,8 +316,8 @@ def try_download(url: str, referer: str = '', attempts: int = 3, proxies = {}) -
 
     Args:
         url (str): url
-        referer (str, optional): referer url. Defaults to ''.
-        attempts (int, optional): max attempts. Defaults to 3.
+        referer (str, optional): referer url
+        attempts (int, optional): max attempts
 
     Returns:
         Union[bytes, None]: response content or None if failed

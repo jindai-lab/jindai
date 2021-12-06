@@ -16,7 +16,7 @@ def fetch_items(stored=True):
     """Fetch all items from database
 
     Args:
-        stored (bool, optional): return only items with Storage = True or thumbnailed. Defaults to True.
+        stored (bool, optional): return only items with Storage = True or thumbnailed
 
     Returns:
         Set: item id strings
@@ -82,8 +82,8 @@ def merge(*files, dry_run=False, output='tmp.h5'):
     """Merge h5 files
 
     Args:
-        dry_run (bool, optional): Dry run, makes no change to file system. Defaults to False.
-        output (str, optional): Output file name. Defaults to 'tmp.h5'.
+        dry_run (bool, optional): Dry run, makes no change to file system
+        output (str, optional): Output file name
     """    
     items = fetch_items()    
     log(len(items), 'items.')

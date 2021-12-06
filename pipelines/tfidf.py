@@ -30,7 +30,7 @@ class TFIDFWordFetch(PipelineStage):
         """初始化
 
         Args:
-            min_df (float, optional): 最小的文档频率. 
+            min_df (float, optional): 最小的文档频率
         """
         self.min_df = min_df
         self.df = defaultdict(list)

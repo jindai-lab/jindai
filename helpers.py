@@ -55,8 +55,8 @@ def serve_file(p: Union[str, IO], ext: str = '', file_size: int = 0) -> Response
 
     Args:
         p (Union[str, IO]): file name or buffer
-        ext (str, optional): extension name. Defaults to '' for auto.
-        file_size (int, optional): file size. Defaults to 0 for auto.
+        ext (str, optional): extension name
+        file_size (int, optional): file size
 
     Returns:
         Response: a flask response object
