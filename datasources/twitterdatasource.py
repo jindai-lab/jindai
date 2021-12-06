@@ -82,7 +82,7 @@ class TwitterDataSource(DataSource):
     """导入社交网络信息
     """    
     
-    def __init__(self, allow_video=False, allow_images=True, allow_text=True, allow_retweet=True, consumer_key='', consumer_secret='', access_token_key='', access_token_secret='',
+    def __init__(self, allow_video=False, allow_retweet=True, consumer_key='', consumer_secret='', access_token_key='', access_token_secret='',
                  import_username='',
                  time_after='', time_before=''
                  ) -> None:
@@ -90,8 +90,6 @@ class TwitterDataSource(DataSource):
 
         Args:
             allow_video (bool, optional): 导入视频
-            allow_images (bool, optional): 导入图片
-            allow_text (bool, optional): 导入文本
             allow_retweet (bool, optional): 导入转发
             consumer_key (str, optional): API CONSUMER KEY
             consumer_secret (str, optional): API CONSUMER SECRET
@@ -103,8 +101,6 @@ class TwitterDataSource(DataSource):
         """        
         super().__init__()
         self.allow_video = allow_video
-        self.allow_images = allow_images
-        self.allow_text = allow_text
         self.allow_retweet = allow_retweet
         self.api = twitter.Api(consumer_key=consumer_key, consumer_secret=consumer_secret, access_token_key=access_token_key, access_token_secret=access_token_secret)
         self.import_username = import_username
@@ -185,34 +181,34 @@ class TwitterDataSource(DataSource):
         if before < after:
             before, after = after, before
 
-        max_id = twitter_id_from_timestamp(before)
+        max_id = twitter_id_from_timestamp(before)+1
 
         while before > after:
             self.logger('twiuser', max_id, before, after)
 
             albums = []
             tl = self.api.GetUserTimeline(
-                screen_name=user, count=100, max_id=max_id)
+                screen_name=user, count=100, max_id=max_id-1)
             for st in tl:
                 p = self.parse_status(st, allow_video=self.allow_video)
+                if p.id: continue
                 before = min(before, st.created_at_in_seconds)
                 max_id = min(max_id, st.id)
                 if p.author != '@' + st.user.screen_name and not self.allow_retweet:
                     continue
-                if p.items and not p.id and p.pdate.timestamp() > after:
+                if p.items and p.pdate.timestamp() > after:
                     albums.append(p)
             
+            yield from albums
             if not albums:
                 break
-            
-            yield from albums
 
     def import_twitl(self):
         after, before = self.time_after, self.time_before
         if after == 0:
             after = Album.query(F.source_url.regex(r'twitter\.com')).sort(-F.pdate).limit(1).first().pdate.timestamp()
         
-        o = twitter_id_from_timestamp(before or time.time())
+        o = twitter_id_from_timestamp(before or time.time())+1
         p = None
 
         for _i in range(100):
@@ -220,9 +216,10 @@ class TwitterDataSource(DataSource):
             albums = []
             time.sleep(0.5)
             try:
-                tl = self.api.GetHomeTimeline(count=100, max_id=o)
+                tl = self.api.GetHomeTimeline(count=100, max_id=o-1)
                 for st in tl:
                     p = self.parse_status(st)
+                    if p.id: continue
                     if not p.author and not self.allow_retweet:
                         continue
                     o = min(st.id, o)
