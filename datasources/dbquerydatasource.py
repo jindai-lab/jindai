@@ -16,7 +16,7 @@ class DBQueryDataSource(DataSource):
             query (str): 查询字符串，或以 ? 开头的查询表达式，或以 ?? 开头的聚合查询表达式
             sort (str): 排序表达式
             limit (int): 查询最多返回的结果数量，默认为0即无限制
-            skip (int): 返回从第skip个开始的结果
+            skip (int): 返回从第%1个开始的结果
             mongocollection (str): 数据库中其他数据集的名称
             raw (bool): 若为 False（默认值）则返回 Paragraph 对象，否则返回原始数据，仅对于聚合查询有效
         """

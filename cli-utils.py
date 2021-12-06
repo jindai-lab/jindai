@@ -102,8 +102,8 @@ def dump(output, colls):
     """Dump the current status of database to a zip file of jsons.
 
     Args:
-        output (str, optional): output zip filename. Defaults to '' for a date string.
-        colls (optional): list of collections. Defaults to [].
+        output (str, optional): output zip filename
+        colls (optional): list of collections
     """
     if not output:
         output = f'dump-{datetime.datetime.now().strftime("%Y%m%d%H%M%S")}{("," + ",".join(colls)) if colls else ""}.zip'
@@ -132,8 +132,8 @@ def restore(infile, colls, force):
 
     Args:
         infile (str): input zip filename.
-        colls (optional): list of collections. Defaults to [].
-        force (bool, optional): ignore errors. Defaults to True.
+        colls (optional): list of collections
+        force (bool, optional): ignore errors
     """
     def _hook(dic: Dict):
         """JSON decoder hook for restoring collections.

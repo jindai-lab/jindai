@@ -12,7 +12,7 @@ class SpaCyNER(PipelineStage):
     def __init__(self, lang) -> None:
         """ 提取的结果格式为 [名称, 类型]
         Args:
-            lang (chs|en|de|fr|ja|ru): 语言
+            lang (简体中文:chs|英文:en|德文:de|法文:fr|日文:ja|俄文:ru): 语言
         """
         import spacy
         model = {
