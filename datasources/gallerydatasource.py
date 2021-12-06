@@ -337,8 +337,8 @@ class ImageImportDataSource(DataSource):
 
         Args:
             path (str): url path
-            rng_start (int, optional): [description]. Defaults to 0.
-            rng_end (int, optional): [description]. Defaults to 0.
+            rng_start (int, optional): [description]
+            rng_end (int, optional): [description]
         """
         albums = []
 

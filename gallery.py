@@ -41,7 +41,7 @@ def chunks(l: Iterable, n: int = 10) -> List:
 
     Args:
         l (Iterable): list
-        n (int, optional): chunk size. Defaults to 10.
+        n (int, optional): chunk size
 
     Yields:
         Iterator[List]: chunks of size `n`
@@ -106,7 +106,7 @@ def arg(k: str, default: Any = None) -> Any:
 
     Args:
         k (str): key name
-        default (Any, optional): default value. Defaults to None.
+        default (Any, optional): default value
 
     Returns:
         Any: the value of the key `k` in request context
@@ -139,7 +139,7 @@ def tmap(action: Callable, iterable: Iterable[Any], pool_size: int = 10) -> Tupl
     Args:
         action (Callable): action function
         iterable (Iterable): a list of args for the function call
-        pool_size (int, optional): pool size. Defaults to 10.
+        pool_size (int, optional): pool size
 
     Yields:
         Iterator[Tuple[Any, Tuple]]: tuples of (result, args) 
@@ -283,7 +283,7 @@ def init(app):
 
         Args:
             id (str): id of the file
-            ext (str, optional): extension file. Defaults to ''.
+            ext (str, optional): extension file
 
         Returns:
             Response: binary data
