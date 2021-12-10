@@ -358,6 +358,14 @@ def init(app):
         }
 
 
+    @app.route('/api/gallery/imageitem/put_storage/<key>', methods=['POST'])
+    @rest()
+    def put_storage(key):
+        with StorageManager() as mgr:
+            mgr.write(base64.b64decode(request.data), key)
+        return True
+
+
     @app.route('/api/gallery/imageitem/merge', methods=["POST"])
     @rest()
     def merge_items(pairs):
@@ -368,12 +376,15 @@ def init(app):
             
             if rese:
                 pr = Album.first(F.items == ObjectId(rese)) or Album(
-                    items=[ObjectId(rese)])
+                    items=[ObjectId(rese)], pdate=None)
                 for pd in Album.query(F.items == dele.id):
                     pr.keywords += pd.keywords
                     if (not pr.source.get('url') or 'restored' in pr.source['url']) and pd.source.get('url'):
                         pr.source = pd.source
-                    
+                    if not pr.pdate:
+                        pr.pdate = pd.pdate
+                if not pr.pdate:
+                    pr.pdate = datetime.datetime.now()
                 pr.save()
             
             Album.query(F.items == dele.id).update(Fn.pull(items=dele.id))        

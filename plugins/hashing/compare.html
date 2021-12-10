@@ -2,449 +2,456 @@
 <html>
 
 <head>
-    <title>compare</title>
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <style>
-        body {
-            background: #000;
-            color: #fff;
-            overflow-x: hidden;
-        }
-        
-        a {
-            color: #fff;
-        }
-        
-        .items {
-            width: 100%;
-            overflow-x: hidden;
-        }
-        
-        .under-pinned {
-            margin-top: 260px;
-        }
-        
-        .items .post {
-            position: relative;
-            margin-bottom: 10px;
-            margin-top: 10px;
-            border: 1px dashed #777
-        }
-        
-        .post span.count {
-            display: none;
-        }
-        
-        .post span .samepost {
-            word-break: keep-all;
-            white-space: nowrap;
-            overflow: hidden;
-            text-overflow: ellipsis;
-        }
-        
-        .post.preview span.count {
-            display: inline;
-        }
-        
-        @media (max-width: 499px) {
-            .post.preview {
-                max-height: unset;
-            }
-        }
-        
-        .items div.group {
-            clear: both;
-            float: left;
-            background: #333;
-            margin-right: 20px;
-            margin-top: 20px;
-        }
-        
-        div.item {
-            padding: 10px 10px 10px 10px;
-        }
-        
-        .items .post.preview {
-            overflow: hidden;
-            height: 320px;
-        }
-        
-        .items .post.preview .selected::before {
-            content: "✅";
-            display: block;
-            z-index: 2;
-            position: absolute;
-            top: 50%;
-            margin: -40px -40px 0;
-            left: 50%;
-            font-size: 80px;
-        }
-        
-        .items .post.preview>span {
-            z-index: 2;
-            background: rgba(0, 0, 0, 0.5);
-            position: absolute;
-            display: block;
-            clear: both;
-            max-height: 100px;
-            overflow: hidden;
-        }
-        
-        .items .post.preview>span.memo {
-            top: 0;
-        }
-        
-        .items .post.preview>span.actions {
-            bottom: 0;
-        }
-        
-        .items .post.preview .item {
-            height: 400px;
-            display: block;
-        }
-        
-        .items .post.preview .item:nth-child(3) img {
-            position: absolute;
-            transform: translate(0, -50%);
-            transform-origin: position(0, -50%);
-            top: 50%;
-        }
-        
-        .items .post.preview .item>span {
-            display: none;
-        }
-        
-        .items .post>span {
-            padding-left: 10px;
-            padding-right: 10px;
-        }
-        
-        div.item img {
-            width: 100%;
-            height: auto;
-        }
-        
-        div.item.video {
-            background: purple;
-        }
-        
-        .items span {
-            display: block;
-            width: 100%;
-            word-break: break-all;
-            color: #fff;
-        }
-        
-        div.showing .text a:focus {
-            background: #fff;
-            color: #000;
-            bottom: 0px;
-        }
-        
-        div.item.selected {
-            background: #0f0;
-        }
-        
-        div.groups {
-            display: block;
-            width: 100%;
-            height: 200px;
-            overflow-x: auto;
-            overflow-y: hidden;
-            background: #333;
-            white-space: nowrap;
-        }
-        
-        div.groups span {
-            display: block;
-        }
-        
-        div.groups img {
-            height: 150px !important;
-            width: auto !important;
-        }
-        
-        div.groups>* {
-            display: inline-block;
-            float: none;
-        }
-        
-        div#controls {
-            color: #fff;
-        }
-        
-        div.loading,
-        div.gif {
-            position: fixed;
-            width: 100%;
-            height: 50px;
-            bottom: 0;
-            left: 0;
-            z-index: 10;
-        }
-        
-        div.loading {
-            display: none;
-            background-color: rgba(0, 0, 0, 0.8);
-        }
-        
-        div.loading div.gif {
-            background: url('/statics/loading.gif') no-repeat center center;
-        }
-        
-        div.showing {
-            display: none;
-            position: fixed;
-            width: 100%;
-            height: 100%;
-            overflow: auto;
-            top: 0;
-            left: 0;
-            background: rgba(0, 0, 0, 0.8);
-            z-index: 10;
-            text-align: center;
-            color: #fff;
-            padding-bottom: 20px;
-        }
-        
-        div.navigate {
-            z-index: 5;
-            position: fixed;
-            padding: 0;
-            margin: -50px 0;
-            top: 50%;
-        }
-        
-        div.navigate>a {
-            height: 50px;
-            font-size: 50px;
-            background: rgba(255, 255, 255, 0.4);
-            color: white;
-            text-decoration: none;
-        }
-        
-        div.showing .close {
-            position: fixed;
-            z-index: 11;
-            right: 10px;
-            top: 10px;
-        }
-        
-        div.showing .close svg {
-            fill: #fff;
-            width: 32px;
-            height: 32px;
-        }
-        
-        div.showing .text-wrapper {
-            position: fixed;
-            background: rgba(0, 0, 0, 0.5);
-            text-align: left;
-            opacity: 0;
-            display: table;
-        }
-        
-        div.showing .text {
-            width: 100%;
-            display: table-cell;
-            vertical-align: bottom;
-            word-break: break-all;
-            padding-bottom: 60px;
-        }
-        
-        div.showing .text a.expand_items {
-            display: none;
-        }
-        
-        div.pinned {
-            position: fixed;
-            z-index: 5;
-            top: 0;
-            background-color: #000;
-            width: 100%;
-        }
-        
-        @media(max-width: 600px) {
-            div.showing .text-wrapper {
-                bottom: 0;
-                left: 0;
-                width: 100%;
-                min-height: 100px;
-            }
-        }
-        
-        @media(min-width: 601px) {
-            div.showing .text-wrapper {
-                top: 0;
-                right: 0;
-                max-width: 15%;
-                min-width: 100px;
-                height: 100%;
-            }
-        }
-        
-        div.showing .text-wrapper:hover,
-        div.showing .text-wrapper:focus-within {
-            opacity: 1;
-        }
-        
-        div.showing img {
-            margin: 0 auto;
-            transform-origin: center;
-        }
-        
-        div.showing .showing-wrapper {
-            margin: 0 auto;
-        }
-        
-        .tag {
-            color: lightblue;
-        }
-        
-        .t_fav,
-        .tag.t_ff {
-            color: orange !important;
-        }
-        
-        .tag.t_group {
-            color: magenta;
-        }
-        
-        .tag.t_author {
-            color: yellow
-        }
-        
-        template,
-        .debug-info {
-            display: none;
-        }
-        
-        .keys {
-            position: fixed;
-            bottom: 25px;
-            right: 25px;
-            z-index: 20;
-        }
-        
-        .keys>a {
-            margin-left: 20px;
-            border-radius: 5px;
-            width: 25px;
-            display: inline-block;
-            background: forestgreen;
-            text-align: center;
-            text-decoration: none
-        }
-        
-        .post.item {
-            width: 300px;
-            display: inline-block;
-        }
-        
-        .pair {
-            clear: both;
-        }
-    </style>
-    <script src="https://cdn.jsdelivr.net/npm/jquery@3.6.0/dist/jquery.min.js"></script>
+  <title>compare</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <style>
+    body {
+      background: #000;
+      color: #fff;
+      overflow-x: hidden;
+    }
+
+    a {
+      color: #fff;
+    }
+
+    .items {
+      width: 100%;
+      overflow-x: hidden;
+    }
+
+    .under-pinned {
+      margin-top: 260px;
+    }
+
+    .items .post {
+      position: relative;
+      margin-bottom: 10px;
+      margin-top: 10px;
+      border: 1px dashed #777
+    }
+
+    .post span.count {
+      display: none;
+    }
+
+    .post span .samepost {
+      word-break: keep-all;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .post.preview span.count {
+      display: inline;
+    }
+
+    @media (max-width: 499px) {
+      .post.preview {
+        max-height: unset;
+      }
+    }
+
+    .items div.group {
+      clear: both;
+      float: left;
+      background: #333;
+      margin-right: 20px;
+      margin-top: 20px;
+    }
+
+    div.item {
+      padding: 10px 10px 10px 10px;
+    }
+
+    .items .post.preview {
+      overflow: hidden;
+      height: 320px;
+    }
+
+    .items .post.preview .selected::before {
+      content: "✅";
+      display: block;
+      z-index: 2;
+      position: absolute;
+      top: 50%;
+      margin: -40px -40px 0;
+      left: 50%;
+      font-size: 80px;
+    }
+
+    .items .post.preview>span {
+      z-index: 2;
+      background: rgba(0, 0, 0, 0.5);
+      position: absolute;
+      display: block;
+      clear: both;
+      max-height: 100px;
+      overflow: hidden;
+    }
+
+    .items .post.preview>span.memo {
+      top: 0;
+    }
+
+    .items .post.preview>span.actions {
+      bottom: 0;
+    }
+
+    .items .post.preview .item {
+      height: 400px;
+      display: block;
+    }
+
+    .items .post.preview .item:nth-child(3) img {
+      position: absolute;
+      transform: translate(0, -50%);
+      transform-origin: position(0, -50%);
+      top: 50%;
+    }
+
+    .items .post.preview .item>span {
+      display: none;
+    }
+
+    .items .post>span {
+      padding-left: 10px;
+      padding-right: 10px;
+    }
+
+    div.item img {
+      width: 100%;
+      height: auto;
+    }
+
+    div.item.video {
+      background: purple;
+    }
+
+    .items span {
+      display: block;
+      width: 100%;
+      word-break: break-all;
+      color: #fff;
+    }
+
+    div.showing .text a:focus {
+      background: #fff;
+      color: #000;
+      bottom: 0px;
+    }
+
+    div.item.selected {
+      background: #0f0;
+    }
+
+    div.groups {
+      display: block;
+      width: 100%;
+      height: 200px;
+      overflow-x: auto;
+      overflow-y: hidden;
+      background: #333;
+      white-space: nowrap;
+    }
+
+    div.groups span {
+      display: block;
+    }
+
+    div.groups img {
+      height: 150px !important;
+      width: auto !important;
+    }
+
+    div.groups>* {
+      display: inline-block;
+      float: none;
+    }
+
+    div#controls {
+      color: #fff;
+    }
+
+    div.loading,
+    div.gif {
+      position: fixed;
+      width: 100%;
+      height: 50px;
+      bottom: 0;
+      left: 0;
+      z-index: 10;
+    }
+
+    div.loading {
+      display: none;
+      background-color: rgba(0, 0, 0, 0.8);
+    }
+
+    div.loading div.gif {
+      background: url('/statics/loading.gif') no-repeat center center;
+    }
+
+    div.showing {
+      display: none;
+      position: fixed;
+      width: 100%;
+      height: 100%;
+      overflow: auto;
+      top: 0;
+      left: 0;
+      background: rgba(0, 0, 0, 0.8);
+      z-index: 10;
+      text-align: center;
+      color: #fff;
+      padding-bottom: 20px;
+    }
+
+    div.navigate {
+      z-index: 5;
+      position: fixed;
+      padding: 0;
+      margin: -50px 0;
+      top: 50%;
+    }
+
+    div.navigate>a {
+      height: 50px;
+      font-size: 50px;
+      background: rgba(255, 255, 255, 0.4);
+      color: white;
+      text-decoration: none;
+    }
+
+    div.showing .close {
+      position: fixed;
+      z-index: 11;
+      right: 10px;
+      top: 10px;
+    }
+
+    div.showing .close svg {
+      fill: #fff;
+      width: 32px;
+      height: 32px;
+    }
+
+    div.showing .text-wrapper {
+      position: fixed;
+      background: rgba(0, 0, 0, 0.5);
+      text-align: left;
+      opacity: 0;
+      display: table;
+    }
+
+    div.showing .text {
+      width: 100%;
+      display: table-cell;
+      vertical-align: bottom;
+      word-break: break-all;
+      padding-bottom: 60px;
+    }
+
+    div.showing .text a.expand_items {
+      display: none;
+    }
+
+    div.pinned {
+      position: fixed;
+      z-index: 5;
+      top: 0;
+      background-color: #000;
+      width: 100%;
+    }
+
+    @media(max-width: 600px) {
+      div.showing .text-wrapper {
+        bottom: 0;
+        left: 0;
+        width: 100%;
+        min-height: 100px;
+      }
+    }
+
+    @media(min-width: 601px) {
+      div.showing .text-wrapper {
+        top: 0;
+        right: 0;
+        max-width: 15%;
+        min-width: 100px;
+        height: 100%;
+      }
+    }
+
+    div.showing .text-wrapper:hover,
+    div.showing .text-wrapper:focus-within {
+      opacity: 1;
+    }
+
+    div.showing img {
+      margin: 0 auto;
+      transform-origin: center;
+    }
+
+    div.showing .showing-wrapper {
+      margin: 0 auto;
+    }
+
+    .tag {
+      color: lightblue;
+    }
+
+    .t_fav,
+    .tag.t_ff {
+      color: orange !important;
+    }
+
+    .tag.t_group {
+      color: magenta;
+    }
+
+    .tag.t_author {
+      color: yellow
+    }
+
+    template,
+    .debug-info {
+      display: none;
+    }
+
+    .keys {
+      position: fixed;
+      bottom: 25px;
+      right: 25px;
+      z-index: 20;
+    }
+
+    .keys>a {
+      margin-left: 20px;
+      border-radius: 5px;
+      min-width: 25px;
+      display: inline-block;
+      background: forestgreen;
+      text-align: center;
+      text-decoration: none
+    }
+
+    .post.item {
+      width: 300px;
+      display: inline-block;
+    }
+
+    .pair {
+      clear: both;
+    }
+  </style>
+  <script src="https://cdn.jsdelivr.net/npm/jquery@3.6.0/dist/jquery.min.js"></script>
 </head>
 
 <body>
-    <div class="items"></div>
-    <div style="clear: both"></div>
-    <script>
-        String.prototype.format = function(o) {
-            console.log(o)
-            return this.replace(/\{(\w+?)\}/g, x => (o[x.substr(1, x.length - 2)]));
-        }
+  <div class="items"></div>
+  <div style="clear: both"></div>
+  <div class="keys">
+    <a href="javascript:void(0);" ondblclick="call_merge()">merge</a>
+  </div>
+  <script>
+    String.prototype.format = function (o) {
+      console.log(o)
+      return this.replace(/\{(\w+?)\}/g, x => (o[x.substr(1, x.length - 2)]));
+    }
 
-        var offset = location.hash.substr(1) | 0;
-        var url = 'compare.tsv';
-        var data = [];
-        const count = 200;
+    var offset = location.hash.substr(1) | 0;
+    var url = 'compare.tsv';
+    var data = [];
+    const count = 200;
 
-        $.get(url, function(resp) {
-            data = resp.split('\n');
-            offset = render(offset);
-        })
+    $.get(url, function (resp) {
+      data = resp.split('\n');
+      offset = render(offset);
+    })
 
-        function render(offset) {
-            var disp = $('.items');
-            disp.html('');
-            offset = Math.min(Math.max(offset, 0), data.length - 1);
-            for (var line of data.slice(offset, offset + count)) {
-                line = line.split(/\s/);
-                if (line.length < 3) continue;
-                var o = {
-                    id1: line[0],
-                    id2: line[1],
-                    diff: +line[2]
-                };
-                disp[0].innerHTML += ('<div class="pair">{diff}</div>'.format(o));
-                var pair = disp.children()[disp.children().length - 1]
-                pair.innerHTML += ('<div class="post item ' + (o.diff <= 1 ? "selected" : "") + '" data-id="{id1}">{id1}<img src="/api/gallery/block/{id1}.jpg?w=400" /></div>'.format(o));
-                pair.innerHTML += ('<div class="post item" data-id="{id2}">{id2}<img src="/api/gallery/block/{id2}.jpg?w=400" /></div><br>'.format(o));
-            }
-            location.hash = '#' + (offset);
-            window.scrollTo(0, 0);
-            return offset;
-        }
+    function render(offset) {
+      var disp = $('.items');
+      disp.html('');
+      offset = Math.min(Math.max(offset, 0), data.length - 1);
+      for (var line of data.slice(offset, offset + count)) {
+        line = line.split(/\s/);
+        if (line.length < 3) continue;
+        var o = {
+          id1: line[0],
+          id2: line[1],
+          diff: +line[2]
+        };
+        disp[0].innerHTML += ('<div class="pair">{diff}</div>'.format(o));
+        var pair = disp.children()[disp.children().length - 1]
+        pair.innerHTML += ('<div class="post item ' + (o.diff <= 1 ? "selected" : "") + '" data-id="{id1}">{id1}<img src="/api/gallery/block/{id1}.jpg?w=400" /></div>'.format(o));
+        pair.innerHTML += ('<div class="post item" data-id="{id2}">{id2}<img src="/api/gallery/block/{id2}.jpg?w=400" /></div><br>'.format(o));
+      }
+      location.hash = '#' + (offset);
+      window.scrollTo(0, 0);
+      return offset;
+    }
 
-        var last_selected = 0;
+    var last_selected = 0;
 
-        $(document).on('click', '.item', function(e) {
-            var thisp = $(this).parent().index();
-            var oe = $(this).index() % 2 == 0 ? 'even' : 'odd'
-            if (e.shiftKey) {
-                var arr = $('.pair').slice(Math.min(last_selected, thisp), Math.max(last_selected, thisp) + 1).find('.item:' + oe);
-                arr.addClass('selected');
-            } else {
-                $(this).toggleClass('selected');
-            }
-            last_selected = thisp;
-        })
-        $(document).on('dblclick', '.item', function() {
-            $(this).append('<a target="_blank" href="/gallery?query=items%3DObjectId(' + $(this).data('id') + ')"> </a>').find('a')[0].click();
-        })
-        var lastkey = '';
+    $(document).on('click', '.item', function (e) {
+      var thisp = $(this).parent().index();
+      var oe = $(this).index() % 2 == 0 ? 'even' : 'odd'
+      if (e.shiftKey) {
+        var arr = $('.pair').slice(Math.min(last_selected, thisp), Math.max(last_selected, thisp) + 1).find('.item:' + oe);
+        arr.addClass('selected');
+      } else {
+        $(this).toggleClass('selected');
+      }
+      last_selected = thisp;
+    })
+    $(document).on('dblclick', '.item', function () {
+      $(this).append('<a target="_blank" href="/gallery?query=items%3DObjectId(' + $(this).data('id') + ')"> </a>').find('a')[0].click();
+    })
+    var lastkey = '';
 
-        $(document).bind('keyup', function(e) {
-            switch (e.key) {
-                case "ArrowLeft":
-                    offset = render(offset - count);
-                    break;
-                case "ArrowRight":
-                    offset = render(offset + count);
-                    break;
-                case "ArrowDown":
-                case "ArrowUp":
-                case "w":
-                case "s":
-                    $('.selected').removeClass('selected');
-                    last_selected = (0 | last_selected) + (e.key === 'ArrowDown' || e.key === 's' ? 1 : -1);
-                    $($('.item')[last_selected]).addClass('selected');
-                    window.scrollTo(0, $('.selected').position().top)
-                    break;
-                case "q":
-                    $('.selected').removeClass('selected');
-                    break;
-                case "d":
-                    var ids = $('.selected').toArray().map(x => [$(x).siblings().data('id'), $(x).data('id')]);
-                    if (lastkey == e.key)
-                        $.post({
-                            url: '/api/gallery/imageitem/merge',
-                            data: JSON.stringify({
-                                'pairs': ids
-                            }),
-                            success: function() {
-                                $('.selected').remove();
-                            },
-                            contentType: 'application/json'
-                        });
-                    break;
-            }
-            lastkey = e.key;
-        });
-    </script>
+    $(document).bind('keyup', function (e) {
+      switch (e.key) {
+        case "ArrowLeft":
+          offset = render(offset - count);
+          break;
+        case "ArrowRight":
+          offset = render(offset + count);
+          break;
+        case "ArrowDown":
+        case "ArrowUp":
+        case "w":
+        case "s":
+          $('.selected').removeClass('selected');
+          last_selected = (0 | last_selected) + (e.key === 'ArrowDown' || e.key === 's' ? 1 : -1);
+          $($('.item')[last_selected]).addClass('selected');
+          window.scrollTo(0, $('.selected').position().top)
+          break;
+        case "q":
+          $('.selected').removeClass('selected');
+          break;
+        case "d":
+          if (lastkey == e.key)
+            call_merge();
+          break;
+      }
+      lastkey = e.key;
+    });
+
+    function call_merge() {      
+      var ids = $('.selected').toArray().map(x => [$(x).siblings().data('id'), $(x).data('id')]);
+      $.post({
+        url: '/api/gallery/imageitem/merge',
+        data: JSON.stringify({
+          'pairs': ids
+        }),
+        success: function () {
+          $('.selected').remove();
+        },
+        contentType: 'application/json'
+      });
+    }
+  </script>
 </body>
 
 </html>
