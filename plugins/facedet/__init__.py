@@ -59,6 +59,7 @@ class FaceDet(Plugin):
 
         offset = ds.order.get('offset', 0)
         limit = ds.limit
+        ds.limit = 0
         ds.raw = False
 
         if len(post_args) == 1:
@@ -125,4 +126,4 @@ class FaceDet(Plugin):
                 if archive:
                     results = list(groupped.values())
                 return [r for _, r in sorted(results, key=lambda x: x[0])[offset:offset+limit]], \
-                    {'offset': max(0, offset-limit), 'limit': limit}, {'offset': offset + limit, 'limit': limit}
+                    {'keys': ['offset'], 'offset': max(0, offset-limit)}, {'keys': ['offset'], 'offset': offset + limit}

@@ -1,6 +1,7 @@
 import click
-from PyMongoWrapper import F
-from models import Meta, User, MongoJSONEncoder
+from PyMongoWrapper import F, Fn
+import h5py
+from models import Meta, User, MongoJSONEncoder, ImageItem
 from typing import Dict, Iterable
 from task import Task
 from tqdm import tqdm
@@ -9,6 +10,8 @@ from bson import ObjectId
 import base64, json
 import datetime
 from io import BytesIO
+import os
+import numpy as np
 
 
 def mongodb(coll):
@@ -95,6 +98,37 @@ def meta(key, value):
         print(r[key] if hasattr(r, key) else '')
 
 
+@cli.command('storage-merge')
+@click.option('--output', '-o', default='tmp.h5')
+@click.argument('infiles', nargs=-1)
+def storage_merge(infiles, output):
+    items = {str(i.id) for i in ImageItem.query({})}
+    fo = h5py.File(output, 'r+' if os.path.exists(output) else 'w')
+    total = 0
+    for f in infiles:
+        f = h5py.File(f, 'r')
+        for k in tqdm(f['data']):
+            if k[:24] in items:
+                dat = f[f'data/{k}']
+                total += len(dat)
+                fo[f'data/{k}'] = np.frombuffer(dat[:].tobytes(), dtype='uint8')
+    fo.close()
+    print('Total:', total, 'bytes')
+
+
+@cli.command('storage-sync')
+@click.argument('infiles', nargs=-1)
+def storage_sync(infiles):
+    items = {str(i.id) for i in ImageItem.query(F.storage==True)}
+    for f in infiles:
+        f = h5py.File(f, 'r')
+        for k in tqdm(f['data']):
+            _id = k[:24]
+            if _id in items: items.remove(_id)
+    print(len(items))
+    ImageItem.query(F.id.in_(list(items))).update(Fn.set(storage=None))
+                
+
 @cli.command('dump')
 @click.option('--output', default='')
 @click.argument('colls', nargs=-1)
@@ -173,7 +207,6 @@ def restore(infile, colls, force):
                                         bypass_document_validation=True)
         except Exception as ex:
             print(ex)
-            exit()
 
     with zipfile.ZipFile(infile, 'r') as z:
         restore_albums = set()

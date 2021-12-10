@@ -33,7 +33,6 @@ class GalleryAlbumDataSource(DataSource):
             groups (bool): 是否按用户标记的分组返回
             archive (bool): 是否按用户标记的分组或来源分组返回
             sort_keys (str): 排序表达式
-            raw (bool): 返回字典而非语段对象
         """
         self.cond = cond
         self.query = parser.eval(cond)
@@ -52,14 +51,15 @@ class GalleryAlbumDataSource(DataSource):
         
         if len(order['keys']) > 0 and 'random' not in order['keys'] and '_id' not in order['keys'] and '-_id' not in order['keys']:
             order['keys'].append('_id')
-            order['_id'] = ObjectId('00'*12)
         
         self.orders = [
             (o.split('-')[-1], -1 if o.startswith('-') == (direction == 'next') else 1)
-            for o in order['keys'] if o != 'random'
+            for o in order['keys'] if o != 'random' and o != 'offset'
         ]
         self.order = order
         self.random = len(self.orders) == 0
+
+        if self.random and self.limit == 0: self.limit = 100
 
         order_conds = []
         vconds = {}
@@ -72,7 +72,7 @@ class GalleryAlbumDataSource(DataSource):
             if k.startswith('items.'):
                 unwind_first = True
             if k == '_id':
-                v = ObjectId(v or ('0' * 24))
+                v = ObjectId(v)
             d = '$gt' if dr == 1 else '$lt'
             vconds[k] = {d: v}
             order_conds.append(dict(vconds))
@@ -199,7 +199,7 @@ class GalleryAlbumDataSource(DataSource):
                 self.aggregator.sort(SON(self.orders))
                 if self.offset:
                     self.aggregator.skip(self.offset)
-            self.aggregator.limit(self.limit)
+            if self.limit: self.aggregator.limit(self.limit)
         
         yield from self.aggregator.perform(raw=self.raw)
 

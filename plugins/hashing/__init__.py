@@ -93,6 +93,7 @@ class Hashing(Plugin):
         groups = ds.groups
         archive = ds.archive
         limit, offset = ds.limit, ds.order.get('offset', 0)
+        ds.limit = 0
 
         if post_args[0] not in ('sim', 'group_ratings'):
             return
@@ -132,7 +133,7 @@ class Hashing(Plugin):
                     results = list(groupped.values())
                 
                 results = sorted(results, key=lambda x: x.score)[offset:offset + limit]
-                return results, {'offset': max(offset - limit, 0), 'limit': limit}, {'offset': offset + limit,
+                return results, {'keys': ['offset'], 'offset': max(offset - limit, 0), 'limit': limit}, {'keys': ['offset'], 'offset': offset + limit,
                                                                                     'limit': limit}
 
         elif post_args[0] == 'group_ratings':

@@ -25,96 +25,6 @@ def fetch_items(stored=True):
     return {str(i['_id']) for i in ImageItem.query(cond).rs}
 
 
-def check_blocks_items():
-    """Check itmes in h5 files
-
-    Returns:
-        Iterable: item id strings
-    """    
-    items = set()
-    
-    for g in glob.glob('blocks*.h5'):
-        log(g)
-        h = h5py.File(g, 'r')
-        for k in h['data']:
-            kid = find_k(k)
-            items.add(kid)
-        h.close()
-    
-    return items
-
-
-def extract(items, h, t):
-    """Extract specified items from h5 file `h` to `t`
-
-    Args:
-        items (Iterable): items to extract
-        h (h5py.File): source
-        t (h5py.File): target
-
-    Returns:
-        [type]: [description]
-    """    
-    if 'data' not in h:
-        return t
-    
-    count = 0
-    total = 0
-    for k in tqdm(h['data']):
-        count += 1
-        if count % 100 == 0 and t is not None:
-            t.flush()
-        kid = find_k(k)
-        if kid in items:
-            try:
-                dat = h[f'data/{k}']
-                total += len(dat)
-                if t is not None:
-                    t[f'data/{k}'] = np.frombuffer(dat[:].tobytes(), dtype='uint8')
-            except Exception as ex:
-                log(ex)
-
-    log('total:', total, 'bytes')
-    return t
-
-
-def merge(*files, dry_run=False, output='tmp.h5'):
-    """Merge h5 files
-
-    Args:
-        dry_run (bool, optional): Dry run, makes no change to file system
-        output (str, optional): Output file name
-    """    
-    items = fetch_items()    
-    log(len(items), 'items.')
-
-    if dry_run:
-        t = None
-        log('dry run.')
-    else:
-        t = h5py.File(output, 'w')
-    
-    for g in files:
-        log('checking', g, '...')
-        h = h5py.File(g, 'r')
-        extract(items, h, t)
-        h.close()
-    
-    if not dry_run:
-        t.close()
-
-
-def check_storage():
-    """Sync storage status to items
-    """    
-    items = fetch_items()
-    blocks = check_blocks_items()
-    diff = items.difference(blocks)
-    log(len(diff))
-    for i in diff:
-        ImageItem.query(F.id == i).update(Fn.set(storage=None))
-
-
 def remove_unused_items():
     """Remove unused items
     """    
@@ -147,7 +57,7 @@ def push(since, target_url):
 
     def _push(k, data : BytesIO, url):
         data = base64.b64encode(data.getvalue())
-        requests.put(url + '/api/item/put_storage/' + k, data)
+        requests.put(url + '/api/gallery/imageitem/put_storage/' + k, data)
         pbar.set_description(f"{k} len={len(data)}")
         pbar.update(1)
 

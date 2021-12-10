@@ -1,15 +1,18 @@
 """图像相关的简单处理
 """
 
-from storage import StorageManager
-from pipeline import PipelineStage
-import numpy as np
-from PIL import Image, ImageOps
-from typing import Union
 import os
-from models import ImageItem, Album, F, parser, try_download
-from plugins.hashing import dhash, whash
+import re
 from collections import defaultdict
+from queue import deque
+from typing import Union
+
+import numpy as np
+from models import Album, F, ImageItem, parser, try_download, AutoTag
+from PIL import Image, ImageOps
+from pipeline import PipelineStage
+from plugins.hashing import dhash, whash
+from storage import StorageManager
 from tqdm import tqdm
 
 
@@ -89,40 +92,38 @@ class ImageHashDuplications(ImageOrAlbumStage):
     
     def __init__(self) -> None:
         from plugins.hashing import v
-        from queue import Queue
         self.d2 = defaultdict(list)
     
         for i in tqdm(ImageItem.query(F.dhash.exists(1) & ~F.dhash.empty() & F.flag.eq(0) & (F.width > 0) & F.url.regex(r'\.(jpe?g|gif|png|tiff)$'))):
-            if not i.dhash: continue
+            if not i.dhash or not i.whash or not i.width: continue
             dha = v(i.dhash)
             dhb = v(i.whash)
             self.d2[dha].append((i.id, i.width, i.height, dhb))
         
         print('unique hashes:', len(self.d2))
         
-        self.results = Queue()
-        self.fo = open('compare.tsv', 'w')
+        self.results = deque()
 
     def resolve_image(self, i: ImageItem):
-        from plugins.hashing import v, flips, bitcount
+        from plugins.hashing import bitcount, flips, v
         if not i.dhash: return
         dh2 = v(i.dhash)
-        self.logger(i.id)
-        ls2 = self.d2[dh2]
-        for id2, w2, h2, dhb2 in ls2:
-            for dh1, sc in [(dh2, 0)] + list(zip(flips(dh2, 1), [1] * 64)) + list(zip(flips(dh2, 2), [2] * 2016)):
-                for id1, w1, h1, dhb1 in self.d2[dh1]:
-                    if id1 >= id2 or w1 == 0: continue
-                    a, b = id2, id1
-                    if w1 * h1 < w2 * h2: b, a = a, b
-                    r = '{}\t{}\t{}'.format(a, b, sc + bitcount(dhb1 ^ dhb2))
-                    self.logger(r)
-                    self.results.put(r + '\n')
+        dhb2 = v(i.whash)
+        h2, w2 = i.height, i.width
+        for dh1, sc in [(dh2, 0)] + list(zip(flips(dh2, 1), [1] * 64)) + list(zip(flips(dh2, 2), [2] * 2016)):
+            for id1, w1, h1, dhb1 in self.d2[dh1]:
+                if id1 >= i.id: continue
+                a, b = i.id, id1
+                if w1 * h1 < w2 * h2: b, a = a, b
+                r = '{}\t{}\t{}'.format(a, b, sc + bitcount(dhb1 ^ dhb2))
+                self.logger(r)
+                self.results.append(r + '\n')
         return i
 
     def summarize(self, r):
-        while not self.results.empty():
-            self.fo.write(self.results.get())
+        self.fo = open('compare.tsv', 'w')
+        for l in self.results:
+            self.fo.write(l)
         self.fo.close()
         return {'redirect': '/api/gallery/compare'}
         
@@ -313,3 +314,23 @@ class DownloadImages(PipelineStage):
             i.save()
 
         return p
+
+
+class ApplyAutoTags(PipelineStage):
+    """应用自动标签设置
+    """
+    
+    def __init__(self) -> None:
+        self.ats = list(AutoTag.query({}))
+    
+    def resolve(self, p : Album) -> Album:
+        for i in self.ats:
+            pattern, from_tag, tag = i.pattern, i.from_tag, i.tag
+            if (from_tag and from_tag in p.keywords) or (pattern and re.search(pattern, p.source['url'])):
+                if tag not in p.keywords:
+                    p.keywords.append(tag)
+                if tag.startswith('@'):
+                    p.author = tag
+        p.save()
+        return p
+
