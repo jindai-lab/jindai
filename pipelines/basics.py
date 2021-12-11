@@ -95,10 +95,10 @@ class AccumulateParagraphs(PipelineStage):
 
     def __init__(self):
         self.paragraphs = []
-        self._lock = threading.Lock()
+        self.lock = threading.Lock()
 
     def resolve(self, p : Paragraph):
-        with self._lock:
+        with self.lock:
             self.paragraphs.append(p)
 
     def summarize(self, *args):

@@ -178,6 +178,7 @@ class CosSimClustering(AccumulateParagraphs):
             threshold (float): 相似度阈值
             label_field (str): 生成的标签字段名
         '''
+        super().__init__()
         self.min_community_size = 10
         self.threshold = threshold
         self.vecs = []
