@@ -315,12 +315,16 @@ class ImageImportDataSource(DataSource):
                 fn = __expand_zip(_f)
                 if _f.endswith('.mp4') or _f.endswith('.avi'):
                     i.generate_thumbnail()
-                else:                                                
-                    im = Image.open(fn)
-                    i.width, i.height = im.size
+                else:
+                    try:
+                        im = Image.open(fn)
+                        i.width, i.height = im.size
+                    except Exception as ex:
+                        self.logger('Error while handling', fn, ':', ex)
+                        continue
 
-                i.save()
                 i.storage = mgr.write(fn, i.id)
+                i.save()
                 p.items.append(i)
 
         albums = albums.values()
