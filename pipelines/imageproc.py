@@ -8,6 +8,7 @@ from queue import deque
 from typing import Union
 
 import numpy as np
+from helpers import rest
 from models import Album, F, ImageItem, parser, try_download, AutoTag
 from PIL import Image, ImageOps
 from pipeline import PipelineStage
@@ -103,6 +104,7 @@ class ImageHashDuplications(ImageOrAlbumStage):
         print('unique hashes:', len(self.d2))
         
         self.results = deque()
+        self.result_pairs = set()
 
     def resolve_image(self, i: ImageItem):
         from plugins.hashing import bitcount, flips, v
@@ -112,7 +114,8 @@ class ImageHashDuplications(ImageOrAlbumStage):
         h2, w2 = i.height, i.width
         for dh1, sc in [(dh2, 0)] + list(zip(flips(dh2, 1), [1] * 64)) + list(zip(flips(dh2, 2), [2] * 2016)):
             for id1, w1, h1, dhb1 in self.d2[dh1]:
-                if id1 >= i.id: continue
+                if id1 == i.id or f'{i.id}-{id1}' in self.result_pairs or f'{id1}-{i.id}' in self.result_pairs: continue
+                self.result_pairs.add(f'{id1}-{i.id}')
                 a, b = i.id, id1
                 if w1 * h1 < w2 * h2: b, a = a, b
                 r = '{}\t{}\t{}'.format(a, b, sc + bitcount(dhb1 ^ dhb2))
