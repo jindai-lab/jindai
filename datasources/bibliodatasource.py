@@ -25,14 +25,19 @@ class BiblioDataSource(DataSource):
         self.collection = collection
         
     def endnote(self, lines):
-        d = {}
+        d = {
+            'content': '',
+            'authors': []
+        }
         field = ''
         for l in lines:
             if not l.strip():
-                self.logger(d)
                 if d:
                     yield Paragraph(collection=self.collection, **d)
-                d = {}
+                d = {
+                    'content': '',
+                    'authors': []
+                }
             else:
                 l = l.decode('utf-8').strip()
                 if ' ' not in l:
@@ -53,17 +58,16 @@ class BiblioDataSource(DataSource):
                         '%@': 'issn',
                         '%L': 'cn_publishing_number',
                         '%W': 'catalog'
-                    }.get(field.upper(), f'field_{field[1:]}')
+                    }.get(field.upper(), f'content')
                 
                 if ';' in value and field != 'content':
                     value = [_ for _ in value.split(';') if _]
-                if field == 'authors' and not isinstance(value, list):
-                    value = [value]
                 if field in d:
                     if field == 'content':
                         d[field] += value
                     else:
-                        d[field] = [d[field]]
+                        if not isinstance(d[field], list):
+                            d[field] = [d[field]]
                         if isinstance(value, list):
                             d[field] += value
                         else:
