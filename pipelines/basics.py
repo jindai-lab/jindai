@@ -12,6 +12,8 @@ import pandas
 import json
 import itertools
 from opencc import OpenCC
+import pykakasi
+from transliterate import translit
 
 from PyMongoWrapper import F, QueryExprParser
 from PyMongoWrapper.dbo import mongodb, DbObject, DbObjectCollection
@@ -45,24 +47,77 @@ class JiebaCut(PipelineStage):
     """使用结巴分词生成检索词
     """
 
-    def __init__(self, for_search=False, **kwargs):
-        """
-        Args:
-            for_search (bool): 是否用于搜索（会产生冗余分词结果）
-        """
-        self.for_search = for_search
-
     def resolve(self, p: Paragraph) -> Paragraph:
         p.tokens = list(jieba.cut_for_search(p.content) if self.for_search else jieba.cut(p.content))
         return p
 
 
-class WordCut(PipelineStage):
-    """西文分词
+class WordStemmer(PipelineStage):
+    """附加词干到 tokens 中（需要先进行切词）
     """
+
+    _language_stemmers = {}
+
+    @staticmethod
+    def get_stemmer(lang):
+        from nltk.stem.snowball import SnowballStemmer 
+        if lang not in WordStemmer._language_stemmers:
+            stemmer = SnowballStemmer(language_iso639.get(lang, lang).lower())
+            WordStemmer._language_stemmers[lang] = stemmer
+        return WordStemmer._language_stemmers[lang]
+
+    def __init__(self, append=True):
+        """
+        Args:
+            append (bool): 将词干添加到结尾，否则直接覆盖
+        """
+        self.append = append
+
+    def resolve(self, p : Paragraph) -> Paragraph:
+        tokens = [WordStemmer.get_stemmer(p.lang).stem(_) for _ in p.tokens]
+        if self.append:
+            p.tokens += tokens
+        else:
+            p.tokens = tokens
+        return p
+
+
+class WordCut(PipelineStage):
+    """多语种分词
+    """
+
+    t2s = OpenCC('t2s')
+    kks = pykakasi.kakasi()
+    stmr = WordStemmer(append=True)
+
+    def __init__(self, for_search=False, **kwargs):
+        """
+        Args:
+            for_search (bool): 是否用于搜索（添加冗余分词结果或西文词干/转写）
+        """
+        self.for_search = for_search
     
     def resolve(self, p: Paragraph) -> Paragraph:
-        p.tokens = [_.lower() for _ in re.split(r'[^\w]', p.content)]
+        if p.lang == 'cht':
+            content = WordCut.t2s.convert(p.content)
+        else:
+            content = p.content
+
+        if p.lang in ('chs', 'cht'):
+            p.tokens = list(jieba.cut_for_search(content) if self.for_search else jieba.cut(content))
+        elif p.lang == 'ja':
+            p.tokens = []
+            for i in WordCut.kks.convert(content):
+                p.tokens.append(i['orig'])
+                if self.for_search: p.tokens.append(i['hepburn'])
+        else:
+            p.tokens = [_.lower() for _ in re.split(r'[^\w]', content)]
+            if self.for_search:
+                WordCut.stmr.resolve(p)
+
+        if self.for_search and p.lang == 'ru':
+            p.tokens += [translit(_, 'ru', reversed=True).lower() for _ in p.tokens]
+
         return p
 
 
@@ -163,7 +218,7 @@ class AutoSummary(PipelineStage):
         self.count = count
 
     def resolve(self, p: Paragraph) -> Paragraph:
-        from textrank4zh import TextRank4Keyword, TextRank4Sentence
+        from textrank4zh import TextRank4Sentence
         tr4s = TextRank4Sentence()
         tr4s.analyze(text=p.content, lower=True, source='all_filters')
         p.summary = '\n'.join([
@@ -563,43 +618,10 @@ class OutlineFilter(PipelineStage):
         return p
 
 
-spliter = re.compile(r'[^\w]')
-
-
-class WordStemmer(PipelineStage):
-    """附加词干到 tokens 中（需要先进行切词）
-    """
-
-    _language_stemmers = {}
-
-    @staticmethod
-    def get_stemmer(lang):
-        from nltk.stem.snowball import SnowballStemmer 
-        if lang not in WordStemmer._language_stemmers:
-            stemmer = SnowballStemmer(language_iso639.get(lang, lang).lower())
-            WordStemmer._language_stemmers[lang] = stemmer
-        return WordStemmer._language_stemmers[lang]
-
-    def __init__(self, append=True):
-        """
-        Args:
-            append (bool): 将词干添加到结尾，否则直接覆盖
-        """
-        self.append = append
-
-    def resolve(self, p : Paragraph) -> Paragraph:
-        tokens = [WordStemmer.get_stemmer(p.lang).stem(_) for _ in p.tokens]
-        if self.append:
-            p.tokens += tokens
-        else:
-            p.tokens = tokens
-        return p
-
-
 class LatinTransliterate(PipelineStage):
     """转写为拉丁字母的单词（需要先进行切词）
     """
-    def __init__(self, language, append=True):
+    def __init__(self, append=True):
         """
         Args:
             append (bool): 是添加到结尾还是覆盖

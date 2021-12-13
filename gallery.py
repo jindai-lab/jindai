@@ -1,21 +1,16 @@
 import base64
 import datetime
-import glob
 import hashlib
-import json
 import os
 import random
 import re
-import shutil
-import time
-import zipfile
 from collections import defaultdict
 from io import BytesIO
 from multiprocessing.pool import ThreadPool
 from typing import IO, Any, Callable, Iterable, List, Tuple, Union
 import requests
 from bson import ObjectId
-from flask import Response, abort, jsonify, request, stream_with_context
+from flask import Response, abort, jsonify, request
 from PIL import Image, ImageEnhance, ImageStat
 from PyMongoWrapper import F, Fn, Var
 from tqdm import tqdm
@@ -24,7 +19,6 @@ import config
 from datasources.gallerydatasource import GalleryAlbumDataSource
 from helpers import *
 from models import Album, AutoTag, ImageItem, parser
-from plugin import Plugin
 from storage import StorageManager
 
 # prepare environment for requests
@@ -101,37 +95,6 @@ def single_item(pid: str, iid: str) -> List[Album]:
 
 
 # HTTP SERV HELPERS
-def arg(k: str, default: Any = None) -> Any:
-    """Get arg from request.args or request.form or request.json
-
-    Args:
-        k (str): key name
-        default (Any, optional): default value
-
-    Returns:
-        Any: the value of the key `k` in request context
-    """
-    return request.values.get(k) or (request.json or {}).get(k, default)
-
-
-def argBool(k: str) -> bool:
-    """Get arg from request.args or request.form or request.json
-
-    Args:
-        request (Request): request context
-        k (str): key name
-
-    Returns:
-        bool: arg value of the key `k` in request context
-    """
-    v = arg(k)
-    return argBoolv(v)
-
-
-def argBoolv(v) -> bool:
-    """Get bool value from"""
-    return v == '1' or v == 'true' or v == 1 or v == True
-
 
 def tmap(action: Callable, iterable: Iterable[Any], pool_size: int = 10) -> Tuple[Any, Tuple]:
     """Multi-threaded mapping with args included
@@ -296,7 +259,7 @@ def init(app):
         except OSError:
             abort(404)
 
-        if arg('enhance', ''):
+        if request.args.get('enhance', ''):
             img = Image.open(p)
             p = BytesIO()
             # ImageOps.autocontrast(img).save(p, 'jpeg')
@@ -306,8 +269,8 @@ def init(app):
             p.seek(0)
             ext = 'jpg'
 
-        if arg('w', ''):
-            w = int(arg('w'))
+        if request.args.get('w', ''):
+            w = int(request.args.get('w'))
             sz = (w, min(w, 1280))
             p = BytesIO(thumb(p, sz))
             ext = 'jpg'

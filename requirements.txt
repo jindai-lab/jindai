@@ -43,3 +43,6 @@ ipython
 numpy
 PyWavelets
 opennsfw-standaloneoauthlib
+textrank4zh
+sentence_transformers
+text2vec

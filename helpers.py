@@ -1,12 +1,12 @@
 import os
 import re
 from functools import wraps
-from flask import Response, request, send_file, stream_with_context, jsonify, abort
+from flask import Response, request, send_file, stream_with_context, jsonify
 import traceback
 from PyMongoWrapper import F
 from models import Token, User
 from concurrent.futures import ThreadPoolExecutor
-from typing import IO, Any, Callable, List, Dict, Iterable, Tuple, Union
+from typing import IO, Union
 import time
 from models import MongoJSONEncoder
 import config
@@ -119,10 +119,13 @@ def serve_file(p: Union[str, IO], ext: str = '', file_size: int = 0) -> Response
     else:
         return send_file(f, mimetype=mimetype, conditional=True)
 
+
 def logs_view(task):
+    """Provide log stream of given TaskDBO
+    """
 
     def generate():
-        """Generate log text from plugin context
+        """Generate log text from task object of the TaskDBO
 
         Yields:
             str: log text
