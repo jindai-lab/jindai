@@ -1,5 +1,6 @@
 from flask import request
-from gallery import Plugin, rest
+from helpers import rest
+from plugin import Plugin
 from models import F, Meta
 
 

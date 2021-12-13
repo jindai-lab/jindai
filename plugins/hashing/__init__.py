@@ -4,7 +4,6 @@ import imagehash
 from gallery import *
 from plugin import Plugin
 from storage import *
-from tqdm import tqdm
 
 
 def dhash(im):
