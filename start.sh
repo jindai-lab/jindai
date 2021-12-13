@@ -1,4 +1,4 @@
-#!/bin/sh
+#!/bin/bash
 # supervisord -n -c /app/supervisor/supervisord.conf
 which python3 || (sed -i s@security.ubuntu@mirrors.aliyun@ /etc/apt/sources.list && \
     sed -i s@archive.ubuntu@mirrors.aliyun@ /etc/apt/sources.list && apt-get update && apt-get install -yqq python3 python3-pip && \

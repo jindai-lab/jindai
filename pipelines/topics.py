@@ -15,11 +15,7 @@ class FilterStopWords(PipelineStage):
     """
 
     _lang_stopwords = {
-        'en': many_stop_words.get_stop_words('en'),
-        'fr': many_stop_words.get_stop_words('fr'),
-        'de': many_stop_words.get_stop_words('de'),
-        'ru': many_stop_words.get_stop_words('ru'),
-        'ja': many_stop_words.get_stop_words('ja')
+        l: many_stop_words.get_stop_words(l) for l in ['en', 'fr', 'de', 'ru', 'ja']
     }
 
     def __init__(self, stopwords=''):
@@ -179,7 +175,7 @@ class CosSimClustering(AccumulateParagraphs):
             label_field (str): 生成的标签字段名
         '''
         super().__init__()
-        self.min_community_size = 10
+        self.min_community_size = min_community_size
         self.threshold = threshold
         self.vecs = []
         self.label_field = label_field

@@ -1,8 +1,5 @@
-import json
-import os
-
-from flask import jsonify, request
-from gallery import Plugin, arg, rest
+from flask import request
+from gallery import Plugin, rest
 from models import F, Meta
 
 
@@ -14,12 +11,7 @@ def read_shortcuts():
 class Shortcuts(Plugin):
 
     def __init__(self, app):
-        self.shortcut_pages = {
-            'r': '?query=~@jav&order=JSON__{"keys":["random"]}',
-            'f': '?query=:fav',
-            'faces': "?query=_faces!=[]"
-        }
-        
+
         @app.route('/api/gallery/shortcuts', methods=['GET', 'POST'])
         @rest()
         def shortcuts(key='', value=''):
@@ -47,9 +39,3 @@ class Shortcuts(Plugin):
             }
             '''
     
-    def get_special_pages(self):
-        return list(self.shortcut_pages.keys())
-    
-    def special_page(self, ds, post_args):    
-        if post_args[0] in self.shortcut_pages:
-            return jsonify({'redirect': self.shortcut_pages[p]})

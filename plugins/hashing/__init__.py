@@ -87,7 +87,7 @@ class Hashing(Plugin):
             return serve_file(os.path.join(os.path.dirname(__file__), 'compare.html'))
     
     def get_special_pages(self):
-        return ['sim', 'group_ratings']
+        return ['sim']
     
     def special_page(self, ds, post_args):
         groups = ds.groups
@@ -95,7 +95,7 @@ class Hashing(Plugin):
         limit, offset = ds.limit, ds.order.get('offset', 0)
         ds.limit = 0
 
-        if post_args[0] not in ('sim', 'group_ratings'):
+        if post_args[0] not in ('sim',):
             return
 
         iid = post_args[1]
@@ -135,29 +135,3 @@ class Hashing(Plugin):
                 results = sorted(results, key=lambda x: x.score)[offset:offset + limit]
                 return results, {'keys': ['offset'], 'offset': max(offset - limit, 0), 'limit': limit}, {'keys': ['offset'], 'offset': offset + limit,
                                                                                     'limit': limit}
-
-        elif post_args[0] == 'group_ratings':
-            if groups:
-                return [], {}, {}
-            return Album.aggregator.match(F.keywords.regex(r'^\*')).lookup(
-                from_=F.item, localField=F.items, foreignField=F._id, as_=F.items2
-            ).addFields(
-                group_id=Fn.filter(input=Var.keywords, as_='t', cond=Fn.substrCP(Var._t, 0, 1) == '*')
-            ).unwind(
-                path=Var.group_id
-            ).addFields(
-                group_id=Fn.ifNull(Var.group_id, Var.source)
-            ).group(
-                _id=Var.group_id,
-                id=Fn.first(Var._id),
-                liked_at=Fn.first(Var.liked_at),
-                created_at=Fn.first(Var.created_at),
-                source=Fn.first(Var.source),
-                items=Fn.push(Var.items),
-                keywords=Fn.first(Var.keywords),
-                counts=Fn.sum(Fn.size(Var.items))
-            ).addFields(
-                items=Fn.cond(Var.items2 == [], Var.items, Var.items2)
-            ).addFields(
-                ratings=Fn.sum(Var['items.rating'])
-            ).sort(ratings=-1).limit(100).perform(), {}, {}
