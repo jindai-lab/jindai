@@ -322,7 +322,8 @@ class ImageImportDataSource(DataSource):
                     except Exception as ex:
                         self.logger('Error while handling', fn, ':', ex)
                         continue
-
+                
+                i.save()
                 i.storage = mgr.write(fn, i.id)
                 i.save()
                 p.items.append(i)
