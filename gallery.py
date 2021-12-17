@@ -128,23 +128,6 @@ def tmap(action: Callable, iterable: Iterable[Any], pool_size: int = 10) -> Tupl
             return
 
 
-def thumb(p: Union[str, IO], size: int) -> bytes:
-    """Thumbnail image
-
-    Args:
-        p (Union[str, IO]): image source
-        size (int): max size for thumbnail
-
-    Returns:
-        bytes: thumbnailed image bytes
-    """
-    img = Image.open(p).convert('RGB')
-    buf = BytesIO()
-    img.thumbnail(size)
-    img.save(buf, 'jpeg')
-    return buf.getvalue()
-
-
 def apply_auto_tags(albums):
     """Apply auto tags to albums
 
@@ -237,48 +220,6 @@ def register_plugins(app):
 def init(app):
            
     os.chdir(os.path.dirname(os.path.abspath(__file__)))
-    readonly_mgr = StorageManager()
-    
-    # STATIC AND RESOURCES PROVIDERS
-    @app.route('/api/gallery/block/<id>.<ext>')
-    def block(id, ext=''):
-        """Serve binary data in h5 files
-
-        Args:
-            id (str): id of the file
-            ext (str, optional): extension file
-
-        Returns:
-            Response: binary data
-        """
-        if id.endswith('.thumb'):
-            id += '.jpg'
-        try:
-            p = readonly_mgr.read(id)
-            length = len(p.getvalue())
-        except OSError:
-            abort(404)
-
-        if request.args.get('enhance', ''):
-            img = Image.open(p)
-            p = BytesIO()
-            # ImageOps.autocontrast(img).save(p, 'jpeg')
-            brightness = ImageStat.Stat(img).mean[0]
-            if brightness < 0.2:
-                ImageEnhance.Brightness(img).enhance(1.2).save(p, 'jpeg')
-            p.seek(0)
-            ext = 'jpg'
-
-        if request.args.get('w', ''):
-            w = int(request.args.get('w'))
-            sz = (w, min(w, 1280))
-            p = BytesIO(thumb(p, sz))
-            ext = 'jpg'
-
-        resp = serve_file(p, ext, length)
-        resp.headers.add("Cache-Control", "public,max-age=86400")
-        return resp
-
 
     # ITEM OPERATIONS
     @app.route('/api/gallery/imageitem/rating', methods=["GET", "POST"])
@@ -313,21 +254,13 @@ def init(app):
         
         items = list(ImageItem.query(F.id.in_([ObjectId(_) if len(_) == 24 else _ for _ in items])))
         for i in items:
-            i.storage = not i.storage
+            if 'file' in i.source: del i.source['file']
+            else: i.source['file'] = 'blocks.h5'
             i.save()
         return {
-            str(i.id): i.storage
+            str(i.id): i.source.get('file')
             for i in items
         }
-
-
-    @app.route('/api/gallery/imageitem/put_storage/<key>', methods=['POST'])
-    @rest()
-    def put_storage(key):
-        with StorageManager() as mgr:
-            mgr.write(base64.b64decode(request.data), key)
-        return True
-
 
     @app.route('/api/gallery/imageitem/merge', methods=["POST"])
     @rest()

@@ -20,6 +20,7 @@ class DBQueryDataSource(DataSource):
             mongocollection (str): 数据库中其他数据集的名称
             raw (bool): 若为 False（默认值）则返回 Paragraph 对象，否则返回原始数据，仅对于聚合查询有效
         """
+        super().__init__()
         self.raw = raw
         self.mongocollection = mongocollection
         if query.startswith('??'):
