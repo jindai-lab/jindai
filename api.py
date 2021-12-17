@@ -13,7 +13,6 @@ from pipeline import Pipeline, PipelineStage
 from datasource import DataSource
 import threading
 from collections import deque
-from pdf2image import convert_from_path
 from io import BytesIO
 import sys
 import config
@@ -182,6 +181,16 @@ def valid_task(j):
         _valid_args(Pipeline.pipeline_ctx[name], args)
 
     return j
+
+
+def _get_object(coll=''):
+    if coll and coll != 'paragraph':
+        class TempParagraph(Paragraph):
+            _collection = str(coll)
+        rs = TempParagraph
+    else:
+        rs = Paragraph
+    return rs
 
 
 @app.route('/api/authenticate', methods=['POST'])
@@ -552,15 +561,6 @@ def get_collections():
 @rest()
 def set_collections(collection=None, collections=None, rename=None, **j):
 
-    def _get_object(coll):
-        if coll.mongocollection:
-            class TempParagraph(Paragraph):
-                _collection = coll.mongocollection
-            rs = TempParagraph
-        else:
-            rs = Paragraph
-        return rs
-    
     if collection is not None:
         if collection.get('_id'):
             c = Collection.query(F.id == collection['_id'])
@@ -578,7 +578,7 @@ def set_collections(collection=None, collections=None, rename=None, **j):
                 Collection(**jset).save()
 
     elif rename is not None:
-        coll = Collection.first(F.name == j['from'])
+        coll = Collection.first(F.name == j['from']).mongocollection
         if not coll:
             return False
 
@@ -592,7 +592,7 @@ def set_collections(collection=None, collections=None, rename=None, **j):
 
     elif 'sources' in j:
         j = j['sources']
-        coll = Collection.first(F.id == j['_id'])
+        coll = Collection.first(F.id == j['_id']).mongocollection
         if not coll:
             return False
 
@@ -606,33 +606,69 @@ def set_collections(collection=None, collections=None, rename=None, **j):
     return True
 
 
-@app.route("/api/image")
+@app.route("/api/image/<coll>/<storage_id>.<ext>")
 @rest(cache=True)
-def page_image():
-    file, pdfpage, storage_id = request.args['file'], int(
-        request.args.get('page', '0')), request.args.get('id', '')
-    pdfpage += 1
-    buf = BytesIO()
-    
-    if file.endswith('.pdf'):
-        file = f'sources/{file}'
-        if not os.path.exists(file):
-            return 'Not found', 404
+def page_image(coll, storage_id, ext):
+    # from PIL import ImageEnhance, ImageStat
+    from PIL import ImageOps
 
-        img, = convert_from_path(file, 120, first_page=pdfpage,
-                                last_page=pdfpage, fmt='png') or [None]
-        if img:
-            img.save(buf, format='png')
-            buf.seek(0)
-        return Response(buf, mimetype='image/png')
-    elif file == 'blocks.h5':
-        try:
-            buf = readonly_storage.read(storage_id)
-        except OSError:
-            return Response('Not found', 404)
-        return Response(buf, mimetype='image/octstream')
+    if len(storage_id) == 24:
+        p = _get_object(coll).first(F.id==storage_id)
+        ext = {'jpg': 'jpeg', 'tiff': 'tiff', 'png': 'png'}.get(ext, 'octstream')
+        buf = None
+        if p:
+            buf = p.image_raw
     else:
-        return Response('Err', 500)
+        buf = StorageManager().read(storage_id + '.' + ext)
+
+    def _thumb(p: Union[str, IO], size: int) -> bytes:
+        """Thumbnail image
+
+        Args:
+            p (Union[str, IO]): image source
+            size (int): max size for thumbnail
+
+        Returns:
+            bytes: thumbnailed image bytes
+        """
+        img = Image.open(p).convert('RGB')
+        buf = BytesIO()
+        img.thumbnail(size)
+        img.save(buf, 'jpeg')
+        return buf.getvalue()
+
+    if buf:
+        length = len(buf.getvalue())
+        
+        if request.args.get('enhance', ''):
+            img = Image.open(buf)
+            buf = BytesIO()
+            ImageOps.autocontrast(img).save(p, 'jpeg')
+            # brightness = ImageStat.Stat(img).mean[0]
+            # if brightness < 0.2:
+                # ImageEnhance.Brightness(img).enhance(1.2).save(p, 'jpeg')
+            buf.seek(0)
+            ext = 'jpg'
+
+        if request.args.get('w', ''):
+            w = int(request.args.get('w'))
+            sz = (w, min(w, 1280))
+            buf = BytesIO(_thumb(buf, sz))
+            ext = 'jpg'
+
+        resp = serve_file(buf, ext, length)
+        resp.headers.add("Cache-Control", "public,max-age=86400")
+        return resp
+    else:
+        return Response('Not found.', 404)
+
+
+@app.route('/api/put_storage/<key>', methods=['POST'])
+@rest()
+def put_storage(key):
+    with StorageManager() as mgr:
+        mgr.write(base64.b64decode(request.data), key)
+    return True
 
 
 @app.route('/api/quicktask', methods=['POST'])
@@ -711,7 +747,7 @@ def blockly_index(p='index.html'):
 @app.route('/', methods=['GET'])
 def index(p='index.html'):
     if p.startswith('api/'):
-        return '', 404
+        return Response('', 404)
     p = p or 'index.html'
     for path in [
         p,

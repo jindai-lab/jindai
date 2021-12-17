@@ -24,7 +24,7 @@ class FaceDet(Plugin):
         if hasattr(i, 'faces') and i.faces is not None:
             return i
 
-        f = i.read_image()
+        f = i.image_raw
         if not f: return
         i.faces = []
         for face in self.crop_faces(f):
@@ -84,7 +84,7 @@ class FaceDet(Plugin):
             if groups:
                 ps = single_item('', iid)
                 p = ps[0]
-                for face in self.crop_faces(p.items[0].read_image()):
+                for face in self.crop_faces(p.items[0].image_raw):
                     saved = BytesIO()
                     face.save(saved, format='JPEG')
                     ps.append(

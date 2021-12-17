@@ -59,10 +59,10 @@ def create_albums(posts_imported: List[Album]):
     albums = defaultdict(Album)
 
     for i in items:
-        fn = i.url.split('/')[-1].split('#')[-1][:-5]
+        fn = i.source['url'].split('/')[-1].split('#')[-1][:-5]
         pu = __expand_twi_url(fn)
         p = albums[pu]
-        if p.source['url'] != pu:
+        if p.source.get('url') != pu:
             author = '@' + fn.split('-')[0]
             p.keywords.append(author)
             p.source = {'url': pu}
@@ -84,7 +84,8 @@ class TwitterDataSource(DataSource):
     
     def __init__(self, allow_video=False, allow_retweet=True, consumer_key='', consumer_secret='', access_token_key='', access_token_secret='',
                  import_username='',
-                 time_after='', time_before=''
+                 time_after='', time_before='',
+                 proxy=''
                  ) -> None:
         """
 
@@ -98,16 +99,18 @@ class TwitterDataSource(DataSource):
             import_username (str, optional): 要导入用户名
             time_after (str): 时间上限
             time_before (str): 时间下限
+            proxy (str): 代理服务器
         """        
         super().__init__()
         self.allow_video = allow_video
         self.allow_retweet = allow_retweet
-        self.api = twitter.Api(consumer_key=consumer_key, consumer_secret=consumer_secret, access_token_key=access_token_key, access_token_secret=access_token_secret)
         self.import_username = import_username
         self.time_after = parser.parse_dt_span(time_after)
         self.time_before = parser.parse_dt_span(time_before)
         if self.time_before == 0:
             self.time_before = time.time()
+        self.proxies = {'http': proxy, 'https': proxy} if proxy else {}
+        self.api = twitter.Api(consumer_key=consumer_key, consumer_secret=consumer_secret, access_token_key=access_token_key, access_token_secret=access_token_secret, proxies=self.proxies)
         
     def parse_status(self, st, allow_video=None) -> Album:
         """Parse twitter status
@@ -259,6 +262,6 @@ class TwitterDataSource(DataSource):
         elif arg.startswith('http://') or arg.startswith('https://'):
             yield from self.import_twiimg(args)
         elif os.path.exists(arg) or glob.glob(arg):
-            yield from create_albums(list(ImageImportDataSource('\n'.join(self.locs)).fetch()))
+            yield from create_albums(list(ImageImportDataSource('\n'.join(args)).fetch()))
         else:
             yield from self.import_twitl()

@@ -20,6 +20,7 @@ class HTMLDataSource(DataSource):
             files (str): HTML或包含HTML的ZIP压缩包文件列表
             fields (str): 字段与搜索字符串的关系，形如 field=.css-selector//attribute
         """
+        super().__init__()
         self.name = collection_name
         self.lang = lang
         self.files = files.split('\n')
@@ -72,6 +73,7 @@ class TextDataSource(DataSource):
             lang (简体中文:chs|繁体中文:cht|英文:en|德文:de|法文:fr|俄文:ru|西班牙文:es|日文:ja|韩文/朝鲜文:kr|越南文:vn): 语言标识
             files (str): HTML或包含HTML的ZIP压缩包文件列表
         """
+        super().__init__()
         self.name = collection_name
         self.lang = lang
         self.files = files.split('\n')
@@ -94,6 +96,7 @@ class LinesDataSource(DataSource):
             lang (简体中文:chs|繁体中文:cht|英文:en|德文:de|法文:fr|俄文:ru|西班牙文:es|日文:ja|韩文/朝鲜文:kr|越南文:vn): 语言标识
             lines (str): 一行一个语段
         """
+        super().__init__()
         self.name = collection_name
         self.lang = lang
         self.lines = lines.split('\n')
@@ -113,6 +116,7 @@ class HTMLImageDataSource(DataSource):
             iterate (str): 形如 start-end 格式的范围，用以匹配网址模式 * 的范围
             collection (str): 数据集名称
         """
+        super().__init__()
         self.collection = collection
         self.urls = []
         for l in urls_or_patterns.split('\n'):
