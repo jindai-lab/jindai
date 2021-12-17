@@ -34,6 +34,7 @@ class GalleryAlbumDataSource(DataSource):
             archive (bool): 是否按用户标记的分组或来源分组返回
             sort_keys (str): 排序表达式
         """
+        super().__init__()
         self.cond = cond
         self.query = parser.eval(cond)
         self.limit = limit
@@ -216,6 +217,7 @@ class GalleryImageItemDataSource(DataSource):
             raw (bool): 返回字典而非 ImageItem
             sort_keys (str): 排序表达式
         """
+        super().__init__()
         self.cond = cond
         self.query = parser.eval(cond)
         self.raw = raw
@@ -242,8 +244,8 @@ class ImageImportDataSource(DataSource):
             tags (str): 标签，一行一个
             proxy (str): 代理服务器
         """
+        super().__init__()
         self.keywords = tags.split('\n')
-
         locs = locs.split('\n')
         self.local_locs = [_ for _ in locs if not weburl.match(_)]
         self.web_locs = [_ for _ in locs if weburl.match(_)]
@@ -324,7 +326,8 @@ class ImageImportDataSource(DataSource):
                         continue
                 
                 i.save()
-                i.storage = mgr.write(fn, i.id)
+                if mgr.write(fn, i.id):
+                    i.source['file'] = 'blocks.h5'
                 i.save()
                 p.items.append(i)
 

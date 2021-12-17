@@ -20,6 +20,7 @@ class WordDataSource(DataSource):
             lang (简体中文:chs|繁体中文:cht|英文:en|德文:de|法文:fr|俄文:ru|西班牙文:es|日文:ja|韩文/朝鲜文:kr|越南文:vn): 语言标识
             files (files): Word文档列表
         """
+        super().__init__()
         self.name = collection_name
         self.lang = lang
         self.files = files
