@@ -3,10 +3,11 @@ import glob
 import importlib
 import json
 import os
-import re
 import time
 from hashlib import sha1
-from typing import Any, Dict, Type, Union
+from typing import Dict, Type, Union
+from io import BytesIO
+from pdf2image import convert_from_path
 
 import requests
 from bson import ObjectId
@@ -18,7 +19,6 @@ import config
 from storage import StorageManager
 
 dbo.connstr = 'mongodb://' + config.mongo + '/' + config.mongoDbName
-readonly_storage = StorageManager()
 
 MongoJSONEncoder = dbo.create_dbo_json_encoder(json.JSONEncoder)
 
@@ -47,6 +47,21 @@ parser = QueryExprParser(abbrev_prefixes={None: 'keywords=', '_': 'items.', '?':
 }, force_timestamp=False)
 
 
+def _pdf_image(file, page, **kwargs):
+    buf = BytesIO()
+    
+    if file.endswith('.pdf'):
+        file = f'sources/{file}'
+        if not os.path.exists(file):
+            return 'Not found', 404
+
+        img, = convert_from_path(file, 120, first_page=page+1,
+                                last_page=page+1, fmt='png') or [None]
+        if img:
+            img.save(buf, format='png')
+            buf.seek(0)
+
+
 class Paragraph(DbObject):
 
     collection = str
@@ -57,7 +72,7 @@ class Paragraph(DbObject):
     content = str
     pagenum = int
     lang = str
-    image_storage = dict
+    storage = bool
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -66,15 +81,69 @@ class Paragraph(DbObject):
 
     @property
     def image(self):
-        if self._image == None and self.image_storage:
-            buf = readonly_storage.read(self.image_storage.get('id', self.id))
-            self._image = Image.open(buf)
+        if self._image == None:
+            self._image = Image.open(self.image_raw)
         return self._image
 
     @image.setter
     def image_setter(self, value):
         self._image = value
         self._image_flag = True
+
+    def generate_thumbnail(self, file_path=''):
+        import cv2
+
+        self.thumbnail = None
+        p = file_path
+
+        try:
+            if not p:
+                if self.source.get('file'):
+                    p = f'_vtt{str(self.id)}'
+                    with StorageManager() as mgr:
+                        with open(p, 'wb') as fo:
+                            blen = fo.write(mgr.read(self.id).read())
+                    if not blen:
+                        os.unlink(p)
+                        return
+                else:
+                    p = self.source['url']
+
+            cap = cv2.VideoCapture(p)
+
+            if cap.isOpened():
+                cap.set(cv2.CAP_PROP_POS_FRAMES, int(cap.get(cv2.CAP_PROP_FRAME_COUNT) * 0.5))
+                rval, frame = cap.read()
+                cap.release()
+                if rval:
+                    rval, npa = cv2.imencode('.jpg', frame)
+                    pic = npa.tobytes()
+                    with StorageManager() as mgr:
+                        mgr.write(pic, f'{self.id}.thumb.jpg')
+                    self.thumbnail = f'{self.id}.thumb.jpg'
+                    self.save()
+        except Exception as ex:
+            print(ex)
+
+        if p.startswith('_vtt') and os.path.exists(p):
+            os.unlink(p)
+
+        return self.thumbnail
+
+    @property
+    def image_raw(self) -> BytesIO:
+        if self.source.get('file'):
+            fn = self.source['file']
+            if fn.lower().endswith('.pdf') and self.source.get('page'):
+                return _pdf_image(**self.source)
+            elif fn == 'blocks.h5':
+                vt = self.id
+                return StorageManager().read(vt)
+            else:
+                with open(fn, 'rb') as fin:
+                    return fin
+        elif self.source.get('url'):
+            return BytesIO(try_download(self.source['url']))
 
     def as_dict(self, expand=False):
         d = super().as_dict(expand)
@@ -193,7 +262,6 @@ class ImageItem(Paragraph):
     dhash = str
     whash = str
     
-    storage = dbo.DbObjectInitiator(lambda: None)
     thumbnail = dbo.DbObjectInitiator(lambda: None)
 
     @classmethod
@@ -203,71 +271,10 @@ class ImageItem(Paragraph):
         Returns:
             MongoOperand: condition for valid items
         """        
-        return (F.storage != None) & (F.flag == 0)
+        return (F['source.file'].exists(1)) & (F.flag == 0)
 
     def __repr__(self):
         return f'<ImageItem {self.source["url"]}>'
-
-    def read_image(self):
-        if not self.source.get('url') or not self.storage: return
-        vt = self.id
-        if self.source['url'].endswith('.mp4') or self.source['url'].endswith('.avi'):
-            if not hasattr(self, 'thumbnail') or not self.thumbnail:
-                try:
-                    self.generate_thumbnail()
-                except:
-                    pass
-            vt = self.thumbnail
-        if vt:
-            return StorageManager().read(vt)
-
-    def generate_thumbnail(self, file_path=''):
-        import os
-
-        import cv2
-
-        self.thumbnail = None
-        p = file_path
-
-        try:
-            if not p:
-                if self.storage:
-                    p = f'_vtt{str(self.id)}'
-                    with StorageManager() as mgr:
-                        with open(p, 'wb') as fo:
-                            blen = fo.write(mgr.read(self.id).read())
-                    if not blen:
-                        os.unlink(p)
-                        return
-                else:
-                    p = self.source['url']
-
-            cap = cv2.VideoCapture(p)
-
-            if cap.isOpened():
-                cap.set(cv2.CAP_PROP_POS_FRAMES, int(cap.get(cv2.CAP_PROP_FRAME_COUNT) * 0.5))
-                rval, frame = cap.read()
-                cap.release()
-                if rval:
-                    rval, npa = cv2.imencode('.jpg', frame)
-                    pic = npa.tobytes()
-                    with StorageManager() as mgr:
-                        vt = mgr.write(pic, f'{self.id}.thumb.jpg')
-                    self.thumbnail = f'{self.id}.thumb.jpg'
-                    self.save()
-        except Exception as ex:
-            print(ex)
-
-        if p.startswith('_vtt') and os.path.exists(p):
-            os.unlink(p)
-
-    def delete(self):
-        storages = []
-        if self.storage:
-            storages.append(self.id)
-        if self.thumbnail:
-            storages.append(self.thumbnail)
-        super().delete()
 
 
 class Album(Paragraph):    

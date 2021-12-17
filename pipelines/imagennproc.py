@@ -13,7 +13,7 @@ class OpenNsfw(ImageOrAlbumStage):
         self.runner = OpenNSFWInferenceRunner.load()
         
     def resolve_image(self, i: ImageItem):
-        i.nsfw = float(self.runner.infer(i.read_image().read()))
+        i.nsfw = float(self.runner.infer(i.image_raw.read()))
         i.save()
         return i
         

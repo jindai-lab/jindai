@@ -18,6 +18,7 @@ class BiblioDataSource(DataSource):
             collection (str): 集合名称
             format (endnote|bibtex): 文献条目信息格式
         """
+        super().__init__()
         if not hasattr(self, format):
             raise NotImplemented()
         

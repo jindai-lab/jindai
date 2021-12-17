@@ -42,8 +42,7 @@ class CheckImage(ImageOrAlbumStage):
 
     def resolve_image(self, p : ImageItem):
         try:
-            buf = p.read_image()
-            im = Image.open(buf)
+            im = p.image
             p.width, p.height = im.width, im.height
             im.verify()
             p.save()
@@ -60,31 +59,23 @@ class ImageHash(ImageOrAlbumStage):
     """
 
     def resolve_image(self, i : ImageItem):
-        if not i.storage: return
         try:
             dh, wh = i.dhash, i.whash
             if dh and wh: return i
 
-            try: f = i.read_image()
+            try: f = i.image
             except: f = None
             if not f: return
 
             if not dh:
-                f.seek(0)
-                im = Image.open(f)
-                dh = dhash(im) or ''
+                dh = dhash(f) or ''
             if not wh:
-                f.seek(0)
-                im = Image.open(f)
-                wh = whash(im) or ''
+                wh = whash(f) or ''
 
             i.dhash, i.whash = dh, wh
-            i.save()
-        except IOError:
+        except IOError, AssertionError:
             pass
-        except AssertionError:
-            i.storage = None
-            i.save()
+        i.save()
 
 
 class ImageHashDuplications(ImageOrAlbumStage):
@@ -313,7 +304,7 @@ class DownloadImages(PipelineStage):
             with self.mgr:
                 self.mgr.write(content, str(i.id))
                 self.logger(i.id, len(content))
-            i.storage = True
+            i.source['file'] = 'blocks.h5'
             i.save()
 
         return p
