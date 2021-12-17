@@ -21,7 +21,7 @@ def fetch_items(stored=True):
     Returns:
         Set: item id strings
     """    
-    cond = {} if not stored else (F.storage == True) | (F.thumbnail != None)
+    cond = {} if not stored else (F['source.file'].exists(1) | (F.thumbnail != None))
     return {str(i['_id']) for i in ImageItem.query(cond).rs}
 
 
@@ -77,7 +77,7 @@ def merge_items():
         item_urls[i.source['url']].append(i)
     for k, v in item_urls.items():
         if len(v) > 1:
-            stored = [i for i in v if i.storage]
+            stored = [i for i in v if i.source.get('file')]
             if len(stored) > 0:
                 replace_to = stored[0]
             else:

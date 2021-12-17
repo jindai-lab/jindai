@@ -56,6 +56,8 @@ class AutoCompletionDataSource(DataSource):
             n (int): 针对每个提示文本生成的样本数量
             topp (float): 概率阈值
         """
+        super().__init__()
+       
         global model
         model = build_transformer_model(
             config_path=config_path,

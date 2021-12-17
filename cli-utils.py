@@ -119,14 +119,14 @@ def storage_merge(infiles, output):
 @cli.command('storage-sync')
 @click.argument('infiles', nargs=-1)
 def storage_sync(infiles):
-    items = {str(i.id) for i in ImageItem.query(F.storage==True)}
+    items = {str(i.id) for i in ImageItem.query(F['source.file']=='blocks.h5')}
     for f in infiles:
         f = h5py.File(f, 'r')
         for k in tqdm(f['data']):
             _id = k[:24]
             if _id in items: items.remove(_id)
     print(len(items))
-    ImageItem.query(F.id.in_(list(items))).update(Fn.set(storage=None))
+    ImageItem.query(F.id.in_(list(items))).update([Fn.set(F['source.file']=='blocks.h5')])
                 
 
 @cli.command('dump')
