@@ -99,19 +99,17 @@ class WordCut(PipelineStage):
     
     def resolve(self, p: Paragraph) -> Paragraph:
         if p.lang == 'cht':
-            content = WordCut.t2s.convert(p.content)
-        else:
-            content = p.content
-
+            p.content = WordCut.t2s.convert(p.content)
+        
         if p.lang in ('chs', 'cht'):
-            p.tokens = list(jieba.cut_for_search(content) if self.for_search else jieba.cut(content))
+            p.tokens = list(jieba.cut_for_search(p.content) if self.for_search else jieba.cut(p.content))
         elif p.lang == 'ja':
             p.tokens = []
-            for i in WordCut.kks.convert(content):
+            for i in WordCut.kks.convert(p.content):
                 p.tokens.append(i['orig'])
                 if self.for_search: p.tokens.append(i['hepburn'])
         else:
-            p.tokens = [_.lower() for _ in re.split(r'[^\w]', content)]
+            p.tokens = [_.lower() for _ in re.split(r'[^\w]', p.content)]
             if self.for_search:
                 WordCut.stmr.resolve(p)
 
@@ -126,8 +124,7 @@ class KeywordsFromTokens(PipelineStage):
     """
     
     def resolve(self, p: Paragraph) -> Paragraph:
-        for w in set(p.tokens):
-            p.keywords.append(w)
+        p.keywords = list(set(p.tokens))
         delattr(p, 'tokens')
         p.save()
         return p
