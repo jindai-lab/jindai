@@ -51,8 +51,9 @@ def _pdf_image(file, page, **kwargs):
     buf = BytesIO()
     
     if file.endswith('.pdf'):
-        file = f'sources/{file}'
-        if not os.path.exists(file):
+        for file in [file, os.path.join(config.storage, file)]:
+            if os.path.exists(file): break
+        else:
             return 'Not found', 404
 
         img, = convert_from_path(file, 120, first_page=page+1,
@@ -60,6 +61,8 @@ def _pdf_image(file, page, **kwargs):
         if img:
             img.save(buf, format='png')
             buf.seek(0)
+
+    return buf
 
 
 class Paragraph(DbObject):
@@ -134,13 +137,13 @@ class Paragraph(DbObject):
     def image_raw(self) -> BytesIO:
         if self.source.get('file'):
             fn = self.source['file']
-            if fn.lower().endswith('.pdf') and self.source.get('page'):
+            if fn.lower().endswith('.pdf') and self.source.get('page') is not None:
                 return _pdf_image(**self.source)
             elif fn == 'blocks.h5':
                 vt = self.id
                 return StorageManager().read(vt)
             else:
-                with open(fn, 'rb') as fin:
+                with open(os.path.join(config.storage, fn), 'rb') as fin:
                     return fin
         elif self.source.get('url'):
             return BytesIO(try_download(self.source['url']))
