@@ -7,16 +7,18 @@ from storage import *
 
 
 def dhash(im):
-    im.seek(0)
-    im = Image.open(im)
+    if isinstance(im, BytesIO):
+        im.seek(0)
+        im = Image.open(im)
     dh = imagehash.dhash(im)
     dh = bytes.fromhex(str(dh))
     return dh
 
 
 def whash(im):
-    im.seek(0)
-    im = Image.open(im)
+    if isinstance(im, BytesIO):
+        im.seek(0)
+        im = Image.open(im)
     dh = imagehash.whash(im)
     dh = bytes.fromhex(str(dh))
     return dh

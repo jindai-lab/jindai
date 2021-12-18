@@ -23,7 +23,7 @@ class AutoRating(ImageOrAlbumStage):
         
     def resolve_image(self, i: ImageItem):
         from plugins.autorating import predict
-        i.rating = predict(i)
+        i.rating = predict(i.image)
         i.save()
         return i
 

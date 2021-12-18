@@ -85,8 +85,9 @@ class Paragraph(DbObject):
     @property
     def image(self):
         if self._image == None:
-            self._image = Image.open(self.image_raw)
-        return self._image
+            return Image.open(self.image_raw)
+        else:
+            return self._image
 
     @image.setter
     def image_setter(self, value):
