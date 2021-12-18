@@ -304,18 +304,21 @@ def write_storage(dir=''):
     return sfs
 
 
-@app.route('/api/paragraphs/<id>', methods=['POST'])
+@app.route('/api/edit/<coll>/<id>', methods=['POST'])
 @rest()
-def modify_paragraph(id, **kws):
+def modify_paragraph(coll, id, **kws):
     id = ObjectId(id)
-    p = Paragraph.first(F.id == id)
+    p = _get_object(coll).first(F.id == id)
     if p:
         for f, v in kws.items():
             if f in ('_id', 'matched_content'): continue
-            if v is None and hasattr(p, f):
-                delattr(p, f)
+            if f in ('$push', '$pull'):
+                _get_object(coll).query(F.id == id).update({f: v})
             else:
-                setattr(p, f, v)
+                if v is None and hasattr(p, f):
+                    delattr(p, f)
+                else:
+                    setattr(p, f, v)
         p.save()
     return True
 
