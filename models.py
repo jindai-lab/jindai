@@ -49,6 +49,7 @@ parser = QueryExprParser(abbrev_prefixes={None: 'keywords=', '_': 'items.', '?':
 
 def _pdf_image(file, page, **kwargs):
     buf = BytesIO()
+    page = int(page)
     
     if file.endswith('.pdf'):
         for file in [file, os.path.join(config.storage, file)]:
@@ -75,8 +76,7 @@ class Paragraph(DbObject):
     content = str
     pagenum = int
     lang = str
-    storage = bool
-
+    
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self._image = None
