@@ -607,19 +607,21 @@ def set_collections(collection=None, collections=None, rename=None, **j):
 
 
 @app.route("/api/image/<coll>/<storage_id>.<ext>")
+@app.route("/api/image")
 @rest(cache=True)
-def page_image(coll, storage_id, ext):
+def page_image(coll=None, storage_id=None, ext=None):
     # from PIL import ImageEnhance, ImageStat
     from PIL import ImageOps
 
-    if len(storage_id) == 24:
+    if coll and storage_id and len(storage_id) == 24:
         p = _get_object(coll).first(F.id==storage_id)
-        ext = {'jpg': 'jpeg', 'tiff': 'tiff', 'png': 'png'}.get(ext, 'octstream')
         buf = None
         if p:
             buf = p.image_raw
     else:
-        buf = StorageManager().read(storage_id + '.' + ext)
+        i = ImageItem(source=request.args.to_dict())
+        buf = i.image_raw
+        ext = i.source.get('url', i.source.get('file', '.')).rsplit('.', 1)[-1]
 
     def _thumb(p: Union[str, IO], size: int) -> bytes:
         """Thumbnail image

@@ -1,9 +1,10 @@
+from collections import deque
 import threading
 import traceback
 from models import get_context
 from datasource import DataSource
 from pipeline import PipelineStage, Pipeline
-from queue import Queue
+from queue import deque
 
 class Task:
 
@@ -17,7 +18,7 @@ class Task:
             name, args = datasource
         self.datasource = Task.datasource_ctx[name](**args)
         self.pipeline = Pipeline(pipeline, concurrent, resume_next)
-        self.queue = Queue()
+        self.queue = deque()
         self.alive = True
         self.returned = None
 
@@ -35,7 +36,7 @@ class Task:
     def log(self, *args):
         s = ' '.join(map(str, args))
         print(s)
-        self.queue.put(s)
+        self.queue.append(s)
         
     def run(self):
         def _run():
@@ -52,8 +53,8 @@ class Task:
         return thr
     
     def fetch_log(self):
-        while not self.queue.empty():
-            yield self.queue.get() + '\n'
+        while self.queue:
+            yield self.queue.popleft() + '\n'
 
     @staticmethod
     def from_dbo(t):

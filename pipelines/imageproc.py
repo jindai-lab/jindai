@@ -15,6 +15,7 @@ from pipeline import PipelineStage
 from plugins.hashing import dhash, whash
 from storage import StorageManager
 from tqdm import tqdm
+import traceback
 
 
 class ImageOrAlbumStage(PipelineStage):
@@ -28,7 +29,8 @@ class ImageOrAlbumStage(PipelineStage):
             try:
                 self.resolve_image(i)
             except Exception as ex:
-                self.logger(i.id, ex)
+                self.logger(i.id, self.__class__.__name__, ex)
+                self.logger(traceback.format_tb(ex.__traceback__))
                 p = None
         return p
 
@@ -63,7 +65,7 @@ class ImageHash(ImageOrAlbumStage):
             dh, wh = i.dhash, i.whash
             if dh and wh: return i
 
-            try: f = i.image
+            try: f = i.image_raw
             except: f = None
             if not f: return
 
@@ -73,7 +75,7 @@ class ImageHash(ImageOrAlbumStage):
                 wh = whash(f) or ''
 
             i.dhash, i.whash = dh, wh
-        except IOError, AssertionError:
+        except (IOError, AssertionError):
             pass
         i.save()
 
@@ -83,35 +85,32 @@ class ImageHashDuplications(ImageOrAlbumStage):
     """
     
     def __init__(self) -> None:
-        from plugins.hashing import v
-        self.d2 = defaultdict(list)
-    
-        for i in tqdm(ImageItem.query(F.dhash.exists(1) & ~F.dhash.empty() & F.flag.eq(0) & (F.width > 0) & F.url.regex(r'\.(jpe?g|gif|png|tiff)$'))):
-            if not i.dhash or not i.whash or not i.width: continue
-            dha = v(i.dhash)
-            dhb = v(i.whash)
-            self.d2[dha].append((i.id, i.width, i.height, dhb))
-        
-        print('unique hashes:', len(self.d2))
-        
         self.results = deque()
         self.result_pairs = set()
 
+    def _unv(self, x):
+        from bson import binary
+        return binary.Binary(bytes.fromhex(f'{x:016x}'))
+
     def resolve_image(self, i: ImageItem):
-        from plugins.hashing import bitcount, flips, v
+        from plugins.hashing import bitcount, flips, v        
         if not i.dhash: return
         dh2 = v(i.dhash)
         dhb2 = v(i.whash)
         h2, w2 = i.height, i.width
-        for dh1, sc in [(dh2, 0)] + list(zip(flips(dh2, 1), [1] * 64)) + list(zip(flips(dh2, 2), [2] * 2016)):
-            for id1, w1, h1, dhb1 in self.d2[dh1]:
-                if id1 == i.id or f'{i.id}-{id1}' in self.result_pairs or f'{id1}-{i.id}' in self.result_pairs: continue
-                self.result_pairs.add(f'{id1}-{i.id}')
-                a, b = i.id, id1
-                if w1 * h1 < w2 * h2: b, a = a, b
-                r = '{}\t{}\t{}'.format(a, b, sc + bitcount(dhb1 ^ dhb2))
-                self.logger(r)
-                self.results.append(r + '\n')
+        for j, sc in zip(
+            ImageItem.query(F.dhash.in_(
+                [self._unv(x) for x in [dh2] + list(flips(dh2, 1)) + list(flips(dh2, 2))])),
+            [0] + [1] * 64 + [2] * 2016
+        ):
+            id1 = j.id
+            if id1 == i.id or f'{i.id}-{id1}' in self.result_pairs or f'{id1}-{i.id}' in self.result_pairs: continue
+            self.result_pairs.add(f'{id1}-{i.id}')
+            a, b = i.id, id1
+            if j.width * j.height < w2 * h2: b, a = a, b
+            r = '{}\t{}\t{}'.format(a, b, sc + bitcount(v(j.whash) ^ dhb2))
+            self.logger(r)
+            self.results.append(r + '\n')
         return i
 
     def summarize(self, r):
@@ -293,7 +292,7 @@ class DownloadImages(PipelineStage):
         } if proxy else {}
     
     def resolve(self, p):
-        items = [p] if isinstance(p, ImageItem) else p.items if isinstance(p, Album) else []
+        items = p.items if isinstance(p, Album) else [p]
 
         for i in items:
             if not i.id:

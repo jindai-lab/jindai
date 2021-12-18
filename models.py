@@ -105,7 +105,7 @@ class Paragraph(DbObject):
                     p = f'_vtt{str(self.id)}'
                     with StorageManager() as mgr:
                         with open(p, 'wb') as fo:
-                            blen = fo.write(mgr.read(self.id).read())
+                            blen = fo.write(mgr.read(self.source.get('block_id', self.id)).read())
                     if not blen:
                         os.unlink(p)
                         return
@@ -140,7 +140,7 @@ class Paragraph(DbObject):
             if fn.lower().endswith('.pdf') and self.source.get('page') is not None:
                 return _pdf_image(**self.source)
             elif fn == 'blocks.h5':
-                vt = self.id
+                vt = self.source.get('block_id', self.id)
                 return StorageManager().read(vt)
             else:
                 with open(os.path.join(config.storage, fn), 'rb') as fin:

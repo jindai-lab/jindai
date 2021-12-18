@@ -1,7 +1,7 @@
 import click
 from PyMongoWrapper import F, Fn
 import h5py
-from models import Meta, User, MongoJSONEncoder, ImageItem
+from models import Meta, User, TaskDBO, MongoJSONEncoder, ImageItem
 from typing import Dict, Iterable
 from task import Task
 from tqdm import tqdm
@@ -39,19 +39,13 @@ def export(query, output):
         fo.write(xlsx)
 
 
-# @cli.command('task_test')
-def task():
-    j = requests.put('http://localhost:8370/api/tasks/', json={
-        'name': 'test russian task',
-        'datasource': 'DBQueryDataSource',
-        'datasource_config': {'query': '', 'mongocollection': 'slg', 'limit': 100},
-        'pipeline': [
-            ('AccumulateParagraphs', {}),
-            ('Export', {'format': 'xlsx', 'inp': 'return'})
-        ]
-    })
-    print(j.json)
-
+@cli.command('task')
+@click.argument('task_id')
+def task(task_id):
+    task = Task.from_dbo(TaskDBO.first(F.id == task_id))
+    result = task.execute()
+    print(result)
+    
 
 @cli.command('enqueue')
 @click.option('--id')
