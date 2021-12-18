@@ -96,7 +96,7 @@ def meta(key, value):
 @click.option('--output', '-o', default='tmp.h5')
 @click.argument('infiles', nargs=-1)
 def storage_merge(infiles, output):
-    items = {str(i.id) for i in ImageItem.query({})}
+    items = {str(i.id) for i in ImageItem.query(F['source.file'] == 'blocks.h5')}
     fo = h5py.File(output, 'r+' if os.path.exists(output) else 'w')
     total = 0
     for f in infiles:
