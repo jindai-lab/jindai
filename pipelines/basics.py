@@ -16,10 +16,10 @@ import pykakasi
 from transliterate import translit
 
 from PyMongoWrapper import F, QueryExprParser
-from PyMongoWrapper.dbo import mongodb, DbObject, DbObjectCollection
+from PyMongoWrapper.dbo import DbObject, DbObjectCollection
 from .utils import execute_query_expr, language_iso639
 
-from models import Paragraph, Collection, parser
+from models import Paragraph, Collection, parser, db
 from pipeline import PipelineStage
 
 
@@ -347,7 +347,7 @@ class FilterDuplication(PipelineStage):
         self.field = field
         
     def resolve(self, p: Paragraph) -> Paragraph:
-        for _ in mongodb(self.mongocollection).find({self.field : getattr(p, self.field)}):
+        for _ in db[self.mongocollection].find({self.field : getattr(p, self.field)}):
             return
         return p
 

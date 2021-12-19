@@ -1,5 +1,3 @@
-import struct
-
 import imagehash
 from gallery import *
 from plugin import Plugin
@@ -29,8 +27,7 @@ def bitcount(x):
 
 
 def v(x):
-    if isinstance(x, bytes): return struct.unpack('>q', x)[0]
-    return int(x, 16) if isinstance(x, str) else x
+    return int(x.hex(), 16)
 
 
 def flip(x, i):
@@ -50,8 +47,7 @@ def flips(x, n, lm=0):
 
 class Hashing(Plugin):
 
-    def __init__(self, app, method='dhash'):
-        self.method = method
+    def __init__(self, app):
 
         @app.route('/api/gallery/compare.tsv')
         def _compare_tsv():
@@ -99,6 +95,7 @@ class Hashing(Plugin):
         archive = ds.archive
         limit, offset = ds.limit, ds.order.get('offset', 0)
         ds.limit = 0
+        ds.raw = False
 
         if post_args[0] not in ('sim',):
             return
@@ -110,17 +107,16 @@ class Hashing(Plugin):
                 return single_item('', iid), None, None
             else:
                 it = ImageItem.first(F.id == iid)
-                if not hasattr(it, self.method): return
+                if it.dhash is None: return
                 pgroups = [g for g in (Album.first(F.items == ObjectId(iid)) or Album()).keywords if g.startswith('*')] or [(Album.first(F.items == ObjectId(iid)) or Album()).source.get('url', '')]
                 dha, dhb = v(it.dhash), v(it.whash)
                 results = []
                 groupped = {}
-                ds.raw = False
                 
                 for p in ds.fetch():
                     for i in p.items:
                         if i.id == it.id: continue
-                        if i.flag != 0 or i[self.method] is None or i[self.method] == '': continue
+                        if i.flag != 0 or i.dhash is None or i.dhash == b'': continue
                         dha1, dhb1 = v(i.dhash), v(i.whash)
                         i.score = bitcount(dha ^ dha1) + bitcount(dhb ^ dhb1)
                         po = Album(**p.as_dict())

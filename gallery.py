@@ -224,17 +224,16 @@ def init(app):
     # ITEM OPERATIONS
     @app.route('/api/gallery/imageitem/rating', methods=["GET", "POST"])
     @rest()
-    def fav(items, inc=1, val=0):
+    def set_rating(items, inc=1, val=0):
         """Increase or decrease the rating of selected items
 
         Returns:
             Response: 'OK' if succeeded
         """
-        
         items = list(ImageItem.query(F.id.in_([ObjectId(_) if len(_) == 24 else _ for _ in items])))
         for i in items:
             if i is None: continue
-            i.rating = int(i.rating + inc) if inc else val
+            i.rating = round(2 * (i.rating + inc)) / 2 if inc else val
             if -1 <= i.rating <= 5:
                 i.save()
         return {

@@ -1,4 +1,3 @@
-from os import name
 from flask import Flask, Response, jsonify, request, send_file, json
 from bson import ObjectId
 import datetime
@@ -129,24 +128,8 @@ class NumpyEncoder(json.JSONEncoder):
         return je.default(self, obj)
 
 
-class JsonDecoder(json.JSONDecoder):
-    def __init__(self, *args, **kargs):
-        _ = kargs.pop('object_hook', None)
-        super().__init__(object_hook=self.decoder, *args, **kargs)
-
-    def decoder(self, d):
-        import dateutil.parser
-        updt = {}
-        for k, v in d.items():
-            if isinstance(v, str):
-                if re.match(r'^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?Z?$', v):
-                    updt[k] = dateutil.parser.isoparse(v)
-        if updt: d.update(**updt)
-        return d
-
-
 app.json_encoder = NumpyEncoder
-app.json_decoder = JsonDecoder
+app.json_decoder = MongoJSONDecoder
 
 tasks_queue = TasksQueue()
     

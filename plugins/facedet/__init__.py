@@ -6,7 +6,7 @@ from io import BytesIO
 from gallery import Album, ImageItem, single_item
 from PIL import Image
 from plugin import Plugin
-from plugins.hashing import bitcount, whash
+from plugins.hashing import bitcount, whash, v
 from PyMongoWrapper import F, Fn, ObjectId, Var
 
 
@@ -44,16 +44,6 @@ class FaceDet(Plugin):
        
     def special_page(self, ds, post_args):
         
-        def _v(x):
-            if isinstance(x, bytes):
-                return struct.unpack('>q', x)[0]
-            elif isinstance(x, str):
-                return int(x, 16)
-            elif isinstance(x, int):
-                return x
-            else:
-                raise TypeError(x)
-
         groups = ds.groups
         archive = ds.archive
 
@@ -100,7 +90,7 @@ class FaceDet(Plugin):
 
                 return ps, {}, {}
             else:
-                fdh = [_v(f) for f in ImageItem.first(F.id == iid).faces]
+                fdh = [v(f) for f in ImageItem.first(F.id == iid).faces]
                 if fid: fdh = [fdh[fid-1]]
                 if not fdh: return [], {}, {}
 
@@ -110,7 +100,7 @@ class FaceDet(Plugin):
                     for ri in rp.items:
                         if not ri or not isinstance(ri, ImageItem) or ri.flag != 0 or not ri.faces or ri.id == iid: continue
                         ri.score = min([
-                            min([bitcount(_v(i) ^ j) for j in fdh])
+                            min([bitcount(v(i) ^ j) for j in fdh])
                             for i in ri.faces
                         ])
                         rpo = Album(**rp.as_dict())
