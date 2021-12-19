@@ -13,14 +13,15 @@ import requests
 from bson import ObjectId
 from PIL import Image
 from PyMongoWrapper import F, Fn, MongoOperand, QueryExprParser, dbo
-from PyMongoWrapper.dbo import DbObject, DbObjectInitiator
+from PyMongoWrapper.dbo import DbObject, DbObjectInitializer, MongoConnection
 
 import config
 from storage import StorageManager
 
-dbo.connstr = 'mongodb://' + config.mongo + '/' + config.mongoDbName
+db = MongoConnection('mongodb://' + config.mongo + '/' + config.mongoDbName)
 
 MongoJSONEncoder = dbo.create_dbo_json_encoder(json.JSONEncoder)
+MongoJSONDecoder = dbo.create_dbo_json_decoder(json.JSONDecoder)
 
 
 def _expr_groupby(params):
@@ -66,10 +67,10 @@ def _pdf_image(file, page, **kwargs):
     return buf
 
 
-class Paragraph(DbObject):
+class Paragraph(db.DbObject):
 
     collection = str
-    source = dict
+    source = DbObjectInitializer(dict)
     keywords = list
     pdate = str
     outline = str
@@ -159,10 +160,7 @@ class Paragraph(DbObject):
         im = self._image
         if self._image_flag:
             self._image = None
-            if not self.image_storage:
-                self.image_storage = {'blocks': True}
-            else:
-                self.image_storage = {'blocks': ObjectId()}
+            self.source['file'] = 'blocks.h5'
 
             with StorageManager() as mgr:
                 buf = im.tobytes('jpeg')
@@ -173,19 +171,19 @@ class Paragraph(DbObject):
         self._image_flag = False
     
 
-class History(DbObject):
+class History(db.DbObject):
 
     user = str
-    created_at = DbObjectInitiator(datetime.datetime.now)
+    created_at = DbObjectInitializer(datetime.datetime.now, datetime.datetime)
     querystr = str
 
 
-class Meta(DbObject):
+class Meta(db.DbObject):
 
     app_title = str
 
 
-class Collection(DbObject):
+class Collection(db.DbObject):
 
     allowed_users = list
     order_weight = int
@@ -194,19 +192,19 @@ class Collection(DbObject):
     sources = list
 
 
-class TaskDBO(DbObject):
+class TaskDBO(db.DbObject):
 
     name = str
     pipeline = list
     datasource = str
     datasource_config = dict
     resume_next = bool
-    last_run = DbObjectInitiator(datetime.datetime.now)
-    concurrent = DbObjectInitiator(lambda: 3)
+    last_run = DbObjectInitializer(datetime.datetime.now, datetime.datetime)
+    concurrent = DbObjectInitializer(lambda: 3, int)
     shortcut_map = dict
 
 
-class User(DbObject):
+class User(db.DbObject):
 
     username = str
     password = str
@@ -228,7 +226,7 @@ class User(DbObject):
             return None
 
 
-class Token(DbObject):
+class Token(db.DbObject):
     
     user = str
     token = str
@@ -263,32 +261,16 @@ class ImageItem(Paragraph):
     rating = int
     width = int
     height = int
-    dhash = str
-    whash = str
-    
-    thumbnail = dbo.DbObjectInitiator(lambda: None)
-
-    @classmethod
-    def valid_item(cls) -> MongoOperand:
-        """Returns condition for valid items (storage not null, flag == 0)
-
-        Returns:
-            MongoOperand: condition for valid items
-        """        
-        return (F['source.file'].exists(1)) & (F.flag == 0)
-
-    def __repr__(self):
-        return f'<ImageItem {self.source["url"]}>'
+    dhash = bytes
+    whash = bytes
+    thumbnail = str
 
 
 class Album(Paragraph):    
 
     author = str
-    liked_at = DbObjectInitiator(lambda: datetime.datetime.utcnow())
+    liked_at = DbObjectInitializer(datetime.datetime.now, datetime.datetime)
     items = dbo.DbObjectCollection(ImageItem)
-
-    def __repr__(self):
-        return f'<Album {self.source["url"]}>'
 
     def save(self):
         self.keywords = list(set(self.keywords))
@@ -297,7 +279,7 @@ class Album(Paragraph):
         super().save()
 
 
-class AutoTag(DbObject):
+class AutoTag(db.DbObject):
     """Auto Tagging Object"""
     
     from_tag = str
