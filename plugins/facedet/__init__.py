@@ -3,6 +3,9 @@ import base64
 import struct
 from io import BytesIO
 
+from PyMongoWrapper.dbo import DbObjectCollection, DbObjectInitializer
+
+
 from gallery import Album, ImageItem, single_item
 from PIL import Image
 from plugin import Plugin
@@ -15,13 +18,13 @@ class FaceDet(Plugin):
     def __init__(self, app, **config):
         if 'faces' not in ImageItem.fields:
             ImageItem._fields.append('faces')
-        setattr(ImageItem, 'faces', lambda: None)
+        ImageItem.faces = DbObjectCollection(bytes)
 
     def get_special_pages(self):
         return ['face']
     
     def faces(self, i):
-        if hasattr(i, 'faces') and i.faces is not None:
+        if hasattr(i, 'faces') and i.faces != b'':
             return i
 
         f = i.image_raw

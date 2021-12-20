@@ -258,7 +258,7 @@ class Token(db.DbObject):
 class ImageItem(Paragraph):
 
     flag = int
-    rating = int
+    rating = float
     width = int
     height = int
     dhash = bytes

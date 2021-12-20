@@ -98,17 +98,14 @@ class ImageHashDuplications(ImageOrAlbumStage):
         dh2 = v(i.dhash)
         dhb2 = v(i.whash)
         h2, w2 = i.height, i.width
-        for j, sc in zip(
-            ImageItem.query(F.dhash.in_(
-                [self._unv(x) for x in [dh2] + list(flips(dh2, 1)) + list(flips(dh2, 2))])),
-            [0] + [1] * 64 + [2] * 2016
-        ):
+        for j in ImageItem.query(F.dhash.in_(
+                [self._unv(x) for x in [dh2] + list(flips(dh2, 1)) + list(flips(dh2, 2))])):
             id1 = j.id
             if id1 == i.id or f'{i.id}-{id1}' in self.result_pairs or f'{id1}-{i.id}' in self.result_pairs: continue
             self.result_pairs.add(f'{id1}-{i.id}')
             a, b = i.id, id1
             if j.width * j.height < w2 * h2: b, a = a, b
-            r = '{}\t{}\t{}'.format(a, b, sc + bitcount(v(j.whash) ^ dhb2))
+            r = '{}\t{}\t{}'.format(a, b, bitcount(v(i.dhash) ^ dh2) + bitcount(v(j.whash) ^ dhb2))
             self.logger(r)
             self.results.append(r + '\n')
         return i
