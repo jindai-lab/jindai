@@ -148,31 +148,6 @@ def apply_auto_tags(albums):
         p.save()
 
 
-# ALBUM HELPERS
-def Q(tags: str) -> Iterable[Album]:
-    """Shortcut for querying albums with items resolved
-
-    Args:
-        tags (str): filtering expression
-
-    Returns:
-        Iterable[Album]: albums matching `tags`
-    """
-    ag = Album.aggregator
-    ands = parser.eval(tags)
-    match_first = 'items.' not in tags
-    if match_first:
-        ag.match(ands)
-    ag.lookup(
-        from_='item', localField=F.items, foreignField=F._id, as_=F.items2
-    ).addFields(
-        items=Fn.cond(Var.items2 == [], Var.items, Var.items2)
-    )
-    if not match_first:
-        ag.match(ands)
-    return ag
-
-
 # prepare plugins
 plugins = []
 special_pages = {}

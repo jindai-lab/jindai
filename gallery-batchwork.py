@@ -68,6 +68,19 @@ def push(since, target_url):
                 _push(k, mgr.read(k), target_url)
             except: pass
 
+
+def fix_items():
+    """Remove non-existent items
+    """
+    aa = {}
+    for a in Album.aggregator.lookup(from_=F.imageitem, localField=F.items, foreignField=F.id, as_=F.items2).project(items2=1, c1=Fn.size(Var.items), c2=Fn.size(Var.items2), _id=1).match(Fn.expr(Var.c1 != Var.c2)).perform(raw=True):
+        aa[a['_id']] = [_['_id'] for _ in a['items2']]
+
+    for a in aa:
+        Album.query(F.id == a).update(Fn.set(items=aa[a]))    
+
+    Album.query(F.items == []).delete()
+
         
 def merge_items():
     """Merge items w.r.t. their urls

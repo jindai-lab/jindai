@@ -13,7 +13,7 @@ import requests
 from bson import ObjectId
 from PIL import Image
 from PyMongoWrapper import F, Fn, MongoOperand, QueryExprParser, dbo
-from PyMongoWrapper.dbo import DbObject, DbObjectInitializer, MongoConnection
+from PyMongoWrapper.dbo import Anything, DbObjectInitializer, MongoConnection
 
 import config
 from storage import StorageManager
@@ -70,12 +70,12 @@ def _pdf_image(file, page, **kwargs):
 class Paragraph(db.DbObject):
 
     collection = str
-    source = DbObjectInitializer(dict)
+    source = DbObjectInitializer(dict, dict)
     keywords = list
     pdate = str
     outline = str
     content = str
-    pagenum = int
+    pagenum = Anything
     lang = str
     
     def __init__(self, *args, **kwargs):
@@ -174,7 +174,7 @@ class Paragraph(db.DbObject):
 class History(db.DbObject):
 
     user = str
-    created_at = DbObjectInitializer(datetime.datetime.utcnow, datetime.datetime)
+    created_at = datetime.datetime
     querystr = str
 
 
@@ -199,8 +199,8 @@ class TaskDBO(db.DbObject):
     datasource = str
     datasource_config = dict
     resume_next = bool
-    last_run = DbObjectInitializer(datetime.datetime.utcnow, datetime.datetime)
-    concurrent = DbObjectInitializer(lambda: 3, int)
+    last_run = datetime.datetime
+    concurrent = DbObjectInitializer(lambda *x: 3 if len(x) == 0 else int(x), int)
     shortcut_map = dict
 
 
@@ -266,16 +266,17 @@ class ImageItem(Paragraph):
     thumbnail = str
 
 
-class Album(Paragraph):    
+class Album(Paragraph):
 
     author = str
-    liked_at = DbObjectInitializer(datetime.datetime.utcnow, datetime.datetime)
+    pdate = datetime.datetime
+    liked_at = datetime.datetime
     items = dbo.DbObjectCollection(ImageItem)
 
     def save(self):
         self.keywords = list(set(self.keywords))
         for i in self.items:
-            if isinstance(i, DbObject) and i.id is None: i.save()
+            if i.id is None: i.save()
         super().save()
 
 
