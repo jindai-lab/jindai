@@ -56,6 +56,7 @@ class HTMLDataSource(DataSource):
             return p
 
         for fp, fn in expand_file_patterns(self.files):
+            self.logger('reading from', fn)
             ol = ''
             if '#' in fn: fn, ol = fn.split('#', 1)
             yield import_html_src(fn, fp, ol)
@@ -127,6 +128,7 @@ class HTMLImageDataSource(DataSource):
     def fetch(self):
         imgset = set()
         for url in self.urls:
+            self.logger('fetching from', url)
             html = try_download(url)
             
             try:
