@@ -13,7 +13,7 @@ import requests
 from bson import ObjectId
 from PIL import Image
 from PyMongoWrapper import F, Fn, MongoOperand, QueryExprParser, dbo
-from PyMongoWrapper.dbo import Anything, DbObjectInitializer, MongoConnection
+from PyMongoWrapper.dbo import Anything, DbObject, DbObjectInitializer, MongoConnection
 
 import config
 from storage import StorageManager
