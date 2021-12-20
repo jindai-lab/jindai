@@ -105,10 +105,16 @@ class TwitterDataSource(DataSource):
         self.allow_video = allow_video
         self.allow_retweet = allow_retweet
         self.import_username = import_username
-        self.time_after = parser.parse_dt_span(time_after)
-        self.time_before = parser.parse_dt_span(time_before)
-        if self.time_before == 0:
+        self.time_after = parser.parse_literal(time_after)
+        self.time_before = parser.parse_literal(time_before)
+        if not self.time_before:
             self.time_before = time.time()
+        elif isinstance(self.time_before, datetime.datetime):
+            self.time_before = self.time_before.timestamp()
+        if not self.time_after:
+            self.time_after = 0
+        elif isinstance(self.time_after, datetime.datetime):
+            self.time_after = self.time_after.timestamp()
         self.proxies = {'http': proxy, 'https': proxy} if proxy else {}
         self.api = twitter.Api(consumer_key=consumer_key, consumer_secret=consumer_secret, access_token_key=access_token_key, access_token_secret=access_token_secret, proxies=self.proxies)
         
@@ -209,7 +215,7 @@ class TwitterDataSource(DataSource):
     def import_twitl(self):
         after, before = self.time_after, self.time_before
         if after == 0:
-            after = Album.query(F.source_url.regex(r'twitter\.com')).sort(-F.pdate).limit(1).first().pdate.timestamp()
+            after = parser.parse_literal(Album.query(F['source.url'].regex(r'twitter\.com')).sort(-F.pdate).limit(1).first().pdate)
         
         o = twitter_id_from_timestamp(before or time.time())+1
         p = None

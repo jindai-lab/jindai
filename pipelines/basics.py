@@ -424,7 +424,7 @@ class FieldAssignment(PipelineStage):
             self.valueField = value[1:]
             self.valueLiteral = None
         else:
-            self.valueLiteral = parser.expand_literals(value)
+            self.valueLiteral = parser.parse_literal(value)
             self.valueField = None
 
     def value(self, p : Paragraph):
@@ -517,7 +517,7 @@ class FieldIncresement(PipelineStage):
             self.inc_field = inc_value[1:]
             self.inc_value = ''
         else:
-            self.inc_value = parser.expand_literals(inc_value)
+            self.inc_value = parser.parse_literal(inc_value)
             self.inc_field = ''
 
     def resolve(self, p : Paragraph):

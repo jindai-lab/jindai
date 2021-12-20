@@ -355,10 +355,10 @@ def list_task(id='', offset=0, limit=10):
 def enqueue_task(id=''):
     t = TaskDBO.first(F.id == id)
     assert t, 'No such task.'
-    t.last_run = datetime.datetime.now()
+    t.last_run = datetime.datetime.utcnow()
     t.save()
     t._task = None
-    key = f'{t.name}@{datetime.datetime.now().strftime("%Y%m%d %H%M%S")}'
+    key = f'{t.name}@{datetime.datetime.utcnow().strftime("%Y%m%d %H%M%S")}'
     tasks_queue.enqueue(key, t)
     if not tasks_queue.running:
         logging.info('start background thread')
@@ -508,7 +508,7 @@ def search(q='', req={}, sort='', limit=100, skip=0, dataset='', **kws):
     if req:
         qstr += _stringify(req)
     
-    History(user=logined(), querystr=qstr, created_at=datetime.datetime.now()).save()
+    History(user=logined(), querystr=qstr, created_at=datetime.datetime.utcnow()).save()
 
     params = {
         'query': q,

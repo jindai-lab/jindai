@@ -134,7 +134,7 @@ def dump(output, colls):
         colls (optional): list of collections
     """
     if not output:
-        output = f'dump-{datetime.datetime.now().strftime("%Y%m%d%H%M%S")}{("," + ",".join(colls)) if colls else ""}.zip'
+        output = f'dump-{datetime.datetime.utcnow().strftime("%Y%m%d%H%M%S")}{("," + ",".join(colls)) if colls else ""}.zip'
     def _hook(s):
         if isinstance(s, datetime.datetime): return s.isoformat()
         else: return s
