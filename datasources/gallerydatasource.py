@@ -361,7 +361,7 @@ class ImageImportDataSource(DataSource):
         for i in rng:
             url = path.replace('##', str(i))
             p = Album.first(F.source == {'url': url}) or Album(
-                source={'url': url}, items=[], pdate=datetime.datetime.now())
+                source={'url': url}, items=[], pdate=datetime.datetime.utcnow())
             if url.endswith('.jpg'):
                 imgs = [('', url)]
                 title = ''
