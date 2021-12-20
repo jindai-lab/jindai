@@ -11,7 +11,6 @@ from task import Task
 from pipeline import Pipeline, PipelineStage
 from datasource import DataSource
 import threading
-from collections import deque
 from io import BytesIO
 import sys
 import config
