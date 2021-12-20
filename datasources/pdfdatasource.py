@@ -3,8 +3,6 @@
 
 import fitz
 from pdf2image import convert_from_path
-import re, logging
-import glob
 from models import Paragraph
 from PyMongoWrapper import F, Fn, Var
 from datasource import DataSource
@@ -28,13 +26,6 @@ class PDFDataSource(DataSource):
         self.files = expand_file_patterns(files_or_patterns.split('\n'))
 
     def fetch(self):
-
-        def __startswith(heap, needles):
-            for n in needles:
-                if heap.startswith(n):
-                    return True
-            return False
-
         for _, pdf in self.files:
             pdffile = pdf
             if pdf.startswith('sources/'):
@@ -47,6 +38,7 @@ class PDFDataSource(DataSource):
             
             doc = fitz.open(pdffile)
             pages = doc.pageCount
+            self.logger('importing from', pdf)
             
             para = ''
             for p in range(min_page, pages):
@@ -76,7 +68,7 @@ class PDFImageDataSource(DataSource):
 
     def fetch(self):
         for _, pdffile in self.files:
-            logging.info('processing', pdffile)
+            self.logger('processing', pdffile)
             images = convert_from_path(pdffile, 300, first_page=0, last_page=self.limit)
             for page, i in enumerate(images):
                 yield Paragraph(image=i, source={'file': pdffile, 'page': page})
