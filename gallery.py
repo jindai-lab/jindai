@@ -279,7 +279,7 @@ def init(app):
                     if not pr.pdate:
                         pr.pdate = pd.pdate
                 if not pr.pdate:
-                    pr.pdate = datetime.datetime.now()
+                    pr.pdate = datetime.datetime.utcnow()
                 pr.save()
             
             Album.query(F.items == dele.id).update(Fn.pull(items=dele.id))        

@@ -3,18 +3,15 @@
 
 import os
 import re
-from collections import defaultdict
 from queue import deque
 from typing import Union
 
 import numpy as np
-from helpers import rest
 from models import Album, F, ImageItem, parser, try_download, AutoTag
 from PIL import Image, ImageOps
 from pipeline import PipelineStage
 from plugins.hashing import dhash, whash
 from storage import StorageManager
-from tqdm import tqdm
 import traceback
 
 

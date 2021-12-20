@@ -174,7 +174,7 @@ class Paragraph(db.DbObject):
 class History(db.DbObject):
 
     user = str
-    created_at = DbObjectInitializer(datetime.datetime.now, datetime.datetime)
+    created_at = DbObjectInitializer(datetime.datetime.utcnow, datetime.datetime)
     querystr = str
 
 
@@ -199,7 +199,7 @@ class TaskDBO(db.DbObject):
     datasource = str
     datasource_config = dict
     resume_next = bool
-    last_run = DbObjectInitializer(datetime.datetime.now, datetime.datetime)
+    last_run = DbObjectInitializer(datetime.datetime.utcnow, datetime.datetime)
     concurrent = DbObjectInitializer(lambda: 3, int)
     shortcut_map = dict
 
@@ -269,7 +269,7 @@ class ImageItem(Paragraph):
 class Album(Paragraph):    
 
     author = str
-    liked_at = DbObjectInitializer(datetime.datetime.now, datetime.datetime)
+    liked_at = DbObjectInitializer(datetime.datetime.utcnow, datetime.datetime)
     items = dbo.DbObjectCollection(ImageItem)
 
     def save(self):

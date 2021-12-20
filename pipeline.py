@@ -1,14 +1,7 @@
-from collections import defaultdict
 from typing import Dict, Iterable, List, Tuple, Any, Union
-from PyMongoWrapper import MongoResultSet, F
-from numpy.lib.arraysetops import isin
-from tqdm import tqdm
+from PyMongoWrapper import MongoResultSet
 from concurrent.futures import ThreadPoolExecutor
-import threading
-from models import Paragraph, get_context
-import importlib
-import os
-import glob
+from models import Paragraph
 
 
 class PipelineStage:
@@ -28,7 +21,13 @@ class Pipeline:
 
     pipeline_ctx = None
     
-    def __init__(self, stages : List[Union[Tuple, Dict, PipelineStage]], concurrent, resume_next):
+    def __init__(self, stages : List[Union[Tuple[str, Dict], List, Dict, PipelineStage]], concurrent : int, resume_next : bool):
+        """
+        Args:
+            stages: 表示各阶段的 Tuple[<名称>, <配置>], List[<名称>, <配置>], 形如 {$<名称> : <配置>} 的参数所构成的列表，或直接由已初始化好的 PipelineStage
+            concurrent (int): 并发运行的数量
+            resume_next (bool): 当某个处理阶段发生错误时是否继续
+        """
         self.stages = []
         if stages:
             for stage in stages:
@@ -49,7 +48,7 @@ class Pipeline:
             return p
         
         for stage in self.stages:
-            stage.logger = self.logger
+            stage.logger = lambda *args: self.logger(stage.__class__.__name__, *args)
             try:
                 p = stage.resolve(p)
                 if not p: return
@@ -59,8 +58,12 @@ class Pipeline:
 
         return p
 
-    def applyParagraphs(self, rs : MongoResultSet, total=0):
-
+    def applyParagraphs(self, rs : Union[MongoResultSet, Iterable[Paragraph]]):
+        """
+        处理段落
+        Args:
+            rs (MongoResultSet | Iterable[Paragraph]): 要处理的各个 Paragraph
+        """
         if not self.stages:
             return rs
 
@@ -82,6 +85,9 @@ class Pipeline:
             return _seq()
 
     def summarize(self):
+        """
+        Reduce 阶段
+        """
         returned = None
         for stage in self.stages:
             returned = stage.summarize(returned)
