@@ -233,7 +233,7 @@ def init(app):
         items = list(ImageItem.query(F.id.in_([ObjectId(_) if len(_) == 24 else _ for _ in items])))
         for i in items:
             if i is None: continue
-            i.rating = round(2 * (i.rating + inc)) / 2 if inc else val
+            i.rating = val if val else round(2 * (i.rating)) / 2 + inc
             if -1 <= i.rating <= 5:
                 i.save()
         return {
