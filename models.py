@@ -238,7 +238,9 @@ class Token(db.DbObject):
     def check(token_string):
         t = Token._cache.get(token_string)
         if t and t.expire > time.time():
-            t.expire = time.time() + 86400
+            if t.expire - time.time() < 86400:
+                t.expire = time.time() + 86400
+                t.save()
             return t
         else:
             t = Token.first((F.token == token_string) & (F.expire > time.time()))
@@ -275,7 +277,10 @@ class Album(Paragraph):
 
     def save(self):
         self.keywords = list(set(self.keywords))
-        for i in self.items:
+        for i in list(self.items):
+            if not isinstance(i, ImageItem):
+                self.items.remove(i)
+                continue
             if i.id is None: i.save()
         super().save()
 

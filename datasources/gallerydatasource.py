@@ -327,7 +327,7 @@ class ImageImportDataSource(DataSource):
                 
                 i.save()
                 if mgr.write(fn, i.id):
-                    i.source['file'] = 'blocks.h5'
+                    i.source = dict(i.source, file='blocks.h5')
                 i.save()
                 p.items.append(i)
 

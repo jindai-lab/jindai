@@ -6,6 +6,7 @@ import logging
 import traceback
 from PyMongoWrapper import *
 from collections import defaultdict
+from queue import deque
 from models import *
 from task import Task
 from pipeline import Pipeline, PipelineStage
@@ -22,8 +23,7 @@ from helpers import *
 class TasksQueue:
 
     def __init__(self, n=3):
-        self._lock = threading.Lock()
-        self.queue = []
+        self.queue = deque()
         self.results = {}
         self.taskdbos = {}
         self.running = False
@@ -46,20 +46,22 @@ class TasksQueue:
                 'last_run': datetime.datetime.strptime(k.split('@')[-1], '%Y%m%d %H%M%S').strftime('%Y-%m-%d %H:%M:%S'),
                 'file_ext': 'json' if not isinstance(v, dict) else v.get('__file_ext__', 'json')
             } for k, v in self.results.items()],
-            'waiting': len(self)
+            'waiting': len(self.queue)
         }
 
     def working(self):
         while self.running:
             if self.queue and len(self.taskdbos) < self.n: # can run new task
-                with self._lock:
-                    tkey, t = self.queue.pop(0)
+                tkey, t = self.queue.popleft()
                 self.taskdbos[tkey] = t
                 try:
                     t._task = Task.from_dbo(t)
                     t._task.run()
                 except Exception as ex:
-                    self.results[tkey] = {'exception': '初始化任务时出错：' + str(ex), 'tracestack': traceback.format_tb(ex.__traceback__)}
+                    self.results[tkey] = {'exception': f'初始化任务时出错: {ex.__class__.__name__}: {ex}', 'tracestack': traceback.format_tb(ex.__traceback__) + [
+                        app.json_encoder().encode(t.as_dict())
+                    ]}
+                    self.taskdbos.pop(k)
             
             elif not self.queue and not self.taskdbos: # all tasks done
                 self.running = False
@@ -75,8 +77,7 @@ class TasksQueue:
             time.sleep(0.5)
 
     def enqueue(self, key, val):
-        with self._lock:
-            self.queue.append((key, val))
+        self.queue.append((key, val))
         # emit('queue', self.status)
 
     def stop(self):
@@ -91,16 +92,12 @@ class TasksQueue:
                     return v
             return None
 
-    def __len__(self):
-        return len(self.queue)
-
     def remove(self, key):
-        with self._lock:
-            for todel, _ in self.queue:
-                if todel == key: break
-            else:
-                return False
-            self.queue.remove(todel)
+        for todel, _ in self.queue:
+            if todel == key: break
+        else:
+            return False
+        self.queue.remove(todel)
         
         return True
 

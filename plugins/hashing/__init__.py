@@ -1,4 +1,5 @@
 import imagehash
+from PIL import Image
 from gallery import *
 from plugin import Plugin
 from storage import *

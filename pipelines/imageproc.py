@@ -297,7 +297,7 @@ class DownloadImages(PipelineStage):
             with self.mgr:
                 self.mgr.write(content, str(i.id))
                 self.logger(i.id, len(content))
-            i.source['file'] = 'blocks.h5'
+            i.source = {'file': 'blocks.h5', 'url': i.source['url']}
             i.save()
 
         return p
