@@ -53,7 +53,7 @@ def create_albums(posts_imported: List[Album]):
     items = []
     impids = []
     for p in posts_imported:
-        items += p.items.a
+        items += list(p.items)
         impids.append(ObjectId(p.id))
 
     albums = defaultdict(Album)
@@ -186,6 +186,7 @@ class TwitterDataSource(DataSource):
 
         before = self.time_before
         after = self.time_after
+        self.logger('twiuser', before, after)
         
         if before < after:
             before, after = after, before
@@ -215,7 +216,7 @@ class TwitterDataSource(DataSource):
     def import_twitl(self):
         after, before = self.time_after, self.time_before
         if after == 0:
-            after = parser.parse_literal(Album.query(F['source.url'].regex(r'twitter\.com')).sort(-F.pdate).limit(1).first().pdate)
+            after = Album.query(F['source.url'].regex(r'twitter\.com')).sort(-F.pdate).limit(1).first().pdate.timestamp()
         
         o = twitter_id_from_timestamp(before or time.time())+1
         p = None

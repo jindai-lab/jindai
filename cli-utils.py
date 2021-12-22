@@ -1,4 +1,5 @@
 import click
+import re
 from PyMongoWrapper import F, Fn
 import h5py
 from models import Meta, User, TaskDBO, MongoJSONEncoder, ImageItem
@@ -42,7 +43,7 @@ def export(query, output):
 @cli.command('task')
 @click.argument('task_id')
 def task(task_id):
-    task = Task.from_dbo(TaskDBO.first(F.id == task_id))
+    task = Task.from_dbo(TaskDBO.first((F.id == task_id) if re.match(r'[0-9a-f]{24}', task_id) else (F.name == task_id)))
     result = task.execute()
     print(result)
     
@@ -147,8 +148,6 @@ def dump(output, colls):
                 fo.write(jsonenc.encode(p).encode('utf-8') + b'\n')
             fo.seek(0)
             z.writestr(coll, fo.read())
-    with open('auditor.log', 'w'):
-        pass
 
 
 @cli.command('restore')

@@ -1,4 +1,3 @@
-from collections import deque
 import threading
 import traceback
 from models import get_context
@@ -22,7 +21,7 @@ class Task:
         self.alive = True
         self.returned = None
 
-        self.datasource.logger = self.log
+        self.datasource.logger = lambda *x: self.log(type(self.datasource).__name__, *x)
         self.pipeline.logger = self.log
 
     def execute(self):

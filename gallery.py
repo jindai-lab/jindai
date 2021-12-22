@@ -1,25 +1,21 @@
-import base64
 import datetime
 import hashlib
 import os
 import random
 import re
 from collections import defaultdict
-from io import BytesIO
 from multiprocessing.pool import ThreadPool
-from typing import IO, Any, Callable, Iterable, List, Tuple, Union
+from typing import Any, Callable, Iterable, List, Tuple
 import requests
 from bson import ObjectId
-from flask import Response, abort, jsonify, request
-from PIL import Image, ImageEnhance, ImageStat
-from PyMongoWrapper import F, Fn, Var
+from flask import Response, jsonify, request
+from PyMongoWrapper import F, Fn
 from tqdm import tqdm
 
 import config
 from datasources.gallerydatasource import GalleryAlbumDataSource
 from helpers import *
-from models import Album, AutoTag, ImageItem, parser
-from storage import StorageManager
+from models import Album, AutoTag, ImageItem
 
 # prepare environment for requests
 proxy = config.gallery.get('proxy') or os.environ.get(
@@ -201,13 +197,11 @@ def init(app):
     @rest()
     def set_rating(items, inc=1, val=0):
         """Increase or decrease the rating of selected items
-
-        Returns:
-            Response: 'OK' if succeeded
         """
         items = list(ImageItem.query(F.id.in_([ObjectId(_) if len(_) == 24 else _ for _ in items])))
         for i in items:
             if i is None: continue
+            print(i.rating)
             i.rating = val if val else round(2 * (i.rating)) / 2 + inc
             if -1 <= i.rating <= 5:
                 i.save()
@@ -221,9 +215,6 @@ def init(app):
     @rest()
     def reset_storage(items):
         """Reset storage status of selected items
-
-        Returns:
-            Response: 'OK' if succeeded
         """
         
         items = list(ImageItem.query(F.id.in_([ObjectId(_) if len(_) == 24 else _ for _ in items])))
@@ -269,7 +260,7 @@ def init(app):
     @rest()
     def delete_item(album_items: dict):
         for pid, items in album_items.items():
-            p = Album.first(F.id == ObjectId(pid))
+            p = Album.first(F.id == pid)
             if p is None: continue
 
             items = list(map(ObjectId, items))
@@ -279,7 +270,7 @@ def init(app):
         for i in items:
             if Album.first(F.items == i):
                 continue
-            print('orphan item, delete', str(i))
+            print('delete orphan item', str(i))
             ImageItem.first(F.id == i).delete()
 
         Album.query(F.items == []).delete()
