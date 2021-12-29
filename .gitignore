@@ -2,6 +2,7 @@
 *.tsv
 *.txt
 config.py
+temp_*.py
 sources/
 texts/
 models_data

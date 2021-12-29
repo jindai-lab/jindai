@@ -7,7 +7,7 @@ from queue import deque
 from typing import Union
 
 import numpy as np
-from models import Album, F, ImageItem, parser, try_download, AutoTag
+from models import Album, F, ImageItem, Paragraph, parser, try_download, AutoTag
 from PIL import Image, ImageOps
 from pipeline import PipelineStage
 from plugins.hashing import dhash, whash
@@ -17,11 +17,14 @@ import traceback
 
 class ImageOrAlbumStage(PipelineStage):
     
-    def resolve(self, p : Union[Album, ImageItem]) -> Union[Album, ImageItem]:
-        if isinstance(p, Album):
+    def resolve(self, p : Paragraph) -> Union[Album, ImageItem]:
+        if p.items:
+            p = Album(p)
             items = p.items
         else:
+            p = ImageItem(p)
             items = [p]
+        
         for i in items:
             try:
                 self.resolve_image(i)
@@ -29,6 +32,7 @@ class ImageOrAlbumStage(PipelineStage):
                 self.logger(i.id, self.__class__.__name__, ex)
                 self.logger(traceback.format_tb(ex.__traceback__))
                 p = None
+        
         return p
 
     def resolve_image(self, i : ImageItem):
@@ -40,6 +44,8 @@ class CheckImage(ImageOrAlbumStage):
     """
 
     def resolve_image(self, p : ImageItem):
+        if p.source.get('url', '').split('.')[-1].lower() in ('mp4', 'avi'):
+            return
         try:
             im = p.image
             p.width, p.height = im.width, im.height
@@ -51,6 +57,7 @@ class CheckImage(ImageOrAlbumStage):
             p.save()
         except Exception as ex:
             self.logger(p.id, ex)
+        return p
 
 
 class ImageHash(ImageOrAlbumStage):
@@ -62,8 +69,7 @@ class ImageHash(ImageOrAlbumStage):
             dh, wh = i.dhash, i.whash
             if dh and wh: return i
 
-            try: f = i.image_raw
-            except: f = None
+            f = i.image_raw
             if not f: return
 
             if not dh:
@@ -90,8 +96,9 @@ class ImageHashDuplications(ImageOrAlbumStage):
         return binary.Binary(bytes.fromhex(f'{x:016x}'))
 
     def resolve_image(self, i: ImageItem):
-        from plugins.hashing import bitcount, flips, v        
+        from plugins.hashing import bitcount, flips, v
         if not i.dhash: return
+        if not isinstance(i.dhash, bytes): self.logger(type(i).__name__, i.as_dict())
         dh2 = v(i.dhash)
         dhb2 = v(i.whash)
         h2, w2 = i.height, i.width
@@ -286,9 +293,10 @@ class DownloadImages(PipelineStage):
         } if proxy else {}
     
     def resolve(self, p):
-        items = p.items if isinstance(p, Album) else [p]
+        items = p.items or [p]
 
         for i in items:
+            i = ImageItem(i)
             if not i.id:
                 i.save()
                 
@@ -298,6 +306,7 @@ class DownloadImages(PipelineStage):
                 self.mgr.write(content, str(i.id))
                 self.logger(i.id, len(content))
             i.source = {'file': 'blocks.h5', 'url': i.source['url']}
+            i.flag = 0
             i.save()
 
         return p
@@ -310,7 +319,7 @@ class ApplyAutoTags(PipelineStage):
     def __init__(self) -> None:
         self.ats = list(AutoTag.query({}))
     
-    def resolve(self, p : Album) -> Album:
+    def resolve(self, p):
         for i in self.ats:
             pattern, from_tag, tag = i.pattern, i.from_tag, i.tag
             if (from_tag and from_tag in p.keywords) or (pattern and re.search(pattern, p.source['url'])):

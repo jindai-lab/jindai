@@ -9,7 +9,7 @@ from typing import Any, Callable, Iterable, List, Tuple
 import requests
 from bson import ObjectId
 from flask import Response, jsonify, request
-from PyMongoWrapper import F, Fn
+from PyMongoWrapper import F, Fn, Var
 from tqdm import tqdm
 
 import config
@@ -201,10 +201,12 @@ def init(app):
         items = list(ImageItem.query(F.id.in_([ObjectId(_) if len(_) == 24 else _ for _ in items])))
         for i in items:
             if i is None: continue
-            print(i.rating)
+            old_value = i.rating
             i.rating = val if val else round(2 * (i.rating)) / 2 + inc
             if -1 <= i.rating <= 5:
                 i.save()
+            else:
+                i.rating = old_value
         return {
             str(i.id): i.rating
             for i in items
@@ -405,8 +407,8 @@ def init(app):
         if match_initials: tag = '^' + tag
         matcher = {'keywords': {'$regex': tag, '$options': '-i'}}
         return [
-                _['_id'] 
-                for _ in Album.aggregator.match(matcher).unwind('$keywords').match(matcher).group(_id='$keywords').perform(raw=True)
+                _
+                for _ in Album.aggregator.match(matcher).unwind('$keywords').match(matcher).group(_id=Var.keywords, count=Fn.sum(1)).sort(count=-1).perform(raw=True)
                 if len(_['_id']) < 15
             ]
 

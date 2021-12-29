@@ -151,8 +151,9 @@ class TwitterDataSource(DataSource):
                 else:
                     author = ''
             text = re.sub(r'https?://[^\s]+', '', st.text).strip()
-            p.keywords = [author, text] + [t.strip(':').strip('#')
-                                       for t in text.split()] + re.findall(r'(@[a-z_A-Z0-9]+)', text)
+            p.keywords = [t.strip().strip('#') for t in re.findall(r'(@[a-z_A-Z0-9]+|[#\s][^\s]{,10})', text)] + [author]
+            p.keywords =[_ for _ in p.keywords if _]
+            p.content = text
             p.author = author
         return p
     

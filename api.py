@@ -21,8 +21,14 @@ from helpers import *
 
 
 class TasksQueue:
+    """处理任务队列
+    """
 
     def __init__(self, n=3):
+        """
+        Args:
+            n (int, optional): 最大同时处理的任务数量
+        """
         self.queue = deque()
         self.results = {}
         self.taskdbos = {}
@@ -30,12 +36,14 @@ class TasksQueue:
         self.n = n
 
     def start(self):
+        """开始处理任务"""
         self.running = True
         self._workingThread = threading.Thread(target=self.working)
         self._workingThread.start()
 
     @property
-    def status(self):
+    def status(self) -> dict:
+        """任务队列状态"""
         return {
             'running': list(self.taskdbos),
             'finished': [{
@@ -50,6 +58,7 @@ class TasksQueue:
         }
 
     def working(self):
+        """处理任务队列"""
         while self.running:
             if self.queue and len(self.taskdbos) < self.n: # can run new task
                 tkey, t = self.queue.popleft()
@@ -77,13 +86,16 @@ class TasksQueue:
             time.sleep(0.5)
 
     def enqueue(self, key, val):
+        """将新任务加入队列"""
         self.queue.append((key, val))
         # emit('queue', self.status)
 
     def stop(self):
+        """停止运行"""
         self.running = False
 
-    def find(self, key):
+    def find(self, key : str):
+        """返回指定任务"""
         if key in self.taskdbos:
             return self.taskdbos[key]
         else:
@@ -92,7 +104,8 @@ class TasksQueue:
                     return v
             return None
 
-    def remove(self, key):
+    def remove(self, key : str):
+        """删除指定任务"""
         for todel, _ in self.queue:
             if todel == key: break
         else:
@@ -622,7 +635,7 @@ def page_image(coll=None, storage_id=None, ext=None):
         return buf.getvalue()
 
     if buf:
-        length = len(buf.getvalue())
+        length = len(buf.getvalue()) if hasattr(buf, 'getvalue') else len(buf)
         
         if request.args.get('enhance', ''):
             img = Image.open(buf)

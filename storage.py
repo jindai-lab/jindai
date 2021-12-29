@@ -3,16 +3,20 @@ import glob
 from io import BytesIO
 import numpy as np
 import h5py
+from threading import Lock
 
 
 class StorageManager:
 
-    files = [h5py.File(g, 'r') for g in glob.glob('blocks?*.h5') + glob.glob('blocks/*.h5')]
+    files = [h5py.File(g, 'r') for g in glob.glob(
+        'blocks?*.h5') + glob.glob('blocks/*.h5')]
     base = 'blocks.h5'
     f = None
     write_counter = 0
+    _lock = Lock()
 
     def __enter__(self, *args):
+        StorageManager._lock.acquire()
         if not StorageManager.f or StorageManager.f.mode != 'r+':
             if StorageManager.f:
                 StorageManager.f.close()
@@ -21,12 +25,11 @@ class StorageManager:
         return self
 
     def __exit__(self, *args):
-        if StorageManager.f:
-            StorageManager.f.close()
-        StorageManager.f = None
-        
+        StorageManager.f.flush()
+        StorageManager._lock.release()
+
     def write(self, src, iid):
-        if not StorageManager.f: self.__enter__()
+        assert StorageManager.f, 'Pleae use `with` statement.'
 
         if isinstance(src, bytes):
             src = BytesIO(src)
@@ -37,9 +40,6 @@ class StorageManager:
         if k in StorageManager.f:
             del StorageManager.f[k]
         StorageManager.f[k] = np.frombuffer(src.read(), dtype='uint8')
-        StorageManager.write_counter += 1
-        if StorageManager.write_counter % 50 == 0:
-            StorageManager.f.flush()
 
         return True
 
@@ -55,14 +55,20 @@ class StorageManager:
         k = f'data/{iid}'
         for f in [StorageManager.f] + StorageManager.files:
             if k in f:
-                if check_only: return True
-                return BytesIO(f[k][:].tobytes())
-        if check_only: return False
-        else: raise OSError(f"No matched ID found: {iid}")
+                if check_only:
+                    return True
+                else:
+                    return BytesIO(f[k][:].tobytes())
+        if check_only:
+            return False
+        else:
+            raise OSError(f"No matched ID found: {iid}")
 
     def exists(self, iid):
         return self.read(iid, True)
 
     def delete(self, iid):
-        pass
-        # hdf file cannot deal with deletion meaningfully
+        k = f'data/{iid}'
+        for f in [StorageManager.f] + StorageManager.files:
+            if k in f:
+                del f[k]
