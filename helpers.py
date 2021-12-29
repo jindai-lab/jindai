@@ -83,7 +83,6 @@ def serve_file(p: Union[str, IO], ext: str = '', file_size: int = 0) -> Response
     start, length = 0, 1 << 20
     range_header = request.headers.get('Range')
     if file_size and file_size > 10 << 20:
-        start = 0
         if range_header:
             # example: 0-1000 or 1250-
             m = re.search('([0-9]+)-([0-9]*)', range_header)
@@ -104,12 +103,12 @@ def serve_file(p: Union[str, IO], ext: str = '', file_size: int = 0) -> Response
 
         def _generate_chunks():
             l = length
-            with f:
-                f.seek(start)
-                while l > 0:
-                    chunk = f.read(min(l, 1 << 20))
-                    l -= len(chunk)
-                    yield chunk
+            f.seek(start)
+            while l > 0:
+                print(l)
+                chunk = f.read(min(l, 1 << 20))
+                l -= len(chunk)
+                yield chunk
 
         rv = Response(stream_with_context(_generate_chunks()), 206,
                       content_type=mimetype, direct_passthrough=True)

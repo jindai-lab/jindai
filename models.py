@@ -67,6 +67,21 @@ def _pdf_image(file, page, **kwargs):
     return buf
 
 
+class LengthedIO:
+    
+    def __init__(self, f, sz):
+        self._f = f
+        self._sz = sz
+
+    def __len__(self):
+        return self._sz
+
+    def __getattribute__(self, name: str):
+        if name.startswith('_'):
+            return object.__getattribute__(self, name)
+        return getattr(self._f, name)
+
+
 class Paragraph(db.DbObject):
 
     collection = str
@@ -97,6 +112,8 @@ class Paragraph(db.DbObject):
 
     def generate_thumbnail(self, file_path=''):
         import cv2
+        if not self.id:
+            self.save()
 
         self.thumbnail = None
         p = file_path
@@ -145,8 +162,10 @@ class Paragraph(db.DbObject):
                 vt = self.source.get('block_id', self.id)
                 return StorageManager().read(vt)
             else:
-                with open(os.path.join(config.storage, fn), 'rb') as fin:
-                    return fin
+                if not os.path.exists(fn):
+                    fn = os.path.join(config.storage, fn)
+                fin = open(fn, 'rb')
+                return LengthedIO(fin, os.stat(fn).st_size)
         elif self.source.get('url'):
             return BytesIO(try_download(self.source['url']))
 
@@ -266,7 +285,7 @@ class ImageItem(Paragraph):
     dhash = bytes
     whash = bytes
     thumbnail = str
-
+    
 
 class Album(Paragraph):
 

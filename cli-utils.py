@@ -160,7 +160,7 @@ def restore(infile, colls, force):
     Args:
         infile (str): input zip filename.
         colls (optional): list of collections
-        force (bool, optional): ignore errors
+        force (bool, optional): delete before import
     """
     def _hook(dic: Dict):
         """JSON decoder hook for restoring collections.
@@ -199,7 +199,7 @@ def restore(infile, colls, force):
             mongodb(coll).insert_many(ps, ordered=False,
                                         bypass_document_validation=True)
         except Exception as ex:
-            print(ex)
+            print(ex.__class__.__name__)
 
     with zipfile.ZipFile(infile, 'r') as z:
         restore_albums = set()
@@ -234,7 +234,7 @@ def restore(infile, colls, force):
                     # print('\nfound match', p['_id'])
                     ps.append(p)
                 elif restore_albums and (
-                        coll == 'album' and (p['_id'] in restore_albums or restore_albums.intersection(set(p['tags'])))
+                        coll == 'album' and (p['_id'] in restore_albums or restore_albums.intersection(set(p['keywords'])))
                     ):
                     # print('\nfound match', p['_id'], p['items'])
                     ps.append(p)

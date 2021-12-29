@@ -1,7 +1,7 @@
 """若干工具函数
 """
 import statistics
-from typing import Union
+from typing import IO, Tuple, Union
 import zipfile
 import os
 import re
@@ -53,7 +53,7 @@ def merge_lines(lines, lang):
         yield t
 
 
-def expand_file_patterns(patterns):
+def expand_file_patterns(patterns : list) -> Tuple[IO, str]:
     for pattern in patterns:
         if pattern.startswith('https://') or pattern.startswith('http://'):
             yield BytesIO(try_download(pattern, '/'.join(pattern.split('/')[:-1]))), pattern

@@ -17,7 +17,7 @@ class FaceDet(Plugin):
     
     def __init__(self, app, **config):
         if 'faces' not in ImageItem.fields:
-            ImageItem.fields = {'faces': DbObjectCollection(bytes)}
+            ImageItem.fields['faces'] = DbObjectCollection(bytes)
             ImageItem.faces = ImageItem.fields['faces']
 
     def get_special_pages(self):

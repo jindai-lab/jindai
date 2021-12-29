@@ -80,17 +80,41 @@ class ConditionalAssignment(PipelineStage):
 class CallTask(PipelineStage):
     """调用其他任务（流程）"""
 
-    def __init__(self, task, pipeline_only=False):
+    def __init__(self, task, pipeline_only=False, params=''):
         """
         Args:
             task (TASK): 任务ID
-            pipeline_only (bool): 仅调用任务中的处理流程，若为 false，则完整调用该任务
+            pipeline_only (bool): 仅调用任务中的处理流程，若为 false，则于 summarize 阶段完整调用该任务
+            params (str): 设置任务中各数据源和流程参数
         """
         from task import Task
         t = TaskDBO.first(F.id == task)
         assert t, '指定的任务不存在'
-        self.task = Task.from_dbo(t)
         self.pipeline_only = pipeline_only
+        if params:
+            params = parser.eval(params)
+            for k, v in params.items():
+                secs = k.split('.')
+                if secs[0] == 'datasource':
+                    target = t.datasource_config
+                else:
+                    target = t.pipeline
+                for sec in secs[1:-1]:
+                    if sec.isnumeric():
+                        assert isinstance(target, list) and len(target) > int(sec), '请指定正确的下标，从0开始'
+                        target = target[int(sec)][1]
+                    else:
+                        assert sec in target, '不存在该参数'
+                        target = target[sec]
+                        if isinstance(target, list) and len(target) == 2 and isinstance(target[0], str) and isinstance(target[1], dict):
+                            target = target[1]
+                sec = secs[-1]
+                target[sec] = v
+        
+        try:
+            self.task = Task.from_dbo(t)
+        except Exception as ex:
+            raise Exception(f"参数错误，{ex.__class__.name}: {ex}")
 
     def resolve(self, p):
         self.task.pipeline.logger = self.logger
@@ -98,9 +122,9 @@ class CallTask(PipelineStage):
             return self.task.pipeline.apply(p)
     
     def summarize(self, r):
+        self.task.pipeline.logger = self.logger
         if self.pipeline_only:
             return self.task.pipeline.summarize()
         else:
-            self.task.pipeline.logger = self.logger
             self.task.datasource.logger = self.logger
             return self.task.execute()
