@@ -40,4 +40,4 @@ This project was made possible through outstanding works from:
 
 License: MIT
 
-@[科技人文研究室](https://innovors.com)
+© zhuth and contributors.
