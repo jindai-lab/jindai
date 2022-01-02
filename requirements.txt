@@ -25,6 +25,7 @@ snownlp
 many_stop_words
 bert4keras
 tensorflow
+hanzidentifier
 requests
 lxml
 torchvision

@@ -17,7 +17,7 @@ class PDFDataSource(DataSource):
         """
         Args:
             collection_name (str): 集合名称
-            lang (简体中文:chs|繁体中文:cht|英文:en|德文:de|法文:fr|俄文:ru|西班牙文:es|日文:ja|韩文/朝鲜文:kr|越南文:vn): 语言标识
+            lang (自动:auto|简体中文:chs|繁体中文:cht|英文:en|德文:de|法文:fr|俄文:ru|西班牙文:es|日文:ja|韩文/朝鲜文:kr|越南文:vn): 语言标识
             files_or_patterns (str): PDF文件列表
         """
         super().__init__()
@@ -39,14 +39,22 @@ class PDFDataSource(DataSource):
             doc = fitz.open(pdffile)
             pages = doc.pageCount
             self.logger('importing from', pdf)
+
+            if self.lang == 'auto':
+                lang = lang_detect(os.path.basename(pdf).rsplit('.', 1)[0])
+                if lang == 'zh-cn': lang = 'chs'
+                elif lang.startswith('zh-'): lang = 'cht'
+                else: lang = lang.split('-')[0]
+            else:
+                lang = self.lang
             
             para = ''
             for p in range(min_page, pages):
                 label = doc[p].get_label()
                 lines = doc[p].getText().split('\n')
-                for para in merge_lines(lines, self.lang):
+                for para in merge_lines(lines, lang):
                     try:
-                        yield Paragraph(lang=self.lang, content=para.encode('utf-8', errors='ignore').decode('utf-8'), source={'file': pdf,
+                        yield Paragraph(lang=lang, content=para.encode('utf-8', errors='ignore').decode('utf-8'), source={'file': pdf,
                             'page': p}, pagenum=label or (p+1), collection=self.name)
                     except Exception as e:
                         self.logger(pdffile, p+1, e)
