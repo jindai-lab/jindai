@@ -1,26 +1,37 @@
 """若干工具函数
 """
-import statistics
-from typing import IO, Tuple, Union
-import zipfile
+import glob
 import os
 import re
-import glob
-import time
-import requests
+import statistics
+import zipfile
 from io import BytesIO
-from models import Paragraph, try_download
+from typing import IO, Tuple
 
+import hanzidentifier
+import langdetect
+from models import try_download
+
+
+def lang_detect(s):
+    s = re.sub('[0-9]', '', s).strip()
+    
+    if re.search(r"[\uac00-\ud7ff]+", s):
+        return 'ko'
+
+    if re.search(r"[\u30a0-\u30ff\u3040-\u309f]+", s):
+        return 'ja'
+    
+    if hanzidentifier.has_chinese(s):
+        if hanzidentifier.is_simplified(s):
+            return 'chs'
+        else:
+            return 'cht'
+    
+    return langdetect.detect(s)
 
 def paragraph_finished(t):
-
-    def _endswith(heap, needles):
-        for _ in needles:
-            if heap.endswith(_):
-                return True
-        return False
-
-    return _endswith(t.strip(), '.!?…\"。！？…—：”')
+    return t.endswith(tuple('.!?…\"。！？…—：”）'))
 
 
 def merge_lines(lines, lang):

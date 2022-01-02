@@ -117,14 +117,17 @@ class CallTask(PipelineStage):
             raise Exception(f"参数错误，{ex.__class__.name}: {ex}")
 
     def resolve(self, p):
-        self.task.pipeline.logger = self.logger
         if self.pipeline_only:
+            self.task.pipeline.logger = self.logger
             return self.task.pipeline.apply(p)
+        else:
+            return p
     
     def summarize(self, r):
-        self.task.pipeline.logger = self.logger
         if self.pipeline_only:
+            self.task.pipeline.logger = self.logger
             return self.task.pipeline.summarize()
         else:
             self.task.datasource.logger = self.logger
+            self.task.pipeline.logger = self.logger
             return self.task.execute()
