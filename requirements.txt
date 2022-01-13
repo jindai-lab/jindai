@@ -47,3 +47,4 @@ opennsfw-standaloneoauthlib
 textrank4zh
 sentence_transformers
 text2vec
+easynmt

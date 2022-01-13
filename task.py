@@ -16,13 +16,12 @@ class Task:
         else:
             name, args = datasource
         self.datasource = Task.datasource_ctx[name](**args)
-        self.pipeline = Pipeline(pipeline, concurrent, resume_next)
+        self.pipeline = Pipeline(pipeline, concurrent, resume_next, self.log)
         self.queue = deque()
         self.alive = True
         self.returned = None
 
         self.datasource.logger = lambda *x: self.log(type(self.datasource).__name__, *x)
-        self.pipeline.logger = self.log
 
     def execute(self):
         try:
