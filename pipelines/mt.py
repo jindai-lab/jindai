@@ -1,0 +1,39 @@
+"""机器翻译
+"""
+from models import Paragraph
+from pipeline import PipelineStage
+from opencc import OpenCC
+
+
+class MachineTranslation(PipelineStage):
+    """机器翻译"""
+
+    def __init__(self, to_lang='chs') -> None:
+        """
+        Args:
+            to_lang (简体中文:chs|繁体中文:cht|英文:en): 目标语言标识
+        """
+        super().__init__()
+        
+        from easynmt import EasyNMT
+        self.model = EasyNMT('opus-mt')
+
+        self.cc = None
+        if to_lang == 'chs':
+            to_lang = 'zh'
+        elif to_lang == 'cht':
+            to_lang = 'zh'
+            self.cc = OpenCC('s2t')
+
+        self.to_lang = to_lang        
+
+    def resolve(self, p: Paragraph) -> Paragraph:
+        t = self.model.translate(p.content, source_lang=p.lang if p.lang not in ('chs', 'cht') else 'zh', target_lang=self.to_lang)
+        if self.cc:
+            t = self.cc.convert(t)
+        p.content = t
+        if p.id:
+            p._id = None
+            del p._orig['_id']
+        return p
+    

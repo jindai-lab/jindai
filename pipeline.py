@@ -1,4 +1,4 @@
-from typing import Dict, Iterable, List, Tuple, Any, Union
+from typing import Callable, Dict, Iterable, List, Tuple, Any, Union
 from PyMongoWrapper import MongoResultSet
 from concurrent.futures import ThreadPoolExecutor
 from models import Paragraph
@@ -21,13 +21,15 @@ class Pipeline:
 
     pipeline_ctx = None
     
-    def __init__(self, stages : List[Union[Tuple[str, Dict], List, Dict, PipelineStage]], concurrent : int, resume_next : bool):
+    def __init__(self, stages : List[Union[Tuple[str, Dict], List, Dict, PipelineStage]], concurrent : int, resume_next : bool, logger : Callable = print):
         """
         Args:
             stages: 表示各阶段的 Tuple[<名称>, <配置>], List[<名称>, <配置>], 形如 {$<名称> : <配置>} 的参数所构成的列表，或直接由已初始化好的 PipelineStage
             concurrent (int): 并发运行的数量
             resume_next (bool): 当某个处理阶段发生错误时是否继续
         """
+        self.logger = logger
+        
         self.stages = []
         if stages:
             for stage in stages:
@@ -38,17 +40,17 @@ class Pipeline:
                 if isinstance(stage, (tuple, list)) and len(stage) == 2 and Pipeline.pipeline_ctx:
                     name, kwargs = stage
                     stage = Pipeline.pipeline_ctx[name](**kwargs)
+                stage.logger = lambda *args: self.logger(stage.__class__.__name__, *args)
                 self.stages.append(stage)
 
         self.concurrent = concurrent
         self.resume_next = resume_next
-
+        
     def apply(self, p : Paragraph):
         if not self.stages:
             return p
         
         for stage in self.stages:
-            stage.logger = lambda *args: self.logger(stage.__class__.__name__, *args)
             try:
                 p = stage.resolve(p)
                 if not p: return
