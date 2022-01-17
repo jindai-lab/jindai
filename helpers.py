@@ -2,6 +2,7 @@ import os
 import re
 from functools import wraps
 from flask import Response, request, send_file, stream_with_context, jsonify
+import werkzeug.wrappers.response
 import traceback
 from PyMongoWrapper import F
 from models import Token, User
@@ -23,7 +24,7 @@ def rest(login=True, cache=False, user_role=''):
                 if request.json:
                     kwargs.update(**request.json)
                 f = func(*args, **kwargs)
-                if isinstance(f, (tuple, Response)): return f
+                if isinstance(f, (tuple, Response, werkzeug.wrappers.response.Response)): return f
                 resp = jsonify({'result': f})
             except Exception as ex:
                 resp = jsonify({'exception': str(ex), 'tracestack': traceback.format_tb(ex.__traceback__)})

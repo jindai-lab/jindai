@@ -156,8 +156,9 @@ class Paragraph(db.DbObject):
     def image_raw(self) -> BytesIO:
         if self.source.get('file'):
             fn = self.source['file']
+            if fn.startswith('/'): fn = fn[1:]
             if fn.lower().endswith('.pdf') and self.source.get('page') is not None:
-                return _pdf_image(**self.source)
+                return _pdf_image(file=fn, page=self.source['page'])
             elif fn == 'blocks.h5':
                 vt = self.source.get('block_id', self.id)
                 return StorageManager().read(vt)

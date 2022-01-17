@@ -8,15 +8,16 @@ from opencc import OpenCC
 class MachineTranslation(PipelineStage):
     """机器翻译"""
 
-    def __init__(self, to_lang='chs') -> None:
+    def __init__(self, to_lang='chs', model='opus-mt') -> None:
         """
         Args:
             to_lang (简体中文:chs|繁体中文:cht|英文:en): 目标语言标识
+            model (较快速度:opus-mt|较高准确度:mbart50_m2m): 机器翻译所使用的模型
         """
         super().__init__()
         
         from easynmt import EasyNMT
-        self.model = EasyNMT('opus-mt')
+        self.model = EasyNMT(model)
 
         self.cc = None
         if to_lang == 'chs':

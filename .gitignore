@@ -121,3 +121,4 @@ venv.bak/
 blocks*.h5
 
 models_data/
+config-jindai.py
