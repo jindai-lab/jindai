@@ -1,4 +1,4 @@
-from flask import Flask, Response, jsonify, request, send_file, json
+from flask import Flask, Response, jsonify, redirect, request, send_file, json
 from bson import ObjectId
 import datetime
 import inspect
@@ -70,7 +70,7 @@ class TasksQueue:
                     self.results[tkey] = {'exception': f'初始化任务时出错: {ex.__class__.__name__}: {ex}', 'tracestack': traceback.format_tb(ex.__traceback__) + [
                         app.json_encoder().encode(t.as_dict())
                     ]}
-                    self.taskdbos.pop(k)
+                    self.taskdbos.pop(tkey)
             
             elif not self.queue and not self.taskdbos: # all tasks done
                 self.running = False
@@ -404,11 +404,17 @@ def fetch_task(_id):
     r = tasks_queue.results[_id]
 
     if isinstance(r, list):
-        offset, limit = int(request.args.get('offset', 0)), int(request.args.get('limit', 100))
-        return {
-            'results': r[offset:offset+limit],
-            'total': len(r)
-        }
+        offset, limit = int(request.args.get('offset', 0)), int(request.args.get('limit', 0))
+        if limit == 0:
+            return {
+                'results': r,
+                'total': len(r)
+            }
+        else:
+            return {
+                'results': r[offset:offset+limit],
+                'total': len(r)
+            }
     elif r is None:
         return None
     else:
@@ -480,7 +486,7 @@ def history():
 
 @app.route('/api/search', methods=['POST'])
 @rest()
-def search(q='', req={}, sort='', limit=100, skip=0, dataset='', **kws):
+def search(q='', req={}, sort='', limit=100, offset=0, dataset='', **kws):
 
     def _stringify(r):
         if not r: return ''
@@ -529,8 +535,8 @@ def search(q='', req={}, sort='', limit=100, skip=0, dataset='', **kws):
         params['sort'] = sort
     if req:
         params['req'] = req
-    if skip:
-        params['skip'] = skip
+    if offset:
+        params['skip'] = offset
 
     if not req and not q:
         return {
@@ -604,7 +610,7 @@ def set_collections(collection=None, collections=None, rename=None, **j):
 @app.route("/api/image/<coll>/<storage_id>.<ext>")
 @app.route("/api/image")
 @rest(cache=True)
-def page_image(coll=None, storage_id=None, ext=None):
+def serve_image(coll=None, storage_id=None, ext=None):
     # from PIL import ImageEnhance, ImageStat
     from PIL import ImageOps
 
@@ -615,6 +621,11 @@ def page_image(coll=None, storage_id=None, ext=None):
             buf = p.image_raw
     else:
         i = ImageItem(source=request.args.to_dict())
+        fn = i.source.get('file', '')
+        for fkey, fmapped in getattr(config, 'file_serve', {}).items():
+            if fn.startswith(fkey):
+                return redirect(fmapped + fn[len(fkey):])
+            
         buf = i.image_raw
         ext = i.source.get('url', i.source.get('file', '.')).rsplit('.', 1)[-1]
 

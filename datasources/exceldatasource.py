@@ -14,7 +14,7 @@ class ExcelDataSource(DataSource):
         Args:
             files_or_patterns (str): 文件名或通配符，每行一个
             collection (str): 集合名称
-            lang (简体中文:chs|繁体中文:cht|英文:en|德文:de|法文:fr|俄文:ru|西班牙文:es|日文:ja|韩文/朝鲜文:kr|越南文:vn): 语言标识
+            lang (简体中文:chs|繁体中文:cht|英文:en|德文:de|法文:fr|俄文:ru|西班牙文:es|葡萄牙文:pt|日文:ja|韩文/朝鲜文:kr|越南文:vn): 语言标识
         '''
         super().__init__()
         self.files = expand_file_patterns(files_or_patterns.split('\n'))

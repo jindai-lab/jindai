@@ -17,7 +17,7 @@ class PDFDataSource(DataSource):
         """
         Args:
             collection_name (str): 集合名称
-            lang (自动:auto|简体中文:chs|繁体中文:cht|英文:en|德文:de|法文:fr|俄文:ru|西班牙文:es|日文:ja|韩文/朝鲜文:kr|越南文:vn): 语言标识
+            lang (自动:auto|简体中文:chs|繁体中文:cht|英文:en|德文:de|法文:fr|俄文:ru|西班牙文:es|葡萄牙文:pt|日文:ja|韩文/朝鲜文:kr|越南文:vn): 语言标识
             files_or_patterns (str): PDF文件列表
         """
         super().__init__()
