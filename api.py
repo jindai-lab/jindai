@@ -560,7 +560,7 @@ def get_collections():
 
 @app.route('/api/collections', methods=['POST'])
 @rest()
-def set_collections(collection=None, collections=None, rename=None, **j):
+def set_collections(collection=None, collections=None, rename=None, sources=None, **j):
 
     if collection is not None:
         if collection.get('_id'):
@@ -579,25 +579,25 @@ def set_collections(collection=None, collections=None, rename=None, **j):
                 Collection(**jset).save()
 
     elif rename is not None:
-        coll = Collection.first(F.name == j['from']).mongocollection
+        coll = Collection.first(F.name == rename['from'])
         if not coll:
             return False
 
-        rs = _get_object(coll)
-        rs.query(F.collection == coll.name).update(Fn.set(collection=j['to']))
+        rs = _get_object(coll.mongocollection)
+        rs.query(F.collection == coll.name).update(Fn.set(collection=rename['to']))
         coll.delete()
 
-        new_coll = Collection.first(F.name == j['to']) or Collection(name=j['to'], sources=[], order_weight=coll.order_weight)
+        new_coll = Collection.first(F.name == rename['to']) or Collection(name=rename['to'], sources=[], order_weight=coll.order_weight)
         new_coll.sources = sorted(set(new_coll.sources + coll.sources))
         new_coll.save()
 
-    elif 'sources' in j:
-        j = j['sources']
-        coll = Collection.first(F.id == j['_id']).mongocollection
+    elif sources is not None:
+        j = sources
+        coll = Collection.first(F.id == j['_id'])
         if not coll:
             return False
 
-        rs = _get_object(coll)
+        rs = _get_object(coll.mongocollection)
         rs = rs.aggregator.match(F.collection == coll.name).group(_id='$collection', sources=Fn.addToSet('$source.file'))
         coll.sources = []
         for r in rs.perform(raw=True):

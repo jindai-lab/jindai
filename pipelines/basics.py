@@ -93,14 +93,16 @@ class WordCut(PipelineStage):
     def __init__(self, for_search=False, **kwargs):
         """
         Args:
-            for_search (bool): 是否用于搜索（添加冗余分词结果或西文词干/转写）
+            for_search (bool): 是否用于搜索（添加冗余分词结果或词干/转写）
         """
         self.for_search = for_search
     
     def resolve(self, p: Paragraph) -> Paragraph:
+        p.tokens = []
+
         if p.lang == 'cht':
             p.content = WordCut.t2s.convert(p.content)
-        
+
         if p.lang in ('chs', 'cht'):
             p.tokens = list(jieba.cut_for_search(p.content) if self.for_search else jieba.cut(p.content))
         elif p.lang == 'ja':
@@ -113,8 +115,8 @@ class WordCut(PipelineStage):
             if self.for_search:
                 WordCut.stmr.resolve(p)
 
-        if self.for_search and p.lang == 'ru':
-            p.tokens += [translit(_, 'ru', reversed=True).lower() for _ in p.tokens]
+        if self.for_search and p.lang not in ('chs', 'cht', 'en', 'ja'):
+            p.tokens += [translit(_, p.lang, reversed=True).lower() for _ in p.tokens]
 
         return p
 
@@ -125,7 +127,7 @@ class KeywordsFromTokens(PipelineStage):
     
     def resolve(self, p: Paragraph) -> Paragraph:
         p.keywords = list(set(p.tokens))
-        delattr(p, 'tokens')
+        del p.tokens
         p.save()
         return p
 
