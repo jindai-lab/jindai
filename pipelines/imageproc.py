@@ -279,7 +279,7 @@ class DumpImages(ImageOrAlbumStage):
     
     
 class DownloadImages(PipelineStage):
-    """根据 ImageItem 的 source['url'] 下载图像
+    """下载图像
     """
     
     def __init__(self, proxy='') -> None:
