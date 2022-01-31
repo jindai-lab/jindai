@@ -266,7 +266,7 @@ def init(app):
             if p is None: continue
 
             items = list(map(ObjectId, items))
-            p.items = [_ for _ in p.items if _.id not in items]        
+            p.items = [_ for _ in p.items if isinstance(_, ImageItem) and _.id not in items]
             p.save()
 
         for i in items:
