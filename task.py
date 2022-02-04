@@ -49,6 +49,9 @@ class Task:
         thr = threading.Thread(target=_run)
         thr.start()
         return thr
+
+    def stop(self):
+        self.pipeline.stop()
     
     def fetch_log(self):
         while self.queue:

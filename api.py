@@ -20,6 +20,11 @@ import base64
 from helpers import *
 
 
+app = Flask(__name__)
+app.config['SECRET_KEY'] = config.secret_key
+je = dbo.create_dbo_json_encoder(json.JSONEncoder)
+
+
 class TasksQueue:
     """处理任务队列
     """
@@ -54,7 +59,7 @@ class TasksQueue:
                 'last_run': datetime.datetime.strptime(k.split('@')[-1], '%Y%m%d %H%M%S').strftime('%Y-%m-%d %H:%M:%S'),
                 'file_ext': 'json' if not isinstance(v, dict) else v.get('__file_ext__', 'json')
             } for k, v in self.results.items()],
-            'waiting': len(self.queue)
+            'waiting': [k for k,_ in self.queue]
         }
 
     def working(self):
@@ -106,18 +111,26 @@ class TasksQueue:
 
     def remove(self, key : str):
         """删除指定任务"""
-        for todel, _ in self.queue:
-            if todel == key: break
-        else:
-            return False
-        self.queue.remove(todel)
+
+        def _remove_queue(key):
+            for todel, _ in self.queue:
+                if todel == key: break
+            else:
+                return False
+            self.queue.remove(todel)
+            return True
+
+        def _remove_running(key):
+            if key in self.taskdbos:
+                t = self.taskdbos.pop(key)
+                t._task.stop()
+            else:
+                return False
         
-        return True
-
-
-app = Flask(__name__)
-app.config['SECRET_KEY'] = config.secret_key
-je = dbo.create_dbo_json_encoder(json.JSONEncoder)
+        if _remove_queue(key):
+            return True
+        else:
+            return _remove_running(key)
 
 
 class NumpyEncoder(json.JSONEncoder):

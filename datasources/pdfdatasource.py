@@ -1,6 +1,7 @@
 """来自PDF
 """
 
+from genericpath import exists
 import fitz
 from pdf2image import convert_from_path
 from rdflib import query
@@ -17,10 +18,11 @@ class PDFDataSource(DataSource):
     def __init__(self, collection_name, lang, files_or_patterns, mongocollection=''):
         """
         Args:
-            collection_name (str): 集合名称
+            collection_name (COLLECTION): 集合名称
             lang (自动:auto|简体中文:chs|繁体中文:cht|英文:en|德文:de|法文:fr|俄文:ru|西班牙文:es|葡萄牙文:pt|日文:ja|韩文/朝鲜文:kr|越南文:vn): 语言标识
             files_or_patterns (str): PDF文件列表
             mongocollection (str): 查询的数据集名
+            skip_existed (bool): 直接跳过已存在于数据集中的文件
         """
         super().__init__()
         self.name = collection_name
@@ -35,20 +37,22 @@ class PDFDataSource(DataSource):
             para_coll = _TempClass
         else:
             para_coll = Paragraph
+
+        existent = {
+            a['_id']: a['pages'] + 1
+            for a in para_coll.aggregator.match(F.collection == self.name).group(_id=Var['source.file'], pages=Fn.max(Var['source.page']))
+        }
         
         for _, pdf in self.files:
             pdffile = pdf
             if pdf.startswith('sources/'):
                 pdf = pdf[len('sources/'):]
-            for a in para_coll.aggregator.match(F['source.file'] == pdf).group(_id=1, pages=Fn.max(Var['source.page'])).perform(raw=True):
-                min_page = a['pages'] + 1
-                break
-            else:
-                min_page = 0
+            
+            min_page = existent.get(pdf, 0)
             
             doc = fitz.open(pdffile)
             pages = doc.pageCount
-            self.logger('importing from', pdf)
+            self.logger('importing', pdf, 'from page', min_page)
 
             if self.lang == 'auto':
                 lang = lang_detect(os.path.basename(pdf).rsplit('.', 1)[0])
