@@ -45,8 +45,17 @@ class Pipeline:
 
         self.concurrent = concurrent
         self.resume_next = resume_next
+        self.exception = None
+
+    def stop(self):
+        self.exception = InterruptedError()
         
     def apply(self, p : Paragraph):
+        if self.exception:
+            ex = self.exception
+            self.exception = None
+            raise ex
+            
         if not self.stages:
             return p
         

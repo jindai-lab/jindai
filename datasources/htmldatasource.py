@@ -15,7 +15,7 @@ class HTMLDataSource(DataSource):
     def __init__(self, collection_name, lang, files, fields='content="//text"'):
         """
         Args:
-            collection_name (str): 集合名称
+            collection_name (COLLECTION): 集合名称
             lang (简体中文:chs|繁体中文:cht|英文:en|德文:de|法文:fr|俄文:ru|西班牙文:es|葡萄牙文:pt|日文:ja|韩文/朝鲜文:kr|越南文:vn): 语言标识
             files (str): HTML或包含HTML的ZIP压缩包文件列表
             fields (str): 字段与搜索字符串的关系，形如 field=".css-selector//attribute"
@@ -69,7 +69,7 @@ class TextDataSource(DataSource):
     def __init__(self, collection_name, lang, files):
         """
         Args:
-            collection_name (str): 集合名称
+            collection_name (COLLECTION): 集合名称
             lang (简体中文:chs|繁体中文:cht|英文:en|德文:de|法文:fr|俄文:ru|西班牙文:es|葡萄牙文:pt|日文:ja|韩文/朝鲜文:kr|越南文:vn): 语言标识
             files (str): HTML或包含HTML的ZIP压缩包文件列表
         """
@@ -92,7 +92,7 @@ class LinesDataSource(DataSource):
     def __init__(self, collection_name, lang, lines):
         """
         Args:
-            collection_name (str): 集合名称
+            collection_name (COLLECTION): 集合名称
             lang (简体中文:chs|繁体中文:cht|英文:en|德文:de|法文:fr|俄文:ru|西班牙文:es|葡萄牙文:pt|日文:ja|韩文/朝鲜文:kr|越南文:vn): 语言标识
             lines (str): 一行一个语段
         """
@@ -114,7 +114,7 @@ class HTMLImageDataSource(DataSource):
         Args:
             urls_or_patterns (str): 网址列表
             iterate (str): 形如 start-end 格式的范围，用以匹配网址模式 * 的范围
-            collection (str): 数据集名称
+            collection (COLLECTION): 数据集名称
         """
         super().__init__()
         self.collection = collection

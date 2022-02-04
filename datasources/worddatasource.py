@@ -16,7 +16,7 @@ class WordDataSource(DataSource):
     def __init__(self, collection_name, lang, *files):
         """
         Args:
-            collection_name (str): 集合名称
+            collection_name (COLLECTION): 集合名称
             lang (简体中文:chs|繁体中文:cht|英文:en|德文:de|法文:fr|俄文:ru|西班牙文:es|葡萄牙文:pt|日文:ja|韩文/朝鲜文:kr|越南文:vn): 语言标识
             files (files): Word文档列表
         """

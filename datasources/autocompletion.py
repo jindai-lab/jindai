@@ -51,7 +51,7 @@ class AutoCompletionDataSource(DataSource):
     def __init__(self, collection_name, prompts, n=5, topp=0.9):
         """
         Args:
-            collection_name (str): 集合名称
+            collection_name (COLLECTION): 集合名称
             prompts (str): 提示文本，一行一个
             n (int): 针对每个提示文本生成的样本数量
             topp (float): 概率阈值
