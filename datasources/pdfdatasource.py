@@ -19,7 +19,7 @@ class PDFDataSource(DataSource):
         """
         Args:
             collection_name (COLLECTION): 集合名称
-            lang (自动:auto|简体中文:chs|繁体中文:cht|英文:en|德文:de|法文:fr|俄文:ru|西班牙文:es|葡萄牙文:pt|日文:ja|韩文/朝鲜文:kr|越南文:vn): 语言标识
+            lang(LANG): 语言标识
             files_or_patterns (str): PDF文件列表
             mongocollection (str): 查询的数据集名
             skip_existed (bool): 直接跳过已存在于数据集中的文件
@@ -39,7 +39,7 @@ class PDFDataSource(DataSource):
             para_coll = Paragraph
 
         existent = {
-            a['_id']: a['pages'] + 1
+            a['_id']: a['pages']
             for a in para_coll.aggregator.match(F.collection == self.name).group(_id=Var['source.file'], pages=Fn.max(Var['source.page']))
         }
         
@@ -48,7 +48,8 @@ class PDFDataSource(DataSource):
             if pdf.startswith('sources/'):
                 pdf = pdf[len('sources/'):]
             
-            min_page = existent.get(pdf, 0)
+            min_page = existent.get(pdf)
+            min_page = 0 if min_page is None else (min_page + 1)
             
             doc = fitz.open(pdffile)
             pages = doc.pageCount

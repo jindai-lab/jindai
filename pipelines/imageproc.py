@@ -2,10 +2,10 @@
 """
 
 import os
-import re
 from queue import deque
+import tempfile
 from typing import Union
-
+from bson import ObjectId
 import numpy as np
 from models import Album, F, ImageItem, Paragraph, parser, try_download, AutoTag
 from PIL import Image, ImageOps
@@ -312,21 +312,67 @@ class DownloadImages(PipelineStage):
         return p
 
 
-class ApplyAutoTags(PipelineStage):
-    """应用自动标签设置
+class VideoFrame(ImageOrAlbumStage):
+    """获取视频中的某一帧
     """
-    
-    def __init__(self) -> None:
-        self.ats = list(AutoTag.query({}))
-    
-    def resolve(self, p):
-        for i in self.ats:
-            pattern, from_tag, tag = i.pattern, i.from_tag, i.tag
-            if (from_tag and from_tag in p.keywords) or (pattern and re.search(pattern, p.source['url'])):
-                if tag not in p.keywords:
-                    p.keywords.append(tag)
-                if tag.startswith('@'):
-                    p.author = tag
-        p.save()
-        return p
 
+    def __init__(self, frame_num=0.5, field='thumbnail') -> None:
+        """
+        Args:
+            frame_num (float): 大于等于一的帧数，或表示时长占比的0-1之间的浮点数
+            field (str): 写入到字段名
+        """
+        super().__init__()
+        self.frame_num = frame_num
+        self.field = field
+
+    def resolve_image(self, i: ImageItem):
+        import cv2
+
+        thumb = f'{ObjectId()}.thumb.jpg'
+        temp_file = '_vtt' + thumb
+
+        ext = (i.source.get('url') or i.source.get('file') or '.').rsplit('.', 1)[-1]
+        if ext.lower() not in ('mp4', 'avi'):
+            self.logger(f'skip {ext} data')
+            return
+
+        try:
+            storage = i.source.get('file')
+            if storage == 'blocks.h5':
+                with open(temp_file, 'wb') as fo:
+                    blen = fo.write(i.image_raw.read())
+                if not blen:
+                    self.logger(f'unable to fetch data from blocks.h5: {i.id}')
+                    os.unlink(temp_file)
+                    return
+            else:
+                temp_file = storage
+
+            if not os.path.exists(temp_file):
+                self.logger(f'{temp_file} not found')
+                return
+            
+            cap = cv2.VideoCapture(temp_file)
+
+            frame_num = int(cap.get(cv2.CAP_PROP_FRAME_COUNT) * self.frame_num) if self.frame_num < 1 else int(self.frame_num)
+
+            if cap.isOpened():
+                cap.set(cv2.CAP_PROP_POS_FRAMES, frame_num)
+                rval, frame = cap.read()
+                cap.release()
+                if rval:
+                    rval, npa = cv2.imencode('.jpg', frame)
+                    pic = npa.tobytes()
+                    with StorageManager() as mgr:
+                        mgr.write(pic, thumb)
+                    setattr(i, self.field, thumb)
+                    i.save()
+                    self.logger(f'wrote {temp_file} frame#{frame_num} to {thumb}')
+        except Exception as ex:
+            self.logger(ex)
+
+        if temp_file.startswith('_vtt') and os.path.exists(temp_file):
+            os.unlink(temp_file)
+
+        return i

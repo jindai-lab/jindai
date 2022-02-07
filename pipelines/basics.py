@@ -19,7 +19,7 @@ from PyMongoWrapper import F, QueryExprParser
 from PyMongoWrapper.dbo import DbObject, DbObjectCollection
 from .utils import execute_query_expr, language_iso639
 
-from models import Paragraph, Collection, parser, db
+from models import Paragraph, Collection, AutoTag, parser, db
 from pipeline import PipelineStage
 
 
@@ -450,7 +450,7 @@ class FilterArrayField(PipelineStage):
         """
         Args:
             field (str): 字段名称
-            cond (str): 条件式，用 iter 表示被判断的项目，或用省略形式
+            cond (QUERY): 条件式，用 iter 表示被判断的项目，或用省略形式
         """
         self.field = field
         self.cond = QueryExprParser(allow_spacing=True, abbrev_prefixes={None: 'iter='}).eval(cond)
@@ -635,3 +635,23 @@ class LatinTransliterate(PipelineStage):
         else:
             p.tokens = tokens
         return p
+
+
+class ApplyAutoTags(PipelineStage):
+    """应用自动标签设置
+    """
+    
+    def __init__(self) -> None:
+        self.ats = list(AutoTag.query({}))
+    
+    def resolve(self, p):
+        for i in self.ats:
+            pattern, from_tag, tag = i.pattern, i.from_tag, i.tag
+            if (from_tag and from_tag in p.keywords) or (pattern and re.search(pattern, p.source['url'])):
+                if tag not in p.keywords:
+                    p.keywords.append(tag)
+                if tag.startswith('@'):
+                    p.author = tag
+        p.save()
+        return p
+

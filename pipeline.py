@@ -80,9 +80,8 @@ class Pipeline:
 
         if self.concurrent > 1:
             def _update_and_do(p):
-                p = self.apply(p)
-                return p
-
+                return self.apply(p)
+            
             with ThreadPoolExecutor(max_workers=self.concurrent) as te:
                 r = te.map(_update_and_do, rs)
                 return [_ for _ in r if _]

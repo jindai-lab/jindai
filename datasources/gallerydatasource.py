@@ -26,7 +26,7 @@ class GalleryAlbumDataSource(DataSource):
     def __init__(self, cond='', limit=20, offset=0, groups=False, archive=False, raw=False, sort_keys='-liked_at', direction='next', order={}):
         """
         Args:
-            cond (str): 检索表达式
+            cond (QUERY): 检索表达式
             flag (int): 图像项目的标记
             limit (int): 最多返回的数量
             offset (int): 跳过记录的数量
@@ -211,7 +211,7 @@ class GalleryImageItemDataSource(DataSource):
     def __init__(self, cond='', limit=20, offset=0, raw=False, sort_keys='-_id'):
         """
         Args:
-            cond (str): 查询表达式
+            cond (QUERY): 查询表达式
             limit (int): 数量限制
             offset (int): 跳过的结果数量
             raw (bool): 返回字典而非 ImageItem
@@ -315,9 +315,7 @@ class ImageImportDataSource(DataSource):
 
                 i = ImageItem(source={'url': _f})
                 fn = __expand_zip(_f)
-                if _f.endswith('.mp4') or _f.endswith('.avi'):
-                    i.generate_thumbnail()
-                else:
+                if not _f.lower().endswith(('.mp4', '.avi')):
                     try:
                         im = Image.open(fn)
                         i.width, i.height = im.size

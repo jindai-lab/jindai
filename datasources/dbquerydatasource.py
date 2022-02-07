@@ -13,7 +13,7 @@ class DBQueryDataSource(DataSource):
     def __init__(self, query, mongocollection='', req={}, limit=0, skip=0, sort='', raw=False):
         """
         Args:
-            query (str): 查询字符串，或以 ? 开头的查询表达式，或以 ?? 开头的聚合查询表达式
+            query (QUERY): 查询字符串，或以 ? 开头的查询表达式，或以 ?? 开头的聚合查询表达式
             sort (str): 排序表达式
             limit (int): 查询最多返回的结果数量，默认为0即无限制
             skip (int): 返回从第%1个开始的结果
