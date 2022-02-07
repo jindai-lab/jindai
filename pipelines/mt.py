@@ -11,7 +11,7 @@ class MachineTranslation(PipelineStage):
     def __init__(self, to_lang='chs', model='opus-mt') -> None:
         """
         Args:
-            to_lang (简体中文:chs|繁体中文:cht|英文:en): 目标语言标识
+            to_lang(LANG): 目标语言标识
             model (较快速度:opus-mt|较高准确度:mbart50_m2m): 机器翻译所使用的模型
         """
         super().__init__()

@@ -108,49 +108,7 @@ class Paragraph(db.DbObject):
     @image.setter
     def image_setter(self, value):
         self._image = value
-        self._image_flag = True
-
-    def generate_thumbnail(self, file_path=''):
-        import cv2
-        if not self.id:
-            self.save()
-
-        self.thumbnail = None
-        p = file_path
-
-        try:
-            if not p:
-                if self.source.get('file'):
-                    p = f'_vtt{str(self.id)}'
-                    with StorageManager() as mgr:
-                        with open(p, 'wb') as fo:
-                            blen = fo.write(mgr.read(self.source.get('block_id', self.id)).read())
-                    if not blen:
-                        os.unlink(p)
-                        return
-                else:
-                    p = self.source['url']
-
-            cap = cv2.VideoCapture(p)
-
-            if cap.isOpened():
-                cap.set(cv2.CAP_PROP_POS_FRAMES, int(cap.get(cv2.CAP_PROP_FRAME_COUNT) * 0.5))
-                rval, frame = cap.read()
-                cap.release()
-                if rval:
-                    rval, npa = cv2.imencode('.jpg', frame)
-                    pic = npa.tobytes()
-                    with StorageManager() as mgr:
-                        mgr.write(pic, f'{self.id}.thumb.jpg')
-                    self.thumbnail = f'{self.id}.thumb.jpg'
-                    self.save()
-        except Exception as ex:
-            print(ex)
-
-        if p.startswith('_vtt') and os.path.exists(p):
-            os.unlink(p)
-
-        return self.thumbnail
+        self._image_flag = True        
 
     @property
     def image_raw(self) -> BytesIO:

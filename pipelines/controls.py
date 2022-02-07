@@ -39,7 +39,7 @@ class Condition(PipelineStage):
     def __init__(self, cond, iftrue, iffalse):
         """
         Args:
-            cond (str): 检查的条件
+            cond (QUERY): 检查的条件
             iftrue (pipeline): 条件成立时执行的流程
             iffalse (pipeline): 条件不成立时执行的流程
         """
@@ -63,7 +63,7 @@ class ConditionalAssignment(PipelineStage):
     def __init__(self, cond, field):
         """
         Args:
-            cond (str): 一行一个检查的条件，与最终要赋予的值之间用=>连缀
+            cond (QUERY): 一行一个检查的条件，与最终要赋予的值之间用=>连缀
             field (str): 要赋值的字段
         """
         self.cond = [parser.eval(_) for _ in cond.split('\n')]

@@ -14,6 +14,9 @@ from models import try_download
 
 
 def lang_detect(s):
+    """
+    简易的语言检测，使用正则表达式和 hanzidentifier 弥补 langdetect 在检测中日韩文字时准确率低的问题，返回 ISO 两字母代码或 chs 或 cht。
+    """
     s = re.sub('[0-9]', '', s).strip()
     
     if re.search(r"[\uac00-\ud7ff]+", s):
@@ -30,11 +33,15 @@ def lang_detect(s):
     
     return langdetect.detect(s)
 
-def paragraph_finished(t):
-    return t.endswith(tuple('.!?…\"。！？…—：”）'))
-
 
 def merge_lines(lines, lang):
+    """
+    根据语言标识将多行文本重新分段
+    """    
+    
+    def paragraph_finished(t):
+        return t.endswith(tuple('.!?…\"。！？…—：”）'))
+
     lens = [len(_) for _ in lines]
     if len(lens) < 3:
         yield ('' if lang[:2] == 'ch' else ' ').join(lines)
@@ -65,9 +72,23 @@ def merge_lines(lines, lang):
 
 
 def expand_file_patterns(patterns : list) -> Tuple[IO, str]:
+    """
+    读取文件（包括压缩包内容）或网址，其中文件名可以使用 */? 通配符，网址可以使用 {num1-num2} 形式给定迭代范围
+    Returns:
+        Tuple[IO, str]: IO 为内容，str 为文件名或网址
+    """
     for pattern in patterns:
         if pattern.startswith('https://') or pattern.startswith('http://'):
-            yield BytesIO(try_download(pattern, '/'.join(pattern.split('/')[:-1]))), pattern
+            urls = []
+            iterate = re.match(r'\{(\d+\-\d+)\}', pattern)
+            if iterate:
+                start, end=map(int,iterate.group(1).split('-'))
+                for i in range(start, end+1):
+                    urls.append(pattern.replace(iterate.group(0), str(i)))
+            else:
+                urls = [pattern]
+            for url in urls:
+                yield BytesIO(try_download(url, '/'.join(url.split('/')[:-1]))), url
         else:
             if not pattern.startswith('sources/'):
                 pattern = 'sources/' + pattern
