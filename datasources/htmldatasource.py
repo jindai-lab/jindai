@@ -16,7 +16,7 @@ class HTMLDataSource(DataSource):
         """
         Args:
             collection_name (COLLECTION): 集合名称
-            lang(LANG): 语言标识
+            lang (LANG): 语言标识
             files (str): HTML或包含HTML的ZIP压缩包文件列表
             paragraph_selector (str): 确定段落的 CSS 选择器，为空则整个网页作为一个段落
             fields (str): 字段与搜索字符串的关系，形如 field=".css-selector//attribute"
@@ -74,7 +74,7 @@ class TextDataSource(DataSource):
         """
         Args:
             collection_name (COLLECTION): 集合名称
-            lang(LANG): 语言标识
+            lang (LANG): 语言标识
             files (str): HTML或包含HTML的ZIP压缩包文件列表
         """
         super().__init__()
@@ -97,7 +97,7 @@ class LinesDataSource(DataSource):
         """
         Args:
             collection_name (COLLECTION): 集合名称
-            lang(LANG): 语言标识
+            lang (LANG): 语言标识
             lines (str): 一行一个语段
         """
         super().__init__()

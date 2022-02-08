@@ -14,7 +14,7 @@ class BiblioDataSource(DataSource):
         """
         Args:
             bibfiles (str): 文件名或通配符，一行一个
-            lang(LANG): 语言标识
+            lang (LANG): 语言标识
             collection (COLLECTION): 集合名称
             format (endnote|bibtex): 文献条目信息格式
         """

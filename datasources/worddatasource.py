@@ -17,7 +17,7 @@ class WordDataSource(DataSource):
         """
         Args:
             collection_name (COLLECTION): 集合名称
-            lang(LANG): 语言标识
+            lang (LANG): 语言标识
             files (files): Word文档列表
         """
         super().__init__()
