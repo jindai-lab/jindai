@@ -19,7 +19,7 @@ class PDFDataSource(DataSource):
         """
         Args:
             collection_name (COLLECTION): 集合名称
-            lang(LANG): 语言标识
+            lang (LANG): 语言标识
             files_or_patterns (str): PDF文件列表
             mongocollection (str): 查询的数据集名
             skip_existed (bool): 直接跳过已存在于数据集中的文件
