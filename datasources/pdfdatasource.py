@@ -4,7 +4,6 @@
 from genericpath import exists
 import fitz
 from pdf2image import convert_from_path
-from rdflib import query
 from models import Paragraph
 from PyMongoWrapper import F, Fn, Var
 from datasource import DataSource
@@ -15,32 +14,26 @@ class PDFDataSource(DataSource):
     """从PDF中导入语段
     """
 
-    def __init__(self, collection_name, lang, files_or_patterns, mongocollection=''):
+    def __init__(self, dataset_name, lang, files_or_patterns, mongocollection=''):
         """
         Args:
-            collection_name (COLLECTION): 集合名称
+            dataset_name (DATASET): 数据集名称
             lang (LANG): 语言标识
             files_or_patterns (str): PDF文件列表
             mongocollection (str): 查询的数据集名
             skip_existed (bool): 直接跳过已存在于数据集中的文件
         """
         super().__init__()
-        self.name = collection_name
+        self.name = dataset_name
         self.lang = lang
         self.files = expand_file_patterns(files_or_patterns.split('\n'))
         self.mongocollection = mongocollection
 
     def fetch(self):
-        if self.mongocollection:
-            class _TempClass(Paragraph):
-                _collection = self.mongocollection
-            para_coll = _TempClass
-        else:
-            para_coll = Paragraph
-
+        para_coll = get_dbo(self.mongocollection)
         existent = {
             a['_id']: a['pages']
-            for a in para_coll.aggregator.match(F.collection == self.name).group(_id=Var['source.file'], pages=Fn.max(Var['source.page']))
+            for a in para_coll.aggregator.match(F.dataset == self.name).group(_id=Var['source.file'], pages=Fn.max(Var['source.page']))
         }
         
         for _, pdf in self.files:
@@ -70,7 +63,7 @@ class PDFDataSource(DataSource):
                 for para in merge_lines(lines, lang):
                     try:
                         yield para_coll(lang=lang, content=para.encode('utf-8', errors='ignore').decode('utf-8'), source={'file': pdf,
-                            'page': p}, pagenum=label or (p+1), collection=self.name)
+                            'page': p}, pagenum=label or (p+1), dataset=self.name)
                     except Exception as e:
                         self.logger(pdffile, p+1, e)
 

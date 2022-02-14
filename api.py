@@ -188,16 +188,6 @@ def valid_task(j):
     return j
 
 
-def _get_object(coll=''):
-    if coll and coll != 'paragraph':
-        class TempParagraph(Paragraph):
-            _collection = str(coll)
-        rs = TempParagraph
-    else:
-        rs = Paragraph
-    return rs
-
-
 @app.route('/api/authenticate', methods=['POST'])
 @rest(login=False)
 def authenticate(username, password, **kws):
@@ -313,12 +303,12 @@ def write_storage(dir=''):
 @rest()
 def modify_paragraph(coll, id, **kws):
     id = ObjectId(id)
-    p = _get_object(coll).first(F.id == id)
+    p = get_dbo(coll).first(F.id == id)
     if p:
         for f, v in kws.items():
             if f in ('_id', 'matched_content'): continue
             if f in ('$push', '$pull'):
-                _get_object(coll).query(F.id == id).update({f: v})
+                get_dbo(coll).query(F.id == id).update({f: v})
             else:
                 if v is None and hasattr(p, f):
                     delattr(p, f)
@@ -326,6 +316,32 @@ def modify_paragraph(coll, id, **kws):
                     setattr(p, f, v)
         p.save()
     return True
+
+
+@app.route('/api/edit/<coll>/<id>/pagenum', methods=['POST'])
+@rest()
+def modify_pagenum(coll, id, sequential, new_pagenum, **kws):
+    id = ObjectId(id)
+    p = get_dbo(coll).first(F.id == id)
+    delta = new_pagenum - int(p.pagenum)
+    if p:
+        if sequential == 'solo':
+            p.pagenum = new_pagenum
+            p.save()
+        else:
+            source = dict(p.source)
+            assert 'page' in source
+            if sequential == 'all':
+                del source['page']
+            else: # after
+                source['page'] = {'$gt': source['page']}
+            source = {'source.' + k: w for k, w in source.items()}
+            get_dbo(coll).query((F.dataset == p.dataset) & (F.pagenum.type('number')) & MongoOperand(source)).update(Fn.inc(pagenum=delta))
+            get_dbo(coll).query((F.dataset == p.dataset) & (F.pagenum <= 0)).update([
+                Fn.set(pagenum=Fn.concat("A",Fn.toString(Fn.add(1, "$source.page"))))
+            ])
+        return True
+    return False
 
 
 @app.route('/api/tasks/', methods=['PUT'])
@@ -499,7 +515,7 @@ def history():
 
 @app.route('/api/search', methods=['POST'])
 @rest()
-def search(q='', req={}, sort='', limit=100, offset=0, dataset='', **kws):
+def search(q='', req={}, sort='', limit=100, offset=0, mongocollections=[], **kws):
 
     def _stringify(r):
         if not r: return ''
@@ -540,7 +556,7 @@ def search(q='', req={}, sort='', limit=100, offset=0, dataset='', **kws):
 
     params = {
         'query': q,
-        'mongocollection': dataset
+        'mongocollections': '\n'.join(mongocollections)
     }
     if limit:
         params['limit'] = limit
@@ -560,58 +576,58 @@ def search(q='', req={}, sort='', limit=100, offset=0, dataset='', **kws):
         ('AccumulateParagraphs', {}),
     ])
     count = task.datasource.count()
-    results = [dict(r.as_dict() if isinstance(r, DbObject) else r, dataset=dataset) for r in task.execute()]
+    results = [dict(r.as_dict(), mongocollection=type(r).db.name) if isinstance(r, DbObject) else r for r in task.execute()]
 
     return {'results': results, 'query': task.datasource.querystr, 'total': count}
 
 
-@app.route('/api/collections')
+@app.route('/api/datasets')
 @rest()
-def get_collections():
-    return list(Collection.query({}).sort(F.order_weight, F.name))
+def get_datasets():
+    return list(Dataset.query({}).sort(F.order_weight, F.name))
 
 
-@app.route('/api/collections', methods=['POST'])
+@app.route('/api/datasets', methods=['POST'])
 @rest()
-def set_collections(collection=None, collections=None, rename=None, sources=None, **j):
+def set_datasets(dataset=None, datasets=None, rename=None, sources=None, **j):
 
-    if collection is not None:
-        if collection.get('_id'):
-            c = Collection.query(F.id == collection['_id'])
+    if dataset is not None:
+        if dataset.get('_id'):
+            c = Dataset.query(F.id == dataset['_id'])
             del j['_id']
-            c.update(Fn.set(**collection))
+            c.update(Fn.set(**dataset))
         else:
-            Collection(**collection).save()
+            Dataset(**dataset).save()
 
-    elif collections is not None:
-        for jc in collections:
+    elif datasets is not None:
+        for jc in datasets:
             jset = {k: v for k, v in jc.items() if k != '_id' and v is not None}
             if '_id' in jc:
-                c = Collection.query(F.id == jc['_id']).update(Fn.set(**jset))
+                c = Dataset.query(F.id == jc['_id']).update(Fn.set(**jset))
             else:
-                Collection(**jset).save()
+                Dataset(**jset).save()
 
     elif rename is not None:
-        coll = Collection.first(F.name == rename['from'])
+        coll = Dataset.first(F.name == rename['from'])
         if not coll:
             return False
 
-        rs = _get_object(coll.mongocollection)
-        rs.query(F.collection == coll.name).update(Fn.set(collection=rename['to']))
+        rs = get_dbo(coll.mongocollection)
+        rs.query(F.dataset == coll.name).update(Fn.set(dataset=rename['to']))
         coll.delete()
 
-        new_coll = Collection.first(F.name == rename['to']) or Collection(name=rename['to'], sources=[], order_weight=coll.order_weight)
+        new_coll = Dataset.first(F.name == rename['to']) or Dataset(name=rename['to'], sources=[], order_weight=coll.order_weight)
         new_coll.sources = sorted(set(new_coll.sources + coll.sources))
         new_coll.save()
 
     elif sources is not None:
         j = sources
-        coll = Collection.first(F.id == j['_id'])
+        coll = Dataset.first(F.id == j['_id'])
         if not coll:
             return False
 
-        rs = _get_object(coll.mongocollection)
-        rs = rs.aggregator.match(F.collection == coll.name).group(_id='$collection', sources=Fn.addToSet('$source.file'))
+        rs = get_dbo(coll.mongocollection)
+        rs = rs.aggregator.match(F.dataset == coll.name).group(_id='$dataset', sources=Fn.addToSet('$source.file'))
         coll.sources = []
         for r in rs.perform(raw=True):
             coll.sources += r['sources']
@@ -628,7 +644,8 @@ def serve_image(coll=None, storage_id=None, ext=None):
     from PIL import ImageOps
 
     if coll and storage_id and len(storage_id) == 24:
-        p = _get_object(coll).first(F.id==storage_id)
+        p = get_dbo(coll).first(F.id==storage_id)
+        p = ImageItem(p)
         buf = None
         if p:
             buf = p.image_raw
@@ -699,7 +716,7 @@ def quick_task(query='', raw=False, mongocollection=''):
         q = parser.eval(query)
         r = Task(datasource=q[0]['datasource'], pipeline=q[1:]).execute()
     else:
-        r = Task(datasource=('DBQueryDataSource', {'query': query, 'raw': raw, 'mongocollection': mongocollection}), pipeline=[
+        r = Task(datasource=('DBQueryDataSource', {'query': query, 'raw': raw, 'mongocollections': mongocollection}), pipeline=[
             ('AccumulateParagraphs', {}),
         ]).execute()
     

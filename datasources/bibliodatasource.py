@@ -10,12 +10,12 @@ class BiblioDataSource(DataSource):
     """从 endnote 文献条目产生语段
     """
     
-    def __init__(self, bibfiles, collection, lang='chs', format='endnote') -> None:
+    def __init__(self, bibfiles, dataset, lang='chs', format='endnote') -> None:
         """
         Args:
             bibfiles (str): 文件名或通配符，一行一个
             lang (LANG): 语言标识
-            collection (COLLECTION): 集合名称
+            dataset (DATASET): 集合名称
             format (endnote|bibtex): 文献条目信息格式
         """
         super().__init__()
@@ -24,7 +24,7 @@ class BiblioDataSource(DataSource):
         
         self.method = getattr(self, format)
         self.files = expand_file_patterns(bibfiles.split('\n'))
-        self.collection = collection
+        self.dataset = dataset
         self.lang=lang
         
     def endnote(self, lines):
@@ -36,7 +36,7 @@ class BiblioDataSource(DataSource):
         for l in lines:
             if not l.strip():
                 if d:
-                    yield Paragraph(collection=self.collection, lang=self.lang, **d)
+                    yield Paragraph(dataset=self.dataset, lang=self.lang, **d)
                 d = {
                     'content': '',
                     'authors': []
@@ -78,7 +78,7 @@ class BiblioDataSource(DataSource):
                 else:
                     d[field] = value
         if d:
-            yield Paragraph(collection=self.collection, **d)
+            yield Paragraph(dataset=self.dataset, **d)
             
     def fetch(self):
         for f, _ in self.files:

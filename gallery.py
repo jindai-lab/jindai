@@ -80,10 +80,10 @@ def single_item(pid: str, iid: str) -> List[Album]:
         p = Album.first(F.id == pid)
     elif iid:
         iid = ObjectId(iid)
-        p = Album.first(F.items == iid)
+        p = Album.first(F.images == iid)
 
     if iid and p:
-        p.items = [i for i in p.items if i.id == iid]
+        p.images = [i for i in p.images if i.id == iid]
         p.group_id = f"id={p['_id']}"
         return [p]
     else:
@@ -238,9 +238,9 @@ def init(app):
                 continue
             
             if rese:
-                pr = Album.first(F.items == ObjectId(rese)) or Album(
-                    items=[ObjectId(rese)], pdate=None)
-                for pd in Album.query(F.items == dele.id):
+                pr = Album.first(F.images == ObjectId(rese)) or Album(
+                    images=[ObjectId(rese)], pdate=None)
+                for pd in Album.query(F.images == dele.id):
                     pr.keywords += pd.keywords
                     if (not pr.source.get('url') or 'restored' in pr.source['url']) and pd.source.get('url'):
                         pr.source = pd.source
@@ -250,10 +250,10 @@ def init(app):
                     pr.pdate = datetime.datetime.utcnow()
                 pr.save()
             
-            Album.query(F.items == dele.id).update(Fn.pull(items=dele.id))        
+            Album.query(F.images == dele.id).update(Fn.pull(images=dele.id))        
             dele.delete()
 
-        Album.query(F.items == []).delete()
+        Album.query(F.images == []).delete()
 
         return True
 
@@ -266,16 +266,16 @@ def init(app):
             if p is None: continue
 
             items = list(map(ObjectId, items))
-            p.items = [_ for _ in p.items if isinstance(_, ImageItem) and _.id not in items]
+            p.images = [_ for _ in p.images if isinstance(_, ImageItem) and _.id not in items]
             p.save()
 
         for i in items:
-            if Album.first(F.items == i):
+            if Album.first(F.images == i):
                 continue
             print('delete orphan item', str(i))
             ImageItem.first(F.id == i).delete()
 
-        Album.query(F.items == []).delete()
+        Album.query(F.images == []).delete()
 
         return True
 
@@ -294,9 +294,9 @@ def init(app):
 
         if request.path.endswith('/split'):
             for p in albums:
-                for i in p.items:
+                for i in p.images:
                     pnew = Album(source={'url': p.source['url']}, liked_at=p.liked_at,
-                                pdate=p.pdate, keywords=p.keywords, items=[i])
+                                pdate=p.pdate, keywords=p.keywords, images=[i], dataset=p.dataset)
                     pnew.save()
                 p.delete()
         else:
@@ -304,10 +304,10 @@ def init(app):
             
             p0 = albums[0]
             p0.keywords = list(p0.keywords)
-            p0.items = list(p0.items)
+            p0.images = list(p0.images)
             for p in albums[1:]:
                 p0.keywords += list(p.keywords)
-                p0.items += list(p.items)
+                p0.images += list(p.images)
             p0.save()
             
             for p in albums[1:]:
@@ -484,18 +484,18 @@ def init(app):
                 if 'count' not in res:
                     res['count'] = ''
 
-                if '_id' not in res or not res['items']:
+                if '_id' not in res or not res['images']:
                     continue
 
-                res['items'] = [_ for _ in res['items'] if isinstance(
+                res['images'] = [_ for _ in res['images'] if isinstance(
                     _, dict) and _.get('flag', 0) == flag]
-                if not res['items']:
+                if not res['images']:
                     continue
 
                 if ds.random:
-                    res['items'] = random.sample(res['items'], 1)
+                    res['images'] = random.sample(res['images'], 1)
                 elif archive or groups or 'counts' in res:
-                    cnt = res.get('counts', len(res['items']))
+                    cnt = res.get('counts', len(res['images']))
                     if cnt > 1:
                         res['count'] = '(+{})'.format(cnt)
 

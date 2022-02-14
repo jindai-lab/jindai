@@ -142,7 +142,7 @@ def dump(output, colls):
 
     jsonenc = MongoJSONEncoder(ensure_ascii=False)
     with zipfile.ZipFile(output, 'w', zipfile.ZIP_DEFLATED) as z:
-        for coll in colls or Meta.db.database.list_collection_names():
+        for coll in colls or Meta.db.database.list_dataset_names():
             fo = BytesIO()
             for p in tqdm(mongodb(coll).find(), total=mongodb(coll).count()):
                 fo.write(jsonenc.encode(p).encode('utf-8') + b'\n')
@@ -173,8 +173,8 @@ def restore(infile, colls, force):
         """
         if '_id' in dic:
             dic['_id'] = ObjectId(dic['_id'])
-        if 'items' in dic and isinstance(dic['items'], list):
-            dic['items'] = [ObjectId(_) for _ in dic['items']]
+        if 'images' in dic and isinstance(dic['images'], list):
+            dic['images'] = [ObjectId(_) for _ in dic['images']]
         for hw in ('dhash', 'whash'):
             if hw in dic:
                 if isinstance(dic[hw], int):
@@ -228,7 +228,7 @@ def restore(infile, colls, force):
                 p = json.loads(line.decode('utf-8'), object_hook=_hook)
                 if (not restore_items and not restore_albums) or (
                     restore_items and (
-                        (coll == 'imageitem' and p['_id'] in restore_items) or (coll == 'album' and restore_items.intersection(set(p['items'])))
+                        (coll == 'imageitem' and p['_id'] in restore_items) or (coll == 'album' and restore_items.intersection(set(p['images'])))
                     )
                 ):
                     # print('\nfound match', p['_id'])
@@ -236,9 +236,9 @@ def restore(infile, colls, force):
                 elif restore_albums and (
                         coll == 'album' and (p['_id'] in restore_albums or restore_albums.intersection(set(p['keywords'])))
                     ):
-                    # print('\nfound match', p['_id'], p['items'])
+                    # print('\nfound match', p['_id'], p['images'])
                     ps.append(p)
-                    for i in p['items']:
+                    for i in p['images']:
                         restore_items.add(i)
 
                 if len(ps) > 100:

@@ -13,7 +13,7 @@ import requests
 from bson import ObjectId
 from PIL import Image
 from PyMongoWrapper import F, Fn, MongoOperand, QueryExprParser, dbo
-from PyMongoWrapper.dbo import Anything, DbObject, DbObjectInitializer, MongoConnection
+from PyMongoWrapper.dbo import Anything, DbObjectInitializer, MongoConnection
 
 import config
 from storage import StorageManager
@@ -67,6 +67,21 @@ def _pdf_image(file, page, **kwargs):
     return buf
 
 
+class StringOrDate(DbObjectInitializer):
+
+    def __init__(self):
+        def func(a=None, *args):
+            if not a: return ''
+            try:
+                a = parser.parse_literal(a)
+                if isinstance(a, datetime.datetime):
+                    return a
+            except:
+                return a
+
+        super().__init__(func, None)
+
+
 class LengthedIO:
     
     def __init__(self, f, sz):
@@ -82,16 +97,16 @@ class LengthedIO:
         return getattr(self._f, name)
 
 
-class Paragraph(db.DbObject):
+class ImageItem(db.DbObject):
 
-    collection = str
+    flag = int
+    rating = float
+    width = int
+    height = int
+    dhash = bytes
+    whash = bytes
+    thumbnail = str
     source = DbObjectInitializer(dict, dict)
-    keywords = list
-    pdate = str
-    outline = str
-    content = str
-    pagenum = Anything
-    lang = str
     
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -128,12 +143,6 @@ class Paragraph(db.DbObject):
         elif self.source.get('url'):
             return BytesIO(try_download(self.source['url']))
 
-    def as_dict(self, expand=False):
-        d = super().as_dict(expand)
-        for k in [_ for _ in d if _.startswith('_') and _ != '_id']:
-            del d[k]
-        return d
-
     def save(self):
         im = self._image
         if self._image_flag:
@@ -147,6 +156,37 @@ class Paragraph(db.DbObject):
         super().save()
         self._image = im
         self._image_flag = False
+
+
+class Paragraph(db.DbObject):
+
+    dataset = str
+    author = str
+    source = DbObjectInitializer(dict, dict)
+    keywords = list
+    pdate = StringOrDate()
+    outline = str
+    content = str
+    pagenum = Anything
+    lang = str
+    images = dbo.DbObjectCollection(ImageItem)
+    
+    def as_dict(self, expand=False):
+        d = super().as_dict(expand)
+        for k in [_ for _ in d if _.startswith('_') and _ != '_id']:
+            del d[k]
+        return d
+
+    def save(self):
+        if 'mongocollection' in self.__dict__:
+            del self.mongocollection
+        self.keywords = list(set(self.keywords))
+        for i in list(self.images):
+            if not isinstance(i, ImageItem):
+                self.images.remove(i)
+                continue
+            if i.id is None: i.save()
+        super().save()
     
 
 class History(db.DbObject):
@@ -161,7 +201,7 @@ class Meta(db.DbObject):
     app_title = str
 
 
-class Collection(db.DbObject):
+class Dataset(db.DbObject):
 
     allowed_users = list
     order_weight = int
@@ -235,32 +275,9 @@ class Token(db.DbObject):
         Token.query(F.user==user).delete()
 
 
-class ImageItem(Paragraph):
-
-    flag = int
-    rating = float
-    width = int
-    height = int
-    dhash = bytes
-    whash = bytes
-    thumbnail = str
-    
-
 class Album(Paragraph):
 
-    author = str
-    pdate = datetime.datetime
     liked_at = datetime.datetime
-    items = dbo.DbObjectCollection(ImageItem)
-
-    def save(self):
-        self.keywords = list(set(self.keywords))
-        for i in list(self.items):
-            if not isinstance(i, ImageItem):
-                self.items.remove(i)
-                continue
-            if i.id is None: i.save()
-        super().save()
 
 
 class AutoTag(db.DbObject):

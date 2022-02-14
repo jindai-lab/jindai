@@ -11,6 +11,7 @@ from PIL import Image
 from PyMongoWrapper import F, Fn, Var
 from urllib.parse import urljoin
 from bson import SON
+from matplotlib import collections
 
 from datasource import DataSource
 from models import Album, ImageItem, ObjectId, try_download, parser
@@ -115,9 +116,9 @@ class GalleryAlbumDataSource(DataSource):
                     continue
                 else:
                     for k, v in d.items():
-                        if 'items.' in k:
+                        if 'images.' in k:
                             flag = True
-                        elif k == 'items' and isinstance(v, dict):
+                        elif k == 'images' and isinstance(v, dict):
                             flag = sum([1 for k_ in v if not k_.startswith('$')])
                         else:
                             stk.append(v)
@@ -135,12 +136,12 @@ class GalleryAlbumDataSource(DataSource):
                 self.aggregator.sample(size=limit*2)
 
         self.aggregator.lookup(
-            from_='imageitem', localField=F.items, foreignField=F._id, as_=F.items
+            from_='imageitem', localField=F.images, foreignField=F._id, as_=F.images
         )
 
         if unwind_first:
-            self.aggregator.unwind(Var.items).addFields(
-                items=[Var.items])
+            self.aggregator.unwind(Var.images).addFields(
+                images=[Var.images])
 
         if not match_first and ands:
             self.aggregator.match(ands)
@@ -158,7 +159,7 @@ class GalleryAlbumDataSource(DataSource):
             ).unwind(
                 path=Var.group_id, preserveNullAndEmptyArrays=archive
             ).unwind(
-                Var.items
+                Var.images
             ).addFields(
                 group_id=Fn.ifNull(Var.group_id, Fn.concat('id=`', Fn.toString(Var._id), '`')),
                 **{'items.album_id': '$_id'}
@@ -168,14 +169,14 @@ class GalleryAlbumDataSource(DataSource):
                 liked_at=Fn.max(Var.liked_at),
                 pdate=Fn.max(Var.pdate),
                 source=Fn.first(Var.source),
-                items=Fn.addToSet(Var.items),
+                images=Fn.addToSet(Var.images),
                 author=Fn.first(Var.author),
                 keywords=Fn.first(Var.keywords),
                 counts=Fn.sum(1),
                 rating=Fn.max(Var['items.rating'])
             ).addFields(
-                items='$items' if archive else [Fn.first(
-                    Fn.filter(input=Var.items, as_='i', cond=Var['$i.rating'] == Var.rating))],
+                images='$items' if archive else [Fn.first(
+                    Fn.filter(input=Var.images, as_='i', cond=Var['$i.rating'] == Var.rating))],
                 _id=Var.id,
                 group_id=Var._id
             )
@@ -236,12 +237,13 @@ class ImageImportDataSource(DataSource):
     """从本地文件或网址导入图像到图集
     """
 
-    def __init__(self, locs, tags='', proxy='', excluding_patterns=''):
+    def __init__(self, locs, dataset='默认图集', tags='', proxy='', excluding_patterns=''):
         """
         Args:
             locs (str): 网址或文件通配符，一行一个
             excluding_patterns (str): 排除的图片网址正则表达式，一行一个
             tags (str): 标签，一行一个
+            dataset (DATASET): 数据集名称
             proxy (str): 代理服务器
         """
         super().__init__()
@@ -254,6 +256,7 @@ class ImageImportDataSource(DataSource):
             'https': proxy
         } if proxy else {}
         self.excluding_patterns = [re.compile(pattern) for pattern in excluding_patterns.split('\n') if pattern]
+        self.dataset = dataset
 
     def fetch(self):
         if self.local_locs:
@@ -312,6 +315,7 @@ class ImageImportDataSource(DataSource):
                     p.source = {'url': pu}
                     p.keywords += self.keywords
                     p.pdate = datetime.datetime.fromtimestamp(ftime)
+                    p.dataset = self.dataset
 
                 i = ImageItem(source={'url': _f})
                 fn = __expand_zip(_f)
@@ -327,7 +331,7 @@ class ImageImportDataSource(DataSource):
                 if mgr.write(fn, i.id):
                     i.source = dict(i.source, file='blocks.h5')
                 i.save()
-                p.items.append(i)
+                p.images.append(i)
 
         albums = albums.values()
 
@@ -359,7 +363,8 @@ class ImageImportDataSource(DataSource):
         for i in rng:
             url = path.replace('##', str(i))
             p = Album.first(F.source == {'url': url}) or Album(
-                source={'url': url}, items=[], pdate=datetime.datetime.utcnow())
+                dataset=self.dataset,
+                source={'url': url}, images=[], pdate=datetime.datetime.utcnow())
             if url.endswith('.jpg'):
                 imgs = [('', url)]
                 title = ''
@@ -397,7 +402,7 @@ class ImageImportDataSource(DataSource):
                     self.logger(imgurl)
                     i = ImageItem.first(F.source == {'url': imgurl}) or ImageItem(source={'url': imgurl})
                     i.save()
-                    p.items.append(i)
+                    p.images.append(i)
                     imgset.add(imgurl)
             p.keywords = list(set(self.keywords + title.split(u',')))
             albums.append(p)

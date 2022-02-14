@@ -18,8 +18,9 @@ from transliterate import translit
 from PyMongoWrapper import F, QueryExprParser
 from PyMongoWrapper.dbo import DbObject, DbObjectCollection
 from .utils import execute_query_expr, language_iso639
+from helpers import get_converter
 
-from models import Paragraph, Collection, AutoTag, parser, db
+from models import Paragraph, Dataset, AutoTag, parser, db
 from pipeline import PipelineStage
 
 
@@ -106,7 +107,7 @@ class WordCut(PipelineStage):
         if p.lang in ('chs', 'cht'):
             p.tokens = list(jieba.cut_for_search(p.content) if self.for_search else jieba.cut(p.content))
         elif p.lang == 'ja':
-            p.tokens = []
+            p.tokens = list(set(p.content))
             for i in WordCut.kks.convert(p.content):
                 p.tokens.append(i['orig'])
                 if self.for_search: p.tokens.append(i['hepburn'])
@@ -339,10 +340,10 @@ class FilterDuplication(PipelineStage):
     """过滤已经存储在指定数据库中的段落
     """
     
-    def __init__(self, field, mongocollection='') -> None:
+    def __init__(self, field, mongocollection='paragraph') -> None:
         """
         Args:
-            mongocollection (str): 数据库数据集
+            mongocollection (str): 数据库集合名
             field (str): 要去重的字段值
         """
         self.mongocollection = mongocollection or 'paragraph'
@@ -475,29 +476,24 @@ class SaveParagraph(PipelineStage):
     """保存
     """
 
-    def __init__(self, mongocollection=''):
+    def __init__(self, mongocollection='paragraph'):
         '''
         Args:
             mongocollection (str): 数据库目标数据集名称
         '''
-        self.convert = lambda x: x
         self.mongocollection = mongocollection
-        self.collections = defaultdict(set)
-        if mongocollection:
-            class TempParagraph(Paragraph):
-                _collection = mongocollection
-                
-            self.convert = lambda x: TempParagraph(**x.as_dict())
+        self.datasets = defaultdict(set)
+        self.convert = get_converter(mongocollection)
 
     def resolve(self, p : Paragraph):
         self.convert(p).save()
-        self.collections[p.collection].add(p.source.get('file'))
+        self.datasets[p.dataset].add(p.source.get('file'))
         return p
 
     def summarize(self, returned):
-        for c, sources in self.collections.items():
-            coll = Collection.first((F.name == c) & (F.mongocollection == self.mongocollection)) \
-                    or Collection(name=c, sources=[], mongocollection=self.mongocollection, order_weight=999)
+        for c, sources in self.datasets.items():
+            coll = Dataset.first(F.name == c) \
+                    or Dataset(name=c, sources=[], mongocollection=self.mongocollection, order_weight=999)
             for s in sources:
                 if s not in coll.sources:
                     coll.sources.append(s)
