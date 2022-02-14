@@ -109,19 +109,19 @@ class Hashing(Plugin):
             else:
                 it = ImageItem.first(F.id == iid)
                 if it.dhash is None: return
-                pgroups = [g for g in (Album.first(F.items == ObjectId(iid)) or Album()).keywords if g.startswith('*')] or [(Album.first(F.items == ObjectId(iid)) or Album()).source.get('url', '')]
+                pgroups = [g for g in (Album.first(F.images == ObjectId(iid)) or Album()).keywords if g.startswith('*')] or [(Album.first(F.images == ObjectId(iid)) or Album()).source.get('url', '')]
                 dha, dhb = v(it.dhash), v(it.whash)
                 results = []
                 groupped = {}
                 
                 for p in ds.fetch():
-                    for i in p.items:
+                    for i in p.images:
                         if i.id == it.id: continue
                         if i.flag != 0 or i.dhash is None or i.dhash == b'': continue
                         dha1, dhb1 = v(i.dhash), v(i.whash)
                         i.score = bitcount(dha ^ dha1) + bitcount(dhb ^ dhb1)
                         po = Album(**p.as_dict())
-                        po.items = [i]
+                        po.images = [i]
                         po.score = i.score
                         if archive:
                             pgs = [g for g in p.keywords if g.startswith('*')]

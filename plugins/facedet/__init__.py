@@ -57,8 +57,8 @@ class FaceDet(Plugin):
 
         if len(post_args) == 1:
             ds.aggregator.addFields(
-                items=Fn.filter(input=Var.items, as_='item', cond=Fn.size(Fn.ifNull('$$item.faces', [])))
-            ).match(F.items != [])            
+                images=Fn.filter(input=Var.images, as_='item', cond=Fn.size(Fn.ifNull('$$item.faces', [])))
+            ).match(F.images != [])            
 
             rs = ds.fetch()
             return rs, {}, {}
@@ -77,13 +77,13 @@ class FaceDet(Plugin):
             if groups:
                 ps = single_item('', iid)
                 p = ps[0]
-                for face in self.crop_faces(p.items[0].image_raw):
+                for face in self.crop_faces(p.images[0].image_raw):
                     saved = BytesIO()
                     face.save(saved, format='JPEG')
                     ps.append(
                         Album(
                             _id=p.id,
-                            items=[
+                            images=[
                                 ImageItem(source={'url': 'data:image/jpeg;base64,' + base64.b64encode(saved.getvalue()).decode('ascii')})
                             ]
                         )
@@ -100,14 +100,14 @@ class FaceDet(Plugin):
                 groupped = {}
                 results = []
                 for rp in ds.fetch():
-                    for ri in rp.items:
+                    for ri in rp.images:
                         if not ri or not isinstance(ri, ImageItem) or ri.flag != 0 or not ri.faces or ri.id == iid: continue
                         ri.score = min([
                             min([bitcount(v(i) ^ j) for j in fdh])
                             for i in ri.faces
                         ])
                         rpo = Album(**rp.as_dict())
-                        rpo.items = [ri]
+                        rpo.images = [ri]
                         if archive:
                             pgs = [g for g in rp.keywords if g.startswith('*')]
                             for g in pgs or [rp.source['url']]:

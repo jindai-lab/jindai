@@ -13,15 +13,15 @@ class WordDataSource(DataSource):
     """从Word文档中导入语段
     """
 
-    def __init__(self, collection_name, lang, *files):
+    def __init__(self, dataset_name, lang, *files):
         """
         Args:
-            collection_name (COLLECTION): 集合名称
+            dataset_name (DATASET): 数据集名称
             lang (LANG): 语言标识
             files (files): Word文档列表
         """
         super().__init__()
-        self.name = collection_name
+        self.name = dataset_name
         self.lang = lang
         self.files = files
 
@@ -40,6 +40,6 @@ class WordDataSource(DataSource):
             if doc:
                 p = Paragraph(
                     lang=self.lang, content=doc, source={'file': f}, pagenum=1,
-                    collection=self.name, outline=''
+                    dataset=self.name, outline=''
                 )
                 yield p

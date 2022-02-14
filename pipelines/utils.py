@@ -2,6 +2,7 @@ import re
 
 RE_DIGITS = re.compile(r'[\+\-]?\d+')
 
+
 def _opr(k):
     oprname = {
         'lte': 'le',
@@ -84,6 +85,7 @@ def execute_query_expr(parsed, inputs):
         else:
             r = r and execute_query_expr(v, _getattr(inputs, k) if _hasattr(inputs, k) else None)
     return r
+
 
 language_iso639 = dict([('ab', 'Abkhaz'),
 ('aa', 'Afar'),

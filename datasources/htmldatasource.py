@@ -12,17 +12,17 @@ class HTMLDataSource(DataSource):
     """从HTML网页中读取语段，每个网页计作一个语段
     """
 
-    def __init__(self, collection_name, lang, files, fields='content="//text"', paragraph_selector=''):
+    def __init__(self, dataset_name, lang, files, fields='content="//text"', paragraph_selector=''):
         """
         Args:
-            collection_name (COLLECTION): 集合名称
+            dataset_name (DATASET): 数据集名称
             lang (LANG): 语言标识
             files (str): HTML或包含HTML的ZIP压缩包文件列表
             paragraph_selector (str): 确定段落的 CSS 选择器，为空则整个网页作为一个段落
             fields (str): 字段与搜索字符串的关系，形如 field=".css-selector//attribute"
         """
         super().__init__()
-        self.name = collection_name
+        self.name = dataset_name
         self.lang = lang
         self.files = files.split('\n')
         self.fields = parser.eval(fields)
@@ -35,7 +35,7 @@ class HTMLDataSource(DataSource):
             for para in b.select(self.paragraph_selector) if self.paragraph_selector else [b]:
                 p = Paragraph(
                     lang=self.lang, content='', source={'url' if '://' in fn else 'file': fname}, pagenum=1,
-                    collection=self.name, outline=outline,
+                    dataset=self.name, outline=outline,
                     keywords=[]
                 )
                 
@@ -70,57 +70,56 @@ class TextDataSource(DataSource):
     """从文本文件中读取语段
     """
 
-    def __init__(self, collection_name, lang, files):
+    def __init__(self, dataset_name, lang, files):
         """
         Args:
-            collection_name (COLLECTION): 集合名称
+            dataset_name (DATASET): 数据集名称
             lang (LANG): 语言标识
             files (str): HTML或包含HTML的ZIP压缩包文件列表
         """
         super().__init__()
-        self.name = collection_name
+        self.name = dataset_name
         self.lang = lang
         self.files = files.split('\n')
 
     def fetch(self):
         for fp, fn in expand_file_patterns(self.files):
             for i, l in enumerate(fp):
-                yield Paragraph(content=codecs.decode(l), source={'url' if '://' in fn else 'file': fn}, collection=self.name, lang=self.lang, outline=f'{i+1:06d}')
-
+                yield Paragraph(content=codecs.decode(l), source={'url' if '://' in fn else 'file': fn}, dataset=self.name, lang=self.lang, outline=f'{i+1:06d}')
 
 
 class LinesDataSource(DataSource):
     """从直接输入的文本中获得语段，每行一个语段
     """
 
-    def __init__(self, collection_name, lang, lines):
+    def __init__(self, dataset_name, lang, lines):
         """
         Args:
-            collection_name (COLLECTION): 集合名称
+            dataset_name (DATASET): 数据集名称
             lang (LANG): 语言标识
             lines (str): 一行一个语段
         """
         super().__init__()
-        self.name = collection_name
+        self.name = dataset_name
         self.lang = lang
         self.lines = lines.split('\n')
 
     def fetch(self):
-        return map(lambda x: Paragraph(content=x, lang=self.lang), self.lines)
+        return map(lambda x: Paragraph(content=x, lang=self.lang, dataset=self.name), self.lines)
 
 
 class HTMLImageDataSource(DataSource):
     """从网页中获得图像
     """
 
-    def __init__(self, files : str, collection : str):
+    def __init__(self, files : str, dataset : str):
         """
         Args:
             files (str): 网址列表
-            collection (COLLECTION): 数据集名称
+            dataset (DATASET): 数据集名称
         """
         super().__init__()
-        self.collection = collection
+        self.dataset = dataset
         self.files = files.split('\n')
 
     def fetch(self):
@@ -169,6 +168,6 @@ class HTMLImageDataSource(DataSource):
                 elif '/thumbs/' in imgurl or '/graphics/' in imgurl:
                     continue
                 if imgurl not in imgset:
-                    yield Paragraph(source={'url': url}, collection=self.collection, content=title, keywords=title.split())
+                    yield Paragraph(source={'url': url}, dataset=self.dataset, content=title, keywords=title.split())
                     imgset.add(imgurl)
     

@@ -53,7 +53,7 @@ def create_albums(posts_imported: List[Album]):
     items = []
     impids = []
     for p in posts_imported:
-        items += list(p.items)
+        items += list(p.images)
         impids.append(ObjectId(p.id))
 
     albums = defaultdict(Album)
@@ -70,7 +70,7 @@ def create_albums(posts_imported: List[Album]):
             if len(dtstr) == 14:
                 p.pdate = datetime.datetime(int(dtstr[:4]), *[int(_1 + _2) for _1, _2 in
                           zip(dtstr[4::2], dtstr[5::2])])
-        p.items.append(i)
+        p.images.append(i)
     
     for p in albums.values():
         yield p
@@ -132,7 +132,7 @@ class TwitterDataSource(DataSource):
             allow_video = self.allow_video
         
         if not p:
-            p = Album(pdate=datetime.datetime.fromtimestamp(st.created_at_in_seconds), source={'url': l})
+            p = Album(dataset='twitter', pdate=datetime.datetime.fromtimestamp(st.created_at_in_seconds), source={'url': l})
             for m in st.media or []:
                 if m.video_info:
                     if not allow_video:
@@ -141,9 +141,9 @@ class TwitterDataSource(DataSource):
                     if url.endswith('.m3u8'):
                         self.logger('found m3u8, pass', url)
                         continue
-                    p.items.append(ImageItem(source={'url': url}))
+                    p.images.append(ImageItem(source={'url': url}))
                 else:
-                    p.items.append(ImageItem(source={'url': m.media_url_https}))
+                    p.images.append(ImageItem(source={'url': m.media_url_https}))
             if st.text.startswith('RT '):
                 author = re.match(r'^RT (@.*?):', st.text)
                 if author:
@@ -177,7 +177,7 @@ class TwitterDataSource(DataSource):
                 continue
 
             p = self.parse_status(st, allow_video=True)
-            if p.items and not p.id:
+            if p.images and not p.id:
                 albums.append(p)
 
         yield from albums
@@ -207,7 +207,7 @@ class TwitterDataSource(DataSource):
                 max_id = min(max_id, st.id)
                 if p.author != '@' + st.user.screen_name and not self.allow_retweet:
                     continue
-                if p.items and p.pdate.timestamp() > after:
+                if p.images and p.pdate.timestamp() > after:
                     albums.append(p)
             
             yield from albums
@@ -236,7 +236,7 @@ class TwitterDataSource(DataSource):
                     o = min(st.id, o)
                     if p.pdate.timestamp() < after:
                         break
-                    if p.items and not p.id:
+                    if p.images and not p.id:
                         albums.append(p)
                 if p and p.pdate.timestamp() < after:
                     break

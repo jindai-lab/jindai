@@ -48,10 +48,10 @@ class AutoCompletionDataSource(DataSource):
     """从输入的提示文本自动生成
     """
 
-    def __init__(self, collection_name, prompts, n=5, topp=0.9):
+    def __init__(self, dataset_name, prompts, n=5, topp=0.9):
         """
         Args:
-            collection_name (COLLECTION): 集合名称
+            dataset_name (DATASET): 数据集名称
             prompts (str): 提示文本，一行一个
             n (int): 针对每个提示文本生成的样本数量
             topp (float): 概率阈值
@@ -66,7 +66,7 @@ class AutoCompletionDataSource(DataSource):
             application='lm',
         )
         self.generator = article_completion
-        self.collection_name = collection_name
+        self.dataset_name = dataset_name
         self.lang = 'chs'
         self.prompts = prompts.split('\n')
         self.n = n
@@ -81,6 +81,6 @@ class AutoCompletionDataSource(DataSource):
                 yield Paragraph(
                     content=r,
                     lang='chs',
-                    collection=self.collection_name,
+                    dataset=self.dataset_name,
                     source={'text': prompt}
                 )

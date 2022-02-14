@@ -9,8 +9,25 @@ from models import Token, User
 from concurrent.futures import ThreadPoolExecutor
 from typing import IO, Union
 import time
-from models import MongoJSONEncoder
+from models import MongoJSONEncoder, Paragraph
 import config
+
+
+def get_dbo(coll=''):
+    if coll and coll not in ('null', 'default', 'undefined', 'paragraph'):
+        class _Temp(Paragraph):
+            _collection = coll
+        return _Temp
+
+    return Paragraph
+
+
+def get_converter(coll=''):
+    a = get_dbo(coll)
+    if a is Paragraph:
+        return lambda x: x
+    else:
+        return lambda x: a(**a.as_dict())
 
 
 def rest(login=True, cache=False, user_role=''):

@@ -107,7 +107,7 @@ def download_dataset(host, count, dataset_dir):
             u, dst, fn = args
             try:
                 if isinstance(u, dict):
-                    i = requests.get(f'http://{host}/block/' + u['items'][0]['_id'] + '.jpg?w=480').content
+                    i = requests.get(f'http://{host}/block/' + u['images'][0]['_id'] + '.jpg?w=480').content
                     i = Image.open(BytesIO(i))
                 else:
                     i = Image.open(u)

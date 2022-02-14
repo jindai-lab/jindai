@@ -9,16 +9,16 @@ from .utils import expand_file_patterns
 class ExcelDataSource(DataSource):
     """从 Excel 导入数据"""
     
-    def __init__(self, files_or_patterns, collection, lang) -> None:
+    def __init__(self, files_or_patterns, dataset, lang) -> None:
         '''
         Args:
             files_or_patterns (str): 文件名或通配符，每行一个
-            collection (COLLECTION): 集合名称
+            dataset (DATASET): 集合名称
             lang (LANG): 语言标识
         '''
         super().__init__()
         self.files = expand_file_patterns(files_or_patterns.split('\n'))
-        self.collection = collection
+        self.dataset = dataset
         self.lang = lang
         
     def fetch(self) -> Iterable[Paragraph]:
@@ -26,8 +26,8 @@ class ExcelDataSource(DataSource):
             df = pd.read_excel(f)
             for _, r in df.iterrows():
                 d = r.to_dict()
-                if 'collection' not in d:
-                    d['collection'] = self.collection
+                if 'dataset' not in d:
+                    d['dataset'] = self.dataset
                 if 'lang' not in d:
                     d['lang'] = self.lang
                 yield Paragraph(**d)

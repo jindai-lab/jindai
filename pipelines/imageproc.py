@@ -18,9 +18,9 @@ import traceback
 class ImageOrAlbumStage(PipelineStage):
     
     def resolve(self, p : Paragraph) -> Union[Album, ImageItem]:
-        if p.items:
+        if p.images:
             p = Album(p)
-            items = p.items
+            items = p.images
         else:
             p = ImageItem(p)
             items = [p]
@@ -293,7 +293,7 @@ class DownloadImages(PipelineStage):
         } if proxy else {}
     
     def resolve(self, p):
-        items = p.items or [p]
+        items = p.images or [p]
 
         for i in items:
             i = ImageItem(i)
