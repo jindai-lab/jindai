@@ -2,11 +2,13 @@ f"""基本操作"""
 
 import json
 import re
+import statistics
 import threading
-from collections import defaultdict
+from collections import defaultdict, deque
 from io import BytesIO
 from itertools import count as iter_count
 from bson import ObjectId
+from chardet import detect
 import jieba
 import pandas
 import json
@@ -21,7 +23,7 @@ from .utils import execute_query_expr, language_iso639
 from helpers import get_converter
 
 from models import Paragraph, Dataset, AutoTag, parser, db
-from pipeline import PipelineStage
+from pipeline import Pipeline, PipelineStage
 
 
 class Passthrough(PipelineStage):
@@ -42,6 +44,42 @@ class TradToSimpChinese(PipelineStage):
         p.content = TradToSimpChinese.t2s.convert(p.content)
         if p.lang == 'cht': p.lang = 'chs'
         return p
+
+
+class LanguageDetect(PipelineStage):    
+    """简易语言检测
+    使用正则表达式和 hanzidentifier 弥补 langdetect 在检测中日韩文字时准确率低的问题，返回 ISO 两字母代码或 chs 或 cht。
+    """
+
+    def resolve(self, p : Paragraph) -> Paragraph:
+        if p.lang and p.lang != 'auto':
+            return p
+        
+        if p.content:
+            p.lang = self.detect(p.content)
+            if p.lang in ('zh-cn', 'zh-sg'): p.lang = 'chs'
+            elif p.lang.startswith('zh-'): p.lang = 'cht'
+            elif '-' in p.lang: p.lang = p.lang.split('-')[0]
+            return p
+
+    def detect(self, s):
+        import hanzidentifier, langdetect
+
+        s = re.sub('[0-9]', '', s).strip()
+        
+        if re.search(r"[\uac00-\ud7ff]+", s):
+            return 'ko'
+
+        if re.search(r"[\u30a0-\u30ff\u3040-\u309f]+", s):
+            return 'ja'
+        
+        if hanzidentifier.has_chinese(s):
+            if hanzidentifier.is_simplified(s):
+                return 'chs'
+            else:
+                return 'cht'
+        
+        return langdetect.detect(s)
 
 
 class JiebaCut(PipelineStage):
@@ -123,7 +161,7 @@ class WordCut(PipelineStage):
 
 
 class KeywordsFromTokens(PipelineStage):
-    """将词袋中的分词结果加入到检索词中并删除词袋
+    """将检索词设为分词结果并删除词串字段
     """
     
     def resolve(self, p: Paragraph) -> Paragraph:
@@ -144,20 +182,63 @@ class FilterPunctuations(PipelineStage):
         return p
 
 
+class Reparagraph(PipelineStage):
+    """重新分段"""
+
+    def resolve(self, p : Paragraph) -> Paragraph:
+        lang = p.lang
+        lines = p.content.split('\n')
+        
+        def paragraph_finished(t):
+            return t.endswith(tuple('.!?…\"。！？…—：”）'))
+
+        def merge_lines():
+            lens = [len(_) for _ in lines]
+            if len(lens) < 3:
+                yield ('' if lang[:2] in ('ch', 'ja') else ' ').join(lines)
+                return
+
+            std = abs(statistics.stdev(lens))
+            maxl = max(lens)
+            t = ''
+            last_line = '1'
+            for l in lines:
+                l = l.strip()
+                if not l:
+                    continue
+                if re.search(r'^[①-⑩]', l):
+                    break
+
+                if lang[:2] != 'ch':
+                    t += ' '
+                t += l
+                if len(l) < maxl - std:
+                    if paragraph_finished(t) or not last_line:
+                        yield t
+                        t = ''
+                last_line = l.strip()
+
+            if t:
+                yield t
+
+        pd = p.as_dict()
+        del pd['content']
+        for t in merge_lines():
+            yield Paragraph(content=t, **pd)
+
+
 class AccumulateParagraphs(PipelineStage):
     """将遍历的段落保存起来以备下一步骤使用（通常用于导出）
     """
 
     def __init__(self):
-        self.paragraphs = []
-        self.lock = threading.Lock()
+        self.paragraphs = deque()
 
     def resolve(self, p : Paragraph):
-        with self.lock:
-            self.paragraphs.append(p)
+        self.paragraphs.append(p)
 
     def summarize(self, *args):
-        return self.paragraphs
+        return list(self.paragraphs)
 
 
 class Export(PipelineStage):

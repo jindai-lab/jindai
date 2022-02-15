@@ -3,7 +3,6 @@
 
 import os
 from queue import deque
-import tempfile
 from typing import Union
 from bson import ObjectId
 import numpy as np

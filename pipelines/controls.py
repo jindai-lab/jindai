@@ -85,7 +85,7 @@ class CallTask(PipelineStage):
         Args:
             task (TASK): 任务ID
             pipeline_only (bool): 仅调用任务中的处理流程，若为 false，则于 summarize 阶段完整调用该任务
-            params (str): 设置任务中各数据源和流程参数
+            params (QUERY): 设置任务中各数据源和流程参数
         """
         from task import Task
         t = TaskDBO.first(F.id == task)
@@ -131,3 +131,31 @@ class CallTask(PipelineStage):
             self.task.datasource.logger = self.logger
             self.task.pipeline.logger = self.logger
             return self.task.execute()
+
+
+class AlternativeDataSource(PipelineStage):
+    """从另一数据源中导入"""
+
+    def __init__(self, datasource, config_map):
+        """
+        Args:
+            datasource (DATASOURCE): 数据源名称
+            config_map (QUERY): 新数据源参数对应关系，格式为 <参数名>=<常量>|$<字段名> ，多个参数之间用 , 隔开。
+        """
+        self.datasource = datasource
+        self.config_map = parser.eval(config_map)
+        assert isinstance(self.config_map, dict), "数据源参数对应关系格式错误"
+
+    def replace_val(self, p):
+        d = {}
+        for k, v in self.config_map.items():
+            if isinstance(v, str) and v.startswith('$'):
+                d[k] = getattr(p, v[1:])
+            else:
+                d[k] = v
+        return d
+
+    def resolve(self, p):
+        from task import Task
+        t = Task.from_dbo(TaskDBO(datasource=self.datasource, datasource_config=self.replace_val(p)))
+        yield from t.datasource.fetch()

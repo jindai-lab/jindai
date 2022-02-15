@@ -1,4 +1,6 @@
-from typing import Callable, Dict, Iterable, List, Tuple, Any, Union
+import itertools
+from typing import Callable, Dict, List, Iterable, Tuple, Any, Union
+from collections.abc import Iterable as IterableClass
 from PyMongoWrapper import MongoResultSet
 from concurrent.futures import ThreadPoolExecutor
 from models import Paragraph
@@ -50,24 +52,33 @@ class Pipeline:
     def stop(self):
         self.exception = InterruptedError()
         
-    def apply(self, p : Paragraph):
+    def apply(self, p : Paragraph) -> Iterable:
         if self.exception:
             ex = self.exception
             self.exception = None
             raise ex
-            
-        if not self.stages:
-            return p
-        
-        for stage in self.stages:
-            try:
-                p = stage.resolve(p)
-                if not p: return
-            except Exception as ex:
-                if not self.resume_next:
-                    raise ex
 
-        return p
+        proc_queue = [p]
+
+        for stage in self.stages:
+            new_queue = []
+            for p in proc_queue:                
+                try:
+                    p = stage.resolve(p)
+                except Exception as ex:
+                    if not self.resume_next:
+                        raise ex
+                    p = None
+
+                if not p:
+                    return
+                elif isinstance(p, IterableClass):
+                    new_queue += list(p)
+                else:
+                    new_queue.append(p)
+            proc_queue = new_queue
+
+        yield from proc_queue
 
     def applyParagraphs(self, rs : Union[MongoResultSet, Iterable[Paragraph]]):
         """
@@ -80,17 +91,16 @@ class Pipeline:
 
         if self.concurrent > 1:
             def _update_and_do(p):
-                return self.apply(p)
+                return list(self.apply(p))
             
             with ThreadPoolExecutor(max_workers=self.concurrent) as te:
                 r = te.map(_update_and_do, rs)
-                return [_ for _ in r if _]
+                return itertools.chain(*r)
 
         else:
             def _seq():
                 for p in rs:
-                    p = self.apply(p)
-                    if p: yield p
+                    yield from self.apply(p)
             
             return _seq()
 

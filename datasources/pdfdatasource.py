@@ -48,24 +48,16 @@ class PDFDataSource(DataSource):
             pages = doc.pageCount
             self.logger('importing', pdf, 'from page', min_page)
 
-            if self.lang == 'auto':
-                lang = lang_detect(os.path.basename(pdf).rsplit('.', 1)[0])
-                if lang == 'zh-cn': lang = 'chs'
-                elif lang.startswith('zh-'): lang = 'cht'
-                else: lang = lang.split('-')[0]
-            else:
-                lang = self.lang
+            lang = self.lang
             
-            para = ''
             for p in range(min_page, pages):
                 label = doc[p].get_label()
-                lines = doc[p].getText().split('\n')
-                for para in merge_lines(lines, lang):
-                    try:
-                        yield para_coll(lang=lang, content=para.encode('utf-8', errors='ignore').decode('utf-8'), source={'file': pdf,
-                            'page': p}, pagenum=label or (p+1), dataset=self.name)
-                    except Exception as e:
-                        self.logger(pdffile, p+1, e)
+                lines = doc[p].getText()
+                try:
+                    yield para_coll(lang=lang, content=lines.encode('utf-8', errors='ignore').decode('utf-8'), source={'file': pdf,
+                        'page': p}, pagenum=label or (p+1), dataset=self.name)
+                except Exception as e:
+                    self.logger(pdffile, p+1, e)
 
 
 class PDFImageDataSource(DataSource):
