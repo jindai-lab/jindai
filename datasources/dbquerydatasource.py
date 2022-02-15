@@ -23,7 +23,7 @@ class DBQueryDataSource(DataSource):
         """
         super().__init__()
         self.raw = raw
-        self.mongocollections = mongocollections.split('\n')
+        self.mongocollections = mongocollections.split('\n') if isinstance(mongocollections, str) else mongocollections
         if query.startswith('??'):
             self.aggregation = True
             self.querystr = query[2:]

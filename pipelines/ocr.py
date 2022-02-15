@@ -1,5 +1,5 @@
 import pytesseract
-from imageproc import ImageOrAlbumStage
+from .imageproc import ImageOrAlbumStage
 from models import ImageItem
 
 

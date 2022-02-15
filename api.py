@@ -576,7 +576,7 @@ def search(q='', req={}, sort='', limit=100, offset=0, mongocollections=[], **kw
         ('AccumulateParagraphs', {}),
     ])
     count = task.datasource.count()
-    results = [dict(r.as_dict(), mongocollection=type(r).db.name) if isinstance(r, DbObject) else r for r in task.execute()]
+    results = [dict(r.as_dict(), mongocollection=type(r).db.name) if isinstance(r, Paragraph) else r for r in task.execute()]
 
     return {'results': results, 'query': task.datasource.querystr, 'total': count}
 
