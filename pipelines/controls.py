@@ -14,7 +14,7 @@ class Repeat(PipelineStage):
         Args:
             pipeline (pipeline): 要重复执行的流程
             times (int): 重复的次数
-            until (str): 重复的终止条件
+            until (QUERY): 重复的终止条件
         """
         self.times = times
         self.until = parser.eval(until) if until else None
