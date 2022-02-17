@@ -568,7 +568,8 @@ class SaveParagraph(PipelineStage):
 
     def resolve(self, p : Paragraph):
         self.convert(p).save()
-        self.datasets[p.dataset].add(p.source.get('file'))
+        if 'file' in p.source:
+            self.datasets[p.dataset].add(p.source['file'])
         return p
 
     def summarize(self, returned):

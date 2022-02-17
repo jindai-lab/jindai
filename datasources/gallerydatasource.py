@@ -71,7 +71,7 @@ class GalleryAlbumDataSource(DataSource):
             v = self.order.get(k)
             if v is None:
                 continue
-            if k.startswith('items.'):
+            if k.startswith('images.'):
                 unwind_first = True
             if k == '_id':
                 v = ObjectId(v)
@@ -162,7 +162,7 @@ class GalleryAlbumDataSource(DataSource):
                 Var.images
             ).addFields(
                 group_id=Fn.ifNull(Var.group_id, Fn.concat('id=`', Fn.toString(Var._id), '`')),
-                **{'items.album_id': '$_id'}
+                **{'images.album_id': '$_id'}
             ).group(
                 _id=Var.group_id,
                 id=Fn.first(Var._id),
@@ -173,9 +173,9 @@ class GalleryAlbumDataSource(DataSource):
                 author=Fn.first(Var.author),
                 keywords=Fn.first(Var.keywords),
                 counts=Fn.sum(1),
-                rating=Fn.max(Var['items.rating'])
+                rating=Fn.max(Var['images.rating'])
             ).addFields(
-                images='$items' if archive else [Fn.first(
+                images='$images' if archive else [Fn.first(
                     Fn.filter(input=Var.images, as_='i', cond=Var['$i.rating'] == Var.rating))],
                 _id=Var.id,
                 group_id=Var._id
@@ -308,13 +308,13 @@ class ImageImportDataSource(DataSource):
                 if _f.split('.')[-1] in ['txt', 'log', 'xlsx', 'xls', 'zip', 'csv'] or _f.endswith('.mp4.thumb.jpg'):
                     continue
                 pu = loc.split('/')[-1]
-                ftime = __get_mtime(_f)+8*3600
+                ftime = __get_mtime(_f)
 
                 p = albums[pu]
                 if not p.source:
                     p.source = {'url': pu}
                     p.keywords += self.keywords
-                    p.pdate = datetime.datetime.fromtimestamp(ftime)
+                    p.pdate = datetime.datetime.utcfromtimestamp(ftime)
                     p.dataset = self.dataset
 
                 i = ImageItem(source={'url': _f})

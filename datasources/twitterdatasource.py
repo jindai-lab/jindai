@@ -132,7 +132,7 @@ class TwitterDataSource(DataSource):
             allow_video = self.allow_video
         
         if not p:
-            p = Album(dataset='twitter', pdate=datetime.datetime.fromtimestamp(st.created_at_in_seconds), source={'url': l})
+            p = Album(dataset='twitter', pdate=datetime.datetime.utcfromtimestamp(st.created_at_in_seconds), source={'url': l})
             for m in st.media or []:
                 if m.video_info:
                     if not allow_video:

@@ -137,7 +137,7 @@ def dump(output, colls):
     if not output:
         output = f'dump-{datetime.datetime.utcnow().strftime("%Y%m%d%H%M%S")}{("," + ",".join(colls)) if colls else ""}.zip'
     def _hook(s):
-        if isinstance(s, datetime.datetime): return s.isoformat()
+        if isinstance(s, datetime.datetime): return s.isoformat() + "Z"
         else: return s
 
     jsonenc = MongoJSONEncoder(ensure_ascii=False)

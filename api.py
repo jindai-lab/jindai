@@ -146,6 +146,8 @@ class NumpyEncoder(json.JSONEncoder):
             return obj.tolist()
         if isinstance(obj, Image.Image):
             return str(obj)
+        if isinstance(obj, datetime.datetime):
+            return obj.isoformat() + "Z"
 
         return je.default(self, obj)
 
@@ -186,6 +188,13 @@ def valid_task(j):
         _valid_args(Pipeline.pipeline_ctx[name], args)
 
     return j
+
+
+def expand_rs(rs):
+    if not isinstance(rs, (str, dict, bytes)) and hasattr(rs, '__iter__'):
+        return [dict(r.as_dict(True), mongocollection=type(r).db.name) if isinstance(r, Paragraph) else r for r in rs]
+    else:
+        return rs
 
 
 @app.route('/api/authenticate', methods=['POST'])
@@ -535,7 +544,7 @@ def search(q='', req={}, sort='', limit=100, offset=0, mongocollections=[], **kw
         elif isinstance(r, (int, float)):
             return str(r)
         elif isinstance(r, datetime.datetime):
-            return r.isoformat()
+            return r.isoformat()+"Z"
         elif isinstance(r, list):
             if len(r) == 0:
                 return '[]'
@@ -576,7 +585,7 @@ def search(q='', req={}, sort='', limit=100, offset=0, mongocollections=[], **kw
         ('AccumulateParagraphs', {}),
     ])
     count = task.datasource.count()
-    results = [dict(r.as_dict(), mongocollection=type(r).db.name) if isinstance(r, Paragraph) else r for r in task.execute()]
+    results = expand_rs(task.execute())
 
     return {'results': results, 'query': task.datasource.querystr, 'total': count}
 
@@ -720,7 +729,7 @@ def quick_task(query='', raw=False, mongocollection=''):
             ('AccumulateParagraphs', {}),
         ]).execute()
     
-    return r
+    return expand_rs(r)
 
 
 @app.route('/api/admin/db', methods=['POST'])
