@@ -312,18 +312,20 @@ def write_storage(dir=''):
 @rest()
 def modify_paragraph(coll, id, **kws):
     id = ObjectId(id)
-    p = get_dbo(coll).first(F.id == id)
+    p = Paragraph.get_coll(coll).first(F.id == id)
+    flag = False
     if p:
         for f, v in kws.items():
             if f in ('_id', 'matched_content'): continue
             if f in ('$push', '$pull'):
-                get_dbo(coll).query(F.id == id).update({f: v})
+                Paragraph.get_coll(coll).query(F.id == id).update({f: v})
             else:
+                flag = True
                 if v is None and hasattr(p, f):
                     delattr(p, f)
                 else:
                     setattr(p, f, v)
-        p.save()
+        if flag: p.save()
     return True
 
 
@@ -331,7 +333,7 @@ def modify_paragraph(coll, id, **kws):
 @rest()
 def modify_pagenum(coll, id, sequential, new_pagenum, **kws):
     id = ObjectId(id)
-    p = get_dbo(coll).first(F.id == id)
+    p = Paragraph.get_coll(coll).first(F.id == id)
     delta = new_pagenum - int(p.pagenum)
     if p:
         if sequential == 'solo':
@@ -345,8 +347,8 @@ def modify_pagenum(coll, id, sequential, new_pagenum, **kws):
             else: # after
                 source['page'] = {'$gt': source['page']}
             source = {'source.' + k: w for k, w in source.items()}
-            get_dbo(coll).query((F.dataset == p.dataset) & (F.pagenum.type('number')) & MongoOperand(source)).update(Fn.inc(pagenum=delta))
-            get_dbo(coll).query((F.dataset == p.dataset) & (F.pagenum <= 0)).update([
+            Paragraph.get_coll(coll).query((F.dataset == p.dataset) & (F.pagenum.type('number')) & MongoOperand(source)).update(Fn.inc(pagenum=delta))
+            Paragraph.get_coll(coll).query((F.dataset == p.dataset) & (F.pagenum <= 0)).update([
                 Fn.set(pagenum=Fn.concat("A",Fn.toString(Fn.add(1, "$source.page"))))
             ])
         return True
@@ -621,7 +623,7 @@ def set_datasets(dataset=None, datasets=None, rename=None, sources=None, **j):
         if not coll:
             return False
 
-        rs = get_dbo(coll.mongocollection)
+        rs = Paragraph.get_coll(coll.mongocollection)
         rs.query(F.dataset == coll.name).update(Fn.set(dataset=rename['to']))
         coll.delete()
 
@@ -635,7 +637,7 @@ def set_datasets(dataset=None, datasets=None, rename=None, sources=None, **j):
         if not coll:
             return False
 
-        rs = get_dbo(coll.mongocollection)
+        rs = Paragraph.get_coll(coll.mongocollection)
         rs = rs.aggregator.match(F.dataset == coll.name).group(_id='$dataset', sources=Fn.addToSet('$source.file'))
         coll.sources = []
         for r in rs.perform(raw=True):
@@ -653,7 +655,7 @@ def serve_image(coll=None, storage_id=None, ext=None):
     from PIL import ImageOps
 
     if coll and storage_id and len(storage_id) == 24:
-        p = get_dbo(coll).first(F.id==storage_id)
+        p = Paragraph.get_coll(coll).first(F.id==storage_id)
         p = ImageItem(p)
         buf = None
         if p:

@@ -1,36 +1,32 @@
-f"""基本操作"""
-
-import json
-import re
-import statistics
-import threading
-from collections import defaultdict, deque
-from io import BytesIO
-from itertools import count as iter_count
-from bson import ObjectId
-from chardet import detect
-import jieba
-import pandas
-import json
-import itertools
-from opencc import OpenCC
-import pykakasi
-from transliterate import translit
-
-from PyMongoWrapper import F, QueryExprParser
-from PyMongoWrapper.dbo import DbObject, DbObjectCollection
-from .utils import execute_query_expr, language_iso639
-from helpers import get_converter
-
-from models import Paragraph, Dataset, AutoTag, parser, db
 from pipeline import Pipeline, PipelineStage
+from models import Paragraph, Dataset, AutoTag, parser, db
+from .utils import execute_query_expr, language_iso639
+import transliterate
+from PyMongoWrapper.dbo import DbObject, DbObjectCollection
+from PyMongoWrapper import F, QueryExprParser
+from transliterate import translit
+import pykakasi
+from opencc import OpenCC
+import itertools
+import pandas
+import jieba
+from chardet import detect
+from bson import ObjectId
+from itertools import chain, count as iter_count
+from io import BytesIO
+from collections import defaultdict, deque
+import threading
+import statistics
+import re
+import json
+f"""基本操作"""
 
 
 class Passthrough(PipelineStage):
     """直接通过
     """
 
-    def resolve(self, p : Paragraph) -> Paragraph:
+    def resolve(self, p: Paragraph) -> Paragraph:
         return p
 
 
@@ -42,43 +38,48 @@ class TradToSimpChinese(PipelineStage):
 
     def resolve(self, p: Paragraph) -> Paragraph:
         p.content = TradToSimpChinese.t2s.convert(p.content)
-        if p.lang == 'cht': p.lang = 'chs'
+        if p.lang == 'cht':
+            p.lang = 'chs'
         return p
 
 
-class LanguageDetect(PipelineStage):    
+class LanguageDetect(PipelineStage):
     """简易语言检测
     使用正则表达式和 hanzidentifier 弥补 langdetect 在检测中日韩文字时准确率低的问题，返回 ISO 两字母代码或 chs 或 cht。
     """
 
-    def resolve(self, p : Paragraph) -> Paragraph:
+    def resolve(self, p: Paragraph) -> Paragraph:
         if p.lang and p.lang != 'auto':
             return p
-        
+
         if p.content:
             p.lang = self.detect(p.content)
-            if p.lang in ('zh-cn', 'zh-sg'): p.lang = 'chs'
-            elif p.lang.startswith('zh-'): p.lang = 'cht'
-            elif '-' in p.lang: p.lang = p.lang.split('-')[0]
+            if p.lang in ('zh-cn', 'zh-sg'):
+                p.lang = 'chs'
+            elif p.lang.startswith('zh-'):
+                p.lang = 'cht'
+            elif '-' in p.lang:
+                p.lang = p.lang.split('-')[0]
             return p
 
     def detect(self, s):
-        import hanzidentifier, langdetect
+        import hanzidentifier
+        import langdetect
 
         s = re.sub('[0-9]', '', s).strip()
-        
+
         if re.search(r"[\uac00-\ud7ff]+", s):
             return 'ko'
 
         if re.search(r"[\u30a0-\u30ff\u3040-\u309f]+", s):
             return 'ja'
-        
+
         if hanzidentifier.has_chinese(s):
             if hanzidentifier.is_simplified(s):
                 return 'chs'
             else:
                 return 'cht'
-        
+
         return langdetect.detect(s)
 
 
@@ -87,7 +88,8 @@ class JiebaCut(PipelineStage):
     """
 
     def resolve(self, p: Paragraph) -> Paragraph:
-        p.tokens = list(jieba.cut_for_search(p.content) if self.for_search else jieba.cut(p.content))
+        p.tokens = list(jieba.cut_for_search(p.content)
+                        if self.for_search else jieba.cut(p.content))
         return p
 
 
@@ -99,9 +101,12 @@ class WordStemmer(PipelineStage):
 
     @staticmethod
     def get_stemmer(lang):
-        from nltk.stem.snowball import SnowballStemmer 
+        from nltk.stem.snowball import SnowballStemmer
         if lang not in WordStemmer._language_stemmers:
-            stemmer = SnowballStemmer(language_iso639.get(lang, lang).lower())
+            lang = language_iso639.get(lang, lang).lower()
+            if lang not in SnowballStemmer.languages:
+                return WordStemmer.get_stemmer('en')
+            stemmer = SnowballStemmer(lang)
             WordStemmer._language_stemmers[lang] = stemmer
         return WordStemmer._language_stemmers[lang]
 
@@ -112,12 +117,36 @@ class WordStemmer(PipelineStage):
         """
         self.append = append
 
-    def resolve(self, p : Paragraph) -> Paragraph:
+    def resolve(self, p: Paragraph) -> Paragraph:
         tokens = [WordStemmer.get_stemmer(p.lang).stem(_) for _ in p.tokens]
         if self.append:
             p.tokens += tokens
         else:
             p.tokens = tokens
+        return p
+
+
+class LatinTransliterate(PipelineStage):
+    """转写为拉丁字母的单词（需要先进行切词）
+    """
+
+    supported_languages = transliterate.get_available_language_codes()
+
+    def __init__(self, append=True):
+        """
+        Args:
+            append (bool): 是添加到结尾还是覆盖
+        """
+        self.append = append
+
+    def resolve(self, p: Paragraph) -> Paragraph:
+        if p.lang in self.supported_languages:
+            tokens = [transliterate.translit(
+                _, p.lang, reversed=True).lower() for _ in p.tokens]
+            if self.append:
+                p.tokens += tokens
+            else:
+                p.tokens = tokens
         return p
 
 
@@ -128,6 +157,7 @@ class WordCut(PipelineStage):
     t2s = OpenCC('t2s')
     kks = pykakasi.kakasi()
     stmr = WordStemmer(append=True)
+    trlit = LatinTransliterate(append=True)
 
     def __init__(self, for_search=False, **kwargs):
         """
@@ -135,7 +165,7 @@ class WordCut(PipelineStage):
             for_search (bool): 是否用于搜索（添加冗余分词结果或词干/转写）
         """
         self.for_search = for_search
-    
+
     def resolve(self, p: Paragraph) -> Paragraph:
         p.tokens = []
 
@@ -143,19 +173,21 @@ class WordCut(PipelineStage):
             p.content = WordCut.t2s.convert(p.content)
 
         if p.lang in ('chs', 'cht'):
-            p.tokens = list(jieba.cut_for_search(p.content) if self.for_search else jieba.cut(p.content))
+            p.tokens = list(jieba.cut_for_search(p.content)
+                            if self.for_search else jieba.cut(p.content))
         elif p.lang == 'ja':
             p.tokens = list(set(p.content))
             for i in WordCut.kks.convert(p.content):
                 p.tokens.append(i['orig'])
-                if self.for_search: p.tokens.append(i['hepburn'])
+                if self.for_search:
+                    p.tokens.append(i['hepburn'])
         else:
             p.tokens = [_.lower() for _ in re.split(r'[^\w]', p.content)]
             if self.for_search:
                 WordCut.stmr.resolve(p)
 
-        if self.for_search and p.lang not in ('chs', 'cht', 'en', 'ja'):
-            p.tokens += [translit(_, p.lang, reversed=True).lower() for _ in p.tokens]
+        if self.for_search:
+            WordCut.trlit.resolve(p)
 
         return p
 
@@ -163,7 +195,7 @@ class WordCut(PipelineStage):
 class KeywordsFromTokens(PipelineStage):
     """将检索词设为分词结果并删除词串字段
     """
-    
+
     def resolve(self, p: Paragraph) -> Paragraph:
         p.keywords = list(set(p.tokens))
         del p.tokens
@@ -174,8 +206,9 @@ class KeywordsFromTokens(PipelineStage):
 class FilterPunctuations(PipelineStage):
     """过滤标点符号
     """
-    
-    re_punctuations = re.compile(r'[，。「」·；□■•●『』［］【】（）\s\(\)、“”‘’《》——\-！？\.\?\!\,\'\"：\/\\\n\u3000…]')
+
+    re_punctuations = re.compile(
+        r'[，。「」·；□■•●『』［］【】（）\s\(\)、“”‘’《》——\-！？\.\?\!\,\'\"：\/\\\n\u3000…]')
 
     def resolve(self, p: Paragraph) -> Paragraph:
         p.content = FilterPunctuations.re_punctuations.sub('', p.content)
@@ -185,10 +218,10 @@ class FilterPunctuations(PipelineStage):
 class Reparagraph(PipelineStage):
     """重新分段"""
 
-    def resolve(self, p : Paragraph) -> Paragraph:
+    def resolve(self, p: Paragraph) -> Paragraph:
         lang = p.lang
         lines = p.content.split('\n')
-        
+
         def paragraph_finished(t):
             return t.endswith(tuple('.!?…\"。！？…—：”）'))
 
@@ -227,6 +260,25 @@ class Reparagraph(PipelineStage):
             yield Paragraph(content=t, **pd)
 
 
+class SplitParagraph(PipelineStage):
+    """拆分语段
+    """
+
+    def __init__(self, delimeter='\n'):
+        """
+        Args:
+            delimeter (str): 拆分的分隔符
+        """
+        self.delimeter = delimeter
+
+    def resolve(self, p : Paragraph):
+        for c in p.content.split(self.delimeter):
+            if c:
+                pp = Paragraph(p)
+                pp.content = c
+                yield pp
+
+
 class AccumulateParagraphs(PipelineStage):
     """将遍历的段落保存起来以备下一步骤使用（通常用于导出）
     """
@@ -234,7 +286,7 @@ class AccumulateParagraphs(PipelineStage):
     def __init__(self):
         self.paragraphs = deque()
 
-    def resolve(self, p : Paragraph):
+    def resolve(self, p: Paragraph):
         self.paragraphs.append(p)
 
     def summarize(self, *args):
@@ -263,7 +315,7 @@ class Export(PipelineStage):
             except:
                 return str(v)
 
-        r = [_.as_dict() if isinstance(_, DbObject) else _ for _ in r ]
+        r = [_.as_dict() if isinstance(_, DbObject) else _ for _ in r]
 
         if self.format == 'json':
             return {
@@ -291,6 +343,7 @@ class Export(PipelineStage):
 class AutoSummary(PipelineStage):
     """中文自动摘要
     """
+
     def __init__(self, count) -> None:
         """
         Args:
@@ -324,7 +377,8 @@ class ArrayField(PipelineStage):
         self.pull = pull
 
     def resolve(self, p: Paragraph) -> Paragraph:
-        if not isinstance(p[self.field], (list, DbObjectCollection)): return p
+        if not isinstance(p[self.field], (list, DbObjectCollection)):
+            return p
         for ele in self.elements:
             if self.pull:
                 p[self.field].append(ele)
@@ -332,7 +386,24 @@ class ArrayField(PipelineStage):
                 if ele in p[self.field]:
                     p[self.field].remove(ele)
         return p
-        
+
+
+class ArrayAggregation(PipelineStage):
+    """减少一层数组嵌套层级"""
+
+    def __init__(self, field, new_field='') -> None:
+        """
+        Args:
+            field (str): 数组字段名
+            new_field (str): 新的字段名，留空表示替换原数组字段
+        """
+        self.field = field
+        self.new_field = new_field or field
+
+    def resolve(self, p: Paragraph) -> Paragraph:
+        setattr(p, self.new_field, list(chain(*p[self.field])))
+        return p
+
 
 class Counter:
 
@@ -341,7 +412,7 @@ class Counter:
         def __init__(self):
             self._number_of_read = 0
             self._counter = iter_count()
-            
+
         def value(self):
             value = next(self._counter) - self._number_of_read
             self._number_of_read += 1
@@ -367,21 +438,22 @@ class NgramCounter(PipelineStage):
     """N-Gram 计数
     """
 
-    def __init__(self, n : int, lr=False):
+    def __init__(self, n: int, lr=False):
         """ N-Gram
 
         Args:
             n (int): 最大字串长度
             lr (bool): 是否同时记录左右字符计数
         """
-        if lr: n += 2
+        if lr:
+            n += 2
         self.n = n
         self.lr = lr
         self.ngrams = Counter()
         self.ngrams_lefts = defaultdict(Counter)
         self.ngrams_rights = defaultdict(Counter)
-    
-    def resolve(self, p : Paragraph) -> Paragraph:
+
+    def resolve(self, p: Paragraph) -> Paragraph:
         ngrams = [' ' * i for i in range(self.n)]
         for c in p.content:
             for i in range(self.n):
@@ -389,20 +461,23 @@ class NgramCounter(PipelineStage):
                 self.ngrams[ngrams[i]].inc()
             if self.lr:
                 for i in range(2, self.n):
-                    left, word, right = ngrams[i][0], ngrams[i][1:-1], ngrams[i][-1]
+                    left, word, right = ngrams[i][0], ngrams[i][1:-
+                                                                1], ngrams[i][-1]
                     self.ngrams_lefts[word][left].inc()
                     self.ngrams_rights[word][right].inc()
 
     def summarize(self, returned):
         self.ngrams = self.ngrams.as_dict()
-        self.ngrams_lefts = {k: v.as_dict() for k, v in self.ngrams_lefts.items()}
-        self.ngrams_rights = {k: v.as_dict() for k, v in self.ngrams_rights.items()}
+        self.ngrams_lefts = {k: v.as_dict()
+                             for k, v in self.ngrams_lefts.items()}
+        self.ngrams_rights = {k: v.as_dict()
+                              for k, v in self.ngrams_rights.items()}
 
 
 class Limit(PipelineStage):
     """限制返回的结果数量
     """
-    
+
     def __init__(self, limit):
         """
         Args:
@@ -411,16 +486,16 @@ class Limit(PipelineStage):
         self.limit = limit
         self.counter = itertools.count()
 
-    def resolve(self, p : Paragraph):
+    def resolve(self, p: Paragraph):
         v = next(self.counter)
         if v < self.limit:
             return p
-        
-        
+
+
 class FilterDuplication(PipelineStage):
     """过滤已经存储在指定数据库中的段落
     """
-    
+
     def __init__(self, field, mongocollection='paragraph') -> None:
         """
         Args:
@@ -429,9 +504,9 @@ class FilterDuplication(PipelineStage):
         """
         self.mongocollection = mongocollection or 'paragraph'
         self.field = field
-        
+
     def resolve(self, p: Paragraph) -> Paragraph:
-        for _ in db[self.mongocollection].find({self.field : getattr(p, self.field)}):
+        for _ in db[self.mongocollection].find({self.field: getattr(p, self.field)}):
             return
         return p
 
@@ -451,7 +526,7 @@ class RegexReplace(PipelineStage):
         self.re = re.compile(pattern)
         self.replacement = replacement
 
-    def resolve(self, p : Paragraph) -> Paragraph:
+    def resolve(self, p: Paragraph) -> Paragraph:
         p.content = self.re.sub(self.replacement, p.content)
         return p
 
@@ -475,8 +550,8 @@ class RegexFilter(PipelineStage):
         self.value = ''
         self.continuous = continuous
         self.filter_out = filter_out
-        
-    def resolve(self, p : Paragraph) -> Paragraph:
+
+    def resolve(self, p: Paragraph) -> Paragraph:
         match = self.re.search(str(getattr(p, self.source, '')))
         if match:
             self.value = match.group(1) or match.group(0)
@@ -511,7 +586,7 @@ class FieldAssignment(PipelineStage):
             self.valueLiteral = parser.parse_literal(value)
             self.valueField = None
 
-    def value(self, p : Paragraph):
+    def value(self, p: Paragraph):
         if self.valueField is None:
             if hasattr(self.valueLiteral, '__call__'):
                 return self.valueLiteral()
@@ -519,7 +594,7 @@ class FieldAssignment(PipelineStage):
         else:
             return getattr(p, self.valueField, '')
 
-    def resolve(self, p : Paragraph) -> Paragraph:
+    def resolve(self, p: Paragraph) -> Paragraph:
         setattr(p, self.field, self.value(p))
         return p
 
@@ -535,20 +610,22 @@ class FilterArrayField(PipelineStage):
             cond (QUERY): 条件式，用 iter 表示被判断的项目，或用省略形式
         """
         self.field = field
-        self.cond = QueryExprParser(allow_spacing=True, abbrev_prefixes={None: 'iter='}).eval(cond)
+        self.cond = QueryExprParser(allow_spacing=True, abbrev_prefixes={
+                                    None: 'iter='}).eval(cond)
 
     def resolve(self, p: Paragraph) -> Paragraph:
         v = getattr(p, self.field, [])
         if not isinstance(v, list):
             return p
-        
+
         nv = []
         for iter in v:
             p.iter = iter
             if execute_query_expr(self.cond, p):
                 nv.append(iter)
-        
-        if hasattr(p, 'iter'): delattr(p, 'iter')
+
+        if hasattr(p, 'iter'):
+            delattr(p, 'iter')
         setattr(p, self.field, nv)
         return p
 
@@ -564,9 +641,9 @@ class SaveParagraph(PipelineStage):
         '''
         self.mongocollection = mongocollection
         self.datasets = defaultdict(set)
-        self.convert = get_converter(mongocollection)
+        self.convert = Paragraph.get_converter(mongocollection)
 
-    def resolve(self, p : Paragraph):
+    def resolve(self, p: Paragraph):
         self.convert(p).save()
         if 'file' in p.source:
             self.datasets[p.dataset].add(p.source['file'])
@@ -575,7 +652,7 @@ class SaveParagraph(PipelineStage):
     def summarize(self, returned):
         for c, sources in self.datasets.items():
             coll = Dataset.first(F.name == c) \
-                    or Dataset(name=c, sources=[], mongocollection=self.mongocollection, order_weight=999)
+                or Dataset(name=c, sources=[], mongocollection=self.mongocollection, order_weight=999)
             for s in sources:
                 if s not in coll.sources:
                     coll.sources.append(s)
@@ -600,9 +677,10 @@ class FieldIncresement(PipelineStage):
             self.inc_value = parser.parse_literal(inc_value)
             self.inc_field = ''
 
-    def resolve(self, p : Paragraph):
+    def resolve(self, p: Paragraph):
         v = getattr(p, self.field)
-        v += self.inc_value if self.inc_value else getattr(self, self.inc_field)
+        v += self.inc_value if self.inc_value else getattr(
+            self, self.inc_field)
         setattr(p, v)
         return p
 
@@ -612,8 +690,9 @@ class OutlineFilter(PipelineStage):
     """
 
     chnum = '[一二三四五六七八九十首甲乙丙丁戊己庚辛壬癸]'
-    romannum = (',I,II,III,IV,V,VI,VII,VIII,IX,X,XI,XII,XIII,XIV,XV,XVI,XVII,').split(',')
-    
+    romannum = (
+        ',I,II,III,IV,V,VI,VII,VIII,IX,X,XI,XII,XIII,XIV,XV,XVI,XVII,').split(',')
+
     def __init__(self):
         super().__init__()
         self.nums = ['00', '00', '00']
@@ -666,13 +745,15 @@ class OutlineFilter(PipelineStage):
                 outline = 'book {:02}'.format(
                     self.deOutlineFilter.chnum(content[1:content.find('卷')]))
             elif re.match('^篇' + OutlineFilter.chnum, content):
-                outline = 'chap {:02}'.format(self.deOutlineFilter.chnum(content[1]))
+                outline = 'chap {:02}'.format(
+                    self.deOutlineFilter.chnum(content[1]))
             elif re.match('^部' + OutlineFilter.chnum, content):
-                outline = 'book {:02}'.format(self.deOutlineFilter.chnum(content[1]))
+                outline = 'book {:02}'.format(
+                    self.deOutlineFilter.chnum(content[1]))
 
         return outline
 
-    def resolve(self, p : Paragraph):
+    def resolve(self, p: Paragraph):
         p.content = p.content.strip()
         if not p.content:
             return p
@@ -695,33 +776,13 @@ class OutlineFilter(PipelineStage):
         return p
 
 
-class LatinTransliterate(PipelineStage):
-    """转写为拉丁字母的单词（需要先进行切词）
-    """
-    def __init__(self, append=True):
-        """
-        Args:
-            append (bool): 是添加到结尾还是覆盖
-        """
-        self.append = append
-        
-    def resolve(self, p : Paragraph) -> Paragraph:
-        from transliterate import translit
-        tokens = [translit(_, 'ru', reversed=True).lower() for _ in p.tokens]
-        if self.append:
-            p.tokens += tokens
-        else:
-            p.tokens = tokens
-        return p
-
-
 class ApplyAutoTags(PipelineStage):
     """应用自动标签设置
     """
-    
+
     def __init__(self) -> None:
         self.ats = list(AutoTag.query({}))
-    
+
     def resolve(self, p):
         for i in self.ats:
             pattern, from_tag, tag = i.pattern, i.from_tag, i.tag
@@ -732,4 +793,3 @@ class ApplyAutoTags(PipelineStage):
                     p.author = tag
         p.save()
         return p
-

@@ -215,7 +215,7 @@ def restore(infile, colls, force):
                     restore_items.add(cid)
                 else:
                     restore_albums.add(cid)
-                collections.append('album')
+                collections.append('paragraph')
                 collections.append('imageitem')
 
             if coll not in collections: collections.append(coll)
@@ -228,13 +228,13 @@ def restore(infile, colls, force):
                 p = json.loads(line.decode('utf-8'), object_hook=_hook)
                 if (not restore_items and not restore_albums) or (
                     restore_items and (
-                        (coll == 'imageitem' and p['_id'] in restore_items) or (coll == 'album' and restore_items.intersection(set(p['images'])))
+                        (coll == 'imageitem' and p['_id'] in restore_items) or (coll == 'paragraph' and restore_items.intersection(set(p['images'])))
                     )
                 ):
                     # print('\nfound match', p['_id'])
                     ps.append(p)
                 elif restore_albums and (
-                        coll == 'album' and (p['_id'] in restore_albums or restore_albums.intersection(set(p['keywords'])))
+                        coll == 'paragraph' and (p['_id'] in restore_albums or restore_albums.intersection(set(p['keywords'])))
                     ):
                     # print('\nfound match', p['_id'], p['images'])
                     ps.append(p)

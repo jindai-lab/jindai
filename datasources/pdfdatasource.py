@@ -30,7 +30,7 @@ class PDFDataSource(DataSource):
         self.mongocollection = mongocollection
 
     def fetch(self):
-        para_coll = get_dbo(self.mongocollection)
+        para_coll = Paragraph.get_coll(self.mongocollection)
         existent = {
             a['_id']: a['pages']
             for a in para_coll.aggregator.match(F.dataset == self.name).group(_id=Var['source.file'], pages=Fn.max(Var['source.page']))

@@ -6,7 +6,7 @@ from queue import deque
 from typing import Union
 from bson import ObjectId
 import numpy as np
-from models import Album, F, ImageItem, Paragraph, parser, try_download, AutoTag
+from models import Paragraph, F, ImageItem, Paragraph, parser, try_download, AutoTag
 from PIL import Image, ImageOps
 from pipeline import PipelineStage
 from plugins.hashing import dhash, whash
@@ -16,9 +16,9 @@ import traceback
 
 class ImageOrAlbumStage(PipelineStage):
     
-    def resolve(self, p : Paragraph) -> Union[Album, ImageItem]:
+    def resolve(self, p : Paragraph) -> Union[Paragraph, ImageItem]:
         if p.images:
-            p = Album(p)
+            p = Paragraph(p)
             items = p.images
         else:
             p = ImageItem(p)

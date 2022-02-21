@@ -6,7 +6,7 @@ from io import BytesIO
 from PyMongoWrapper.dbo import DbObjectCollection, DbObjectInitializer
 
 
-from gallery import Album, ImageItem, single_item
+from gallery import Paragraph, ImageItem, single_item
 from PIL import Image
 from plugin import Plugin
 from plugins.hashing import bitcount, whash, v
@@ -81,7 +81,7 @@ class FaceDet(Plugin):
                     saved = BytesIO()
                     face.save(saved, format='JPEG')
                     ps.append(
-                        Album(
+                        Paragraph(
                             _id=p.id,
                             images=[
                                 ImageItem(source={'url': 'data:image/jpeg;base64,' + base64.b64encode(saved.getvalue()).decode('ascii')})
@@ -106,7 +106,7 @@ class FaceDet(Plugin):
                             min([bitcount(v(i) ^ j) for j in fdh])
                             for i in ri.faces
                         ])
-                        rpo = Album(**rp.as_dict())
+                        rpo = Paragraph(**rp.as_dict())
                         rpo.images = [ri]
                         if archive:
                             pgs = [g for g in rp.keywords if g.startswith('*')]

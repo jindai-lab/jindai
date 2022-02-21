@@ -2,7 +2,6 @@
 """
 import jieba
 import re
-from helpers import get_dbo
 from models import Paragraph, parser
 from datasource import DataSource
 
@@ -53,7 +52,7 @@ class DBQueryDataSource(DataSource):
         self.sort = sort.split(',') if sort else []
 
     def fetch_rs(self, mongocollection):
-        rs = get_dbo(mongocollection)
+        rs = Paragraph.get_coll(mongocollection)
         
         if self.aggregation:
             rs = rs.aggregate(self.query if isinstance(self.query, list) else [self.query], raw=self.raw, allowDiskUse=True)

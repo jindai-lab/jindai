@@ -20,17 +20,33 @@ class Repeat(PipelineStage):
         self.until = parser.eval(until) if until else None
         self.pipeline = Pipeline(pipeline, 1, False)
 
+        self._logger = print
+
+    @property
+    def logger(self):
+        return self._logger
+
+    @logger.setter
+    def logger(self, val):
+        self._logger = val
+        self.pipeline.logger = val
+
     def resolve(self, p):
-        self.pipeline.logger = self.logger
+        p = [p]
         if self.until:
-            while True:
-                p = self.pipeline.apply(p)
-                if execute_query_expr(self.until, p):
-                    break
+            flag = True
+            times = 0
+            while flag and times != self.times:
+                times += 1
+                p = self.pipeline.applyParagraphs(p)
+                for p_ in p:
+                    if execute_query_expr(self.until, p_):
+                        flag = False
+                        break
         else:
             for i in range(self.times):
-                p = self.pipeline.apply(p)
-        return p
+                p = self.pipeline.applyParagraphs(p)
+        yield from p
 
 
 class Condition(PipelineStage):
@@ -47,14 +63,24 @@ class Condition(PipelineStage):
         self.iftrue = Pipeline(iftrue, 1, False)
         self.iffalse = Pipeline(iffalse, 1, False)
 
+        self._logger = print
+
+    @property
+    def logger(self):
+        return self._logger
+
+    @logger.setter
+    def logger(self, val):
+        self._logger = val
+        self.iffalse.logger = val
+        self.iftrue.logger = val
+
     def resolve(self, p):
-        self.iftrue.logger = self.logger
-        self.iffalse.logger = self.logger
         if execute_query_expr(self.cond, p):
-            p = self.iftrue.apply(p)
+            p = self.iftrue.applyParagraphs([p])
         else:
-            p = self.iffalse.apply(p)
-        return p
+            p = self.iffalse.applyParagraphs([p])
+        yield from p
 
 
 class ConditionalAssignment(PipelineStage):
@@ -113,23 +139,32 @@ class CallTask(PipelineStage):
         
         try:
             self.task = Task.from_dbo(t)
+            self.task.pipeline.concurrent = 1
         except Exception as ex:
-            raise Exception(f"参数错误，{ex.__class__.name}: {ex}")
+            raise Exception(f"参数错误，{ex.__class__.__name__}: {ex}")
+        
+        self._logger = print
+
+    @property
+    def logger(self):
+        return self._logger
+
+    @logger.setter
+    def logger(self, val):
+        self._logger = val
+        self.task.pipeline.logger = val
+        self.task.datasource.logger = val
 
     def resolve(self, p):
         if self.pipeline_only:
-            self.task.pipeline.logger = self.logger
-            return self.task.pipeline.apply(p)
+            yield from self.task.pipeline.applyParagraphs([p])
         else:
-            return p
+            yield p
     
     def summarize(self, r):
         if self.pipeline_only:
-            self.task.pipeline.logger = self.logger
             return self.task.pipeline.summarize()
         else:
-            self.task.datasource.logger = self.logger
-            self.task.pipeline.logger = self.logger
             return self.task.execute()
 
 

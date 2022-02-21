@@ -1,7 +1,7 @@
 #!/usr/bin/python3
 from collections import defaultdict
 from gallery import *
-from models import Album 
+from models import Paragraph 
 import numpy as np
 import h5py
 import glob
@@ -29,7 +29,7 @@ def remove_unused_items():
     """Remove unused items
     """    
     items = fetch_items(False)
-    for p in Album.query({}).rs:
+    for p in Paragraph.query({}).rs:
         for ii in p['images']:
             if str(ii) in items: items.remove(str(ii))
     log(len(items))
@@ -73,13 +73,13 @@ def fix_items():
     """Remove non-existent items
     """
     aa = {}
-    for a in Album.aggregator.lookup(from_=F.imageitem, localField=F.images, foreignField=F.id, as_=F.items2).project(items2=1, c1=Fn.size(Var.images), c2=Fn.size(Var.items2), _id=1).match(Fn.expr(Var.c1 != Var.c2)).perform(raw=True):
+    for a in Paragraph.aggregator.lookup(from_=F.imageitem, localField=F.images, foreignField=F.id, as_=F.items2).project(items2=1, c1=Fn.size(Var.images), c2=Fn.size(Var.items2), _id=1).match(Fn.expr(Var.c1 != Var.c2)).perform(raw=True):
         aa[a['_id']] = [_['_id'] for _ in a['items2']]
 
     for a in aa:
-        Album.query(F.id == a).update(Fn.set(images=aa[a]))    
+        Paragraph.query(F.id == a).update(Fn.set(images=aa[a]))    
 
-    Album.query(F.images == []).delete()
+    Paragraph.query(F.images == []).delete()
 
         
 def merge_items():
@@ -97,8 +97,8 @@ def merge_items():
                 replace_to = v[0]
             for i in v:
                 if i.id != replace_to.id:
-                    Album.query(F.images == i.id).update(Fn.push(images=ObjectId(replace_to.id)))
-                    Album.query(F.images == i.id).update(Fn.pull(images=ObjectId(i.id)))
+                    Paragraph.query(F.images == i.id).update(Fn.push(images=ObjectId(replace_to.id)))
+                    Paragraph.query(F.images == i.id).update(Fn.pull(images=ObjectId(i.id)))
                     i.delete()
                     log('replace', i.id, 'to', replace_to.id)
                     
@@ -122,7 +122,7 @@ def merge_albums(expr=''):
     _items = defaultdict(list)
     
     print(parser.eval(expr))
-    for p in Album.query(parser.eval(expr)):
+    for p in Paragraph.query(parser.eval(expr)):
         _urls[p.source['url']].append(p)
         for i in p.images:
             _items[i.id].append(p)

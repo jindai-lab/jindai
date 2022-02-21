@@ -8,7 +8,6 @@ from io import BytesIO
 from typing import IO, Tuple
 
 from models import try_download
-from helpers import get_dbo, get_converter
 
 
 def expand_file_patterns(patterns : list) -> Tuple[IO, str]:
