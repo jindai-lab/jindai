@@ -40,4 +40,6 @@ This project was made possible through outstanding works from:
 
 License: MIT
 
+☕ [Buy me a coffee](https://www.buymeacoffee.com/zhuth90)
+
 © zhuth and contributors.
