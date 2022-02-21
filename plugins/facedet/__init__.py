@@ -1,12 +1,12 @@
 # facedet
 import base64
-import struct
 from io import BytesIO
 
-from PyMongoWrapper.dbo import DbObjectCollection, DbObjectInitializer
+from PyMongoWrapper.dbo import DbObjectCollection
 
 
-from gallery import Paragraph, ImageItem, single_item
+from models import Paragraph, ImageItem
+from gallery import single_item
 from PIL import Image
 from plugin import Plugin
 from plugins.hashing import bitcount, whash, v

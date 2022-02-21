@@ -355,6 +355,174 @@ def modify_pagenum(coll, id, sequential, new_pagenum, **kws):
     return False
 
 
+@app.route('/api/edit/<coll>/batch', methods=["GET", "POST"])
+@rest()
+def batch(coll, ids, **kws):
+    """Batch edit
+    """
+    
+    paras = list(Paragraph.get_coll(coll).query(F.id.in_([ObjectId(_) if len(_) == 24 else _ for _ in ids])))
+    for p in paras:
+        for field, val in kws.items():
+            if field in ('$pull', '$push'):
+                for afield, aval in val.items():
+                    if p[afield] is None:
+                        p[afield] = []
+                    for t in (aval if isinstance(aval, list) else [aval]):
+                        t = t.strip()
+                        if field == '$pull' and t in p[afield]:
+                            p[afield].remove(t)
+                        elif field == '$push' and t not in p[afield]:
+                            p[afield].append(t)
+            elif not field.startswith('$'):
+                p[field] = val
+        p.save()
+        
+    return {
+        str(p.id): p.as_dict()
+        for p in paras
+    }
+
+
+@app.route('/api/<coll>/search_values', methods=['GET', 'POST'])
+@rest()
+def search_tags(coll, search, field, match_initials=False):
+    if not search: return []
+    search = re.escape(search)
+    if match_initials: search = '^' + search
+    matcher = {field: {'$regex': search, '$options': '-i'}}
+    return [
+            _
+            for _ in Paragraph.get_coll(coll).aggregator.match(matcher).unwind(Var[field]).match(matcher).group(_id=Var[field], count=Fn.sum(1)).sort(count=-1).perform(raw=True)
+            if len(_['_id']) < 15
+        ]
+
+
+@app.route('/api/<coll>/split', methods=["GET", "POST"])
+@app.route('/api/<coll>/merge', methods=["GET", "POST"])
+@rest()
+def splitting(coll, ids):
+    """Split or merge selected items/paragraphs into seperate/single paragraph(s)
+
+    Returns:
+        bool: True if succeeded
+    """        
+    paras = list(Paragraph.get_coll(coll).query(F.id.in_([ObjectId(_) if len(_) == 24 else _ for _ in ids])))
+
+    if request.path.endswith('/split'):
+        for p in paras:
+            for i in p.images:
+                pnew = Paragraph(source={'url': p.source['url']}, 
+                            pdate=p.pdate, keywords=p.keywords, images=[i], dataset=p.dataset)
+                pnew.save()
+            p.delete()
+    else:
+        if not paras: return False
+        
+        p0 = paras[0]
+        p0.keywords = list(p0.keywords)
+        p0.images = list(p0.images)
+        for p in paras[1:]:
+            p0.keywords += list(p.keywords)
+            p0.images += list(p.images)
+        p0.save()
+        
+        for p in paras[1:]:
+            p.delete()
+
+    return True
+
+
+@app.route('/api/imageitem/rating', methods=["GET", "POST"])
+@rest()
+def set_rating(ids, inc=1, val=0):
+    """Increase or decrease the rating of selected items
+    """
+    items = list(ImageItem.query(F.id.in_([ObjectId(_) if len(_) == 24 else _ for _ in ids])))
+    for i in items:
+        if i is None: continue
+        old_value = i.rating
+        i.rating = val if val else round(2 * (i.rating)) / 2 + inc
+        if -1 <= i.rating <= 5:
+            i.save()
+        else:
+            i.rating = old_value
+    return {
+        str(i.id): i.rating
+        for i in items
+    }
+
+
+@app.route('/api/imageitem/reset_storage', methods=["GET", "POST"])
+@rest()
+def reset_storage(ids):
+    """Reset storage status of selected items
+    """
+    
+    items = list(ImageItem.query(F.id.in_([ObjectId(_) if len(_) == 24 else _ for _ in ids])))
+    for i in items:
+        if 'file' in i.source: del i.source['file']
+        else: i.source['file'] = 'blocks.h5'
+        i.save()
+    return {
+        str(i.id): i.source.get('file')
+        for i in items
+    }
+
+
+@app.route('/api/imageitem/merge', methods=["POST"])
+@rest()
+def merge_items(pairs):
+    """将两两指定的 ImageItem 作为同一个图像的两个副本处理，保留第一项，删除第二项，并合并所在的 Paragraph
+    """
+    for rese, dele in pairs:
+        dele = ImageItem.first(F.id == dele)
+        if not dele:
+            continue
+        
+        if rese:
+            pr = Paragraph.first(F.images == ObjectId(rese)) or Paragraph(
+                images=[ObjectId(rese)], pdate=None)
+            for pd in Paragraph.query(F.images == dele.id):
+                pr.keywords += pd.keywords
+                if (not pr.source.get('url') or 'restored' in pr.source['url']) and pd.source.get('url'):
+                    pr.source = pd.source
+                if not pr.pdate:
+                    pr.pdate = pd.pdate
+            if not pr.pdate:
+                pr.pdate = datetime.datetime.utcnow()
+            pr.save()
+        
+        Paragraph.query(F.images == dele.id).update(Fn.pull(images=dele.id))        
+        dele.delete()
+
+    Paragraph.query(F.images == []).delete()
+
+    return True
+
+
+@app.route('/api/imageitem/delete', methods=["POST"])
+@rest()
+def delete_item(album_items: dict):
+    for pid, items in album_items.items():
+        p = Paragraph.first(F.id == pid)
+        if p is None: continue
+
+        items = list(map(ObjectId, items))
+        p.images = [_ for _ in p.images if isinstance(_, ImageItem) and _.id not in items]
+        p.save()
+
+    for i in items:
+        if Paragraph.first(F.images == i):
+            continue
+        print('delete orphan item', str(i))
+        ImageItem.first(F.id == i).delete()
+
+    Paragraph.query(F.images == []).delete()
+
+    return True
+
+
 @app.route('/api/tasks/', methods=['PUT'])
 @rest()
 def create_task(**task):
