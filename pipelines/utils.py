@@ -73,6 +73,8 @@ def execute_query_expr(parsed, inputs):
                     rr = rr or execute_query_expr(v_, inputs)
                     if rr:
                         break
+            elif k == '$not':
+                rr = not execute_query_expr(v, inputs)
             elif k == '$regex':
                 rr = re.search(v, inputs) is not None
             elif k == '$options':

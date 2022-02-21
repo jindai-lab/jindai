@@ -9,6 +9,7 @@ from typing import Dict, Type, Union
 from io import BytesIO
 from pdf2image import convert_from_path
 
+from flask import request
 import requests
 from bson import ObjectId
 from PIL import Image
@@ -42,9 +43,9 @@ def _object_id(params):
         return ObjectId.from_datetime(params)
 
 
-parser = QueryExprParser(abbrev_prefixes={None: 'keywords=', '_': 'items.', '?': 'source.url%'}, allow_spacing=True, functions={
+parser = QueryExprParser(abbrev_prefixes={None: 'keywords=', '_': 'images.', '?': 'source.url%'}, allow_spacing=True, functions={
     'groupby': _expr_groupby,
-    'object_id': _object_id
+    'object_id': _object_id,
 }, force_timestamp=False)
 
 
@@ -121,7 +122,7 @@ class ImageItem(db.DbObject):
             return self._image
 
     @image.setter
-    def image_setter(self, value):
+    def image(self, value):
         self._image = value
         self._image_flag = True        
 
@@ -187,7 +188,24 @@ class Paragraph(db.DbObject):
                 continue
             if i.id is None: i.save()
         super().save()
+
+    @staticmethod
+    def get_coll(coll):
+        if coll and coll not in ('null', 'default', 'undefined', 'paragraph'):
+            class _Temp(Paragraph):
+                _collection = coll
+            return _Temp
+
+        return Paragraph
     
+    @staticmethod
+    def get_converter(coll):
+        a = Paragraph.get_coll(coll)
+        if a is Paragraph:
+            return lambda x: x
+        else:
+            return lambda x: a(**a.as_dict())
+
 
 class History(db.DbObject):
 
@@ -273,11 +291,6 @@ class Token(db.DbObject):
             if t.user == user:
                 t.expire = 0
         Token.query(F.user==user).delete()
-
-
-class Album(Paragraph):
-
-    liked_at = datetime.datetime
 
 
 class AutoTag(db.DbObject):

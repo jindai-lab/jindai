@@ -1,9 +1,10 @@
 import itertools
+import traceback
 from typing import Callable, Dict, List, Iterable, Tuple, Any, Union
 from collections.abc import Iterable as IterableClass
 from PyMongoWrapper import MongoResultSet
 from concurrent.futures import ThreadPoolExecutor
-from models import Paragraph
+from models import ImageItem, Paragraph
 
 
 class PipelineStage:
@@ -31,7 +32,6 @@ class Pipeline:
             resume_next (bool): 当某个处理阶段发生错误时是否继续
         """
         self.logger = logger
-        
         self.stages = []
         if stages:
             for stage in stages:
@@ -42,12 +42,13 @@ class Pipeline:
                 if isinstance(stage, (tuple, list)) and len(stage) == 2 and Pipeline.pipeline_ctx:
                     name, kwargs = stage
                     stage = Pipeline.pipeline_ctx[name](**kwargs)
-                stage.logger = lambda *args: self.logger(stage.__class__.__name__, *args)
+                stage.logger = lambda *args: self.logger('>', stage.__class__.__name__, *args)
                 self.stages.append(stage)
 
         self.concurrent = concurrent
         self.resume_next = resume_next
         self.exception = None
+        self.verbose = False
 
     def stop(self):
         self.exception = InterruptedError()
@@ -62,6 +63,9 @@ class Pipeline:
 
         for stage in self.stages:
             new_queue = []
+            if self.verbose:
+                self.logger(type(stage).__name__, '@', len(proc_queue))
+            
             for p in proc_queue:                
                 try:
                     p = stage.resolve(p)
@@ -70,12 +74,18 @@ class Pipeline:
                         raise ex
                     p = None
 
-                if not p:
-                    return
+                if p is None:
+                    continue
                 elif isinstance(p, IterableClass):
                     new_queue += list(p)
-                else:
+                elif isinstance(p, (Paragraph, ImageItem)):
                     new_queue.append(p)
+                else:
+                    self.logger('Returned value not of type Iterable or Paragraph or ImageItem, ignored:', type(p).__name__)
+
+            if self.verbose:
+                self.logger(type(stage).__name__, '<', len(new_queue))
+            
             proc_queue = new_queue
 
         yield from proc_queue

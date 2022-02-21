@@ -80,13 +80,13 @@ function load() {
         contents: []
       })
       for (var group in group_object[0]) {
-        toolbox.contents.slice(-1)[0].contents.push({
+        toolbox.contents.push({
           kind: 'category',
           name: group,
           colour: atype == 'ds' ? 220 : 160,
           contents: []
         })
-        let toolbox_contents = toolbox.contents.slice(-1)[0].contents.slice(-1)[0].contents
+        let toolbox_contents = toolbox.contents.slice(-1)[0].contents
         let items = group_object[0][group]
         for (var item_key in items) {
           let item = items[item_key]

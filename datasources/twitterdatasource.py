@@ -7,22 +7,22 @@ from collections import defaultdict
 from typing import List, Union
 import twitter
 from datasource import DataSource
-from models import Album, ImageItem, ObjectId, parser
+from models import Paragraph, ImageItem, ObjectId, parser
 from PyMongoWrapper import F
 
 from datasources.gallerydatasource import ImageImportDataSource, parser
 
 
-def find_post(url: str) -> Union[Album, None]:
+def find_post(url: str) -> Union[Paragraph, None]:
     """Find post with twitter id in the url
 
     Args:
         url (str): twitter url
 
     Returns:
-        Union[Album, None]: Album
+        Union[Paragraph, None]: Paragraph
     """
-    return Album.first(F['source.url'].regex(r'https://twitter.com/.*/status/' + url.split('/')[-1]))
+    return Paragraph.first(F['source.url'].regex(r'https://twitter.com/.*/status/' + url.split('/')[-1]))
 
 
 def twitter_id_from_timestamp(ts: float) -> int:
@@ -37,11 +37,11 @@ def twitter_id_from_timestamp(ts: float) -> int:
     return (int(ts * 1000) - 1288834974657) << 22
 
 
-def create_albums(posts_imported: List[Album]):
+def create_albums(posts_imported: List[Paragraph]):
     """Create posts from imported files
 
     Args:
-        posts_imported (List[Album]): posts representing imported files
+        posts_imported (List[Paragraph]): posts representing imported files
     """
     def __expand_twi_url(zipfn):
         a = zipfn.split('-', 2)
@@ -56,7 +56,7 @@ def create_albums(posts_imported: List[Album]):
         items += list(p.images)
         impids.append(ObjectId(p.id))
 
-    albums = defaultdict(Album)
+    albums = defaultdict(Paragraph)
 
     for i in items:
         fn = i.source['url'].split('/')[-1].split('#')[-1][:-5]
@@ -75,7 +75,7 @@ def create_albums(posts_imported: List[Album]):
     for p in albums.values():
         yield p
 
-    Album.query(F.id.in_(impids)).delete()
+    Paragraph.query(F.id.in_(impids)).delete()
 
 
 class TwitterDataSource(DataSource):
@@ -118,7 +118,7 @@ class TwitterDataSource(DataSource):
         self.proxies = {'http': proxy, 'https': proxy} if proxy else {}
         self.api = twitter.Api(consumer_key=consumer_key, consumer_secret=consumer_secret, access_token_key=access_token_key, access_token_secret=access_token_secret, proxies=self.proxies)
         
-    def parse_status(self, st, allow_video=None) -> Album:
+    def parse_status(self, st, allow_video=None) -> Paragraph:
         """Parse twitter status
         Args:
             st (twitter.status): status
@@ -132,7 +132,7 @@ class TwitterDataSource(DataSource):
             allow_video = self.allow_video
         
         if not p:
-            p = Album(dataset='twitter', pdate=datetime.datetime.utcfromtimestamp(st.created_at_in_seconds), source={'url': l})
+            p = Paragraph(dataset='twitter', pdate=datetime.datetime.utcfromtimestamp(st.created_at_in_seconds), source={'url': l})
             for m in st.media or []:
                 if m.video_info:
                     if not allow_video:
@@ -217,7 +217,7 @@ class TwitterDataSource(DataSource):
     def import_twitl(self):
         after, before = self.time_after, self.time_before
         if after == 0:
-            after = Album.query(F['source.url'].regex(r'twitter\.com')).sort(-F.pdate).limit(1).first().pdate.timestamp()
+            after = Paragraph.query(F['source.url'].regex(r'twitter\.com')).sort(-F.pdate).limit(1).first().pdate.timestamp()
         
         o = twitter_id_from_timestamp(before or time.time())+1
         p = None
@@ -258,7 +258,7 @@ class TwitterDataSource(DataSource):
                 before, after = self.time_before, self.time_after
                 for u in unames:
                     if after == 0:
-                        last_updated = Album.query(F['source.url'].regex(
+                        last_updated = Paragraph.query(F['source.url'].regex(
                             f'^https://twitter.com/{u}/')).sort(-F.pdate).first()
                         if last_updated:
                             after = last_updated.pdate.timestamp()

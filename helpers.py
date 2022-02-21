@@ -5,29 +5,13 @@ from flask import Response, request, send_file, stream_with_context, jsonify
 import werkzeug.wrappers.response
 import traceback
 from PyMongoWrapper import F
-from models import Token, User
+from models import Token, User, MongoJSONEncoder, Paragraph, parser
 from concurrent.futures import ThreadPoolExecutor
 from typing import IO, Union
 import time
-from models import MongoJSONEncoder, Paragraph
 import config
 
-
-def get_dbo(coll=''):
-    if coll and coll not in ('null', 'default', 'undefined', 'paragraph'):
-        class _Temp(Paragraph):
-            _collection = coll
-        return _Temp
-
-    return Paragraph
-
-
-def get_converter(coll=''):
-    a = get_dbo(coll)
-    if a is Paragraph:
-        return lambda x: x
-    else:
-        return lambda x: a(**a.as_dict())
+parser.functions['me'] = lambda p: str(p) + ':' + logined()
 
 
 def rest(login=True, cache=False, user_role=''):
@@ -155,7 +139,7 @@ def logs_view(task):
             time.sleep(0.1)
 
         yield from task._task.fetch_log()
-        yield 'returned: ' + MongoJSONEncoder(ensure_ascii=False).encode(task._task.returned) + '\n'
+        yield 'returned: ' + str(type(task._task.returned)) + '\n'
 
         yield 'finished.\n'
 

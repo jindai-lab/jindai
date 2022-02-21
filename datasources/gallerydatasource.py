@@ -14,7 +14,7 @@ from bson import SON
 from matplotlib import collections
 
 from datasource import DataSource
-from models import Album, ImageItem, ObjectId, try_download, parser
+from models import Paragraph, ImageItem, ObjectId, try_download, parser
 from storage import StorageManager
 from models import try_download
 
@@ -24,7 +24,7 @@ weburl = re.compile('^https?://')
 class GalleryAlbumDataSource(DataSource):
     """图集（图册）数据源"""
 
-    def __init__(self, cond='', limit=20, offset=0, groups=False, archive=False, raw=False, sort_keys='-liked_at', direction='next', order={}):
+    def __init__(self, cond='', limit=20, offset=0, groups=False, archive=False, raw=False, sort_keys='-_id', direction='next', order={}):
         """
         Args:
             cond (QUERY): 检索表达式
@@ -128,7 +128,7 @@ class GalleryAlbumDataSource(DataSource):
         if not match_first:
             unwind_first = True
 
-        self.aggregator = Album.aggregator
+        self.aggregator = Paragraph.aggregator
         if match_first:
             if ands:
                 self.aggregator.match(ands)
@@ -151,9 +151,9 @@ class GalleryAlbumDataSource(DataSource):
 
         if groups or archive:
             if not self.orders:
-                self.orders = [('liked_at', -1)]
+                self.orders = [('id', -1)]
 
-            self.aggregator.addFields(
+            self.aggregator.match(keywords=Fn.regex(r'^\*')).addFields(
                 group_id=Fn.filter(input=Var.keywords, as_='t',
                                 cond=Fn.substrCP(Var._t, 0, 1) == '*')
             ).unwind(
@@ -166,7 +166,6 @@ class GalleryAlbumDataSource(DataSource):
             ).group(
                 _id=Var.group_id,
                 id=Fn.first(Var._id),
-                liked_at=Fn.max(Var.liked_at),
                 pdate=Fn.max(Var.pdate),
                 source=Fn.first(Var.source),
                 images=Fn.addToSet(Var.images),
@@ -193,7 +192,7 @@ class GalleryAlbumDataSource(DataSource):
             self.orders_params = {}
 
 
-    def fetch(self) -> Iterable[Album]:
+    def fetch(self) -> Iterable[Paragraph]:
         if self.random:
             self.aggregator.sample(size=self.limit)
         else:
@@ -265,7 +264,7 @@ class ImageImportDataSource(DataSource):
             for loc in self.web_locs:
                 yield from self.import_page(loc)
 
-    def import_local(self, locs) -> List[Album]:
+    def import_local(self, locs) -> List[Paragraph]:
         zips = []
 
         def __expand_zip(src):
@@ -301,7 +300,7 @@ class ImageImportDataSource(DataSource):
         for _ in glob.glob('._*'):
             os.unlink(_)
 
-        albums = defaultdict(Album)
+        albums = defaultdict(Paragraph)
 
         with StorageManager() as mgr:
             for loc, _f in sorted(__list_all(locs)):
@@ -362,7 +361,7 @@ class ImageImportDataSource(DataSource):
 
         for i in rng:
             url = path.replace('##', str(i))
-            p = Album.first(F.source == {'url': url}) or Album(
+            p = Paragraph.first(F.source == {'url': url}) or Paragraph(
                 dataset=self.dataset,
                 source={'url': url}, images=[], pdate=datetime.datetime.utcnow())
             if url.endswith('.jpg'):

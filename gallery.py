@@ -15,7 +15,7 @@ from tqdm import tqdm
 import config
 from datasources.gallerydatasource import GalleryAlbumDataSource
 from helpers import *
-from models import Album, AutoTag, ImageItem
+from models import Paragraph, AutoTag, ImageItem
 
 # prepare environment for requests
 proxy = config.gallery.get('proxy') or os.environ.get(
@@ -65,22 +65,22 @@ def split_array(lst: Iterable, fn: Callable[[Any], bool]) -> Tuple[List, List]:
     return a, b
 
 
-def single_item(pid: str, iid: str) -> List[Album]:
-    """Return a single-item album object with id = `pid` and item id = `iid`
+def single_item(pid: str, iid: str) -> List[Paragraph]:
+    """Return a single-item paragraph object with id = `pid` and item id = `iid`
 
     Args:
-        pid (str): Album ID
+        pid (str): Paragraph ID
         iid (str): ImageItem ID
 
     Returns:
-        List[Album]: a list with at most one element, i.e., the single-item album object
+        List[Paragraph]: a list with at most one element, i.e., the single-item paragraph object
     """
     if pid:
         pid = ObjectId(pid)
-        p = Album.first(F.id == pid)
+        p = Paragraph.first(F.id == pid)
     elif iid:
         iid = ObjectId(iid)
-        p = Album.first(F.images == iid)
+        p = Paragraph.first(F.images == iid)
 
     if iid and p:
         p.images = [i for i in p.images if i.id == iid]
@@ -128,7 +128,7 @@ def apply_auto_tags(albums):
     """Apply auto tags to albums
 
     Args:
-        albums (Iterable[Album]): album objects
+        albums (Iterable[Paragraph]): paragraph objects
     """
     m = list(AutoTag.query({}))
     if not m:
@@ -238,9 +238,9 @@ def init(app):
                 continue
             
             if rese:
-                pr = Album.first(F.images == ObjectId(rese)) or Album(
+                pr = Paragraph.first(F.images == ObjectId(rese)) or Paragraph(
                     images=[ObjectId(rese)], pdate=None)
-                for pd in Album.query(F.images == dele.id):
+                for pd in Paragraph.query(F.images == dele.id):
                     pr.keywords += pd.keywords
                     if (not pr.source.get('url') or 'restored' in pr.source['url']) and pd.source.get('url'):
                         pr.source = pd.source
@@ -250,10 +250,10 @@ def init(app):
                     pr.pdate = datetime.datetime.utcnow()
                 pr.save()
             
-            Album.query(F.images == dele.id).update(Fn.pull(images=dele.id))        
+            Paragraph.query(F.images == dele.id).update(Fn.pull(images=dele.id))        
             dele.delete()
 
-        Album.query(F.images == []).delete()
+        Paragraph.query(F.images == []).delete()
 
         return True
 
@@ -262,7 +262,7 @@ def init(app):
     @rest()
     def delete_item(album_items: dict):
         for pid, items in album_items.items():
-            p = Album.first(F.id == pid)
+            p = Paragraph.first(F.id == pid)
             if p is None: continue
 
             items = list(map(ObjectId, items))
@@ -270,32 +270,32 @@ def init(app):
             p.save()
 
         for i in items:
-            if Album.first(F.images == i):
+            if Paragraph.first(F.images == i):
                 continue
             print('delete orphan item', str(i))
             ImageItem.first(F.id == i).delete()
 
-        Album.query(F.images == []).delete()
+        Paragraph.query(F.images == []).delete()
 
         return True
 
 
     # ALBUM OPERATIONS
-    @app.route('/api/gallery/album/split', methods=["GET", "POST"])
-    @app.route('/api/gallery/album/merge', methods=["GET", "POST"])
+    @app.route('/api/gallery/paragraph/split', methods=["GET", "POST"])
+    @app.route('/api/gallery/paragraph/merge', methods=["GET", "POST"])
     @rest()
     def splitting(albums):
-        """Split or merge selected items/albums into seperate albums/one album
+        """Split or merge selected items/albums into seperate albums/one paragraph
 
         Returns:
             Response: 'OK' if succeeded
         """        
-        albums = list(Album.query(F.id.in_([ObjectId(_) if len(_) == 24 else _ for _ in albums])))
+        albums = list(Paragraph.query(F.id.in_([ObjectId(_) if len(_) == 24 else _ for _ in albums])))
 
         if request.path.endswith('/split'):
             for p in albums:
                 for i in p.images:
-                    pnew = Album(source={'url': p.source['url']}, liked_at=p.liked_at,
+                    pnew = Paragraph(source={'url': p.source['url']}, 
                                 pdate=p.pdate, keywords=p.keywords, images=[i], dataset=p.dataset)
                     pnew.save()
                 p.delete()
@@ -316,7 +316,7 @@ def init(app):
         return True
 
 
-    @app.route('/api/gallery/album/group', methods=["GET", "POST", "PUT"])
+    @app.route('/api/gallery/paragraph/group', methods=["GET", "POST", "PUT"])
     @rest()
     def grouping(albums, group='', delete=False):
         """Grouping selected albums
@@ -326,7 +326,7 @@ def init(app):
         """
         def gh(x): return hashlib.sha256(x.encode('utf-8')).hexdigest()[-9:]
         
-        albums = list(Album.query(F.id.in_([ObjectId(_) if len(_) == 24 else _ for _ in albums])))
+        albums = list(Paragraph.query(F.id.in_([ObjectId(_) if len(_) == 24 else _ for _ in albums])))
 
         if delete:
             group_id = ''
@@ -358,7 +358,7 @@ def init(app):
 
             gids = list(set(gids) - set(named))
             if gids:
-                for p in Album.query(F.keywords.in_(gids)):
+                for p in Paragraph.query(F.keywords.in_(gids)):
                     for id0 in gids:
                         if id0 in p.keywords:
                             p.keywords.remove(id0)
@@ -369,7 +369,7 @@ def init(app):
         return group_id
 
 
-    @app.route('/api/gallery/album/tag', methods=["GET", "POST"])
+    @app.route('/api/gallery/paragraph/tag', methods=["GET", "POST"])
     @rest()
     def tag(albums, delete=[], append=[]):
         """Tagging selected albums
@@ -378,7 +378,7 @@ def init(app):
             Response: 'OK' if succeeded
         """
         
-        albums = list(Album.query(F.id.in_([ObjectId(_) if len(_) == 24 else _ for _ in albums])))
+        albums = list(Paragraph.query(F.id.in_([ObjectId(_) if len(_) == 24 else _ for _ in albums])))
         for p in albums:
             for t in delete:
                 if t in p.keywords:
@@ -408,7 +408,7 @@ def init(app):
         matcher = {'keywords': {'$regex': tag, '$options': '-i'}}
         return [
                 _
-                for _ in Album.aggregator.match(matcher).unwind('$keywords').match(matcher).group(_id=Var.keywords, count=Fn.sum(1)).sort(count=-1).perform(raw=True)
+                for _ in Paragraph.aggregator.match(matcher).unwind('$keywords').match(matcher).group(_id=Var.keywords, count=Fn.sum(1)).sort(count=-1).perform(raw=True)
                 if len(_['_id']) < 15
             ]
 
@@ -427,7 +427,7 @@ def init(app):
         assert tag and (pattern or from_tag), 'Must specify tag with pattern or from tag'
         AutoTag.query(F.pattern.eq(pattern) & F.from_tag.eq(from_tag) & F.tag.eq(tag)).delete()
         AutoTag(pattern=pattern, from_tag=from_tag, tag=tag).save()
-        albums = Album.query(F['source.url'].regex(pattern)) if pattern else Album.query(F.keywords == from_tag)
+        albums = Paragraph.query(F['source.url'].regex(pattern)) if pattern else Paragraph.query(F.keywords == from_tag)
         apply_auto_tags(albums)
 
         return True
@@ -478,7 +478,7 @@ def init(app):
         res = {}
         try:
             for res in rs:
-                if isinstance(res, Album):
+                if isinstance(res, Paragraph):
                     res = res.as_dict(expand=True)
 
                 if 'count' not in res:
