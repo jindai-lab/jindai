@@ -3,6 +3,7 @@ from PIL import Image
 from gallery import *
 from plugin import Plugin
 from storage import *
+from models import ImageItem
 
 
 def dhash(im):
