@@ -48,10 +48,20 @@ class DBQueryDataSource(DataSource):
         if req and not self.aggregation:
             self.query = {'$and': [self.query, req]}
         self.limit = limit
-        self.skip = skip
         self.sort = sort.split(',') if sort else []
+        self.skips = {}
 
-    def fetch_rs(self, mongocollection):
+        if skip:
+            for c in self.mongocollections:
+                count = self.fetch_rs(c).count()
+                if count <= skip:
+                    skip -= count
+                    self.skips[c] = -1
+                else:
+                    self.skips[c] = skip
+                    break
+
+    def fetch_rs(self, mongocollection, limit=-1):
         rs = Paragraph.get_coll(mongocollection)
         
         if self.aggregation:
@@ -60,16 +70,19 @@ class DBQueryDataSource(DataSource):
             rs = rs.query(self.query)
             if self.sort:
                 rs = rs.sort(*self.sort)
-            if self.skip:
-                rs = rs.skip(self.skip)
-            if self.limit:
-                rs = rs.limit(self.limit)
+            if self.skips.get(mongocollection, 0):
+                rs = rs.skip(self.skips.get(mongocollection, 0))
+            if limit < 0:
+                limit = self.limit
+            if limit:
+                rs = rs.limit(limit)
 
         return rs
 
     def fetch_all_rs(self):
-        for mongocollection in self.mongocollections:
-            yield from self.fetch_rs(mongocollection)
+        for c in self.mongocollections:
+            if self.skips.get(c, 0) >= 0:
+                yield from self.fetch_rs(c)
 
     def fetch(self):
         if len(self.mongocollections) == 1:
@@ -79,6 +92,6 @@ class DBQueryDataSource(DataSource):
 
     def count(self):
         try:
-            return self.fetch().count()
+            return sum([self.fetch_rs(r, limit=0).count() for r in self.mongocollections])
         except:
             return -1

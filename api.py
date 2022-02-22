@@ -980,6 +980,8 @@ def index(p='index.html'):
 import gallery
 gallery.init(app)
 
+import scheduler
+scheduler.init(app)
 
 if __name__ == "__main__":
     os.environ['FLASK_ENV'] = 'development'

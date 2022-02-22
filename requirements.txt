@@ -3,6 +3,7 @@ flask
 pymongo
 https://github.com/zhuth/PyMongoWrapper/archive/master.zip
 opencc-python-reimplemented
+opencv-python-headless
 fitz
 openpyxl
 https://github.com/kpu/kenlm/archive/master.zip
@@ -48,3 +49,4 @@ textrank4zh
 sentence_transformers
 text2vec
 easynmt
+schedule
