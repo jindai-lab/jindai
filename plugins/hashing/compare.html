@@ -441,7 +441,7 @@
     function call_merge() {      
       var ids = $('.selected').toArray().map(x => [$(x).siblings().data('id'), $(x).data('id')]);
       $.post({
-        url: '/api/gallery/imageitem/merge',
+        url: '/api/imageitem/merge',
         data: JSON.stringify({
           'pairs': ids
         }),
