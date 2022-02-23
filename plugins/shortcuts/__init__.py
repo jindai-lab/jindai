@@ -12,6 +12,7 @@ def read_shortcuts():
 class Shortcuts(Plugin):
 
     def __init__(self, app):
+        super().__init__(app)
 
         @app.route('/api/gallery/shortcuts', methods=['GET', 'POST'])
         @rest()

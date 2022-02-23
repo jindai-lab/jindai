@@ -6,16 +6,30 @@ from PyMongoWrapper.dbo import DbObjectCollection
 
 
 from models import Paragraph, ImageItem
-from gallery import single_item
+from pipelines.imageproc import ImageOrAlbumStage
+from plugins.gallery import single_item
 from PIL import Image
 from plugin import Plugin
 from plugins.hashing import bitcount, whash, v
 from PyMongoWrapper import F, Fn, ObjectId, Var
 
 
-class FaceDet(Plugin):
+class FaceDet(ImageOrAlbumStage):
+    """人脸检测"""
+
+    def __init__(self) -> None:
+        from plugins.facedet import FaceDet
+        self.det = FaceDet(None)
+
+    def resolve_image(self, i: ImageItem):
+        self.det.faces(i)
+
+
+class FaceDetPlugin(Plugin):
     
     def __init__(self, app, **config):
+        super().__init__(app)
+        super().register_pipelines('人脸识别', [FaceDet])
         if 'faces' not in ImageItem.fields:
             ImageItem.fields['faces'] = DbObjectCollection(bytes)
             ImageItem.faces = ImageItem.fields['faces']
@@ -45,7 +59,7 @@ class FaceDet(Plugin):
             bufi = image.crop((x, y, x + w, y + h))
             yield bufi
        
-    def special_page(self, ds, post_args):
+    def handle_special_page(self, ds, post_args):
         
         groups = ds.groups
         archive = ds.archive
