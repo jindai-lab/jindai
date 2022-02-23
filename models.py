@@ -245,6 +245,7 @@ class User(db.DbObject):
     username = str
     password = str
     roles = list
+    datasets = list
 
     @staticmethod
     def encrypt_password(u, p):
@@ -293,18 +294,13 @@ class Token(db.DbObject):
         Token.query(F.user==user).delete()
 
 
-class AutoTag(db.DbObject):
-    """Auto Tagging Object"""
-    
-    from_tag = str
-    pattern = str
-    tag = str
-
-
 def get_context(directory : str, parent_class : Type) -> Dict:
     modules = [
-                directory + '.' + os.path.basename(f)[:-3] 
+                directory + '.' + os.path.basename(f).split('.')[0]
                 for f in glob.glob(os.path.join(os.path.dirname(__file__), directory, "*.py"))
+            ] + [
+                directory + '.' + f.split('/')[-2]
+                for f in glob.glob(os.path.join(os.path.dirname(__file__), directory, '*/__init__.py'))
             ]
     ctx = {}
     for mm in modules:

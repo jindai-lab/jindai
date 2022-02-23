@@ -1,11 +1,9 @@
-from pipeline import Pipeline, PipelineStage
-from models import Paragraph, Dataset, AutoTag, parser, db
+from helpers import safe_import
+from pipeline import PipelineStage
+from models import Paragraph, Dataset, parser, db
 from .utils import execute_query_expr, language_iso639
-import transliterate
 from PyMongoWrapper.dbo import DbObject, DbObjectCollection
 from PyMongoWrapper import F, QueryExprParser
-from transliterate import translit
-import pykakasi
 from opencc import OpenCC
 import itertools
 import pandas
@@ -20,6 +18,11 @@ import statistics
 import re
 import json
 f"""基本操作"""
+
+
+safe_import('transliterate')
+safe_import('nltk')
+pykakasi = safe_import('pykakasi')
 
 
 class Passthrough(PipelineStage):
@@ -130,18 +133,19 @@ class LatinTransliterate(PipelineStage):
     """转写为拉丁字母的单词（需要先进行切词）
     """
 
-    supported_languages = transliterate.get_available_language_codes()
-
     def __init__(self, append=True):
         """
         Args:
             append (bool): 是添加到结尾还是覆盖
         """
         self.append = append
+        import transliterate
+        self.supported_languages = transliterate.get_available_language_codes()
+        self.translit = transliterate.translit
 
     def resolve(self, p: Paragraph) -> Paragraph:
         if p.lang in self.supported_languages:
-            tokens = [transliterate.translit(
+            tokens = [self.translit(
                 _, p.lang, reversed=True).lower() for _ in p.tokens]
             if self.append:
                 p.tokens += tokens
@@ -306,6 +310,7 @@ class Export(PipelineStage):
         """
         self.format = format
         self.limit = limit
+        safe_import('xlsxwriter')
 
     def summarize(self, r):
 
@@ -772,24 +777,5 @@ class OutlineFilter(PipelineStage):
                 self.nums = nnums
 
         p.outline = '.'.join(self.nums)
-        p.save()
-        return p
-
-
-class ApplyAutoTags(PipelineStage):
-    """应用自动标签设置
-    """
-
-    def __init__(self) -> None:
-        self.ats = list(AutoTag.query({}))
-
-    def resolve(self, p):
-        for i in self.ats:
-            pattern, from_tag, tag = i.pattern, i.from_tag, i.tag
-            if (from_tag and from_tag in p.keywords) or (pattern and re.search(pattern, p.source['url'])):
-                if tag not in p.keywords:
-                    p.keywords.append(tag)
-                if tag.startswith('@'):
-                    p.author = tag
         p.save()
         return p

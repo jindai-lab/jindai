@@ -137,11 +137,8 @@ class CallTask(PipelineStage):
                 sec = secs[-1]
                 target[sec] = v
         
-        try:
-            self.task = Task.from_dbo(t)
-            self.task.pipeline.concurrent = 1
-        except Exception as ex:
-            raise Exception(f"参数错误，{ex.__class__.__name__}: {ex}")
+        self.task = Task.from_dbo(t)
+        self.task.pipeline.concurrent = 1
         
         self._logger = print
 

@@ -1,13 +1,13 @@
 """话题与分类
 """
 
+from helpers import safe_import
 from pipeline import PipelineStage
 from models import Paragraph
 from collections import defaultdict
 import numpy as np
-import many_stop_words
-import os
 from .basics import AccumulateParagraphs
+many_stop_words = safe_import('many_stop_words')
 
 
 class FilterStopWords(PipelineStage):
@@ -82,6 +82,7 @@ class Word2Vec(PipelineStage):
         Args:
             model_name (str): 模型名称，默认为多语言小模型
         '''
+        safe_import('text2vec')
         import text2vec
         self.bert = text2vec.SBert(model_name)
 
@@ -179,6 +180,8 @@ class CosSimClustering(AccumulateParagraphs):
         self.threshold = threshold
         self.vecs = []
         self.label_field = label_field
+        safe_import('sentence_transformers')
+
 
     def resolve(self, p):
         super().resolve(p)

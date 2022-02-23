@@ -1,5 +1,6 @@
 """机器翻译
 """
+from helpers import safe_import
 from models import Paragraph
 from pipeline import PipelineStage
 from opencc import OpenCC
@@ -15,6 +16,8 @@ class MachineTranslation(PipelineStage):
             model (较快速度:opus-mt|较高准确度:mbart50_m2m): 机器翻译所使用的模型
         """
         super().__init__()
+
+        safe_import('easynmt')
         
         from easynmt import EasyNMT
         self.model = EasyNMT(model)

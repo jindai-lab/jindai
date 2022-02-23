@@ -1,17 +1,104 @@
+import importlib
 import os
 import re
-from functools import wraps
-from flask import Response, request, send_file, stream_with_context, jsonify
-import werkzeug.wrappers.response
-import traceback
-from PyMongoWrapper import F
-from models import Token, User, MongoJSONEncoder, Paragraph, parser
-from concurrent.futures import ThreadPoolExecutor
-from typing import IO, Union
+import sys
 import time
-import config
+import traceback
+from collections import defaultdict
+from concurrent.futures import ThreadPoolExecutor
+from functools import wraps
+from typing import IO, Union
 
-parser.functions['me'] = lambda p: str(p) + ':' + logined()
+import werkzeug.wrappers.response
+from flask import Response, jsonify, request, send_file, stream_with_context
+from PyMongoWrapper import F
+
+import config
+from models import MongoJSONEncoder, Paragraph, Token, User, get_context, parser
+from plugin import Plugin
+
+
+def _me(p=''):
+    p = str(p)
+    if p: 
+        p += ':'
+    return p + logined()
+
+
+parser.functions['me'] = _me
+
+
+class PluginManager:
+
+    def __init__(self, app) -> None:
+        self.plugins = []
+        self.pages = {}
+        self.callbacks = defaultdict(list)
+
+        @app.route('/api/plugins/styles.css')
+        def plugins_style():
+            """Returns css from all enabled plugins
+
+            Returns:
+                Response: css document
+            """
+            css = '\n'.join([p.run_callback('css')
+                            for p in self.callbacks['css']])
+            return Response(css, mimetype='text/css')
+
+        @app.route('/api/plugins/pages', methods=["GET", "POST"])
+        @rest()
+        def plugin_pages():
+            """Returns names for special pages in every plugins
+            """
+            return list(self.pages.keys())
+
+        # load plugins
+
+        import plugins as _plugins
+        pls = getattr(config, 'plugins', ['*'])
+        if pls == ['*']:
+            pls = list(get_context('plugins', Plugin).values())
+
+        for pl in pls:
+            if isinstance(pl, tuple) and len(pl) == 2:
+                pl, kwargs = pl
+            else:
+                kwargs = {}
+
+            if isinstance(pl, str):
+                if '.' in pl:
+                    plpkg, plname = pl.rsplit('.', 1)
+                    pkg = __import__('plugins.' + plpkg)
+                    for seg in pl.split('.'):
+                        pkg = getattr(pkg, seg)
+                    pl = pkg
+                else:
+                    pl = getattr(_plugins, pl)
+
+            try:
+                pl = pl(app, **kwargs)
+
+                for name in pl.get_pages():
+                    self.pages[name] = pl
+
+                for name in pl.get_callbacks():
+                    self.callbacks[name].append(pl)
+
+                self.plugins.append(pl)
+                print('Registered plugin:', type(pl).__name__)
+            except Exception as ex:
+                print('Error while registering plugin:', pl, ex)
+                continue
+
+
+def safe_import(module_name, package_name=''):
+    try:
+        importlib.import_module(module_name)
+    except ImportError:
+        import subprocess
+        subprocess.call([sys.executable, '-m', 'pip', 'install', package_name or module_name])
+    return importlib.import_module(module_name)
 
 
 def rest(login=True, cache=False, user_role=''):

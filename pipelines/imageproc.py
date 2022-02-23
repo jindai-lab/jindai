@@ -6,7 +6,8 @@ from queue import deque
 from typing import Union
 from bson import ObjectId
 import numpy as np
-from models import Paragraph, F, ImageItem, Paragraph, parser, try_download, AutoTag
+from helpers import safe_import
+from models import Paragraph, F, ImageItem, Paragraph, parser, try_download
 from PIL import Image, ImageOps
 from pipeline import PipelineStage
 from plugins.hashing import dhash, whash
@@ -118,7 +119,7 @@ class ImageHashDuplications(ImageOrAlbumStage):
         for l in self.results:
             self.fo.write(l)
         self.fo.close()
-        return {'redirect': '/api/gallery/compare'}
+        return {'redirect': '/api/plugins/compare'}
         
 
 class ImageGrayScale(ImageOrAlbumStage):
@@ -324,9 +325,10 @@ class VideoFrame(ImageOrAlbumStage):
         super().__init__()
         self.frame_num = frame_num
         self.field = field
+        self.cv2 = safe_import('cv2', 'opencv-python-headless')
 
     def resolve_image(self, i: ImageItem):
-        import cv2
+        cv2 = self.cv2
 
         thumb = f'{ObjectId()}.thumb.jpg'
         temp_file = '_vtt' + thumb

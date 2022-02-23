@@ -1,3 +1,4 @@
+import datetime
 import re
 from threading import Thread
 
@@ -9,7 +10,7 @@ from plugin import Plugin
 
 
 class SchedulerJob(db.DbObject):
-    
+
     cron = str
 
 
@@ -20,9 +21,10 @@ class JobTask:
         self.key = ObjectId()
 
     def __call__(self):
-        from task import Task
-        self.task_dbo = TaskDBO.first(F.id == self.task_dbo.id)
-        Task.from_dbo(self.task_dbo).execute()
+        t = TaskDBO.first(F.id == self.task_dbo.id)
+        assert t
+        t.last_run = datetime.datetime.utcnow()
+        self.app.task_queue.enque(t)
 
     def __repr__(self) -> str:
         return f'{self.key}: {self.task_dbo.name}'
@@ -54,11 +56,12 @@ class Scheduler(Plugin):
             if token == 'every':
                 a = schedule.every
                 context = 'start'
-            elif re.match(r'\d+', token) and context == 'every':
+            elif re.match(r'\d+', token) and context == 'start':
                 a = a(int(token))
                 context = 'every'
             elif token.lower() in ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday', 'minute', 'minutes', 'second', 'seconds', 'hour', 'hours', 'week', 'weeks', 'day', 'days']:
-                if context == 'start': a = a()
+                if context == 'start':
+                    a = a()
                 a = getattr(a, token.lower())
                 context = 'unit'
             elif re.match(r'\d{2}:\d{2}(:\d{2})?', token) and context == 'at':
@@ -70,27 +73,46 @@ class Scheduler(Plugin):
                 jobs.append(a.do(JobTask(token)))
                 context = 'end'
             else:
-                print(f'Unknown token "{token}" in context "{context}"')
+                print(
+                    f'Unknown token "{token}" in context "{context}": {text}')
 
         return jobs
-
 
     def list_jobs(self, jobs):
         return [
             dict(getattr(j.job_func.func, 'dict', {}),
-                repr=repr(j).split(' do')[0].lower())
+                 repr=repr(j).split(' do')[0].lower())
             for j in jobs
         ]
 
-
-    def dump_scheduler(self):
+    def reload_scheduler(self):
         SchedulerJob.query({}).delete()
-        for j in schedule.jobs:
-            SchedulerJob(cron=f"{repr(j).split(' do')[0].lower()} do {j.job_func.func.task_dbo.id}").save()
+        if schedule.jobs:
+            for j in schedule.jobs:
+                SchedulerJob(
+                    cron=f"{repr(j).split(' do')[0].lower()} do {j.job_func.func.task_dbo.id}").save()
+            
+            self.run_background_thread()
 
+    def run_background_thread(self):
+
+        if self._thread is not None: return
+        if not self.daemon: return
+
+        def background():
+            import time
+            while self.running and schedule.jobs:
+                schedule.run_pending()
+                time.sleep(1)
+            self._thread = None
+        
+        self._thread = Thread(target=background)
+        self._thread.start()
 
     def __init__(self, app):
         super().__init__(app)
+        self._thread = None
+        self.running = True
 
         @app.route('/api/scheduler', methods=['GET'])
         @rest()
@@ -101,7 +123,7 @@ class Scheduler(Plugin):
         @rest()
         def schedule_job(text):
             jobs = self.cron(text)
-            self.dump_scheduler()
+            self.reload_scheduler()
             return self.list_jobs(jobs)
 
         @app.route('/api/scheduler/<key>', methods=['DELETE'])
@@ -115,16 +137,10 @@ class Scheduler(Plugin):
             ]
             for t in to_del:
                 schedule.jobs.remove(t)
-            self.dump_scheduler()
+            self.reload_scheduler()
             return len(to_del) > 0
-
-        def background():
-            import time
-            while True:
-                schedule.run_pending()
-                time.sleep(1)
 
         for j in SchedulerJob.query({}):
             self.cron(j.cron)
-
-        Thread(target=background).start()
+        
+        self.run_background_thread()
