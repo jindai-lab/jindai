@@ -1,6 +1,6 @@
 import imagehash
 from PIL import Image
-from gallery import *
+from plugins.gallery import *
 from plugin import Plugin
 from storage import *
 from models import ImageItem
@@ -50,6 +50,7 @@ def flips(x, n, lm=0):
 class Hashing(Plugin):
 
     def __init__(self, app):
+        super().__init__(app)
 
         @app.route('/api/gallery/compare.tsv')
         def _compare_tsv():
@@ -92,7 +93,7 @@ class Hashing(Plugin):
     def get_special_pages(self):
         return ['sim']
     
-    def special_page(self, ds, post_args):
+    def handle_special_page(self, ds, post_args):
         groups = ds.groups
         archive = ds.archive
         limit, offset = ds.limit, ds.order.get('offset', 0)
