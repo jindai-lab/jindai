@@ -7,6 +7,7 @@ from sklearn.decomposition import PCA
 from pipeline import PipelineStage
 from models import Paragraph
 from .basics import Counter
+from helpers import safe_import
 
 plt.rcParams['font.sans-serif'] = ['Microsoft YaHei']
 
@@ -100,6 +101,8 @@ class GenerateCooccurance(PipelineStage):
         Returns:
             共现矩阵，需要 GraphicClustering 绘图
         """
+        safe_import('sentence_transformers')
+
         self.method = weighted_by
         self.counter = Counter()
     

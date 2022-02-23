@@ -41,8 +41,6 @@ class Gallery(Plugin):
 
     def __init__(self, app):
         super().__init__(app)
-           
-        os.chdir(os.path.dirname(os.path.abspath(__file__)))
 
         # ALBUM OPERATIONS
 
@@ -54,14 +52,17 @@ class Gallery(Plugin):
             Returns:
                 Response: 'OK' if succeeded
             """
-            def gh(x): return hashlib.sha256(x.encode('utf-8')).hexdigest()[-9:]
-            
-            paras = list(Paragraph.query(F.id.in_([ObjectId(_) if len(_) == 24 else _ for _ in ids])))
+            def gh(x): return hashlib.sha256(
+                x.encode('utf-8')).hexdigest()[-9:]
+
+            paras = list(Paragraph.query(
+                F.id.in_([ObjectId(_) if len(_) == 24 else _ for _ in ids])))
 
             if delete:
                 group_id = ''
                 for p in paras:
-                    p.keywords = [_ for _ in p.keywords if not _.startswith('*')]
+                    p.keywords = [
+                        _ for _ in p.keywords if not _.startswith('*')]
                     p.save()
 
             else:
@@ -100,23 +101,24 @@ class Gallery(Plugin):
 
         @app.route('/api/gallery/get', methods=["GET", "POST"])
         @rest()
-        def get(query='', flag=0, post='', limit=20, offset=0, order={'keys':['random']}, direction='next', groups=False, archive=False, count=False):
+        def get(post='', count=False, **album_options):
             """Get records
 
             Returns:
                 Response: json document of records
             """
-            ds = GalleryAlbumDataSource(query, limit, offset, groups, archive, True, '', direction, order)
-            
+            ds = GalleryAlbumDataSource(**album_options, raw=True)
+
             if count:
                 return (list(ds.aggregator.group(_id='', count=Fn.sum(1)).perform(raw=True)) + [{'count': 0}])[0]['count']
 
             prev_order, next_order = {}, {}
 
             post_args = post.split('/')
-            special_page = special_pages.get(post_args[0])
+            special_page = self.app.plugins.pages.get(post_args[0])
             if special_page:
-                ret = special_page.handle_special_page(ds, post_args) or ([], None, None)
+                ret = special_page.handle_special_page(
+                    ds, post_args) or ([], None, None)
                 if isinstance(ret, tuple) and len(ret) == 3:
                     rs, prev_order, next_order = ret
                 else:
@@ -137,19 +139,10 @@ class Gallery(Plugin):
                     if '_id' not in res or not res['images']:
                         continue
 
-                    res['images'] = [_ for _ in res['images'] if isinstance(
-                        _, dict) and _.get('flag', 0) == flag]
-                    if not res['images']:
-                        continue
-
                     if ds.random:
                         res['images'] = random.sample(res['images'], 1)
-                    elif archive or groups or 'counts' in res:
-                        cnt = res.get('counts', len(res['images']))
-                        if cnt > 1:
-                            res['count'] = '(+{})'.format(cnt)
 
-                    if direction != 'next':
+                    if ds.direction != 'next':
                         r.insert(0, res)
                     else:
                         r.append(res)
@@ -164,7 +157,7 @@ class Gallery(Plugin):
                 }), 500
 
             def mkorder(rk):
-                o = dict(order)
+                o = dict(ds.order)
                 for k in o['keys']:
                     k = k[1:] if k.startswith('-') else k
                     if '.' in k:
@@ -193,23 +186,4 @@ class Gallery(Plugin):
                 'results': r,
                 '_filters': ds.aggregator.aggregators
             })
-
-        @app.route('/api/gallery/styles.css')
-        def plugins_style():
-            """Returns css from all enabled plugins
-
-            Returns:
-                Response: css document
-            """
-            css = '\n'.join([p.run_callback('css')
-                            for p in callbacks['css']])
-            return Response(css, mimetype='text/css')
-
-        @app.route('/api/gallery/plugin_pages', methods=["GET", "POST"])
-        @rest()
-        def plugin_pages():
-            """Returns names for special pages in every plugins
-            """
-            return list(special_pages.keys())
-
         

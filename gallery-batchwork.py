@@ -1,15 +1,17 @@
 #!/usr/bin/python3
-from collections import defaultdict
-from gallery import *
-from models import Paragraph 
-import numpy as np
-import h5py
-import glob
-import fire
 from tqdm import tqdm
+from collections import defaultdict
+from helpers import safe_import
+
+from models import Paragraph, ImageItem, StorageManager, parser
+from PyMongoWrapper import Var, F, Fn, ObjectId
+from io import BytesIO
+import base64
+import requests
 
 log = print
-find_k = lambda k: k.split('.')[0] # {k}[.{ext}]
+def find_k(k):
+    return k.split('.')[0]  # {k}[.{ext}]
 
 
 def fetch_items(stored=True):
@@ -20,18 +22,20 @@ def fetch_items(stored=True):
 
     Returns:
         Set: item id strings
-    """    
-    cond = {} if not stored else (F['source.file'].exists(1) | (F.thumbnail != None))
+    """
+    cond = {} if not stored else (
+        F['source.file'].exists(1) | (F.thumbnail != None))
     return {str(i['_id']) for i in ImageItem.query(cond).rs}
 
 
 def remove_unused_items():
     """Remove unused items
-    """    
+    """
     items = fetch_items(False)
     for p in Paragraph.query({}).rs:
         for ii in p['images']:
-            if str(ii) in items: items.remove(str(ii))
+            if str(ii) in items:
+                items.remove(str(ii))
     log(len(items))
     ImageItem.query(F.id.in_(list(items))).delete()
 
@@ -55,9 +59,9 @@ def push(since, target_url):
     items = ImageItem.query(F.id > since)
     pbar = tqdm(total=items.count())
 
-    def _push(k, data : BytesIO, url):
+    def _push(k, data: BytesIO, url):
         data = base64.b64encode(data.getvalue())
-        requests.put(url + '/api/gallery/imageitem/put_storage/' + k, data)
+        requests.put(url + '/api/imageitem/put_storage/' + k, data)
         pbar.set_description(f"{k} len={len(data)}")
         pbar.update(1)
 
@@ -66,7 +70,8 @@ def push(since, target_url):
             k = str(i.id)
             try:
                 _push(k, mgr.read(k), target_url)
-            except: pass
+            except:
+                pass
 
 
 def fix_items():
@@ -77,14 +82,14 @@ def fix_items():
         aa[a['_id']] = [_['_id'] for _ in a['items2']]
 
     for a in aa:
-        Paragraph.query(F.id == a).update(Fn.set(images=aa[a]))    
+        Paragraph.query(F.id == a).update(Fn.set(images=aa[a]))
 
     Paragraph.query(F.images == []).delete()
 
-        
+
 def merge_items():
     """Merge items w.r.t. their urls
-    """    
+    """
     item_urls = defaultdict(list)
     for i in ImageItem.query({}):
         item_urls[i.source['url']].append(i)
@@ -97,30 +102,34 @@ def merge_items():
                 replace_to = v[0]
             for i in v:
                 if i.id != replace_to.id:
-                    Paragraph.query(F.images == i.id).update(Fn.push(images=ObjectId(replace_to.id)))
-                    Paragraph.query(F.images == i.id).update(Fn.pull(images=ObjectId(i.id)))
+                    Paragraph.query(F.images == i.id).update(
+                        Fn.push(images=ObjectId(replace_to.id)))
+                    Paragraph.query(F.images == i.id).update(
+                        Fn.pull(images=ObjectId(i.id)))
                     i.delete()
                     log('replace', i.id, 'to', replace_to.id)
-                    
-                    
+
+
 def merge_albums(expr=''):
     """Merge albums w.r.t their items and urls
-    """    
+    """
     def do_merge(albums):
         albums = [_ for _ in albums if _.id]
-        if len(albums) < 2: return
+        if len(albums) < 2:
+            return
         albums = sorted(albums, key=lambda p: p.id)
         for p in albums[1:]:
             albums[0].keywords += p.keywords
             albums[0].images += p.images
             p.delete()
             p._id = ''
-        albums[0].images = sorted(set(albums[0].images), key=lambda x: x.source['url'])
+        albums[0].images = sorted(
+            set(albums[0].images), key=lambda x: x.source['url'])
         albums[0].save()
-    
+
     _urls = defaultdict(list)
     _items = defaultdict(list)
-    
+
     print(parser.eval(expr))
     for p in Paragraph.query(parser.eval(expr)):
         _urls[p.source['url']].append(p)
@@ -131,7 +140,7 @@ def merge_albums(expr=''):
         if len(v) > 1:
             do_merge(v)
             log('merge', *v)
-            
+
     for v in _items.values():
         if len(v) > 1:
             do_merge(v)
@@ -139,4 +148,5 @@ def merge_albums(expr=''):
 
 
 if __name__ == '__main__':
+    fire = safe_import('fire')
     fire.Fire()

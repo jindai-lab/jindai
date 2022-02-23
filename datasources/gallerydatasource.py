@@ -24,10 +24,10 @@ weburl = re.compile('^https?://')
 class GalleryAlbumDataSource(DataSource):
     """图集（图册）数据源"""
 
-    def __init__(self, cond='', limit=20, offset=0, groups=False, archive=False, raw=False, sort_keys='-_id', direction='next', order={}):
+    def __init__(self, query='', flag=0, limit=20, offset=0, groups=False, archive=False, raw=False, sort_keys='-_id', direction='next', order={}, **kws):
         """
         Args:
-            cond (QUERY): 检索表达式
+            query (QUERY): 检索表达式
             flag (int): 图像项目的标记
             limit (int): 最多返回的数量
             offset (int): 跳过记录的数量
@@ -36,32 +36,36 @@ class GalleryAlbumDataSource(DataSource):
             sort_keys (str): 排序表达式
         """
         super().__init__()
-        self.cond = cond
-        self.query = parser.eval(cond)
+        self.cond = query
+        self.query = parser.eval(query)
         self.limit = limit
         self.offset = offset
         self.groups = groups
         self.archive = archive
+        self.direction = direction
+        self.flag = flag
         self.raw = raw
 
         # sorting order
         if order == 'random' or not isinstance(order, dict) or not isinstance(order.get('keys'), list):
             order = {'keys': []}
-        
+
         if sort_keys and sort_keys != 'random':
             order['keys'] = sort_keys.split(',')
-        
+
         if len(order['keys']) > 0 and 'random' not in order['keys'] and '_id' not in order['keys'] and '-_id' not in order['keys']:
             order['keys'].append('_id')
-        
+
         self.orders = [
-            (o.split('-')[-1], -1 if o.startswith('-') == (direction == 'next') else 1)
+            (o.split('-')[-1], -1 if o.startswith('-')
+             == (direction == 'next') else 1)
             for o in order['keys'] if o != 'random' and o != 'offset'
         ]
         self.order = order
         self.random = len(self.orders) == 0
 
-        if self.random and self.limit == 0: self.limit = 100
+        if self.random and self.limit == 0:
+            self.limit = 100
 
         order_conds = []
         vconds = {}
@@ -104,9 +108,9 @@ class GalleryAlbumDataSource(DataSource):
 
         def __examine_dict(d):
             stk = [d]
-            flag = False
+            expand_images = False
             while stk:
-                if flag:
+                if expand_images:
                     break
                 d = stk.pop()
                 if isinstance(d, list):
@@ -117,12 +121,13 @@ class GalleryAlbumDataSource(DataSource):
                 else:
                     for k, v in d.items():
                         if 'images.' in k:
-                            flag = True
+                            expand_images = True
                         elif k == 'images' and isinstance(v, dict):
-                            flag = sum([1 for k_ in v if not k_.startswith('$')])
+                            expand_images = sum(
+                                [1 for k_ in v if not k_.startswith('$')])
                         else:
                             stk.append(v)
-            return flag
+            return expand_images
 
         match_first = not __examine_dict(ands)
         if not match_first:
@@ -137,7 +142,9 @@ class GalleryAlbumDataSource(DataSource):
 
         self.aggregator.lookup(
             from_='imageitem', localField=F.images, foreignField=F._id, as_=F.images
-        )
+        ).addFields(
+            images=Fn.filter(input=Var.images, as_='t', cond=Var['_t.flag'] == flag)
+        ).match(F.images != [])
 
         if unwind_first:
             self.aggregator.unwind(Var.images).addFields(
@@ -153,15 +160,19 @@ class GalleryAlbumDataSource(DataSource):
             if not self.orders:
                 self.orders = [('id', -1)]
 
-            self.aggregator.match(keywords=Fn.regex(r'^\*')).addFields(
+            if groups:
+                self.aggregator.match(keywords=Fn.regex(r'^\*'))
+
+            self.aggregator.addFields(
                 group_id=Fn.filter(input=Var.keywords, as_='t',
-                                cond=Fn.substrCP(Var._t, 0, 1) == '*')
+                                   cond=Fn.substrCP(Var._t, 0, 1) == '*')
             ).unwind(
                 path=Var.group_id, preserveNullAndEmptyArrays=archive
             ).unwind(
                 Var.images
             ).addFields(
-                group_id=Fn.ifNull(Var.group_id, Fn.concat('id=`', Fn.toString(Var._id), '`')),
+                group_id=Fn.ifNull(Var.group_id, Fn.concat(
+                    'id=`', Fn.toString(Var._id), '`')),
                 **{'images.album_id': '$_id'}
             ).group(
                 _id=Var.group_id,
@@ -179,8 +190,9 @@ class GalleryAlbumDataSource(DataSource):
                 _id=Var.id,
                 group_id=Var._id
             )
-            if archive and order_conds: self.aggregator.match({'$and': order_conds})
-        
+            if archive and order_conds:
+                self.aggregator.match({'$and': order_conds})
+
         if self.orders:
             self.orders_params = {
                 'order_conds': order_conds,
@@ -191,7 +203,6 @@ class GalleryAlbumDataSource(DataSource):
         else:
             self.orders_params = {}
 
-
     def fetch(self) -> Iterable[Paragraph]:
         if self.random:
             self.aggregator.sample(size=self.limit)
@@ -200,8 +211,9 @@ class GalleryAlbumDataSource(DataSource):
                 self.aggregator.sort(SON(self.orders))
                 if self.offset:
                     self.aggregator.skip(self.offset)
-            if self.limit: self.aggregator.limit(self.limit)
-        
+            if self.limit:
+                self.aggregator.limit(self.limit)
+
         yield from self.aggregator.perform(raw=self.raw)
 
 
@@ -254,7 +266,8 @@ class ImageImportDataSource(DataSource):
             'http': proxy,
             'https': proxy
         } if proxy else {}
-        self.excluding_patterns = [re.compile(pattern) for pattern in excluding_patterns.split('\n') if pattern]
+        self.excluding_patterns = [re.compile(
+            pattern) for pattern in excluding_patterns.split('\n') if pattern]
         self.dataset = dataset
 
     def fetch(self):
@@ -325,7 +338,7 @@ class ImageImportDataSource(DataSource):
                     except Exception as ex:
                         self.logger('Error while handling', fn, ':', ex)
                         continue
-                
+
                 i.save()
                 if mgr.write(fn, i.id):
                     i.source = dict(i.source, file='blocks.h5')
@@ -396,14 +409,16 @@ class ImageImportDataSource(DataSource):
             for _, img in imgs:
                 imgurl = urljoin(url, img)
                 for rep in self.excluding_patterns:
-                    if rep.search(imgurl): continue
+                    if rep.search(imgurl):
+                        continue
                 if imgurl not in imgset:
                     self.logger(imgurl)
-                    i = ImageItem.first(F.source == {'url': imgurl}) or ImageItem(source={'url': imgurl})
+                    i = ImageItem.first(F.source == {'url': imgurl}) or ImageItem(
+                        source={'url': imgurl})
                     i.save()
                     p.images.append(i)
                     imgset.add(imgurl)
             p.keywords = list(set(self.keywords + title.split(u',')))
             albums.append(p)
-        
+
         yield from albums

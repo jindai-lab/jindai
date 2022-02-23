@@ -1,7 +1,14 @@
 from pipeline import PipelineStage
 from models import Paragraph
+from helpers import safe_import
 import os
 import config
+
+
+jiayan = safe_import('jiayan')
+safe_import('kenlm', 'https://github.com/kpu/kenlm/archive/master.zip')
+load_lm = jiayan.load_lm
+CharHMMTokenizer = jiayan.CharHMMTokenizer
 
 
 class JiayanWordCut(PipelineStage):
@@ -9,7 +16,6 @@ class JiayanWordCut(PipelineStage):
     tokenizer = None
 
     def __init__(self):
-        from jiayan import load_lm, CharHMMTokenizer
         if JiayanWordCut.tokenizer is None:
             JiayanWordCut.tokenizer = CharHMMTokenizer(load_lm(os.path.join(config.rootpath, 'models_data', 'jiayan.klm')))
 

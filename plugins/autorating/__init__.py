@@ -1,6 +1,7 @@
 import os
 from PIL import Image
 import config
+from helpers import safe_import
 from plugin import Plugin
 
 from pipelines.imageproc import ImageOrAlbumStage
@@ -32,6 +33,7 @@ class OpenNsfw(ImageOrAlbumStage):
     """使用 OpenNSFW 模型进行打分"""
 
     def __init__(self):
+        safe_import('opennsfw_standalone', 'opennsfw-standalone')
         from opennsfw_standalone import OpenNSFWInferenceRunner
         self.runner = OpenNSFWInferenceRunner.load()
         
@@ -45,4 +47,4 @@ class AutoRatingPlugin(Plugin):
 
     def __init__(self, app, **config) -> None:
         super().__init__(app, **config)
-        super().register_pipelines('自动打分', globals())
+        self.register_pipelines(globals())

@@ -3,15 +3,12 @@ from bson import ObjectId
 import datetime
 import inspect
 import logging
-import traceback
 from PyMongoWrapper import *
 from collections import defaultdict
-from queue import deque
 from models import *
 from task import Task
 from pipeline import Pipeline, PipelineStage
 from datasource import DataSource
-import threading
 from io import BytesIO
 import sys
 import config
@@ -23,115 +20,6 @@ from helpers import *
 app = Flask(__name__)
 app.config['SECRET_KEY'] = config.secret_key
 je = dbo.create_dbo_json_encoder(json.JSONEncoder)
-
-
-class TasksQueue:
-    """处理任务队列
-    """
-
-    def __init__(self, n=3):
-        """
-        Args:
-            n (int, optional): 最大同时处理的任务数量
-        """
-        self.queue = deque()
-        self.results = {}
-        self.taskdbos = {}
-        self.running = False
-        self.n = n
-
-    def start(self):
-        """开始处理任务"""
-        self.running = True
-        self._workingThread = threading.Thread(target=self.working)
-        self._workingThread.start()
-
-    @property
-    def status(self) -> dict:
-        """任务队列状态"""
-        return {
-            'running': list(self.taskdbos),
-            'finished': [{
-                'id': k,
-                'name': k.split('@')[0],
-                'viewable': isinstance(v, list) or (isinstance(v, dict) and 'exception' in v) or (isinstance(v, dict) and 'redirect' in v),
-                'isnull': v is None,
-                'last_run': datetime.datetime.strptime(k.split('@')[-1], '%Y%m%d %H%M%S').strftime('%Y-%m-%d %H:%M:%S'),
-                'file_ext': 'json' if not isinstance(v, dict) else v.get('__file_ext__', 'json')
-            } for k, v in self.results.items()],
-            'waiting': [k for k,_ in self.queue]
-        }
-
-    def working(self):
-        """处理任务队列"""
-        while self.running:
-            if self.queue and len(self.taskdbos) < self.n: # can run new task
-                tkey, t = self.queue.popleft()
-                self.taskdbos[tkey] = t
-                try:
-                    t._task = Task.from_dbo(t)
-                    t._task.run()
-                except Exception as ex:
-                    self.results[tkey] = {'exception': f'初始化任务时出错: {ex.__class__.__name__}: {ex}', 'tracestack': traceback.format_tb(ex.__traceback__) + [
-                        app.json_encoder().encode(t.as_dict())
-                    ]}
-                    self.taskdbos.pop(tkey)
-            
-            elif not self.queue and not self.taskdbos: # all tasks done
-                self.running = False
-
-            else:
-                done = []
-                for k, v in self.taskdbos.items():
-                    if not v._task.alive:
-                        done.append(k)
-                        self.results[k] = v._task.returned
-                for k in done:
-                    self.taskdbos.pop(k)
-            time.sleep(0.5)
-
-    def enqueue(self, key, val):
-        """将新任务加入队列"""
-        self.queue.append((key, val))
-        # emit('queue', self.status)
-
-    def stop(self):
-        """停止运行"""
-        self.running = False
-
-    def find(self, key : str):
-        """返回指定任务"""
-        if key in self.taskdbos:
-            return self.taskdbos[key]
-        else:
-            for k, v in self.queue:
-                if k == key:
-                    return v
-            return None
-
-    def remove(self, key : str):
-        """删除指定任务"""
-
-        def _remove_queue(key):
-            for todel, _ in self.queue:
-                if todel == key: break
-            else:
-                return False
-            self.queue.remove(todel)
-            return True
-
-        def _remove_running(key):
-            if key in self.taskdbos:
-                t = self.taskdbos.pop(key)
-                t._task.stop()
-            else:
-                return False
-        
-        if _remove_queue(key):
-            return True
-        else:
-            return _remove_running(key)
-
 
 class NumpyEncoder(json.JSONEncoder):
     def __init__(self, **kwargs):
@@ -154,9 +42,6 @@ class NumpyEncoder(json.JSONEncoder):
 
 app.json_encoder = NumpyEncoder
 app.json_decoder = MongoJSONDecoder
-
-tasks_queue = TasksQueue()
-    
 
 def valid_task(j):
 
@@ -228,7 +113,7 @@ def log_out():
 @app.route('/api/users/')
 @app.route('/api/users/<user>', methods=['GET', 'POST'])
 @rest(user_role='admin')
-def admin_users(user='', password=None, roles=None, **kws):
+def admin_users(user='', password=None, roles=None, datasets=None, **kws):
     if user:
         u = User.first(F.username == user)
         if not u: return 'No such user.', 404
@@ -236,7 +121,10 @@ def admin_users(user='', password=None, roles=None, **kws):
             u.set_password(password)
         if roles is not None:
             u.roles = roles
+        if datasets is not None:
+            u.datasets = datasets
         u.save()
+        return True
     else:
         return list(User.query({}))
 
@@ -516,7 +404,8 @@ def delete_item(album_items: dict):
         if Paragraph.first(F.images == i):
             continue
         print('delete orphan item', str(i))
-        ImageItem.first(F.id == i).delete()
+        ii = ImageItem.first(F.id == i)
+        if ii: ii.delete()
 
     Paragraph.query(F.images == []).delete()
 
@@ -567,79 +456,6 @@ def list_task(id='', offset=0, limit=10):
         return list(TaskDBO.query({}).sort(-F.last_run, -F.id).skip(int(offset)).limit(int(limit)))
 
 
-@app.route('/api/queue/', methods=['PUT'])
-@rest()
-def enqueue_task(id=''):
-    t = TaskDBO.first(F.id == id)
-    assert t, 'No such task.'
-    t.last_run = datetime.datetime.utcnow()
-    t.save()
-    t._task = None
-    key = f'{t.name}@{datetime.datetime.utcnow().strftime("%Y%m%d %H%M%S")}'
-    tasks_queue.enqueue(key, t)
-    if not tasks_queue.running:
-        logging.info('start background thread')
-        tasks_queue.start()
-    return key
-
-
-@app.route('/api/queue/logs/<path:key>', methods=['GET'])
-@rest()
-def logs_task(key):
-    t = tasks_queue.find(key)
-    if t:
-        return logs_view(t)
-    else:
-        return f'No such key: {key}', 404
-
-
-@app.route('/api/queue/<path:_id>', methods=['DELETE'])
-@rest()
-def dequeue_task(_id):
-    if _id in tasks_queue.results:
-        del tasks_queue.results[_id]
-        # emit('queue', tasks_queue.status)
-        return True
-    else:
-        return tasks_queue.remove(_id)
-
-
-@app.route('/api/queue/<path:_id>', methods=['GET'])
-@rest(cache=True)
-def fetch_task(_id):        
-    if _id not in tasks_queue.results:
-        return Response('No such id: ' + _id, 404)
-    r = tasks_queue.results[_id]
-
-    if isinstance(r, list):
-        offset, limit = int(request.args.get('offset', 0)), int(request.args.get('limit', 0))
-        if limit == 0:
-            return {
-                'results': r,
-                'total': len(r)
-            }
-        else:
-            return {
-                'results': r[offset:offset+limit],
-                'total': len(r)
-            }
-    elif r is None:
-        return None
-    else:
-        if isinstance(r, dict) and '__file_ext__' in r and 'data' in r:
-            buf = BytesIO(r['data'])
-            buf.seek(0)
-            return send_file(buf, 'application/octstream', as_attachment=True, attachment_filename=os.path.basename(_id + '.' + r['__file_ext__']))
-        else:
-            return jsonify(r)
-
-
-@app.route('/api/queue/', methods=['GET'])
-@rest()
-def list_queue():
-    return tasks_queue.status
-
-
 @app.route('/api/help/<pipe_or_ds>')
 @rest(cache=True)
 def help(pipe_or_ds):
@@ -673,17 +489,9 @@ def help(pipe_or_ds):
     ctx = Pipeline.pipeline_ctx if pipe_or_ds == 'pipelines' else Task.datasource_ctx
     r = defaultdict(dict)
     for k, v in ctx.items():
-        name = sys.modules[v.__module__].__doc__ or v.__module__.split('.')[-1]
+        name = sys.modules[v.__module__].__doc__ or v.__module__.split('.')[-1] if hasattr(v, '__module__') else k
         r[name][k] = _doc(v)
     return r
-
-
-@app.route('/api/refresh_context')
-@rest()
-def refresh_context():
-    Pipeline.pipeline_ctx = get_context('pipelines', PipelineStage)
-    Task.datasource_ctx = get_context('datasources', DataSource)
-    return True
 
 
 @app.route('/api/history')
@@ -763,7 +571,17 @@ def search(q='', req={}, sort='', limit=100, offset=0, mongocollections=[], **kw
 @app.route('/api/datasets')
 @rest()
 def get_datasets():
-    return list(Dataset.query({}).sort(F.order_weight, F.name))
+    datasets = list(Dataset.query({}).sort(F.order_weight, F.name))
+    dataset_patterns = User.first(F.username == logined()).datasets
+    if dataset_patterns:
+        filtered_datasets = []
+        for ds in datasets:
+            for p in dataset_patterns:
+                if ds.name.startswith(p):
+                    filtered_datasets.append(ds)
+                    break
+        datasets = filtered_datasets
+    return datasets
 
 
 @app.route('/api/datasets', methods=['POST'])
@@ -977,11 +795,8 @@ def index(p='index.html'):
     return serve_file('ui/dist/index.html')
 
 
-import gallery
-gallery.init(app)
+app.plugins = PluginManager(app)
 
-import scheduler
-scheduler.init(app)
 
 if __name__ == "__main__":
     os.environ['FLASK_ENV'] = 'development'

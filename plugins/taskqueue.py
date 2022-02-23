@@ -1,18 +1,17 @@
-import traceback
-from queue import deque
-import threading
 import datetime
-import time
 import logging
 import os
-
+import threading
+import time
+import traceback
 from io import BytesIO
-from flask import Response, request, send_file, jsonify
+from queue import deque
 
+from flask import Response, jsonify, request, send_file
+from helpers import logs_view, rest
+from models import F, TaskDBO
 from plugin import Plugin
 from task import Task
-from helpers import rest, logs_view
-from models import TaskDBO, F
 
 
 class TasksQueue(Plugin):
@@ -25,6 +24,7 @@ class TasksQueue(Plugin):
             n (int, optional): 最大同时处理的任务数量
         """
         super().__init__(app)
+        app.task_queue = self
         self.queue = deque()
         self.results = {}
         self.taskdbos = {}
@@ -39,13 +39,11 @@ class TasksQueue(Plugin):
             t.last_run = datetime.datetime.utcnow()
             t.save()
             t._task = None
-            key = f'{t.name}@{datetime.datetime.utcnow().strftime("%Y%m%d %H%M%S")}'
-            self.enqueue(key, t)
+            key = self.enqueue(t)
             if not self.running:
                 logging.info('start background thread')
                 self.start()
             return key
-
 
         @app.route('/api/queue/logs/<path:key>', methods=['GET'])
         @rest()
@@ -55,7 +53,6 @@ class TasksQueue(Plugin):
                 return logs_view(t)
             else:
                 return f'No such key: {key}', 404
-
 
         @app.route('/api/queue/<path:_id>', methods=['DELETE'])
         @rest()
@@ -69,13 +66,14 @@ class TasksQueue(Plugin):
 
         @app.route('/api/queue/<path:_id>', methods=['GET'])
         @rest(cache=True)
-        def fetch_task(_id):        
+        def fetch_task(_id):
             if _id not in self.results:
                 return Response('No such id: ' + _id, 404)
             r = self.results[_id]
 
             if isinstance(r, list):
-                offset, limit = int(request.args.get('offset', 0)), int(request.args.get('limit', 0))
+                offset, limit = int(request.args.get('offset', 0)), int(
+                    request.args.get('limit', 0))
                 if limit == 0:
                     return {
                         'results': r,
@@ -120,13 +118,13 @@ class TasksQueue(Plugin):
                 'last_run': datetime.datetime.strptime(k.split('@')[-1], '%Y%m%d %H%M%S').strftime('%Y-%m-%d %H:%M:%S'),
                 'file_ext': 'json' if not isinstance(v, dict) else v.get('__file_ext__', 'json')
             } for k, v in self.results.items()],
-            'waiting': [k for k,_ in self.queue]
+            'waiting': [k for k, _ in self.queue]
         }
 
     def working(self):
         """处理任务队列"""
         while self.running:
-            if self.queue and len(self.taskdbos) < self.n: # can run new task
+            if self.queue and len(self.taskdbos) < self.n:  # can run new task
                 tkey, t = self.queue.popleft()
                 self.taskdbos[tkey] = t
                 try:
@@ -137,8 +135,8 @@ class TasksQueue(Plugin):
                         self.app.json_encoder().encode(t.as_dict())
                     ]}
                     self.taskdbos.pop(tkey)
-            
-            elif not self.queue and not self.taskdbos: # all tasks done
+
+            elif not self.queue and not self.taskdbos:  # all tasks done
                 self.running = False
 
             else:
@@ -151,16 +149,19 @@ class TasksQueue(Plugin):
                     self.taskdbos.pop(k)
             time.sleep(0.5)
 
-    def enqueue(self, key, val):
+    def enqueue(self, val, key=''):
         """将新任务加入队列"""
+        if not key:
+            key = f'{val.name}@{datetime.datetime.utcnow().strftime("%Y%m%d %H%M%S")}'
         self.queue.append((key, val))
+        return key
         # emit('queue', self.status)
 
     def stop(self):
         """停止运行"""
         self.running = False
 
-    def find(self, key : str):
+    def find(self, key: str):
         """返回指定任务"""
         if key in self.taskdbos:
             return self.taskdbos[key]
@@ -170,12 +171,13 @@ class TasksQueue(Plugin):
                     return v
             return None
 
-    def remove(self, key : str):
+    def remove(self, key: str):
         """删除指定任务"""
 
         def _remove_queue(key):
             for todel, _ in self.queue:
-                if todel == key: break
+                if todel == key:
+                    break
             else:
                 return False
             self.queue.remove(todel)
@@ -187,7 +189,7 @@ class TasksQueue(Plugin):
                 t._task.stop()
             else:
                 return False
-        
+
         if _remove_queue(key):
             return True
         else:

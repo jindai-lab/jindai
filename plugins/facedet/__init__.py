@@ -18,8 +18,7 @@ class FaceDet(ImageOrAlbumStage):
     """人脸检测"""
 
     def __init__(self) -> None:
-        from plugins.facedet import FaceDet
-        self.det = FaceDet(None)
+        self.det = FaceDetPlugin(None)
 
     def resolve_image(self, i: ImageItem):
         self.det.faces(i)
@@ -29,7 +28,7 @@ class FaceDetPlugin(Plugin):
     
     def __init__(self, app, **config):
         super().__init__(app)
-        super().register_pipelines('人脸识别', [FaceDet])
+        self.register_pipelines([FaceDet])
         if 'faces' not in ImageItem.fields:
             ImageItem.fields['faces'] = DbObjectCollection(bytes)
             ImageItem.faces = ImageItem.fields['faces']
