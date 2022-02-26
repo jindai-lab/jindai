@@ -31,12 +31,21 @@ class ImageOrAlbumStage(PipelineStage):
             except Exception as ex:
                 self.logger(i.id, self.__class__.__name__, ex)
                 self.logger(traceback.format_tb(ex.__traceback__))
-                p = None
         
         return p
 
     def resolve_image(self, i : ImageItem):
         return i
+
+
+class ImagesFromSource(PipelineStage):
+    """将来自 PDF 等语段的页面作为图片"""
+
+    def resolve(self, p: Paragraph) -> Paragraph:
+        i = ImageItem(**p.as_dict())
+        i._id = None
+        p.images = [i]
+        return p
 
 
 class CheckImage(ImageOrAlbumStage):

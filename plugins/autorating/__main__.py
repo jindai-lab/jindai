@@ -129,7 +129,6 @@ def download_dataset(host, count, dataset_dir):
             for r in te.map(download, samples(negatives, 0)): pass
         
 
-
 if __name__ == "__main__":
     os.chdir(os.path.dirname(__file__))
     cli()

@@ -30,7 +30,7 @@ class DBQueryDataSource(DataSource):
             self.aggregation = False
             if query.startswith('?'):
                 query = query[1:]
-            elif re.search(r'[\,\=\|\%:]', query):
+            elif re.search(r'[\,\=\|\%:@\*`]', query):
                 pass
             else:
                 query = ','.join([f'`{_.strip().lower()}`' for _ in jieba.cut(query) if _.strip()])
@@ -46,6 +46,7 @@ class DBQueryDataSource(DataSource):
             self.query = self.query[:-1]
         
         if req and not self.aggregation:
+            if isinstance(req, str): req = parser.eval(req)
             self.query = {'$and': [self.query, req]}
         self.limit = limit
         self.sort = sort.split(',') if sort else []

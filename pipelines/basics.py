@@ -650,7 +650,7 @@ class SaveParagraph(PipelineStage):
 
     def resolve(self, p: Paragraph):
         self.convert(p).save()
-        if 'file' in p.source:
+        if 'file' in p.source and p.dataset:
             self.datasets[p.dataset].add(p.source['file'])
         return p
 

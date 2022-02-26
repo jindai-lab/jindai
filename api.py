@@ -7,13 +7,13 @@ from PyMongoWrapper import *
 from collections import defaultdict
 from models import *
 from task import Task
-from pipeline import Pipeline, PipelineStage
-from datasource import DataSource
+from pipeline import Pipeline
 from io import BytesIO
 import sys
 import config
 import logging
 import base64
+from plugin import PluginManager
 from helpers import *
 
 
@@ -222,7 +222,7 @@ def modify_paragraph(coll, id, **kws):
 def modify_pagenum(coll, id, sequential, new_pagenum, **kws):
     id = ObjectId(id)
     p = Paragraph.get_coll(coll).first(F.id == id)
-    delta = new_pagenum - int(p.pagenum)
+    delta = new_pagenum - p.source['page']
     if p:
         if sequential == 'solo':
             p.pagenum = new_pagenum
@@ -235,7 +235,7 @@ def modify_pagenum(coll, id, sequential, new_pagenum, **kws):
             else: # after
                 source['page'] = {'$gt': source['page']}
             source = {'source.' + k: w for k, w in source.items()}
-            Paragraph.get_coll(coll).query((F.dataset == p.dataset) & (F.pagenum.type('number')) & MongoOperand(source)).update(Fn.inc(pagenum=delta))
+            Paragraph.get_coll(coll).query((F.dataset == p.dataset) & MongoOperand(source)).update([Fn.set(pagenum=Fn.add('$source.page', delta))])
             Paragraph.get_coll(coll).query((F.dataset == p.dataset) & (F.pagenum <= 0)).update([
                 Fn.set(pagenum=Fn.concat("A",Fn.toString(Fn.add(1, "$source.page"))))
             ])
@@ -403,7 +403,6 @@ def delete_item(album_items: dict):
     for i in items:
         if Paragraph.first(F.images == i):
             continue
-        print('delete orphan item', str(i))
         ii = ImageItem.first(F.id == i)
         if ii: ii.delete()
 
@@ -417,7 +416,6 @@ def delete_item(album_items: dict):
 def create_task(**task):
     task = valid_task(task)
     task.pop('shortcut_map', None)
-    print(task)
     task = TaskDBO(**task)
     task.save()
     return task.id
@@ -502,7 +500,7 @@ def history():
 
 @app.route('/api/search', methods=['POST'])
 @rest()
-def search(q='', req={}, sort='', limit=100, offset=0, mongocollections=[], **kws):
+def search(q='', req='', sort='', limit=100, offset=0, mongocollections=[], **kws):
 
     def _stringify(r):
         if not r: return ''
@@ -535,9 +533,9 @@ def search(q='', req={}, sort='', limit=100, offset=0, mongocollections=[], **kw
 
     qstr = q
     if q and req:
-        qstr += ','
+        qstr = '(' + qstr + '),'
     if req:
-        qstr += _stringify(req)
+        qstr += req
     
     History(user=logined(), querystr=qstr, created_at=datetime.datetime.utcnow()).save()
 
@@ -565,7 +563,7 @@ def search(q='', req={}, sort='', limit=100, offset=0, mongocollections=[], **kw
     count = task.datasource.count()
     results = expand_rs(task.execute())
 
-    return {'results': results, 'query': task.datasource.querystr, 'total': count}
+    return {'results': results, 'query': qstr, 'total': count}
 
 
 @app.route('/api/datasets')

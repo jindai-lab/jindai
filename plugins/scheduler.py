@@ -16,15 +16,15 @@ class SchedulerJob(db.DbObject):
 
 class JobTask:
 
-    def __init__(self, task_id: str):
+    def __init__(self, app, task_id: str):
         self.task_dbo = TaskDBO.first(F.id == task_id)
         self.key = ObjectId()
+        self.app = app
 
     def __call__(self):
         t = TaskDBO.first(F.id == self.task_dbo.id)
         assert t
         t.last_run = datetime.datetime.utcnow()
-        self.app.task_queue.enque(t)
 
     def __repr__(self) -> str:
         return f'{self.key}: {self.task_dbo.name}'
@@ -70,7 +70,7 @@ class Scheduler(Plugin):
             elif token in ['at', 'do']:
                 context = token
             elif re.match(r'[0-9a-fA-F]{24}', token) and context == 'do':
-                jobs.append(a.do(JobTask(token)))
+                jobs.append(a.do(JobTask(self.app, token)))
                 context = 'end'
             else:
                 print(
@@ -97,7 +97,6 @@ class Scheduler(Plugin):
     def run_background_thread(self):
 
         if self._thread is not None: return
-        if not self.daemon: return
 
         def background():
             import time

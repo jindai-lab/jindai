@@ -15,7 +15,6 @@ from PyMongoWrapper import F
 
 import config
 from models import MongoJSONEncoder, Paragraph, Token, User, get_context, parser
-from plugin import Plugin
 
 
 def _me(p=''):
@@ -26,70 +25,6 @@ def _me(p=''):
 
 
 parser.functions['me'] = _me
-
-
-class PluginManager:
-
-    def __init__(self, app) -> None:
-        self.plugins = []
-        self.pages = {}
-        self.callbacks = defaultdict(list)
-
-        @app.route('/api/plugins/styles.css')
-        def plugins_style():
-            """Returns css from all enabled plugins
-
-            Returns:
-                Response: css document
-            """
-            css = '\n'.join([p.run_callback('css')
-                            for p in self.callbacks['css']])
-            return Response(css, mimetype='text/css')
-
-        @app.route('/api/plugins/pages', methods=["GET", "POST"])
-        @rest()
-        def plugin_pages():
-            """Returns names for special pages in every plugins
-            """
-            return list(self.pages.keys())
-
-        # load plugins
-
-        import plugins as _plugins
-        pls = getattr(config, 'plugins', ['*'])
-        if pls == ['*']:
-            pls = list(get_context('plugins', Plugin).values())
-
-        for pl in pls:
-            if isinstance(pl, tuple) and len(pl) == 2:
-                pl, kwargs = pl
-            else:
-                kwargs = {}
-
-            if isinstance(pl, str):
-                if '.' in pl:
-                    plpkg, plname = pl.rsplit('.', 1)
-                    pkg = __import__('plugins.' + plpkg)
-                    for seg in pl.split('.'):
-                        pkg = getattr(pkg, seg)
-                    pl = pkg
-                else:
-                    pl = getattr(_plugins, pl)
-
-            try:
-                pl = pl(app, **kwargs)
-
-                for name in pl.get_pages():
-                    self.pages[name] = pl
-
-                for name in pl.get_callbacks():
-                    self.callbacks[name].append(pl)
-
-                self.plugins.append(pl)
-                print('Registered plugin:', type(pl).__name__)
-            except Exception as ex:
-                print('Error while registering plugin:', pl, ex)
-                continue
 
 
 def safe_import(module_name, package_name=''):
@@ -194,7 +129,6 @@ def serve_file(p: Union[str, IO], ext: str = '', file_size: int = 0) -> Response
             l = length
             f.seek(start)
             while l > 0:
-                print(l)
                 chunk = f.read(min(l, 1 << 20))
                 l -= len(chunk)
                 yield chunk
