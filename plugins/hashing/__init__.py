@@ -1,5 +1,6 @@
 import imagehash
 from PIL import Image
+from PyMongoWrapper.dbo import DbObjectInitializer
 from plugins.gallery import *
 from plugin import Plugin
 from storage import *
@@ -51,7 +52,12 @@ class Hashing(Plugin):
 
     def __init__(self, app):
         super().__init__(app)
-
+        if 'dhash' not in Paragraph.fields:
+            Paragraph.dhash = Paragraph.fields['dhash'] = DbObjectInitializer(bytes)
+            Paragraph.whash = Paragraph.fields['whash'] = DbObjectInitializer(bytes)
+            Paragraph.ensure_index('dhash')
+            Paragraph.ensure_index('whash')
+            
         @app.route('/api/plugins/compare.tsv')
         def _compare_tsv():
             if not os.path.exists('compare.tsv'):
@@ -93,24 +99,15 @@ class Hashing(Plugin):
         def _compare_html():
             return serve_file(os.path.join(os.path.dirname(__file__), 'compare.html'))
 
-    def get_special_pages(self):
-        return ['sim']
-
-    def handle_special_page(self, ds, post_args):
-        groups = ds.groups
-        archive = ds.archive
-        limit, offset = ds.limit, ds.order.get('offset', 0)
-        ds.limit = 0
-        ds.raw = False
-
-        if post_args[0] not in ('sim',):
-            return
-
-        iid = post_args[1]
-
-        if post_args[0] == 'sim':
-            if groups:
-                return single_item('', iid), None, None
+        @app.route('/api/plugins/sim/<iid>', methods=['POST', 'GET'])
+        @rest()
+        def sim_page(iid, raw=False, limit=50, **gallery_options):
+            ds = GalleryAlbumDataSource(limit=0, raw=False, **gallery_options)
+            offset = ds.order.get('offset', 0)
+            ds.raw = False
+            
+            if ds.groups:
+                return make_gallery_response(single_item('', iid))
             else:
                 it = ImageItem.first(F.id == iid)
                 if it.dhash is None:
@@ -132,7 +129,7 @@ class Hashing(Plugin):
                         po = Paragraph(**p.as_dict())
                         po.images = [i]
                         po.score = i.score
-                        if archive:
+                        if ds.archive:
                             pgs = [g for g in p.keywords if g.startswith('*')]
                             for g in pgs or [po.source['url']]:
                                 if g not in pgroups and (g not in groupped or groupped[g].score > po.score):
@@ -140,10 +137,12 @@ class Hashing(Plugin):
                         else:
                             results.append(po)
 
-                if archive:
+                if ds.archive:
                     results = list(groupped.values())
 
                 results = sorted(results, key=lambda x: x.score)[
                     offset:offset + limit]
-                return results, {'keys': ['offset'], 'offset': max(offset - limit, 0), 'limit': limit}, {'keys': ['offset'], 'offset': offset + limit,
-                                                                                                         'limit': limit}
+                return make_gallery_response(results, {'keys': ['offset'], 'offset': max(offset - limit, 0), 'limit': limit}, {'keys': ['offset'], 'offset': offset + limit,
+                                                                                                         'limit': limit}, False, ds.direction, ds.order)    
+    def get_pages(self):
+        return ['sim']

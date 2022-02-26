@@ -33,7 +33,6 @@ class Task:
 
     def log(self, *args):
         s = ' '.join(map(str, args))
-        print(s)
         self.queue.append(s)
         
     def run(self):

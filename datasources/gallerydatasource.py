@@ -47,10 +47,10 @@ class GalleryAlbumDataSource(DataSource):
         self.raw = raw
 
         # sorting order
-        if order == 'random' or not isinstance(order, dict) or not isinstance(order.get('keys'), list):
+        if not isinstance(order, dict) or not isinstance(order.get('keys'), list):
             order = {'keys': []}
 
-        if sort_keys and sort_keys != 'random':
+        if sort_keys and sort_keys != 'random' and not order['keys']:
             order['keys'] = sort_keys.split(',')
 
         if len(order['keys']) > 0 and 'random' not in order['keys'] and '_id' not in order['keys'] and '-_id' not in order['keys']:
@@ -92,10 +92,10 @@ class GalleryAlbumDataSource(DataSource):
         query = parser.eval(self.cond)
 
         if isinstance(query, list) and len(query) > 0:
-            ands = [query[0]] if query[0] else []
+            ands += [query[0]] if query[0] else []
             query = query[1:]
         else:
-            ands = [query] if query else []
+            ands += [query] if query else []
             query = None
 
         ands += order_conds if (not self.groups and not self.archive) else []
@@ -235,6 +235,8 @@ class GalleryImageItemDataSource(DataSource):
         self.raw = raw
         self.sort_keys = sort_keys.split(',')
         self.rs = ImageItem.query(self.query)
+        if self.sort_keys:
+            self.rs = self.rs.sort(*self.sort_keys)
         if offset:
             self.rs = self.rs.skip(offset)
         if limit:

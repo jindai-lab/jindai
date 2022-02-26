@@ -47,9 +47,7 @@ def find_latest_id():
         kmax = ''
         for f in mgr.files:
             k = max([_ for _ in f['data'] if len(_) == 24])
-            print(f, k)
             kmax = max(k, kmax)
-        print(kmax)
         return kmax
 
 
@@ -130,7 +128,6 @@ def merge_albums(expr=''):
     _urls = defaultdict(list)
     _items = defaultdict(list)
 
-    print(parser.eval(expr))
     for p in Paragraph.query(parser.eval(expr)):
         _urls[p.source['url']].append(p)
         for i in p.images:

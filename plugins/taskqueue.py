@@ -40,9 +40,6 @@ class TasksQueue(Plugin):
             t.save()
             t._task = None
             key = self.enqueue(t)
-            if not self.running:
-                logging.info('start background thread')
-                self.start()
             return key
 
         @app.route('/api/queue/logs/<path:key>', methods=['GET'])
@@ -154,6 +151,11 @@ class TasksQueue(Plugin):
         if not key:
             key = f'{val.name}@{datetime.datetime.utcnow().strftime("%Y%m%d %H%M%S")}'
         self.queue.append((key, val))
+
+        if not self.running:
+            logging.info('start background thread')
+            self.start()
+        
         return key
         # emit('queue', self.status)
 

@@ -104,11 +104,9 @@ class ImageItem(db.DbObject):
     rating = float
     width = int
     height = int
-    dhash = bytes
-    whash = bytes
     thumbnail = str
     source = DbObjectInitializer(dict, dict)
-    
+
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self._image = None
@@ -158,6 +156,13 @@ class ImageItem(db.DbObject):
         self._image = im
         self._image_flag = False
 
+    @classmethod
+    def on_initialize(cls):
+        cls.ensure_index('flag')
+        cls.ensure_index('rating')
+        cls.ensure_index('source')
+        cls.ensure_index('-_id')
+
 
 class Paragraph(db.DbObject):
 
@@ -172,6 +177,18 @@ class Paragraph(db.DbObject):
     lang = str
     images = dbo.DbObjectCollection(ImageItem)
     
+    @classmethod
+    def on_initialize(cls):
+        cls.ensure_index('dataset')
+        cls.ensure_index('author')
+        cls.ensure_index('source')
+        cls.ensure_index('keywords')
+        cls.ensure_index('pdate')
+        cls.ensure_index('outline')
+        cls.ensure_index('pagenum')
+        cls.ensure_index('images')
+        cls.ensure_index('-_id')
+
     def as_dict(self, expand=False):
         d = super().as_dict(expand)
         for k in [_ for _ in d if _.startswith('_') and _ != '_id']:

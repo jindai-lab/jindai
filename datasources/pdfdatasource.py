@@ -58,26 +58,3 @@ class PDFDataSource(DataSource):
                         'page': p}, pagenum=label or (p+1), dataset=self.name)
                 except Exception as e:
                     self.logger(pdffile, p+1, e)
-
-
-class PDFImageDataSource(DataSource):
-    """从PDF中获得图像
-    """
-
-    def __init__(self, files_or_patterns, limit=None):
-        """
-        Args:
-            files_or_patterns (str): PDF文件列表
-            limit (int): 最多返回的图像数量
-        """
-        super().__init__()
-        self.files = expand_file_patterns(files_or_patterns.split('\n'))
-        self.limit = limit
-
-    def fetch(self):
-        for _, pdffile in self.files:
-            self.logger('processing', pdffile)
-            images = convert_from_path(pdffile, 300, first_page=0, last_page=self.limit)
-            for page, i in enumerate(images):
-                yield Paragraph(image=i, source={'file': pdffile, 'page': page})
-                

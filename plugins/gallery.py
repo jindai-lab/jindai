@@ -1,6 +1,6 @@
 import hashlib
 import os
-import random
+from random import sample
 from typing import List
 from bson import ObjectId
 from datasources.gallerydatasource import GalleryAlbumDataSource
@@ -36,6 +36,68 @@ def single_item(pid: str, iid: str) -> List[Paragraph]:
     else:
         return []
 
+
+def make_gallery_response(rs, prev_order={}, next_order={}, random=False, direction='next', order={}):
+    
+    r = []
+    res = {}
+    try:
+        for res in rs:
+            if isinstance(res, Paragraph):
+                res = res.as_dict(expand=True)
+
+            if 'count' not in res:
+                res['count'] = ''
+
+            if '_id' not in res or not res['images']:
+                continue
+
+            if random:
+                res['images'] = sample(res['images'], 1)
+
+            if direction != 'next':
+                r.insert(0, res)
+            else:
+                r.append(res)
+
+    except Exception as ex:
+        import traceback
+        return jsonify({
+            'exception': repr(ex),
+            'trackstack': traceback.format_exc(),
+            'results': [res],
+        }), 500
+
+    def _make_order(rk):
+        o = dict(order)
+        for k in o.get('keys', []):
+            k = k[1:] if k.startswith('-') else k
+            if '.' in k:
+                o[k] = rk
+                for k_ in k.split('.'):
+                    o[k] = o[k].get(k_, {})
+                    if isinstance(o[k], list):
+                        o[k] = o[k][0] if o[k] else {}
+                if o[k] == {}:
+                    o[k] = 0
+            else:
+                o[k] = rk.get(k, 0)
+        return o
+
+    if r:
+        if not prev_order:
+            prev_order = _make_order(r[0])
+        if not next_order:
+            next_order = _make_order(r[-1])
+
+    return jsonify({
+        'total_count': len(r),
+        'params': request.json,
+        'prev': prev_order,
+        'next': next_order,
+        'results': r,
+    })
+    
 
 class Gallery(Plugin):
 
@@ -112,78 +174,4 @@ class Gallery(Plugin):
             if count:
                 return (list(ds.aggregator.group(_id='', count=Fn.sum(1)).perform(raw=True)) + [{'count': 0}])[0]['count']
 
-            prev_order, next_order = {}, {}
-
-            post_args = post.split('/')
-            special_page = self.app.plugins.pages.get(post_args[0])
-            if special_page:
-                ret = special_page.handle_special_page(
-                    ds, post_args) or ([], None, None)
-                if isinstance(ret, tuple) and len(ret) == 3:
-                    rs, prev_order, next_order = ret
-                else:
-                    return ret
-            else:
-                rs = ds.fetch()
-
-            r = []
-            res = {}
-            try:
-                for res in rs:
-                    if isinstance(res, Paragraph):
-                        res = res.as_dict(expand=True)
-
-                    if 'count' not in res:
-                        res['count'] = ''
-
-                    if '_id' not in res or not res['images']:
-                        continue
-
-                    if ds.random:
-                        res['images'] = random.sample(res['images'], 1)
-
-                    if ds.direction != 'next':
-                        r.insert(0, res)
-                    else:
-                        r.append(res)
-
-            except Exception as ex:
-                import traceback
-                return jsonify({
-                    'exception': repr(ex),
-                    'trackstack': traceback.format_exc(),
-                    'results': [res],
-                    '_filters': ds.aggregator.aggregators
-                }), 500
-
-            def mkorder(rk):
-                o = dict(ds.order)
-                for k in o['keys']:
-                    k = k[1:] if k.startswith('-') else k
-                    if '.' in k:
-                        o[k] = rk
-                        for k_ in k.split('.'):
-                            o[k] = o[k].get(k_, {})
-                            if isinstance(o[k], list):
-                                o[k] = o[k][0] if o[k] else {}
-                        if o[k] == {}:
-                            o[k] = 0
-                    else:
-                        o[k] = rk.get(k, 0)
-                return o
-
-            if r:
-                if not prev_order:
-                    prev_order = mkorder(r[0])
-                if not next_order:
-                    next_order = mkorder(r[-1])
-
-            return jsonify({
-                'total_count': len(r),
-                'params': request.json,
-                'prev': prev_order,
-                'next': next_order,
-                'results': r,
-                '_filters': ds.aggregator.aggregators
-            })
-        
+            return make_gallery_response(ds.fetch(), random=ds.random, direction=ds.direction, order=ds.order)
