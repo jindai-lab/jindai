@@ -20,7 +20,6 @@ class Task:
         self.queue = deque()
         self.alive = True
         self.returned = None
-
         self.datasource.logger = lambda *x: self.log(type(self.datasource).__name__, *x)
 
     def execute(self):

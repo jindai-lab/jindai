@@ -25,7 +25,8 @@ class JobTask:
         t = TaskDBO.first(F.id == self.task_dbo.id)
         assert t
         t.last_run = datetime.datetime.utcnow()
-
+        self.app.task_queue.enqueue(t, run_by='scheduler')
+        
     def __repr__(self) -> str:
         return f'{self.key}: {self.task_dbo.name}'
 

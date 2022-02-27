@@ -255,6 +255,8 @@ class TaskDBO(db.DbObject):
     last_run = datetime.datetime
     concurrent = DbObjectInitializer(lambda *x: 3 if len(x) == 0 else int(x), int)
     shortcut_map = dict
+    creator = str
+    shared = bool
 
 
 class User(db.DbObject):
@@ -309,6 +311,10 @@ class Token(db.DbObject):
             if t.user == user:
                 t.expire = 0
         Token.query(F.user==user).delete()
+
+    @property
+    def roles(self):
+        return User.first(F.username == self.user).roles
 
 
 def get_context(directory : str, parent_class : Type) -> Dict:
