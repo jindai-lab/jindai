@@ -8,7 +8,7 @@ from io import BytesIO
 from queue import deque
 
 from flask import Response, jsonify, request, send_file
-from helpers import logs_view, rest
+from helpers import logined, logs_view, rest
 from models import F, TaskDBO
 from plugin import Plugin
 from task import Task
@@ -35,11 +35,11 @@ class TasksQueue(Plugin):
         @rest()
         def enqueue_task(id=''):
             t = TaskDBO.first(F.id == id)
-            assert t, 'No such task.'
+            assert t, 'No such task, or you do not have permission.'
             t.last_run = datetime.datetime.utcnow()
             t.save()
             t._task = None
-            key = self.enqueue(t)
+            key = self.enqueue(t, run_by=logined())
             return key
 
         @app.route('/api/queue/logs/<path:key>', methods=['GET'])
@@ -128,7 +128,7 @@ class TasksQueue(Plugin):
                     t._task = Task.from_dbo(t)
                     t._task.run()
                 except Exception as ex:
-                    self.results[tkey] = {'exception': f'初始化任务时出错: {ex.__class__.__name__}: {ex}', 'tracestack': traceback.format_tb(ex.__traceback__) + [
+                    self.results[tkey] = {'run_by': t.run_by, 'exception': f'初始化任务时出错: {ex.__class__.__name__}: {ex}', 'tracestack': traceback.format_tb(ex.__traceback__) + [
                         self.app.json_encoder().encode(t.as_dict())
                     ]}
                     self.taskdbos.pop(tkey)
@@ -146,16 +146,18 @@ class TasksQueue(Plugin):
                     self.taskdbos.pop(k)
             time.sleep(0.5)
 
-    def enqueue(self, val, key=''):
+    def enqueue(self, val, key='', run_by=''):
         """将新任务加入队列"""
+        val.run_by = run_by
         if not key:
             key = f'{val.name}@{datetime.datetime.utcnow().strftime("%Y%m%d %H%M%S")}'
+
         self.queue.append((key, val))
 
         if not self.running:
             logging.info('start background thread')
             self.start()
-        
+
         return key
         # emit('queue', self.status)
 

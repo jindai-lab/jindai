@@ -75,6 +75,13 @@ def valid_task(j):
     return j
 
 
+def task_authorized():
+    if logined('admin'):
+        return MongoOperand({})
+    else:
+        return ((F.creator == logined()) | (F.shared == True))
+
+
 def expand_rs(rs):
     if not isinstance(rs, (str, dict, bytes)) and hasattr(rs, '__iter__'):
         return [dict(r.as_dict(True), mongocollection=type(r).db.name) if isinstance(r, Paragraph) else r for r in rs]
@@ -112,7 +119,7 @@ def log_out():
 
 @app.route('/api/users/')
 @app.route('/api/users/<user>', methods=['GET', 'POST'])
-@rest(user_role='admin')
+@rest(role='admin')
 def admin_users(user='', password=None, roles=None, datasets=None, **kws):
     if user:
         u = User.first(F.username == user)
@@ -130,7 +137,7 @@ def admin_users(user='', password=None, roles=None, datasets=None, **kws):
 
 
 @app.route('/api/users/', methods=['PUT'])
-@rest(user_role='admin')
+@rest(role='admin')
 def admin_users_add(username, password, **kws):
     if User.first(F.username == username):
         raise Exception('User already exists: ' + str(username))
@@ -155,7 +162,7 @@ def user_change_password(old_password='', password='', **kws):
 
 
 @app.route('/api/users/<uname>', methods=['DELETE'])
-@rest(user_role='admin')
+@rest(role='admin')
 def admin_users_del(uname):
     return User.query(F.username == uname).delete()
 
@@ -168,7 +175,7 @@ def file_detail(path):
         'ctime': st.st_ctime,
         'mtime': st.st_mtime,
         'size': st.st_size,
-        'folder': os.path.isdir(path)
+        'type': 'folder' if os.path.isdir(path) else 'file'
     }
 
 
@@ -417,6 +424,7 @@ def create_task(**task):
     task = valid_task(task)
     task.pop('shortcut_map', None)
     task = TaskDBO(**task)
+    task.creator = logined()
     task.save()
     return task.id
 
@@ -424,7 +432,8 @@ def create_task(**task):
 @app.route('/api/tasks/shortcuts', methods=['GET'])
 @rest()
 def list_tasks_shortcuts():
-    return list(TaskDBO.query(F.shortcut_map != {}))
+    return list(TaskDBO.query((F.shortcut_map != {}) & task_authorized()))
+
 
 @app.route('/api/tasks/<id>', methods=['DELETE'])
 @rest()
@@ -439,7 +448,7 @@ def update_task(id, **task):
     _id = ObjectId(id)
     task = valid_task(task)
     if '_id' in task: del task['_id']
-    return {'acknowledged': TaskDBO.query(F.id == _id).update(Fn.set(task)).acknowledged, 'updated': task}
+    return {'acknowledged': TaskDBO.query((F.id == _id) & task_authorized()).update(Fn.set(task)).acknowledged, 'updated': task}
 
 
 @app.route('/api/tasks/<id>', methods=['GET'])
@@ -449,9 +458,9 @@ def update_task(id, **task):
 def list_task(id='', offset=0, limit=10):
     if id:
         _id = ObjectId(id)
-        return TaskDBO.first(F.id == _id)
+        return TaskDBO.first((F.id == _id) & task_authorized())
     else:
-        return list(TaskDBO.query({}).sort(-F.last_run, -F.id).skip(int(offset)).limit(int(limit)))
+        return list(TaskDBO.query(task_authorized()).sort(-F.last_run, -F.id).skip(int(offset)).limit(int(limit)))
 
 
 @app.route('/api/help/<pipe_or_ds>')
@@ -569,7 +578,7 @@ def search(q='', req='', sort='', limit=100, offset=0, mongocollections=[], **kw
 @app.route('/api/datasets')
 @rest()
 def get_datasets():
-    datasets = list(Dataset.query({}).sort(F.order_weight, F.name))
+    datasets = list(Dataset.query((F.allowed_users == []) | (F.allowed_users == logined())).sort(F.order_weight, F.name))
     dataset_patterns = User.first(F.username == logined()).datasets
     if dataset_patterns:
         filtered_datasets = []
@@ -719,7 +728,7 @@ def quick_task(query='', raw=False, mongocollection=''):
 
 
 @app.route('/api/admin/db', methods=['POST'])
-@rest(user_role='admin')
+@rest(role='admin')
 def dbconsole(mongocollection='', query='', operation='', operation_params={}, preview=True):
     mongo = Paragraph.db.database[mongocollection]
     query = parser.eval(query)
@@ -742,7 +751,7 @@ def dbconsole(mongocollection='', query='', operation='', operation_params={}, p
 
 
 @app.route('/api/admin/db/collections', methods=['GET'])
-@rest(user_role='admin')
+@rest(role='admin')
 def dbconsole_collections():
     return Paragraph.db.database.list_collection_names()
 
@@ -755,7 +764,7 @@ def get_meta():
 
 
 @app.route('/api/meta', methods=['POST'])
-@rest(user_role='admin')
+@rest(role='admin')
 def set_meta(**vals):
     r = Meta.first(F.app_title.exists(1)) or Meta()
     for k, v in vals.items():

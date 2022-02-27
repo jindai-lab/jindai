@@ -36,13 +36,12 @@ def safe_import(module_name, package_name=''):
     return importlib.import_module(module_name)
 
 
-def rest(login=True, cache=False, user_role=''):
+def rest(login=True, cache=False, role=''):
     def do_rest(func):
         @wraps(func)
         def wrapped(*args, **kwargs):
             try:
-                if (login and not logined()) or \
-                    (user_role and not User.first((F.roles == user_role) & (F.username == logined()))):
+                if login and not logined(role):
                     raise Exception(f'Forbidden. Client: {request.remote_addr}')
                 if request.json:
                     kwargs.update(**request.json)
@@ -61,11 +60,11 @@ def rest(login=True, cache=False, user_role=''):
     return do_rest
 
 
-def logined():
+def logined(role=''):
     t = Token.check(request.headers.get('X-Authentication-Token', request.cookies.get('token')))
-    if t:
+    if t and (not role or role in t.roles):
         return t.user
-    if request.remote_addr in config.allowed_ips:
+    if request.remote_addr in getattr(config, 'allowed_ips', []):
         return request.remote_addr
 
 
