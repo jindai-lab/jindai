@@ -45,83 +45,81 @@ class FaceDetPlugin(Plugin):
         super().__init__(app)
         self.det = FaceDet()
         self.register_pipelines([FaceDet])
-        if 'faces' not in ImageItem.fields:
-            ImageItem.fields['faces'] = DbObjectCollection(bytes)
-            ImageItem.faces = ImageItem.fields['faces']
+        ImageItem.set_field('faces', DbObjectCollection(bytes))
         
-        @app.route('/api/plugins/face', methods=['POST', 'GET'])
-        @app.route('/api/plugins/face/<iid>', methods=['POST', 'GET'])
-        @app.route('/api/plugins/face/<iid>.<fid>', methods=['POST', 'GET'])
-        @rest()
-        def handle_page(iid='', fid='', **gallery_options):
-        
-            ds = GalleryAlbumDataSource(**gallery_options)
-            groups = ds.groups
-            archive = ds.archive
+    def handle_page(self, ds, iid='', fid=''):
+        groups = ds.groups
+        archive = ds.archive
 
-            offset = ds.order.get('offset', 0)
-            limit = ds.limit
-            ds.limit = 0
-            ds.raw = False
+        offset = ds.order.get('offset', 0)
+        limit = ds.limit
+        ds.limit = 0
+        ds.raw = False
 
-            if iid == '':
-                ds.aggregator.addFields(
-                    images=Fn.filter(input=Var.images, as_='item', cond=Fn.size(Fn.ifNull('$$item.faces', [])))
-                ).match(F.images != [])            
+        if iid == '':
+            ds.aggregator.addFields(
+                images=Fn.filter(input=Var.images, as_='item', cond=Fn.size(Fn.ifNull('$$item.faces', [])))
+            ).match(F.images != [])            
 
-                rs = ds.fetch()
-                return make_gallery_response(rs)
+            rs = ds.fetch()
+            return make_gallery_response(rs)
 
-            else:
-                fid = 0 if not fid else int(fid)
-                iid = ObjectId(iid)
-                if groups:
-                    ps = single_item('', iid)
-                    p = ps[0]
-                    for face in self.det.crop_faces(p.images[0].image_raw):
-                        saved = BytesIO()
-                        face.save(saved, format='JPEG')
-                        ps.append(
-                            Paragraph(
-                                _id=p.id,
-                                images=[
-                                    ImageItem(source={'url': 'data:image/jpeg;base64,' + base64.b64encode(saved.getvalue()).decode('ascii')})
-                                ]
-                            )
+        else:
+            fid = 0 if not fid else int(fid)
+            iid = ObjectId(iid)
+            if groups:
+                ps = single_item('', iid)
+                p = ps[0]
+                for face in self.det.crop_faces(p.images[0].image_raw):
+                    saved = BytesIO()
+                    face.save(saved, format='JPEG')
+                    ps.append(
+                        Paragraph(
+                            _id=p.id,
+                            images=[
+                                ImageItem(source={'url': 'data:image/jpeg;base64,' + base64.b64encode(saved.getvalue()).decode('ascii')})
+                            ]
                         )
+                    )
 
-                    if fid: ps = [ps[0], ps[fid]]
+                if fid: ps = [ps[0], ps[fid]]
 
-                    return make_gallery_response(ps)
-                else:
-                    fdh = [v(f) for f in ImageItem.first(F.id == iid).faces]
-                    if fid: fdh = [fdh[fid-1]]
-                    if not fdh:
-                        return make_gallery_response([])
+                return make_gallery_response(ps)
+            else:
+                fdh = [v(f) for f in ImageItem.first(F.id == iid).faces]
+                if fid: fdh = [fdh[fid-1]]
+                if not fdh:
+                    return make_gallery_response([])
 
-                    groupped = {}
-                    results = []
-                    for rp in ds.fetch():
-                        for ri in rp.images:
-                            if not ri or not isinstance(ri, ImageItem) or ri.flag != 0 or not ri.faces or ri.id == iid: continue
-                            ri.score = min([
-                                min([bitcount(v(i) ^ j) for j in fdh])
-                                for i in ri.faces
-                            ])
-                            rpo = Paragraph(**rp.as_dict())
-                            rpo.images = [ri]
-                            if archive:
-                                pgs = [g for g in rp.keywords if g.startswith('*')]
-                                for g in pgs or [rp.source['url']]:
-                                    if g not in groupped or groupped[g][0] > ri.score:
-                                        groupped[g] = (ri.score, rpo)
-                            else:
-                                results.append((ri.score, rpo))
-                    
-                    if archive:
-                        results = list(groupped.values())
-                    return make_gallery_response([r for _, r in sorted(results, key=lambda x: x[0])[offset:offset+limit]], \
-                        {'keys': ['offset'], 'offset': max(0, offset-limit)}, {'keys': ['offset'], 'offset': offset + limit}, False, ds.direction, ds.order)
-        
+                groupped = {}
+                results = []
+                for rp in ds.fetch():
+                    for ri in rp.images:
+                        if not ri or not isinstance(ri, ImageItem) or ri.flag != 0 or not ri.faces or ri.id == iid: continue
+                        ri.score = min([
+                            min([bitcount(v(i) ^ j) for j in fdh])
+                            for i in ri.faces
+                        ])
+                        rpo = Paragraph(**rp.as_dict())
+                        rpo.images = [ri]
+                        if archive:
+                            pgs = [g for g in rp.keywords if g.startswith('*')]
+                            for g in pgs or [rp.source['url']]:
+                                if g not in groupped or groupped[g][0] > ri.score:
+                                    groupped[g] = (ri.score, rpo)
+                        else:
+                            results.append((ri.score, rpo))
+                
+                if archive:
+                    results = list(groupped.values())
+                return make_gallery_response([r for _, r in sorted(results, key=lambda x: x[0])[offset:offset+limit]], \
+                    {'keys': ['offset'], 'offset': max(0, offset-limit)}, {'keys': ['offset'], 'offset': offset + limit}, False, ds.direction, ds.order)
+    
     def get_pages(self):
-        return ['face']
+        return {
+            'face': {
+                'format': 'face/{imageitem._id}',
+                'shortcut': 'e',
+                'icon': 'mdi-emoticon-outline'
+            }
+        }

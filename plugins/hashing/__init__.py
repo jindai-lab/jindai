@@ -52,11 +52,8 @@ class Hashing(Plugin):
 
     def __init__(self, app):
         super().__init__(app)
-        if 'dhash' not in Paragraph.fields:
-            Paragraph.dhash = Paragraph.fields['dhash'] = DbObjectInitializer(bytes)
-            Paragraph.whash = Paragraph.fields['whash'] = DbObjectInitializer(bytes)
-            Paragraph.ensure_index('dhash')
-            Paragraph.ensure_index('whash')
+        ImageItem.set_field('dhash', bytes)
+        ImageItem.set_field('whash', bytes)
             
         @app.route('/api/plugins/compare.tsv')
         def _compare_tsv():
@@ -99,50 +96,55 @@ class Hashing(Plugin):
         def _compare_html():
             return serve_file(os.path.join(os.path.dirname(__file__), 'compare.html'))
 
-        @app.route('/api/plugins/sim/<iid>', methods=['POST', 'GET'])
-        @rest()
-        def sim_page(iid, raw=False, limit=50, **gallery_options):
-            ds = GalleryAlbumDataSource(limit=0, raw=False, **gallery_options)
-            offset = ds.order.get('offset', 0)
-            ds.raw = False
-            
-            if ds.groups:
-                return make_gallery_response(single_item('', iid))
-            else:
-                it = ImageItem.first(F.id == iid)
-                if it.dhash is None:
-                    return
-                pgroups = [g for g in (Paragraph.first(F.images == ObjectId(iid)) or Paragraph()).keywords if g.startswith(
-                    '*')] or [(Paragraph.first(F.images == ObjectId(iid)) or Paragraph()).source.get('url', '')]
-                dha, dhb = v(it.dhash), v(it.whash)
-                results = []
-                groupped = {}
+    def handle_page(self, ds, iid):
+        limit = ds.limit
+        offset = ds.order.get('offset', 0)
+        ds.limit = 0
+        ds.raw = False
+        
+        if ds.groups:
+            return make_gallery_response(single_item('', iid))
+        else:
+            it = ImageItem.first(F.id == iid)
+            if it.dhash is None:
+                return
+            pgroups = [g for g in (Paragraph.first(F.images == ObjectId(iid)) or Paragraph()).keywords if g.startswith(
+                '*')] or [(Paragraph.first(F.images == ObjectId(iid)) or Paragraph()).source.get('url', '')]
+            dha, dhb = v(it.dhash), v(it.whash)
+            results = []
+            groupped = {}
 
-                for p in ds.fetch():
-                    for i in p.images:
-                        if i.id == it.id:
-                            continue
-                        if i.flag != 0 or i.dhash is None or i.dhash == b'':
-                            continue
-                        dha1, dhb1 = v(i.dhash), v(i.whash)
-                        i.score = bitcount(dha ^ dha1) + bitcount(dhb ^ dhb1)
-                        po = Paragraph(**p.as_dict())
-                        po.images = [i]
-                        po.score = i.score
-                        if ds.archive:
-                            pgs = [g for g in p.keywords if g.startswith('*')]
-                            for g in pgs or [po.source['url']]:
-                                if g not in pgroups and (g not in groupped or groupped[g].score > po.score):
-                                    groupped[g] = po
-                        else:
-                            results.append(po)
+            for p in ds.fetch():
+                for i in p.images:
+                    if i.id == it.id:
+                        continue
+                    if i.flag != 0 or i.dhash is None or i.dhash == b'':
+                        continue
+                    dha1, dhb1 = v(i.dhash), v(i.whash)
+                    i.score = bitcount(dha ^ dha1) + bitcount(dhb ^ dhb1)
+                    po = Paragraph(**p.as_dict())
+                    po.images = [i]
+                    po.score = i.score
+                    if ds.archive:
+                        pgs = [g for g in p.keywords if g.startswith('*')]
+                        for g in pgs or [po.source['url']]:
+                            if g not in pgroups and (g not in groupped or groupped[g].score > po.score):
+                                groupped[g] = po
+                    else:
+                        results.append(po)
 
-                if ds.archive:
-                    results = list(groupped.values())
+            if ds.archive:
+                results = list(groupped.values())
 
-                results = sorted(results, key=lambda x: x.score)[
-                    offset:offset + limit]
-                return make_gallery_response(results, {'keys': ['offset'], 'offset': max(offset - limit, 0), 'limit': limit}, {'keys': ['offset'], 'offset': offset + limit,
-                                                                                                         'limit': limit}, False, ds.direction, ds.order)    
+            results = sorted(results, key=lambda x: x.score)[
+                offset:offset + limit]
+            return make_gallery_response(results, {'keys': ['offset'], 'offset': max(offset - limit, 0), 'limit': limit}, {'keys': ['offset'], 'offset': offset + limit,
+                                                                                                        'limit': limit}, False, ds.direction, ds.order)    
     def get_pages(self):
-        return ['sim']
+        return {
+            'sim': {
+                'format': 'sim/{imageitem._id}',
+                'shortcut': 's',
+                'icon': 'mdi-image'
+            }
+        }

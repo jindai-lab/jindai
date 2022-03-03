@@ -36,6 +36,7 @@ class OpenNsfw(ImageOrAlbumStage):
         safe_import('opennsfw_standalone', 'opennsfw-standalone')
         from opennsfw_standalone import OpenNSFWInferenceRunner
         self.runner = OpenNSFWInferenceRunner.load()
+        ImageItem.set_field('nsfw', float)
         
     def resolve_image(self, i: ImageItem):
         i.nsfw = float(self.runner.infer(i.image_raw.read()))

@@ -161,7 +161,6 @@ class ImageItem(db.DbObject):
         cls.ensure_index('flag')
         cls.ensure_index('rating')
         cls.ensure_index('source')
-        cls.ensure_index('-_id')
 
 
 class Paragraph(db.DbObject):
@@ -187,7 +186,6 @@ class Paragraph(db.DbObject):
         cls.ensure_index('outline')
         cls.ensure_index('pagenum')
         cls.ensure_index('images')
-        cls.ensure_index('-_id')
 
     def as_dict(self, expand=False):
         d = super().as_dict(expand)
@@ -314,8 +312,10 @@ class Token(db.DbObject):
 
     @property
     def roles(self):
-        return User.first(F.username == self.user).roles
-
+        if not hasattr(self, '_roles'):
+            self._roles = User.first(F.username == self.user).roles
+        return self._roles
+        
 
 def get_context(directory : str, parent_class : Type) -> Dict:
     modules = [
