@@ -163,13 +163,25 @@ class Gallery(Plugin):
 
         @app.route('/api/gallery/get', methods=["GET", "POST"])
         @rest()
-        def get(post='', count=False, **album_options):
+        def get(query, count=False, **album_options):
             """Get records
 
             Returns:
                 Response: json document of records
             """
-            ds = GalleryAlbumDataSource(**album_options, raw=True)
+
+            query = parser.eval(query)
+            page = []
+            if isinstance(query, list) and '$page' in query[-1]:
+                query, page = query[:-1], query[-1]['$page'].split('/')
+                if len(query) == 1: query = query[0]
+
+            ds = GalleryAlbumDataSource(query, **album_options, raw=True)
+            
+            if page:
+                for pl in app.plugins:
+                    if page[0] in pl.get_pages():
+                        return pl.handle_page(ds, *page[1:])
 
             if count:
                 return (list(ds.aggregator.group(_id='', count=Fn.sum(1)).perform(raw=True)) + [{'count': 0}])[0]['count']

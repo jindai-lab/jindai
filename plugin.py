@@ -15,7 +15,7 @@ class Plugin:
         self.app = app
         
     def get_pages(self):
-        return []
+        return {}
     
     def get_callbacks(self):
         return []
@@ -37,7 +37,7 @@ class PluginManager:
 
     def __init__(self, app) -> None:
         self.plugins = []
-        self.pages = []
+        self.pages = {}
         self.callbacks = defaultdict(list)
 
         @app.route('/api/plugins/styles.css')
@@ -84,7 +84,7 @@ class PluginManager:
             try:
                 pl = pl(app, **kwargs)
 
-                self.pages += pl.get_pages()
+                self.pages.update(**pl.get_pages())
 
                 for name in pl.get_callbacks():
                     self.callbacks[name].append(pl)
@@ -95,3 +95,5 @@ class PluginManager:
                 print('Error while registering plugin:', pl, ex)
                 continue
 
+    def __iter__(self):
+        yield from self.plugins

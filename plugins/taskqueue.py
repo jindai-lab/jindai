@@ -94,7 +94,12 @@ class TasksQueue(Plugin):
         @app.route('/api/queue/', methods=['GET'])
         @rest()
         def list_queue():
-            return self.status
+            st = self.status
+            st['running'] = [_ for _ in st['running'] if logined('admin') or _.run_by == logined()]
+            st['finished'] = [_ for _ in st['finished'] if logined('admin') or not _.get('run_by') or _['run_by'] == logined()]
+            st['waiting'] = [_ for _ in st['waiting'] if logined('admin') or _.run_by == logined()]
+            return st
+
 
     def start(self):
         """开始处理任务"""
@@ -113,7 +118,8 @@ class TasksQueue(Plugin):
                 'viewable': isinstance(v, list) or (isinstance(v, dict) and 'exception' in v) or (isinstance(v, dict) and 'redirect' in v),
                 'isnull': v is None,
                 'last_run': datetime.datetime.strptime(k.split('@')[-1], '%Y%m%d %H%M%S').strftime('%Y-%m-%d %H:%M:%S'),
-                'file_ext': 'json' if not isinstance(v, dict) else v.get('__file_ext__', 'json')
+                'file_ext': 'json' if not isinstance(v, dict) else v.get('__file_ext__', 'json'),
+                'run_by': v.get('run_by', '') if isinstance(v, dict) else ''
             } for k, v in self.results.items()],
             'waiting': [k for k, _ in self.queue]
         }

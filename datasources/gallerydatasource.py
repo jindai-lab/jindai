@@ -36,8 +36,7 @@ class GalleryAlbumDataSource(DataSource):
             sort_keys (str): 排序表达式
         """
         super().__init__()
-        self.cond = query
-        self.query = parser.eval(query)
+        self.query = parser.eval(query) if isinstance(query, str) else query
         self.limit = limit
         self.offset = offset
         self.groups = groups
@@ -88,8 +87,6 @@ class GalleryAlbumDataSource(DataSource):
             order_conds = [{'$or': order_conds}]
 
         ands = []
-
-        query = parser.eval(self.cond)
 
         if isinstance(query, list) and len(query) > 0:
             ands += [query[0]] if query[0] else []
