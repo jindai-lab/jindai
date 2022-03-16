@@ -281,16 +281,12 @@ def batch(coll, ids, **kws):
 
 @app.route('/api/<coll>/search_values', methods=['GET', 'POST'])
 @rest()
-def search_tags(coll, search, field, match_initials=False):
+def search_values(coll, search, field, match_initials=False):
     if not search: return []
-    search = re.escape(search)
+    search = re.escape(search.strip())
     if match_initials: search = '^' + search
     matcher = {field: {'$regex': search, '$options': '-i'}}
-    return [
-            _
-            for _ in Paragraph.get_coll(coll).aggregator.match(matcher).unwind(Var[field]).match(matcher).group(_id=Var[field], count=Fn.sum(1)).sort(count=-1).perform(raw=True)
-            if len(_['_id']) < 15
-        ]
+    return list(Paragraph.get_coll(coll).aggregator.unwind(Var[field]).match(matcher).group(_id=Var[field], count=Fn.sum(1)).sort(count=-1).perform(raw=True))
 
 
 @app.route('/api/<coll>/split', methods=["GET", "POST"])

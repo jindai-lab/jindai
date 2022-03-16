@@ -1,6 +1,4 @@
 from collections import defaultdict
-import os
-
 from flask import Response
 from models import get_context
 from pipeline import Pipeline, PipelineStage

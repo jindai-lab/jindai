@@ -4,7 +4,7 @@ from PyMongoWrapper import F, Fn
 import h5py
 from models import Meta, User, TaskDBO, MongoJSONEncoder, ImageItem
 from typing import Dict, Iterable
-from task import Task
+#from task import Task
 from tqdm import tqdm
 import requests, zipfile
 from bson import ObjectId
@@ -29,6 +29,7 @@ def cli():
 @click.option('--query')
 def export(query, output):
 
+    from task import Task
     task = Task(datasource=('DBQueryDataSource', {'query': query}), pipeline=[
         ('AccumulateParagraphs', {}),
         ('Export', {'format': 'xlsx', 'inp': 'return'})
@@ -43,6 +44,7 @@ def export(query, output):
 @cli.command('task')
 @click.argument('task_id')
 def task(task_id):
+    from task import Task
     task = Task.from_dbo(TaskDBO.first((F.id == task_id) if re.match(r'[0-9a-f]{24}', task_id) else (F.name == task_id)))
     result = task.execute()
     print(result)
@@ -98,6 +100,7 @@ def meta(key, value):
 @click.argument('infiles', nargs=-1)
 def storage_merge(infiles, output):
     items = {str(i.id) for i in ImageItem.query(F['source.file'] == 'blocks.h5')}
+    items = items.union({i.thumbnail for i in ImageItem.query(F.thumbnail.exists(1) & (F.thumbnail != '')) if i.thumbnail})
     fo = h5py.File(output, 'r+' if os.path.exists(output) else 'w')
     total = 0
     for f in infiles:
@@ -122,7 +125,7 @@ def storage_sync(infiles):
             if _id in items: items.remove(_id)
     print(len(items))
     ImageItem.query(F.id.in_(list(items))).update([Fn.set(F['source.file']=='blocks.h5')])
-                
+
 
 @cli.command('dump')
 @click.option('--output', default='')

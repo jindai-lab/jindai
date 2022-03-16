@@ -64,8 +64,8 @@ def logined(role=''):
     t = Token.check(request.headers.get('X-Authentication-Token', request.cookies.get('token')))
     if t and (not role or role in t.roles):
         return t.user
-    if request.remote_addr in getattr(config, 'allowed_ips', []):
-        return request.remote_addr
+    if request.remote_addr in getattr(config, 'allowed_ips', {}):
+        return config.allowed_ips[request.remote_addr]
 
 
 def tmap(func, iterable, n=10):
