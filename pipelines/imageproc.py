@@ -3,6 +3,7 @@
 
 import os
 from queue import deque
+import tempfile
 from typing import Union
 from bson import ObjectId
 import numpy as np
@@ -18,12 +19,7 @@ import traceback
 class ImageOrAlbumStage(PipelineStage):
     
     def resolve(self, p : Paragraph) -> Union[Paragraph, ImageItem]:
-        if p.images:
-            p = Paragraph(p)
-            items = p.images
-        else:
-            p = ImageItem(p)
-            items = [p]
+        items = p.images if p.images else [ImageItem(p)]
         
         for i in items:
             try:
@@ -135,9 +131,9 @@ class ImageGrayScale(ImageOrAlbumStage):
     """图像灰度化
     """
 
-    def resolve_image(self, p):
-        p.image = p.image.convert('L')
-        return p
+    def resolve_image(self, i : ImageItem):
+        i.image = i.image.convert('L')
+        return i
 
 
 class ImageBW(ImageOrAlbumStage):
@@ -152,9 +148,9 @@ class ImageBW(ImageOrAlbumStage):
         assert 0 < threshold < 256
         self.table = [0] * int(threshold) + [1] * (256-int(threshold))
 
-    def resolve_image(self, p):
-        p.image = p.image.point(self.table, '1')
-        return p
+    def resolve_image(self, i : ImageItem):
+        i.image = i.image.point(self.table, '1')
+        return i
 
 
 class ImageBWAdaptive(ImageOrAlbumStage):
@@ -170,13 +166,14 @@ class ImageBWAdaptive(ImageOrAlbumStage):
         self.block_size = block_size
         self.offset = offset
 
-    def resolve_image(self, p):
+    def resolve_image(self, i : ImageItem):
+        safe_import('skimage', 'scikit-image')
         from skimage.filters import threshold_local
-        img = np.array(p.image.convert('L'))
+        img = np.array(i.image.convert('L'))
         thr = threshold_local(img, self.block_size, offset=self.offset)
         img = img > thr
-        p.image = Image.fromarray(img)
-        return p
+        i.image = Image.fromarray(img)
+        return i
 
 
 class ImageEnhance(ImageOrAlbumStage):
@@ -192,9 +189,9 @@ class ImageEnhance(ImageOrAlbumStage):
         self.method = method
         self.args = [parser.expand_literal(l) for l in args.split('\n')] if args else []
 
-    def resolve_image(self, p):
-        p.image = getattr(ImageOps, self.method)(p.image, *self.args)
-        return p
+    def resolve_image(self, i : ImageItem):
+        i.image = getattr(ImageOps, self.method)(i.image, *self.args)
+        return i
 
 
 class ImageResize(ImageOrAlbumStage):
@@ -212,15 +209,15 @@ class ImageResize(ImageOrAlbumStage):
         self.percentage = 0 <= max_height < 1 and 0 <= max_width < 1
         self.max_width, self.max_height = max_width, max_height
 
-    def resolve_image(self, p):
+    def resolve_image(self, i : ImageItem):
         w, h = self.max_width, self.max_height
         if self.percentage:
-            w, h = int(w * p.image.width), int(h * p.image.height)
+            w, h = int(w * i.image.width), int(h * i.image.height)
         if self.proportional:
-            p.image.thumbnail((w, h))
+            i.image.thumbnail((w, h))
         else:
-            p.image = p.image.resize((w, h))
-        return p
+            i.image = i.image.resize((w, h))
+        return i
 
 
 class ImageCrop(ImageOrAlbumStage):
@@ -238,13 +235,13 @@ class ImageCrop(ImageOrAlbumStage):
         self.box = (top, left, right, bottom)
         self.percentage = 0 <= top < 1 and 0 <= left < 1 and 0 <= right < 1 and 0 <= bottom < 1
 
-    def resolve_image(self, p):
-        width, height = p.image.size
+    def resolve_image(self, i : ImageItem):
+        width, height = i.image.size
         top, left, right, bottom = self.box
         if self.percentage:
             top, left, right, bottom = int(top * height), int(left * width), int(right * width), int(bottom * height)
-        p.image = p.image.crop((left, top, width - right, height - bottom))
-        return p
+        i.image = i.image.crop((left, top, width - right, height - bottom))
+        return i
 
     
 class ImageRotate(ImageOrAlbumStage):
@@ -259,9 +256,9 @@ class ImageRotate(ImageOrAlbumStage):
         assert degree in (90, 180, 270, 0), "Degree must in (0, 90, 180, 270)"
         self.degree = degree
 
-    def resolve_image(self, p):
-        p.image = p.image.rotate(90, Image.NEAREST, expand=1)
-        return p
+    def resolve_image(self, i : ImageItem):
+        i.image = i.image.rotate(90, Image.NEAREST, expand=1)
+        return i
 
 
 class DumpImages(ImageOrAlbumStage):
@@ -277,17 +274,17 @@ class DumpImages(ImageOrAlbumStage):
         if not os.path.exists(self.folder):
             os.makedirs(self.folder, exist_ok=True)
 
-    def resolve_image(self, p):
-        f = os.path.basename(p.source.get('url', p.source.get('file', ''))).lower()
+    def resolve_image(self, i : ImageItem):
+        f = os.path.basename(i.source.get('url', i.source.get('file', ''))).lower()
         if f.endswith('.pdf'):
-            f = f[:-4] + f'_{p.pdfpage:04d}.jpg'
+            f = f[:-4] + f'_{i.pdfpage:04d}.jpg'
         f = os.path.join(self.folder, f)
-        p.image.save(f)
-        delattr(p, 'image')
-        return p
+        i.image.save(f)
+        delattr(i, 'image')
+        return i
     
     
-class DownloadImages(PipelineStage):
+class DownloadImages(ImageOrAlbumStage):
     """下载图像
     """
     
@@ -300,25 +297,48 @@ class DownloadImages(PipelineStage):
         self.proxies = {
             'http': proxy, 'https': proxy
         } if proxy else {}
+
+    def resolve(self, p: Paragraph) -> Union[Paragraph, ImageItem]:
+        self.post = p
+        return super().resolve(p)
     
-    def resolve(self, p):
-        items = p.images or [p]
-
-        for i in items:
-            i = ImageItem(i)
-            if not i.id:
-                i.save()
-                
-            content = try_download(i.source['url'], p.source.get('url', ''), proxies=self.proxies)
-            if not content: return
-            with self.mgr:
-                self.mgr.write(content, str(i.id))
-                self.logger(i.id, len(content))
-            i.source = {'file': 'blocks.h5', 'url': i.source['url']}
-            i.flag = 0
+    def resolve_image(self, i : ImageItem):
+        if not i.id:
             i.save()
+            
+        content = try_download(i.source['url'], self.post.source.get('url', ''), proxies=self.proxies)
+        if not content: return
+        with self.mgr:
+            self.mgr.write(content, str(i.id))
+            self.logger(i.id, len(content))
+        i.source = {'file': 'blocks.h5', 'url': i.source['url']}
+        i.flag = 0
+        i.save()
 
-        return p
+
+class QRCodeScanner(PipelineStage):
+    """获取图像中的二维码信息
+    """
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.cv2 = safe_import('cv2', 'opencv-python-headless')
+        self.qr = self.cv2.QRCodeDetector()
+
+    def resolve(self, p: Paragraph) -> Paragraph:
+        p.qrcodes = []
+        for i in p.images:
+            data, vertices_array, _ = self.qr.detectAndDecode(self.cv2.imread(i.image_raw))
+            if vertices_array is not None:
+                try:
+                    data = data.decode('utf-8')
+                except:
+                    data = 'bindata:' + data.hex()
+                p.qrcodes.append(data)
+        if p.qrcodes:
+            p.save()
+        else:
+            del p.qrcodes
 
 
 class VideoFrame(ImageOrAlbumStage):
@@ -340,7 +360,8 @@ class VideoFrame(ImageOrAlbumStage):
         cv2 = self.cv2
 
         thumb = f'{ObjectId()}.thumb.jpg'
-        temp_file = '_vtt' + thumb
+        temp_file = tempfile.mktemp()
+        read_from = temp_file
 
         ext = (i.source.get('url') or i.source.get('file') or '.').rsplit('.', 1)[-1]
         if ext.lower() not in ('mp4', 'avi'):
@@ -357,13 +378,13 @@ class VideoFrame(ImageOrAlbumStage):
                     os.unlink(temp_file)
                     return
             else:
-                temp_file = storage
+                read_from = storage
 
-            if not os.path.exists(temp_file):
-                self.logger(f'{temp_file} not found')
+            if not os.path.exists(read_from):
+                self.logger(f'{read_from} not found')
                 return
             
-            cap = cv2.VideoCapture(temp_file)
+            cap = cv2.VideoCapture(read_from)
 
             frame_num = int(cap.get(cv2.CAP_PROP_FRAME_COUNT) * self.frame_num) if self.frame_num < 1 else int(self.frame_num)
 
@@ -382,7 +403,7 @@ class VideoFrame(ImageOrAlbumStage):
         except Exception as ex:
             self.logger(ex)
 
-        if temp_file.startswith('_vtt') and os.path.exists(temp_file):
+        if os.path.exists(temp_file):
             os.unlink(temp_file)
 
         return i

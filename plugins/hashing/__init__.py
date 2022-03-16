@@ -96,6 +96,10 @@ class Hashing(Plugin):
         def _compare_html():
             return serve_file(os.path.join(os.path.dirname(__file__), 'compare.html'))
 
+        @app.route('/api/plugins/jquery.min.js')
+        def _jquery_js():
+            return serve_file(os.path.join(os.path.dirname(__file__), 'jquery.min.js'))
+
     def handle_page(self, ds, iid):
         limit = ds.limit
         offset = ds.order.get('offset', 0)
