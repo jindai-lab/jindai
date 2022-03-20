@@ -1,8 +1,8 @@
+from dis import dis
 from flask import Flask, Response, jsonify, redirect, request, send_file, json
 from bson import ObjectId
 import datetime
 import inspect
-import logging
 from PyMongoWrapper import *
 from collections import defaultdict
 from models import *
@@ -11,7 +11,6 @@ from pipeline import Pipeline
 from io import BytesIO
 import sys
 import config
-import logging
 import base64
 from plugin import PluginManager
 from helpers import *
@@ -20,6 +19,8 @@ from helpers import *
 app = Flask(__name__)
 app.config['SECRET_KEY'] = config.secret_key
 je = dbo.create_dbo_json_encoder(json.JSONEncoder)
+with open('restarting', 'wb'): pass
+
 
 class NumpyEncoder(json.JSONEncoder):
     def __init__(self, **kwargs):
@@ -52,7 +53,6 @@ def valid_task(j):
         toremove = []
         for k in args:
             if k not in argnames or args[k] is None:
-                logging.info(k, 'not an arg' if k not in argnames else 'is null')
                 toremove.append(k)
         for k in toremove:
             del args[k]
@@ -505,21 +505,16 @@ def history():
 
 @app.route('/api/search', methods=['POST'])
 @rest()
-def search(q='', req='', sort='', limit=100, offset=0, mongocollections=[], **kws):
+def search(q='', req='', sort='', limit=100, offset=0, mongocollections=[], groups='none', **kws):
 
     def _stringify(r):
-        if not r: return ''
+        if r is None: return ''
         if isinstance(r, dict):
             s = []
             for k, v in r.items():
-                if k.startswith('$'):
-                    s.append(k[1:] + '(' + _stringify(v) + ')')
-                else:
-                    s.append(k + '=' + _stringify(v))
-            if len(s) == 1:
-                return s[0]
-            else:
-                return '(' + ','.join(s) + ')'
+                if k == '$options': continue
+                s.append(k + '=' + _stringify(v))
+            return '(' + ','.join(s) + ')'
         elif isinstance(r, str):
             return '`' + json.dumps(r, ensure_ascii=False)[1:-1].replace('`', '\\`') + '`'
         elif isinstance(r, (int, float)):
@@ -527,47 +522,77 @@ def search(q='', req='', sort='', limit=100, offset=0, mongocollections=[], **kw
         elif isinstance(r, datetime.datetime):
             return r.isoformat()+"Z"
         elif isinstance(r, list):
-            if len(r) == 0:
-                return '[]'
-            elif len(r) == 1:
-                return '[];' + _stringify(r[0])
-            else:
-                return ';'.join([_stringify(x) for x in r])
+            return '[' + ','.join([_stringify(e) for e in r]) + ']'
+        elif isinstance(r, bool):
+            return str(bool).lower()
         else:
             return '_json(`' + json.dumps(r, ensure_ascii=False) + '`)'
-
-    qstr = q
-    if q and req:
-        qstr = '(' + qstr + '),'
-    if req:
-        qstr += req
     
-    History(user=logined(), querystr=qstr, created_at=datetime.datetime.utcnow()).save()
-
-    params = {
-        'query': q,
-        'mongocollections': '\n'.join(mongocollections)
-    }
-    if limit:
-        params['limit'] = limit
-    if sort:
-        params['sort'] = sort
-    if req:
-        params['req'] = req
-    if offset:
-        params['skip'] = offset
-
-    if not req and not q:
+    if not req or not q:
         return {
             'results': [], 'query': '', 'total': 0
         }
 
-    task = Task(datasource=('DBQueryDataSource', params), pipeline=[
-        ('AccumulateParagraphs', {}),
-    ])
-    count = task.datasource.count()
-    results = expand_rs(task.execute())
+    params = {
+        'mongocollections': '\n'.join(mongocollections),
+        'groups': groups,
+        'sort': sort or '_id',
+        'skip': offset or 0,
+        'limit': limit,
+    }
 
+    qparsed = parser.eval(q)
+    req = parser.eval(req)
+
+    # merge req into query
+    def merge_req(qparsed, req):
+        if isinstance(qparsed, dict):
+            return (MongoOperand(qparsed) & MongoOperand(req))()
+        elif isinstance(qparsed, list) and len(qparsed) > 0:
+            q0 = qparsed[0]
+            if isinstance(q0, str):
+                q0 = {'$match': parser.eval(q0)}
+            elif isinstance(q0, dict) and not [_ for _ in q0 if _.startswith('$')]:
+                q0 = {'$match': q0}
+
+            if isinstance(q0, dict) and '$match' in q0:
+                return [{'$match': (MongoOperand(q0['$match']) & MongoOperand(req))()}] + qparsed[1:]
+            else:
+                return [{'$match': req}] + qparsed[1:]
+        else:
+            return req
+
+    qparsed = merge_req(qparsed, req)
+
+    # test plugin pages
+    def test_plugin_pages(qparsed):
+        page_args = []
+        if isinstance(qparsed, list) and '$page' in qparsed[-1]:
+            qparsed, page_args = qparsed[:-1], qparsed[-1]['$page'].split('/')
+        return qparsed, page_args
+    
+    qparsed, page_args = test_plugin_pages(qparsed)
+    
+    if isinstance(qparsed, list) and len(qparsed) == 1 and '$match' in qparsed[0]:
+        qparsed = qparsed[0]['$match']
+
+    qstr = '?'+_stringify(qparsed)
+        
+    ds = Task.datasource_ctx['DBQueryDataSource'](qstr, **params)
+    results = None
+
+    if page_args:
+        for pl in app.plugins:
+            if page_args[0] in pl.get_pages():
+                count = limit or -1
+                results = expand_rs(pl.handle_page(ds, *page_args[1:]))
+                break
+    
+    if results is None:
+        count = ds.count()
+        results = expand_rs(ds.fetch())
+
+    History(user=logined(), querystr=qstr, created_at=datetime.datetime.utcnow()).save()
     return {'results': results, 'query': qstr, 'total': count}
 
 
@@ -799,6 +824,7 @@ def index(p='index.html'):
 
 
 app.plugins = PluginManager(app)
+if os.path.exists('restarting'): os.unlink('restarting')
 
 
 if __name__ == "__main__":

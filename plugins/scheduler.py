@@ -1,4 +1,5 @@
 import datetime
+import os
 import re
 from threading import Thread
 
@@ -103,6 +104,8 @@ class Scheduler(Plugin):
             import time
             while self.running and schedule.jobs:
                 schedule.run_pending()
+                if os.path.exists('restarting'):
+                    self.running = False
                 time.sleep(1)
             self._thread = None
         

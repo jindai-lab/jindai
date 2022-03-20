@@ -20,13 +20,13 @@ class PDFDataSource(DataSource):
             dataset_name (DATASET): 数据集名称
             lang (LANG): 语言标识
             files_or_patterns (str): PDF文件列表
-            mongocollection (str): 查询的数据集名
+            mongocollection (str): 数据库集合名
             skip_existed (bool): 直接跳过已存在于数据集中的文件
         """
         super().__init__()
         self.name = dataset_name
         self.lang = lang
-        self.files = expand_file_patterns(files_or_patterns.split('\n'))
+        self.files = expand_file_patterns(files_or_patterns.split('\n'), names_only=True)
         self.mongocollection = mongocollection
 
     def fetch(self):
@@ -36,7 +36,7 @@ class PDFDataSource(DataSource):
             for a in para_coll.aggregator.match(F.dataset == self.name).group(_id=Var['source.file'], pages=Fn.max(Var['source.page']))
         }
         
-        for _, pdf in self.files:
+        for pdf in self.files:
             pdffile = pdf
             if pdf.startswith('sources/'):
                 pdf = pdf[len('sources/'):]

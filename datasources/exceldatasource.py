@@ -17,12 +17,12 @@ class ExcelDataSource(DataSource):
             lang (LANG): 语言标识
         '''
         super().__init__()
-        self.files = expand_file_patterns(files_or_patterns.split('\n'))
+        self.files = expand_file_patterns(files_or_patterns.split('\n'), names_only=True)
         self.dataset = dataset
         self.lang = lang
         
     def fetch(self) -> Iterable[Paragraph]:
-        for _, f in self.files:
+        for f in self.files:
             df = pd.read_excel(f)
             for _, r in df.iterrows():
                 d = r.to_dict()

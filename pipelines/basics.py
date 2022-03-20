@@ -370,22 +370,24 @@ class AutoSummary(PipelineStage):
 class ArrayField(PipelineStage):
     """操作数组字段"""
 
-    def __init__(self, field, pull=True, elements='') -> None:
+    def __init__(self, field, push=True, elements='') -> None:
         """
         Args:
             field (str): 字段名
-            pull (bool): 添加（true）或删除（false）
+            push (bool): 添加（true）或删除（false）
             elements (str): 添加或删除的元素；使用分号分隔，作为表达式运算
         """
         self.field = field
         self.elements = parser.eval(elements)
-        self.pull = pull
+        self.push = push
 
     def resolve(self, p: Paragraph) -> Paragraph:
         if not isinstance(p[self.field], (list, DbObjectCollection)):
             return p
         for ele in self.elements:
-            if self.pull:
+            if ele.startswith('$'):
+                ele = getattr(p, ele[1:], '')
+            if self.push:
                 p[self.field].append(ele)
             else:
                 if ele in p[self.field]:
@@ -540,12 +542,13 @@ class RegexFilter(PipelineStage):
     """正则表达式匹配并提取到字段中
     """
 
-    def __init__(self, pattern, target, source='content', continuous=False, filter_out=False):
+    def __init__(self, pattern, target, source='content', match='{0}', continuous=False, filter_out=False):
         """
         Args:
             pattern (str): 正则表达式
             source (str): 匹配的字段，默认为内容
             target (str): 要提取入的字段名称
+            match (str): 填入的值，如 '{1}{2}' 等形式，默认为全部匹配到的文本
             filter_out (bool): 过滤未匹配到的语段
             continuous (bool): 未匹配到的语段自动使用上次的值
         """
@@ -553,16 +556,19 @@ class RegexFilter(PipelineStage):
         self.source = source
         self.target = target
         self.value = ''
+        self.match = match
         self.continuous = continuous
         self.filter_out = filter_out
 
     def resolve(self, p: Paragraph) -> Paragraph:
         match = self.re.search(str(getattr(p, self.source, '')))
         if match:
-            self.value = match.group(1) or match.group(0)
-        if match or self.continuous:
+            val = self.match.format(match.group(0), *[_ if _ is not None else '' for _ in match.groups()])
+            setattr(p, self.target, val)
+            self.value = val
+        elif self.continuous:
             setattr(p, self.target, self.value)
-        else:
+        elif self.filter_out:
             return
         return p
 
@@ -642,7 +648,7 @@ class SaveParagraph(PipelineStage):
     def __init__(self, mongocollection='paragraph'):
         '''
         Args:
-            mongocollection (str): 数据库目标数据集名称
+            mongocollection (str): 数据库集合名
         '''
         self.mongocollection = mongocollection
         self.datasets = defaultdict(set)

@@ -1,10 +1,6 @@
 import hashlib
-import os
-from random import sample
 from typing import List
 from bson import ObjectId
-from datasources.gallerydatasource import GalleryAlbumDataSource
-from flask import Response, jsonify, request
 from helpers import *
 from models import Paragraph
 from plugin import Plugin
@@ -35,69 +31,7 @@ def single_item(pid: str, iid: str) -> List[Paragraph]:
         return [p]
     else:
         return []
-
-
-def make_gallery_response(rs, prev_order={}, next_order={}, random=False, direction='next', order={}):
-    
-    r = []
-    res = {}
-    try:
-        for res in rs:
-            if isinstance(res, Paragraph):
-                res = res.as_dict(expand=True)
-
-            if 'count' not in res:
-                res['count'] = ''
-
-            if '_id' not in res or not res['images']:
-                continue
-
-            if random:
-                res['images'] = sample(res['images'], 1)
-
-            if direction != 'next':
-                r.insert(0, res)
-            else:
-                r.append(res)
-
-    except Exception as ex:
-        import traceback
-        return jsonify({
-            'exception': repr(ex),
-            'trackstack': traceback.format_exc(),
-            'results': [res],
-        }), 500
-
-    def _make_order(rk):
-        o = dict(order)
-        for k in o.get('keys', []):
-            k = k[1:] if k.startswith('-') else k
-            if '.' in k:
-                o[k] = rk
-                for k_ in k.split('.'):
-                    o[k] = o[k].get(k_, {})
-                    if isinstance(o[k], list):
-                        o[k] = o[k][0] if o[k] else {}
-                if o[k] == {}:
-                    o[k] = 0
-            else:
-                o[k] = rk.get(k, 0)
-        return o
-
-    if r:
-        if not prev_order:
-            prev_order = _make_order(r[0])
-        if not next_order:
-            next_order = _make_order(r[-1])
-
-    return jsonify({
-        'total_count': len(r),
-        'params': request.json,
-        'prev': prev_order,
-        'next': next_order,
-        'results': r,
-    })
-    
+  
 
 class Gallery(Plugin):
 
@@ -160,30 +94,3 @@ class Gallery(Plugin):
                         p.save()
 
             return group_id
-
-        @app.route('/api/gallery/get', methods=["GET", "POST"])
-        @rest()
-        def get(query, count=False, **album_options):
-            """Get records
-
-            Returns:
-                Response: json document of records
-            """
-
-            query = parser.eval(query)
-            page = []
-            if isinstance(query, list) and '$page' in query[-1]:
-                query, page = query[:-1], query[-1]['$page'].split('/')
-                if len(query) == 1: query = query[0]
-
-            ds = GalleryAlbumDataSource(query, **album_options, raw=True)
-            
-            if page:
-                for pl in app.plugins:
-                    if page[0] in pl.get_pages():
-                        return pl.handle_page(ds, *page[1:])
-
-            if count:
-                return (list(ds.aggregator.group(_id='', count=Fn.sum(1)).perform(raw=True)) + [{'count': 0}])[0]['count']
-
-            return make_gallery_response(ds.fetch(), random=ds.random, direction=ds.direction, order=ds.order)

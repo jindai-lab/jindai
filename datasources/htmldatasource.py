@@ -2,10 +2,11 @@
 """
 import codecs
 from bs4 import BeautifulSoup as B
-from models import Paragraph, try_download, parser
+from models import Paragraph, try_download, parser, ImageItem
 from datasource import DataSource
 from .utils import *
 from urllib.parse import urljoin
+from concurrent.futures import ThreadPoolExecutor
 
 
 class HTMLDataSource(DataSource):
@@ -108,66 +109,118 @@ class LinesDataSource(DataSource):
         return map(lambda x: Paragraph(content=x, lang=self.lang, dataset=self.name), self.lines)
 
 
-class HTMLImageDataSource(DataSource):
-    """从网页中获得图像
-    """
+class WebPageListingDataSource(DataSource):
 
-    def __init__(self, files : str, dataset : str):
+    def __init__(self, dataset, patterns, 
+                 mongocollection='', lang='auto', detail_link='', list_link='', proxy='', list_depth=1, tags='',
+                 img_pattern='img[src]|[zoomfile]|[data-original]|[data-src]|[file]|[data-echo]'.replace('|', '\n')) -> None:
         """
         Args:
-            files (str): 网址列表
-            dataset (DATASET): 数据集名称
+            patterns (str): 列表页面模式
+            list_depth (int): 列表深度
+            proxy (str): 代理服务器
+            tags (str): 标签，一行一个
+            detail_link (str): 详情页面正则表达式
+            list_link (str): 列表页面正则表达式
+            dataset (str): 数据集名称
+            lang (str): 语言标记
+            img_pattern (str): 图像检索标记，一行一个
+            mongocollection (str): 数据库集合名
         """
-        super().__init__()
+
+        self.proxies = {} if not proxy else {
+            'http': proxy,
+            'https': proxy
+        }
+        self.patterns = patterns.split('\n')
+        self.list_depth = list_depth
+        self.detail_link = re.compile(detail_link)
+        self.list_link = re.compile(list_link)
+        self.tags = tags.split('\n')
         self.dataset = dataset
-        self.files = files.split('\n')
+        self.lang = lang
+        self.image_patterns = img_pattern.split('\n')
+        self.mongocollection = mongocollection
+        self.convert = Paragraph.get_converter(mongocollection)
+
+    def read_html(self, url):
+        html = try_download(url, proxies=self.proxies)
+        if not html:
+            self.logger('Cannot read from', url)
+            return
+
+        b = B(html.decode('utf-8'), 'lxml')
+        return b
+
+    def get_text(self, el):
+        if el and el.text:
+            return re.sub(r'\s+', ' ', el.text)
+        return ''
+
+    def parse_detail(self, url):
+
+        b = self.read_html(url)
+        p = Paragraph(source={'url': url},
+                      dataset=self.dataset, lang=self.lang)
+        p.content = self.get_text(b)
+        p.keywords = self.tags
+        p.title = self.get_text(b.find('title'))
+
+        for imgp in self.image_patterns:
+            for i in b.select(imgp):
+                attr_m = re.search(r'\[(.+)\]', imgp)
+                if attr_m:
+                    attr = i[attr_m.group(1)]
+                else:
+                    attr = self.get_text(i)
+                u = urljoin(url, attr)
+                if ImageItem.first({'source.url': urljoin(url, attr)}):
+                    continue
+                p.images.append(ImageItem(source={'url': u}))
+
+        self.logger(f'Found {len(p.images)} images in {url}')
+        return p
+
+    def parse_list(self, url):
+
+        b = self.read_html(url)
+        if not b:
+            self.logger(f'Cannot read list from {url}')
+            return
+
+        links = {
+            urljoin(url, a['href'])
+            for a in b.select('a[href]')
+        }
+
+        return [u for u in links if self.list_link.search(u) or self.detail_link.search(u)]
 
     def fetch(self):
-        imgset = set()
-        for buf, url in expand_file_patterns(self.files):
-            self.logger('fetching from', url)
-            html = buf.read()
-            
-            try:
-                html = html.decode('utf-8')
-            except:
-                try:
-                    html = html.decode('gbk')
-                except:
-                    try:
-                        html = html.decode('euc-jp')
-                    except:
-                        html = html.decode('utf-8', errors='ignore')
-                        
-            title = re.search(r'<title>(.*?)</title>', html) or ''
-            if title:
-                title = title.group(1)
-            title = re.sub(r'[\s]', u',', title)
-            imgs = []
-            for img in re.findall(r'<img.*?>|<div.*?>', html):
-                imgs += re.findall(
-                    r'(zoomfile|data-original|data-src|src|file|data-echo)=["\'](.*?)["\']', img)
-            imgs += re.findall(r'<a[^>]+(href)="([^"]*?\.jpe?g)"',
-                                html, flags=re.I)
 
-            for _, img in imgs:
-                imgurl = urljoin(url, img)
-                if '.fc2.com/' in imgurl:
-                    if imgurl.endswith('s.jpg'):
-                        continue
-                elif '/cute-' in imgurl:
-                    imgurl = imgurl.replace('/cute-', '/')
-                elif '/small/' in imgurl:
-                    imgurl = imgurl.replace('/small/', '/big/')
-                elif '.imagebam.com/' in imgurl:
-                    imgfile = imgurl.split('/')[-1].split('.')[0]
-                    html = try_download('http://www.imagebam.com/image/' + imgfile,
-                                        referer='http://www.imagebam.com/').decode('utf-8')
-                    imgurl = html[html.find('"og:image"'):]
-                    imgurl = imgurl[imgurl.find('http://'):imgurl.find('"/>')]
-                elif '/thumbs/' in imgurl or '/graphics/' in imgurl:
-                    continue
-                if imgurl not in imgset:
-                    yield Paragraph(source={'url': url}, dataset=self.dataset, content=title, keywords=title.split())
-                    imgset.add(imgurl)
-    
+        queue = [(p, 1) for p in expand_file_patterns(self.patterns, names_only=True)]
+        visited = set()
+
+        def _do_parse(q_tup):
+            url, level = q_tup
+            if url in visited or Paragraph.get_coll(self.mongocollection).first({'source.url': url}):
+                return
+
+            visited.add(url)
+
+            if level <= self.list_depth:
+                for u in self.parse_list(url):
+                    yield u, level
+                
+            if level == self.list_depth or self.detail_link.search(url):
+                yield self.parse_detail(url), level
+
+        while queue:
+            self.logger(f'Queuing {len(queue)} urls')
+            tpe = ThreadPoolExecutor(5)
+            for riter in tpe.map(_do_parse, queue[:5]):
+                for res, level in riter:
+                    if isinstance(res, Paragraph):
+                        yield self.convert(res)
+                    else:
+                        queue.append((res, level))
+            queue = queue[5:]
