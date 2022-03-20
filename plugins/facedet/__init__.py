@@ -1,15 +1,10 @@
 # facedet
 import base64
 from io import BytesIO
-
 from PyMongoWrapper.dbo import DbObjectCollection
-from datasources.gallerydatasource import GalleryAlbumDataSource
-from helpers import rest
-
-
 from models import Paragraph, ImageItem
 from pipelines.imageproc import ImageOrAlbumStage
-from plugins.gallery import make_gallery_response, single_item
+from plugins.gallery import single_item
 from PIL import Image
 from plugin import Plugin
 from plugins.hashing import bitcount, whash, v
@@ -48,10 +43,10 @@ class FaceDetPlugin(Plugin):
         ImageItem.set_field('faces', DbObjectCollection(bytes))
         
     def handle_page(self, ds, iid='', fid=''):
-        groups = ds.groups
-        archive = ds.archive
+        groups = ds.groups in ('both', 'group')
+        archive = ds.groups in ('both', 'source')
 
-        offset = ds.order.get('offset', 0)
+        offset = ds.skip
         limit = ds.limit
         ds.limit = 0
         ds.raw = False
@@ -62,7 +57,7 @@ class FaceDetPlugin(Plugin):
             ).match(F.images != [])            
 
             rs = ds.fetch()
-            return make_gallery_response(rs)
+            return rs
 
         else:
             fid = 0 if not fid else int(fid)
@@ -84,12 +79,12 @@ class FaceDetPlugin(Plugin):
 
                 if fid: ps = [ps[0], ps[fid]]
 
-                return make_gallery_response(ps)
+                return ps
             else:
                 fdh = [v(f) for f in ImageItem.first(F.id == iid).faces]
                 if fid: fdh = [fdh[fid-1]]
                 if not fdh:
-                    return make_gallery_response([])
+                    return []
 
                 groupped = {}
                 results = []
@@ -112,8 +107,7 @@ class FaceDetPlugin(Plugin):
                 
                 if archive:
                     results = list(groupped.values())
-                return make_gallery_response([r for _, r in sorted(results, key=lambda x: x[0])[offset:offset+limit]], \
-                    {'keys': ['offset'], 'offset': max(0, offset-limit)}, {'keys': ['offset'], 'offset': offset + limit}, False, ds.direction, ds.order)
+                return [r for _, r in sorted(results, key=lambda x: x[0])[offset:offset+limit]]
     
     def get_pages(self):
         return {

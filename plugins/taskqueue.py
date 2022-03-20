@@ -1,5 +1,4 @@
 import datetime
-import logging
 import os
 import threading
 import time
@@ -161,7 +160,6 @@ class TasksQueue(Plugin):
         self.queue.append((key, val))
 
         if not self.running:
-            logging.info('start background thread')
             self.start()
 
         return key

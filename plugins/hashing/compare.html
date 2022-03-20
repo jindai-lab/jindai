@@ -402,7 +402,7 @@
       last_selected = thisp;
     })
     $(document).on('dblclick', '.item', function () {
-      $(this).append('<a target="_blank" href="/gallery?query=images%3DObjectId(' + $(this).data('id') + ')"> </a>').find('a')[0].click();
+      $(this).append('<a target="_blank" href="/?q=images%3DObjectId(' + $(this).data('id') + ')"> </a>').find('a')[0].click();
     })
     var lastkey = '';
 

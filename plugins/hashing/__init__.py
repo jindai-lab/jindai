@@ -1,6 +1,5 @@
 import imagehash
 from PIL import Image
-from PyMongoWrapper.dbo import DbObjectInitializer
 from plugins.gallery import *
 from plugin import Plugin
 from storage import *
@@ -102,12 +101,15 @@ class Hashing(Plugin):
 
     def handle_page(self, ds, iid):
         limit = ds.limit
-        offset = ds.order.get('offset', 0)
+        offset = ds.skip
         ds.limit = 0
         ds.raw = False
         
-        if ds.groups:
-            return make_gallery_response(single_item('', iid))
+        groups = ds.groups in ('both', 'group')
+        archive = ds.groups in ('both', 'source')
+
+        if groups:
+            return single_item('', iid)
         else:
             it = ImageItem.first(F.id == iid)
             if it.dhash is None:
@@ -129,7 +131,7 @@ class Hashing(Plugin):
                     po = Paragraph(**p.as_dict())
                     po.images = [i]
                     po.score = i.score
-                    if ds.archive:
+                    if archive:
                         pgs = [g for g in p.keywords if g.startswith('*')]
                         for g in pgs or [po.source['url']]:
                             if g not in pgroups and (g not in groupped or groupped[g].score > po.score):
@@ -137,13 +139,13 @@ class Hashing(Plugin):
                     else:
                         results.append(po)
 
-            if ds.archive:
+            if archive:
                 results = list(groupped.values())
 
             results = sorted(results, key=lambda x: x.score)[
                 offset:offset + limit]
-            return make_gallery_response(results, {'keys': ['offset'], 'offset': max(offset - limit, 0), 'limit': limit}, {'keys': ['offset'], 'offset': offset + limit,
-                                                                                                        'limit': limit}, False, ds.direction, ds.order)    
+            return results
+    
     def get_pages(self):
         return {
             'sim': {

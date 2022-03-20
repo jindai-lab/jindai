@@ -10,7 +10,7 @@ from datasource import DataSource
 from models import Paragraph, ImageItem, ObjectId, parser
 from PyMongoWrapper import F
 
-from datasources.gallerydatasource import ImageImportDataSource, parser
+from datasources.dbquerydatasource import ImageImportDataSource, parser
 
 
 def find_post(url: str) -> Union[Paragraph, None]:

@@ -1,19 +1,21 @@
-from .common import set_up_seed
-from .trainer import Trainer, validate_and_test
-from .inference_model import InferenceModel
-
-from pathlib import Path
-import logging
-import click
-import glob, requests, json, random
+import json
 import os
-from tqdm import tqdm
-from PIL import Image
-from io import BytesIO
 from concurrent.futures import ThreadPoolExecutor
+from io import BytesIO
+from pathlib import Path
+
+import click
+import requests
+from PIL import Image
+from tqdm import tqdm
+
+from .common import set_up_seed
+from .inference_model import InferenceModel
+from .trainer import Trainer, validate_and_test
 
 
 def init_logging() -> None:
+    import logging
     logging.basicConfig(level=logging.DEBUG, format="%(asctime)s - %(levelname)s - %(message)s")
 
 
@@ -92,8 +94,8 @@ def validate_model(path_to_model_state, path_to_save_csv, path_to_images, batch_
 @click.option("--dataset-dir", default='', type=str)
 def download_dataset(host, count, dataset_dir):
 
-    positives = requests.post(f'http://{host}/api/gallery/get', headers={'content-type': 'application/json'}, data=json.dumps({'limit': int(count * 1.1), 'tag': '_rating>1'})).json()['results']
-    negatives = requests.post(f'http://{host}/api/gallery/get', headers={'content-type': 'application/json'}, data=json.dumps({'limit': int(count * 1.1), 'tag': '_rating<=-1|((@asiantolick|@Fengsiyuan|@tbzt3623|@shuanggu888|@xihuansiwalau),_rating<1)'})).json()['results']
+    positives = requests.post(f'http://{host}/api/search', headers={'content-type': 'application/json'}, data=json.dumps({'limit': int(count * 1.1), 'tag': '_rating>1'})).json()['results']
+    negatives = requests.post(f'http://{host}/api/search', headers={'content-type': 'application/json'}, data=json.dumps({'limit': int(count * 1.1), 'tag': '_rating<=-1|((@asiantolick|@Fengsiyuan|@tbzt3623|@shuanggu888|@xihuansiwalau),_rating<1)'})).json()['results']
     # negatives = glob.glob('negatives/*.jpg'); random.shuffle(negatives); negatives = negatives[:int(limit * 1.1)]
 
     dirs = { t : os.path.join(dataset_dir, t) for t in ('train', 'val', 'test') }
