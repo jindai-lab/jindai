@@ -19,7 +19,8 @@ from helpers import *
 app = Flask(__name__)
 app.config['SECRET_KEY'] = config.secret_key
 je = dbo.create_dbo_json_encoder(json.JSONEncoder)
-with open('restarting', 'wb'): pass
+with open('restarting', 'wb'):
+    pass
 
 
 class NumpyEncoder(json.JSONEncoder):
@@ -44,10 +45,11 @@ class NumpyEncoder(json.JSONEncoder):
 app.json_encoder = NumpyEncoder
 app.json_decoder = MongoJSONDecoder
 
+
 def valid_task(j):
 
     j = dict(j)
-    
+
     def _valid_args(t, args):
         argnames = inspect.getfullargspec(t.__init__).args[1:]
         toremove = []
@@ -58,7 +60,7 @@ def valid_task(j):
             del args[k]
 
         return args
-    
+
     if 'datasource' not in j:
         j['datasource'] = 'DBQueryDataSource'
     if 'datasource_config' not in j:
@@ -93,7 +95,7 @@ def expand_rs(rs):
 @rest(login=False)
 def authenticate(username, password, **kws):
     if User.authenticate(username, password):
-        Token.query((F.user==username) & (F.expire < time.time())).delete()
+        Token.query((F.user == username) & (F.expire < time.time())).delete()
         token = User.encrypt_password(str(time.time()), str(time.time_ns()))
         Token(user=username, token=token, expire=time.time() + 86400).save()
         return token
@@ -104,7 +106,8 @@ def authenticate(username, password, **kws):
 @rest()
 def whoami():
     if logined():
-        u = (User.first(F.username == logined()) or User(username=logined(), password='', roles=['admin'])).as_dict()
+        u = (User.first(F.username == logined()) or User(
+            username=logined(), password='', roles=['admin'])).as_dict()
         del u['password']
         return u
     return None
@@ -123,7 +126,8 @@ def log_out():
 def admin_users(user='', password=None, roles=None, datasets=None, **kws):
     if user:
         u = User.first(F.username == user)
-        if not u: return 'No such user.', 404
+        if not u:
+            return 'No such user.', 404
         if password is not None:
             u.set_password(password)
         if roles is not None:
@@ -183,7 +187,8 @@ def file_detail(path):
 @app.route('/api/storage/', methods=['GET'])
 @rest()
 def list_storage(dir=''):
-    dir = os.path.join(config.storage, dir) if dir and not '..' in dir else config.storage
+    dir = os.path.join(
+        config.storage, dir) if dir and not '..' in dir else config.storage
     if os.path.isdir(dir):
         return sorted(map(file_detail, [os.path.join(dir, x) for x in os.listdir(dir)]), key=lambda x: x['ctime'], reverse=True)
     else:
@@ -194,7 +199,8 @@ def list_storage(dir=''):
 @app.route('/api/storage/', methods=['PUT'])
 @rest()
 def write_storage(dir=''):
-    dir = os.path.join(config.storage, dir) if dir and not '..' in dir else config.storage
+    dir = os.path.join(
+        config.storage, dir) if dir and not '..' in dir else config.storage
     sfs = []
     for f in request.files.values():
         sf = os.path.join(dir, f.filename)
@@ -211,7 +217,8 @@ def modify_paragraph(coll, id, **kws):
     flag = False
     if p:
         for f, v in kws.items():
-            if f in ('_id', 'matched_content'): continue
+            if f in ('_id', 'matched_content'):
+                continue
             if f in ('$push', '$pull'):
                 Paragraph.get_coll(coll).query(F.id == id).update({f: v})
             else:
@@ -220,7 +227,8 @@ def modify_paragraph(coll, id, **kws):
                     delattr(p, f)
                 else:
                     setattr(p, f, v)
-        if flag: p.save()
+        if flag:
+            p.save()
     return True
 
 
@@ -239,12 +247,14 @@ def modify_pagenum(coll, id, sequential, new_pagenum, **kws):
             assert 'page' in source
             if sequential == 'all':
                 del source['page']
-            else: # after
+            else:  # after
                 source['page'] = {'$gt': source['page']}
             source = {'source.' + k: w for k, w in source.items()}
-            Paragraph.get_coll(coll).query((F.dataset == p.dataset) & MongoOperand(source)).update([Fn.set(pagenum=Fn.add('$source.page', delta))])
+            Paragraph.get_coll(coll).query((F.dataset == p.dataset) & MongoOperand(
+                source)).update([Fn.set(pagenum=Fn.add('$source.page', delta))])
             Paragraph.get_coll(coll).query((F.dataset == p.dataset) & (F.pagenum <= 0)).update([
-                Fn.set(pagenum=Fn.concat("A",Fn.toString(Fn.add(1, "$source.page"))))
+                Fn.set(pagenum=Fn.concat(
+                    "A", Fn.toString(Fn.add(1, "$source.page"))))
             ])
         return True
     return False
@@ -255,8 +265,9 @@ def modify_pagenum(coll, id, sequential, new_pagenum, **kws):
 def batch(coll, ids, **kws):
     """Batch edit
     """
-    
-    paras = list(Paragraph.get_coll(coll).query(F.id.in_([ObjectId(_) if len(_) == 24 else _ for _ in ids])))
+
+    paras = list(Paragraph.get_coll(coll).query(
+        F.id.in_([ObjectId(_) if len(_) == 24 else _ for _ in ids])))
     for p in paras:
         for field, val in kws.items():
             if field in ('$pull', '$push'):
@@ -272,7 +283,7 @@ def batch(coll, ids, **kws):
             elif not field.startswith('$'):
                 p[field] = val
         p.save()
-        
+
     return {
         str(p.id): p.as_dict()
         for p in paras
@@ -282,9 +293,11 @@ def batch(coll, ids, **kws):
 @app.route('/api/<coll>/search_values', methods=['GET', 'POST'])
 @rest()
 def search_values(coll, search, field, match_initials=False):
-    if not search: return []
+    if not search:
+        return []
     search = re.escape(search.strip())
-    if match_initials: search = '^' + search
+    if match_initials:
+        search = '^' + search
     matcher = {field: {'$regex': search, '$options': '-i'}}
     return list(Paragraph.get_coll(coll).aggregator.unwind(Var[field]).match(matcher).group(_id=Var[field], count=Fn.sum(1)).sort(count=-1).perform(raw=True))
 
@@ -297,19 +310,21 @@ def splitting(coll, ids):
 
     Returns:
         bool: True if succeeded
-    """        
-    paras = list(Paragraph.get_coll(coll).query(F.id.in_([ObjectId(_) if len(_) == 24 else _ for _ in ids])))
+    """
+    paras = list(Paragraph.get_coll(coll).query(
+        F.id.in_([ObjectId(_) if len(_) == 24 else _ for _ in ids])))
 
     if request.path.endswith('/split'):
         for p in paras:
             for i in p.images:
-                pnew = Paragraph(source={'url': p.source['url']}, 
-                            pdate=p.pdate, keywords=p.keywords, images=[i], dataset=p.dataset)
+                pnew = Paragraph(source={'url': p.source['url']},
+                                 pdate=p.pdate, keywords=p.keywords, images=[i], dataset=p.dataset)
                 pnew.save()
             p.delete()
     else:
-        if not paras: return False
-        
+        if not paras:
+            return False
+
         p0 = paras[0]
         p0.keywords = list(p0.keywords)
         p0.images = list(p0.images)
@@ -317,7 +332,7 @@ def splitting(coll, ids):
             p0.keywords += list(p.keywords)
             p0.images += list(p.images)
         p0.save()
-        
+
         for p in paras[1:]:
             p.delete()
 
@@ -329,9 +344,11 @@ def splitting(coll, ids):
 def set_rating(ids, inc=1, val=0):
     """Increase or decrease the rating of selected items
     """
-    items = list(ImageItem.query(F.id.in_([ObjectId(_) if len(_) == 24 else _ for _ in ids])))
+    items = list(ImageItem.query(
+        F.id.in_([ObjectId(_) if len(_) == 24 else _ for _ in ids])))
     for i in items:
-        if i is None: continue
+        if i is None:
+            continue
         old_value = i.rating
         i.rating = val if val else round(2 * (i.rating)) / 2 + inc
         if -1 <= i.rating <= 5:
@@ -349,11 +366,14 @@ def set_rating(ids, inc=1, val=0):
 def reset_storage(ids):
     """Reset storage status of selected items
     """
-    
-    items = list(ImageItem.query(F.id.in_([ObjectId(_) if len(_) == 24 else _ for _ in ids])))
+
+    items = list(ImageItem.query(
+        F.id.in_([ObjectId(_) if len(_) == 24 else _ for _ in ids])))
     for i in items:
-        if 'file' in i.source: del i.source['file']
-        else: i.source['file'] = 'blocks.h5'
+        if 'file' in i.source:
+            del i.source['file']
+        else:
+            i.source['file'] = 'blocks.h5'
         i.save()
     return {
         str(i.id): i.source.get('file')
@@ -370,7 +390,7 @@ def merge_items(pairs):
         dele = ImageItem.first(F.id == dele)
         if not dele:
             continue
-        
+
         if rese:
             pr = Paragraph.first(F.images == ObjectId(rese)) or Paragraph(
                 images=[ObjectId(rese)], pdate=None)
@@ -383,8 +403,8 @@ def merge_items(pairs):
             if not pr.pdate:
                 pr.pdate = datetime.datetime.utcnow()
             pr.save()
-        
-        Paragraph.query(F.images == dele.id).update(Fn.pull(images=dele.id))        
+
+        Paragraph.query(F.images == dele.id).update(Fn.pull(images=dele.id))
         dele.delete()
 
     Paragraph.query(F.images == []).delete()
@@ -397,17 +417,20 @@ def merge_items(pairs):
 def delete_item(album_items: dict):
     for pid, items in album_items.items():
         p = Paragraph.first(F.id == pid)
-        if p is None: continue
+        if p is None:
+            continue
 
         items = list(map(ObjectId, items))
-        p.images = [_ for _ in p.images if isinstance(_, ImageItem) and _.id not in items]
+        p.images = [_ for _ in p.images if isinstance(
+            _, ImageItem) and _.id not in items]
         p.save()
 
     for i in items:
         if Paragraph.first(F.images == i):
             continue
         ii = ImageItem.first(F.id == i)
-        if ii: ii.delete()
+        if ii:
+            ii.delete()
 
     Paragraph.query(F.images == []).delete()
 
@@ -443,7 +466,8 @@ def delete_task(id):
 def update_task(id, **task):
     _id = ObjectId(id)
     task = valid_task(task)
-    if '_id' in task: del task['_id']
+    if '_id' in task:
+        del task['_id']
     return {'acknowledged': TaskDBO.query((F.id == _id) & task_authorized()).update(Fn.set(task)).acknowledged, 'updated': task}
 
 
@@ -470,16 +494,19 @@ def help(pipe_or_ds):
             if m:
                 g = m.groups()
                 if len(g) > 2:
-                    args_docs[g[0]] = {'type': g[1].split(',')[0], 'description': g[2]}
+                    args_docs[g[0]] = {'type': g[1].split(
+                        ',')[0], 'description': g[2]}
 
         args_spec = inspect.getfullargspec(cl.__init__)
-        args_defaults = dict(zip(reversed(args_spec.args), reversed(args_spec.defaults or [])))
+        args_defaults = dict(zip(reversed(args_spec.args),
+                             reversed(args_spec.defaults or [])))
 
         for arg in args_spec.args[1:]:
             if arg not in args_docs:
                 args_docs[arg] = {}
             if arg in args_defaults:
-                args_docs[arg]['default'] = json.dumps(args_defaults[arg], ensure_ascii=False)
+                args_docs[arg]['default'] = json.dumps(
+                    args_defaults[arg], ensure_ascii=False)
 
         return {
             'name': cl.__name__,
@@ -492,7 +519,8 @@ def help(pipe_or_ds):
     ctx = Pipeline.pipeline_ctx if pipe_or_ds == 'pipelines' else Task.datasource_ctx
     r = defaultdict(dict)
     for k, v in ctx.items():
-        name = sys.modules[v.__module__].__doc__ or v.__module__.split('.')[-1] if hasattr(v, '__module__') else k
+        name = sys.modules[v.__module__].__doc__ or v.__module__.split(
+            '.')[-1] if hasattr(v, '__module__') else k
         r[name][k] = _doc(v)
     return r
 
@@ -505,14 +533,16 @@ def history():
 
 @app.route('/api/search', methods=['POST'])
 @rest()
-def search(q='', req='', sort='', limit=100, offset=0, mongocollections=[], groups='none', **kws):
+def search(q='', req='', sort='', limit=100, offset=0, mongocollections=[], groups='none', count=False, **kws):
 
     def _stringify(r):
-        if r is None: return ''
+        if r is None:
+            return ''
         if isinstance(r, dict):
             s = []
             for k, v in r.items():
-                if k == '$options': continue
+                if k == '$options':
+                    continue
                 s.append(k + '=' + _stringify(v))
             return '(' + ','.join(s) + ')'
         elif isinstance(r, str):
@@ -525,13 +555,16 @@ def search(q='', req='', sort='', limit=100, offset=0, mongocollections=[], grou
             return '[' + ','.join([_stringify(e) for e in r]) + ']'
         elif isinstance(r, bool):
             return str(bool).lower()
+        elif isinstance(r, ObjectId):
+            return 'ObjectId(' + str(r) + ')'
         else:
             return '_json(`' + json.dumps(r, ensure_ascii=False) + '`)'
-    
+
     if not req or not q:
-        return {
-            'results': [], 'query': '', 'total': 0
-        }
+        if count:
+            return 0
+        else:
+            return {'results': [], 'query': ''}
 
     params = {
         'mongocollections': '\n'.join(mongocollections),
@@ -570,36 +603,40 @@ def search(q='', req='', sort='', limit=100, offset=0, mongocollections=[], grou
         if isinstance(qparsed, list) and '$page' in qparsed[-1]:
             qparsed, page_args = qparsed[:-1], qparsed[-1]['$page'].split('/')
         return qparsed, page_args
-    
+
     qparsed, page_args = test_plugin_pages(qparsed)
-    
+
     if isinstance(qparsed, list) and len(qparsed) == 1 and '$match' in qparsed[0]:
         qparsed = qparsed[0]['$match']
 
     qstr = '?'+_stringify(qparsed)
-        
+
     ds = Task.datasource_ctx['DBQueryDataSource'](qstr, **params)
     results = None
 
     if page_args:
         for pl in app.plugins:
             if page_args[0] in pl.get_pages():
-                count = limit or -1
+                if count:
+                    return limit
                 results = expand_rs(pl.handle_page(ds, *page_args[1:]))
                 break
-    
+
     if results is None:
-        count = ds.count()
+        if count:
+            return ds.count()
         results = expand_rs(ds.fetch())
 
-    History(user=logined(), querystr=qstr, created_at=datetime.datetime.utcnow()).save()
-    return {'results': results, 'query': qstr, 'total': count}
+    History(user=logined(), querystr=qstr,
+            created_at=datetime.datetime.utcnow()).save()
+    return {'results': results, 'query': qstr}
 
 
 @app.route('/api/datasets')
 @rest()
 def get_datasets():
-    datasets = list(Dataset.query((F.allowed_users == []) | (F.allowed_users == logined())).sort(F.order_weight, F.name))
+    datasets = list(Dataset.query((F.allowed_users == []) | (
+        F.allowed_users == logined())).sort(F.order_weight, F.name))
     dataset_patterns = User.first(F.username == logined()).datasets
     if dataset_patterns:
         filtered_datasets = []
@@ -626,7 +663,8 @@ def set_datasets(dataset=None, datasets=None, rename=None, sources=None, **j):
 
     elif datasets is not None:
         for jc in datasets:
-            jset = {k: v for k, v in jc.items() if k != '_id' and v is not None}
+            jset = {k: v for k, v in jc.items() if k !=
+                    '_id' and v is not None}
             if '_id' in jc:
                 c = Dataset.query(F.id == jc['_id']).update(Fn.set(**jset))
             else:
@@ -641,7 +679,8 @@ def set_datasets(dataset=None, datasets=None, rename=None, sources=None, **j):
         rs.query(F.dataset == coll.name).update(Fn.set(dataset=rename['to']))
         coll.delete()
 
-        new_coll = Dataset.first(F.name == rename['to']) or Dataset(name=rename['to'], sources=[], order_weight=coll.order_weight)
+        new_coll = Dataset.first(F.name == rename['to']) or Dataset(
+            name=rename['to'], sources=[], order_weight=coll.order_weight)
         new_coll.sources = sorted(set(new_coll.sources + coll.sources))
         new_coll.save()
 
@@ -652,7 +691,8 @@ def set_datasets(dataset=None, datasets=None, rename=None, sources=None, **j):
             return False
 
         rs = Paragraph.get_coll(coll.mongocollection)
-        rs = rs.aggregator.match(F.dataset == coll.name).group(_id='$dataset', sources=Fn.addToSet('$source.file'))
+        rs = rs.aggregator.match(F.dataset == coll.name).group(
+            _id='$dataset', sources=Fn.addToSet('$source.file'))
         coll.sources = []
         for r in rs.perform(raw=True):
             coll.sources += r['sources']
@@ -669,7 +709,7 @@ def serve_image(coll=None, storage_id=None, ext=None):
     from PIL import ImageOps
 
     if coll and storage_id and len(storage_id) == 24:
-        p = Paragraph.get_coll(coll).first(F.id==storage_id)
+        p = Paragraph.get_coll(coll).first(F.id == storage_id)
         p = ImageItem(p)
         buf = None
         if p:
@@ -680,7 +720,7 @@ def serve_image(coll=None, storage_id=None, ext=None):
         for fkey, fmapped in getattr(config, 'file_serve', {}).items():
             if fn.startswith(fkey):
                 return redirect(fmapped + fn[len(fkey):])
-            
+
         buf = i.image_raw
         ext = i.source.get('url', i.source.get('file', '.')).rsplit('.', 1)[-1]
 
@@ -702,14 +742,14 @@ def serve_image(coll=None, storage_id=None, ext=None):
 
     if buf:
         length = len(buf.getvalue()) if hasattr(buf, 'getvalue') else len(buf)
-        
+
         if request.args.get('enhance', ''):
             img = Image.open(buf)
             buf = BytesIO()
             ImageOps.autocontrast(img).save(p, 'jpeg')
             # brightness = ImageStat.Stat(img).mean[0]
             # if brightness < 0.2:
-                # ImageEnhance.Brightness(img).enhance(1.2).save(p, 'jpeg')
+            # ImageEnhance.Brightness(img).enhance(1.2).save(p, 'jpeg')
             buf.seek(0)
             ext = 'jpg'
 
@@ -744,7 +784,7 @@ def quick_task(query='', raw=False, mongocollection=''):
         r = Task(datasource=('DBQueryDataSource', {'query': query, 'raw': raw, 'mongocollections': mongocollection}), pipeline=[
             ('AccumulateParagraphs', {}),
         ]).execute()
-    
+
     return expand_rs(r)
 
 
@@ -823,8 +863,10 @@ def index(p='index.html'):
     return serve_file('ui/dist/index.html')
 
 
+if os.path.exists('restarting'):
+    os.unlink('restarting')
+
 app.plugins = PluginManager(app)
-if os.path.exists('restarting'): os.unlink('restarting')
 
 
 if __name__ == "__main__":

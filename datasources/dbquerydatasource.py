@@ -85,30 +85,31 @@ class DBQueryDataSource(DataSource):
         self.skips = {}
         self.skip = skip
 
-        if skip:
-            for c in self.mongocollections:
-                count = self.fetch_rs(c).count()
-                if count <= skip:
-                    skip -= count
-                    self.skips[c] = -1
-                else:
-                    self.skips[c] = skip
-                    break
-
-    def fetch_rs(self, mongocollection, limit=-1):
+    def fetch_rs(self, mongocollection, sort=None, limit=-1, skip=-1):
         rs = Paragraph.get_coll(mongocollection)
         
         if self.aggregation:
-            rs = rs.aggregate(self.query if isinstance(self.query, list) else [self.query], raw=self.raw, allowDiskUse=True)
+            agg = self.query if isinstance(self.query, list) else [self.query]
+            if self.sort:
+                agg.append({'$sort': self.sort})
+            if self.skips.get(mongocollection, 0) >= 0:
+                agg.append({'$skip': self.skips[mongocollection]})
+            rs = rs.aggregate(agg, raw=self.raw, allowDiskUse=True)
         else:
             rs = rs.query(self.query)
-            if self.sort:
-                rs = rs.sort(*self.sort)
-            if self.skips.get(mongocollection, 0):
-                rs = rs.skip(self.skips.get(mongocollection, 0))
+            
+            if sort is None:
+                sort = self.sort
+            if skip < 0:
+                skip = self.skips.get(mongocollection, 0)
             if limit < 0:
                 limit = self.limit
-            if limit:
+
+            if sort:
+                rs = rs.sort(*sort)
+            if skip > 0:
+                rs = rs.skip(skip)
+            if limit > 0:
                 rs = rs.limit(limit)
 
         return rs
@@ -119,6 +120,17 @@ class DBQueryDataSource(DataSource):
                 yield from self.fetch_rs(c)
 
     def fetch(self):
+        if self.skip is not None and self.skip > 0:
+            skip = self.skip
+            for c in self.mongocollections:
+                count = self.fetch_rs(c, sort=[], limit=0, skip=0).count()
+                if count == 0 or count <= skip:
+                    skip -= count
+                    self.skips[c] = -1
+                else:
+                    self.skips[c] = skip
+                    break
+
         if len(self.mongocollections) == 1:
             return self.fetch_rs(self.mongocollections[0])
         else:
@@ -126,9 +138,10 @@ class DBQueryDataSource(DataSource):
 
     def count(self):
         try:
-            return sum([self.fetch_rs(r, limit=0).count() for r in self.mongocollections])
+            return sum([self.fetch_rs(r, sort=[], limit=0, skip=0).count() for r in self.mongocollections])
         except:
             return -1
+
 
 class ImageItemDataSource(DataSource):
     """图像项目数据源"""
