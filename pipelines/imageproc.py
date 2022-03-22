@@ -322,13 +322,17 @@ class QRCodeScanner(PipelineStage):
 
     def __init__(self) -> None:
         super().__init__()
-        self.cv2 = safe_import('cv2', 'opencv-python-headless')
-        self.qr = self.cv2.QRCodeDetector()
+        cv2 = safe_import('cv2', 'opencv-python-headless')
+        self.qr = cv2.QRCodeDetector()
 
     def resolve(self, p: Paragraph) -> Paragraph:
         p.qrcodes = []
         for i in p.images:
-            data, vertices_array, _ = self.qr.detectAndDecode(self.cv2.imread(i.image_raw))
+            try:
+                im = np.asarray(i.image)
+            except:
+                continue
+            data, vertices_array, _ = self.qr.detectAndDecode(im)
             if vertices_array is not None:
                 try:
                     data = data.decode('utf-8')
