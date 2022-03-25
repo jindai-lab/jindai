@@ -6,7 +6,7 @@ import re
 import zipfile
 from io import BytesIO
 from typing import IO, Tuple
-
+import config
 from models import try_download
 
 
@@ -34,7 +34,7 @@ def expand_file_patterns(patterns : list, names_only = False) -> Tuple[IO, str]:
                     yield BytesIO(try_download(url, '/'.join(url.split('/')[:-1]))), url
         else:
             if not pattern.startswith('sources/'):
-                pattern = 'sources/' + pattern
+                pattern = os.path.join(config.storage, pattern)
             for f in glob.glob(pattern):
                 if not names_only and f.endswith('.zip') or f.endswith('.epub'):
                     with zipfile.ZipFile(f) as z:                    

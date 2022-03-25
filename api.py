@@ -290,18 +290,6 @@ def batch(coll, ids, **kws):
     }
 
 
-@app.route('/api/<coll>/search_values', methods=['GET', 'POST'])
-@rest()
-def search_values(coll, search, field, match_initials=False):
-    if not search:
-        return []
-    search = re.escape(search.strip())
-    if match_initials:
-        search = '^' + search
-    matcher = {field: {'$regex': search, '$options': '-i'}}
-    return list(Paragraph.get_coll(coll).aggregator.unwind(Var[field]).match(matcher).group(_id=Var[field], count=Fn.sum(1)).sort(count=-1).perform(raw=True))
-
-
 @app.route('/api/<coll>/split', methods=["GET", "POST"])
 @app.route('/api/<coll>/merge', methods=["GET", "POST"])
 @rest()
@@ -543,6 +531,8 @@ def search(q='', req='', sort='', limit=100, offset=0, mongocollections=[], grou
             for k, v in r.items():
                 if k == '$options':
                     continue
+                if k == '_id':
+                    k = 'id'
                 s.append(k + '=' + _stringify(v))
             return '(' + ','.join(s) + ')'
         elif isinstance(r, str):
@@ -857,6 +847,8 @@ def index(p='index.html'):
         p + '.html',
         os.path.join('ui/dist', p)
     ]:
+        if path.startswith('ui/') and getattr(config, 'ui_proxy', ''):
+            return serve_proxy(config.ui_proxy, path=p)
         if os.path.exists(path) and os.path.isfile(path):
             return serve_file(path)
 

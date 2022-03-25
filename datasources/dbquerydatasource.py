@@ -15,6 +15,7 @@ from PyMongoWrapper import F, Fn, Var
 from datasource import DataSource
 from storage import StorageManager
 from PIL import Image
+from bson import SON
 
 
 class DBQueryDataSource(DataSource):
@@ -88,23 +89,25 @@ class DBQueryDataSource(DataSource):
     def fetch_rs(self, mongocollection, sort=None, limit=-1, skip=-1):
         rs = Paragraph.get_coll(mongocollection)
         
+        if sort is None:
+            sort = self.sort
+        if skip < 0:
+            skip = self.skips.get(mongocollection, 0)
+        if limit < 0:
+            limit = self.limit
+        
         if self.aggregation:
             agg = self.query if isinstance(self.query, list) else [self.query]
-            if self.sort:
-                agg.append({'$sort': self.sort})
-            if self.skips.get(mongocollection, 0) >= 0:
-                agg.append({'$skip': self.skips[mongocollection]})
+            if sort:
+                agg.append({'$sort': SON(parser.eval_sort(','.join(sort)))})
+            if skip > 0:
+                agg.append({'$skip': skip})
+            if limit > 0:
+                agg.append({'$limit': limit})
             rs = rs.aggregate(agg, raw=self.raw, allowDiskUse=True)
         else:
             rs = rs.query(self.query)
             
-            if sort is None:
-                sort = self.sort
-            if skip < 0:
-                skip = self.skips.get(mongocollection, 0)
-            if limit < 0:
-                limit = self.limit
-
             if sort:
                 rs = rs.sort(*sort)
             if skip > 0:
@@ -124,7 +127,7 @@ class DBQueryDataSource(DataSource):
             skip = self.skip
             for c in self.mongocollections:
                 count = self.fetch_rs(c, sort=[], limit=0, skip=0).count()
-                if count == 0 or count <= skip:
+                if count <= skip:
                     skip -= count
                     self.skips[c] = -1
                 else:
