@@ -4,13 +4,13 @@ from io import BytesIO
 import numpy as np
 import h5py
 from threading import Lock
+import config
 
 
 class StorageManager:
 
-    files = [h5py.File(g, 'r') for g in glob.glob(
-        'blocks?*.h5') + glob.glob('blocks/*.h5')]
-    base = 'blocks.h5'
+    files = [h5py.File(g, 'r') for g in glob.glob(os.path.join(config.storage, '*.h5')) if not g.endswith('blocks.h5')]
+    base = os.path.join(config.storage, 'blocks.h5')
     f = None
     write_counter = 0
     _lock = Lock()

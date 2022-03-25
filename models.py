@@ -41,11 +41,15 @@ def _object_id(params):
         return ObjectId(params)
     if isinstance(params, datetime.datetime):
         return ObjectId.from_datetime(params)
+    return ObjectId()
 
+def _expand(*args):
+    return [Fn.unwind('$images')(), Fn.lookup(from_='imageitem', localField='images', foreignField='_id', as_='images')()]
 
 parser = QueryExprParser(abbrev_prefixes={None: 'keywords=', '_': 'images.', '?': 'source.url%'}, allow_spacing=True, functions={
     'groupby': _expr_groupby,
     'object_id': _object_id,
+    'expand': _expand 
 }, force_timestamp=False)
 
 

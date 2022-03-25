@@ -1,4 +1,5 @@
 import importlib
+import requests
 import os
 import re
 import sys
@@ -139,6 +140,11 @@ def serve_file(p: Union[str, IO], ext: str = '', file_size: int = 0) -> Response
         return rv
     else:
         return send_file(f, mimetype=mimetype, conditional=True)
+
+
+def serve_proxy(server, path):
+    resp = requests.get(f'http://{server}/{path}', headers={'Host': 'localhost:8080'})
+    return Response(resp.content, headers=dict(resp.headers))
 
 
 def logs_view(task):
