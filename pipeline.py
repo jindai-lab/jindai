@@ -5,6 +5,7 @@ from collections.abc import Iterable as IterableClass
 from PyMongoWrapper import MongoResultSet
 from concurrent.futures import ThreadPoolExecutor
 from models import ImageItem, Paragraph
+from helpers import safe_import
 
 
 class PipelineStage:
@@ -32,6 +33,7 @@ class Pipeline:
             resume_next (bool): 当某个处理阶段发生错误时是否继续
         """
         self.logger = logger
+        self.tqdm = False
         self.stages = []
         if stages:
             for stage in stages:
@@ -99,8 +101,18 @@ class Pipeline:
         if not self.stages:
             return rs
 
+        if self.tqdm:
+            pbar = safe_import('tqdm').tqdm()
+        else:
+            class _FakeTqdm:
+                def update(self, i):
+                    pass
+
+            pbar = _FakeTqdm()
+
         if self.concurrent > 1:
             def _update_and_do(p):
+                pbar.update(1)
                 return list(self.apply(p))
             
             with ThreadPoolExecutor(max_workers=self.concurrent) as te:
@@ -110,6 +122,7 @@ class Pipeline:
         else:
             def _seq():
                 for p in rs:
+                    pbar.update(1)
                     yield from self.apply(p)
             
             return _seq()

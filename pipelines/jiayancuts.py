@@ -5,8 +5,8 @@ import os
 import config
 
 
-jiayan = safe_import('jiayan')
 safe_import('kenlm', 'https://github.com/kpu/kenlm/archive/master.zip')
+jiayan = safe_import('jiayan')
 load_lm = jiayan.load_lm
 CharHMMTokenizer = jiayan.CharHMMTokenizer
 
