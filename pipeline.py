@@ -105,7 +105,7 @@ class Pipeline:
             pbar = safe_import('tqdm').tqdm()
         else:
             class _FakeTqdm:
-                def update(self):
+                def update(self, i):
                     pass
 
             pbar = _FakeTqdm()
