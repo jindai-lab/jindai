@@ -45,6 +45,7 @@ def export(query, output):
 
     with open(output, 'wb') as fo:
         fo.write(xlsx)
+    exit(0)
 
 
 @cli.command('task')
@@ -58,6 +59,7 @@ def task(task_id, concurrent=0):
     task.pipeline.tqdm = True
     result = task.execute()
     print(result)
+    exit(0)
     
 
 @cli.command('enqueue')
@@ -111,8 +113,9 @@ def meta(key, value):
 @click.option('--output', '-o', default='tmp.h5')
 @click.argument('infiles', nargs=-1)
 def storage_merge(infiles, output):
-    items = {str(i.id) for i in ImageItem.query(F['source.file'] == 'blocks.h5')}
-    items = items.union({i.thumbnail for i in ImageItem.query(F.thumbnail.exists(1) & (F.thumbnail != '')) if i.thumbnail})
+    items = {str(i['_id']) for i in ImageItem.aggregator.match(F['source.file'] == 'blocks.h5').project(_id=1).perform(raw=True)}
+    items = items.union({i.thumbnail[:24] for i in ImageItem.query(F.thumbnail.exists(1) & (F.thumbnail != '')) if i.thumbnail})
+    print(len(items), 'items')
     fo = h5py.File(output, 'r+' if os.path.exists(output) else 'w')
     total = 0
     for f in infiles:
