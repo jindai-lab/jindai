@@ -463,7 +463,7 @@ def update_task(id, **task):
 @app.route('/api/tasks/<offset>/<limit>', methods=['GET'])
 @app.route('/api/tasks/', methods=['GET'])
 @rest()
-def list_task(id='', offset=0, limit=10):
+def list_task(id='', offset=0, limit=50):
     if id:
         _id = ObjectId(id)
         return TaskDBO.first((F.id == _id) & task_authorized())

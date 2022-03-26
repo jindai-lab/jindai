@@ -2,7 +2,6 @@
 """
 
 import os
-from queue import deque
 import tempfile
 from typing import Union
 from bson import ObjectId
@@ -11,7 +10,6 @@ from helpers import safe_import
 from models import Paragraph, F, ImageItem, Paragraph, parser, try_download
 from PIL import Image, ImageOps
 from pipeline import PipelineStage
-from plugins.hashing import dhash, whash
 from storage import StorageManager
 import traceback
 
@@ -64,68 +62,6 @@ class CheckImage(ImageOrAlbumStage):
             self.logger(p.id, ex)
         return p
 
-
-class ImageHash(ImageOrAlbumStage):
-    """建立图像哈希检索
-    """
-
-    def resolve_image(self, i : ImageItem):
-        try:
-            dh, wh = i.dhash, i.whash
-            if dh and wh: return i
-
-            f = i.image_raw
-            if not f: return
-
-            if not dh:
-                dh = dhash(f) or ''
-            if not wh:
-                wh = whash(f) or ''
-
-            i.dhash, i.whash = dh, wh
-        except (IOError, AssertionError):
-            pass
-        i.save()
-
-
-class ImageHashDuplications(ImageOrAlbumStage):
-    """进行图像哈希去重
-    """
-    
-    def __init__(self) -> None:
-        self.results = deque()
-        self.result_pairs = set()
-
-    def _unv(self, x):
-        from bson import binary
-        return binary.Binary(bytes.fromhex(f'{x:016x}'))
-
-    def resolve_image(self, i: ImageItem):
-        from plugins.hashing import bitcount, flips, v
-        if not i.dhash: return
-        if not isinstance(i.dhash, bytes): self.logger(type(i).__name__, i.as_dict())
-        dh2 = v(i.dhash)
-        dhb2 = v(i.whash)
-        h2, w2 = i.height, i.width
-        for j in ImageItem.query(F.dhash.in_(
-                [self._unv(x) for x in [dh2] + list(flips(dh2, 1)) + list(flips(dh2, 2))])):
-            id1 = j.id
-            if id1 == i.id or f'{i.id}-{id1}' in self.result_pairs or f'{id1}-{i.id}' in self.result_pairs: continue
-            self.result_pairs.add(f'{id1}-{i.id}')
-            a, b = i.id, id1
-            if j.width * j.height < w2 * h2: b, a = a, b
-            r = '{}\t{}\t{}'.format(a, b, bitcount(v(i.dhash) ^ dh2) + bitcount(v(j.whash) ^ dhb2))
-            self.logger(r)
-            self.results.append(r + '\n')
-        return i
-
-    def summarize(self, r):
-        self.fo = open('compare.tsv', 'w')
-        for l in self.results:
-            self.fo.write(l)
-        self.fo.close()
-        return {'redirect': '/api/plugins/compare'}
-        
 
 class ImageGrayScale(ImageOrAlbumStage):
     """图像灰度化
