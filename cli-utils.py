@@ -4,7 +4,6 @@ from PyMongoWrapper import F, Fn
 import h5py
 from models import Meta, User, TaskDBO, MongoJSONEncoder, ImageItem
 from typing import Dict, Iterable
-#from task import Task
 from tqdm import tqdm
 import requests, zipfile
 from bson import ObjectId
@@ -19,6 +18,14 @@ def mongodb(coll):
     return Meta.db.database[coll]
 
 
+def _init_task():
+    from flask import Flask
+    from task import Task
+    from plugin import PluginManager
+    PluginManager(Flask(__name__))
+    return Task
+
+
 @click.group()
 def cli():
     pass
@@ -28,8 +35,7 @@ def cli():
 @click.option('--output')
 @click.option('--query')
 def export(query, output):
-
-    from task import Task
+    Task = _init_task()
     task = Task(datasource=('DBQueryDataSource', {'query': query}), pipeline=[
         ('AccumulateParagraphs', {}),
         ('Export', {'format': 'xlsx', 'inp': 'return'})
@@ -43,17 +49,23 @@ def export(query, output):
 
 @cli.command('task')
 @click.argument('task_id')
-def task(task_id):
-    from task import Task
+@click.option('--concurrent', type=int)
+def task(task_id, concurrent=0):
+    Task = _init_task()
     task = Task.from_dbo(TaskDBO.first((F.id == task_id) if re.match(r'[0-9a-f]{24}', task_id) else (F.name == task_id)))
+    if concurrent > 0: task.pipeline.concurrent = concurrent
+    task.log = print
+    task.pipeline.tqdm = True
     result = task.execute()
     print(result)
     
 
 @cli.command('enqueue')
 @click.option('--id')
-def task_enqueue(id):
-    j = requests.put('http://localhost:8370/api/queue/', json={'id': id}, headers={'Accept-ContentType': 'text/plain'})
+@click.option('--host')
+@click.option('--ssl')
+def task_enqueue(id, host='localhost:8370', ssl=False):
+    j = requests.put(f'http{"s" if ssl else ""}://{host}/api/queue/', json={'id': id}, headers={'Accept-ContentType': 'text/plain'})
     if j.status_code == 200:
         print(j.json())
     else:
@@ -145,9 +157,9 @@ def dump(output, colls):
 
     jsonenc = MongoJSONEncoder(ensure_ascii=False)
     with zipfile.ZipFile(output, 'w', zipfile.ZIP_DEFLATED) as z:
-        for coll in colls or Meta.db.database.list_dataset_names():
+        for coll in colls or Meta.db.database.list_collection_names():
             fo = BytesIO()
-            for p in tqdm(mongodb(coll).find(), total=mongodb(coll).count()):
+            for p in tqdm(mongodb(coll).find(), total=mongodb(coll).count_documents({})):
                 fo.write(jsonenc.encode(p).encode('utf-8') + b'\n')
             fo.seek(0)
             z.writestr(coll, fo.read())
