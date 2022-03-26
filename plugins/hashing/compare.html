@@ -357,7 +357,7 @@
     }
 
     var offset = location.hash.substr(1) | 0;
-    var url = 'compare.tsv';
+    var url = 'compare.tsv?key=' + location.search.substr(1);
     var data = [];
     const count = 200;
 

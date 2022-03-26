@@ -93,7 +93,7 @@ class LinesDataSource(DataSource):
     """从直接输入的文本中获得语段，每行一个语段
     """
 
-    def __init__(self, dataset_name, lang, lines):
+    def __init__(self, dataset_name, lang="auto", lines=""):
         """
         Args:
             dataset_name (DATASET): 数据集名称

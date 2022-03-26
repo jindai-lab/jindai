@@ -1,9 +1,12 @@
 import imagehash
 from PIL import Image
 from plugins.gallery import *
+from queue import deque
 from plugin import Plugin
 from storage import *
+from pipelines.imageproc import ImageOrAlbumStage
 from models import ImageItem
+import tempfile
 
 
 def dhash(im):
@@ -47,20 +50,84 @@ def flips(x, n, lm=0):
                 yield __x
 
 
+class ImageHash(ImageOrAlbumStage):
+    """建立图像哈希检索
+    """
+
+    def resolve_image(self, i : ImageItem):
+        try:
+            dh, wh = i.dhash, i.whash
+            if dh and wh: return i
+
+            f = i.image_raw
+            if not f: return
+
+            if not dh:
+                dh = dhash(f) or ''
+            if not wh:
+                wh = whash(f) or ''
+
+            i.dhash, i.whash = dh, wh
+        except (IOError, AssertionError):
+            pass
+        i.save()
+
+
+class ImageHashDuplications(ImageOrAlbumStage):
+    """进行图像哈希去重
+    """
+    
+    def __init__(self) -> None:
+        self.results = deque()
+        self.result_pairs = set()
+
+    def _unv(self, x):
+        from bson import binary
+        return binary.Binary(bytes.fromhex(f'{x:016x}'))
+
+    def resolve_image(self, i: ImageItem):
+        if not i.dhash: return
+        if not isinstance(i.dhash, bytes): self.logger(type(i).__name__, i.as_dict())
+        dh2 = v(i.dhash)
+        dhb2 = v(i.whash)
+        h2, w2 = i.height, i.width
+        for j in ImageItem.query(F.dhash.in_(
+                [self._unv(x) for x in [dh2] + list(flips(dh2, 1)) + list(flips(dh2, 2))])):
+            id1 = j.id
+            if id1 == i.id or f'{i.id}-{id1}' in self.result_pairs or f'{id1}-{i.id}' in self.result_pairs: continue
+            self.result_pairs.add(f'{id1}-{i.id}')
+            a, b = i.id, id1
+            if j.width * j.height < w2 * h2: b, a = a, b
+            r = '{}\t{}\t{}'.format(a, b, bitcount(v(i.dhash) ^ dh2) + bitcount(v(j.whash) ^ dhb2))
+            self.logger(r)
+            self.results.append(r + '\n')
+        return i
+
+    def summarize(self, r):
+        k = tempfile.mktemp()
+        self.fo = open(k + '.tsv', 'w')
+        for l in self.results:
+            self.fo.write(l)
+        self.fo.close()
+        return {'redirect': '/api/plugins/compare?' + k}
+        
+
 class Hashing(Plugin):
 
     def __init__(self, app):
         super().__init__(app)
         ImageItem.set_field('dhash', bytes)
         ImageItem.set_field('whash', bytes)
+        self.register_pipelines([ImageHashDuplications, ImageHash])
             
         @app.route('/api/plugins/compare.tsv')
         def _compare_tsv():
-            if not os.path.exists('compare.tsv'):
+            p = request.args.get('key', '') + '.tsv'
+            if not os.path.exists(p):
                 return Response('')
 
             def __parse_compare_results():
-                with open('compare.tsv') as fi:
+                with open(p) as fi:
                     for l in fi:
                         r = l.strip().split('\t')
                         if len(r) < 3:
