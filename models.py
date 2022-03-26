@@ -326,7 +326,7 @@ def get_context(directory : str, parent_class : Type) -> Dict:
                 directory + '.' + os.path.basename(f).split('.')[0]
                 for f in glob.glob(os.path.join(os.path.dirname(__file__), directory, "*.py"))
             ] + [
-                directory + '.' + f.split('/')[-2]
+                directory + '.' + f.split(os.path.sep)[-2]
                 for f in glob.glob(os.path.join(os.path.dirname(__file__), directory, '*/__init__.py'))
             ]
     ctx = {}

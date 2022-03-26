@@ -1,7 +1,7 @@
 bs4
 flask
 pymongo
-https://github.com/zhuth/PyMongoWrapper/archive/master.zip
+#https://github.com/zhuth/PyMongoWrapper/archive/master.zip
 opencc-python-reimplemented
 fitz
 jieba
@@ -23,6 +23,7 @@ python-twitter
 scipy
 Pillow
 gunicorn
+matplotlib
 oauthlib
 requests-oauthlib
 ImageHash
