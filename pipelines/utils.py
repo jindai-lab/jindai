@@ -1,4 +1,13 @@
 import re
+from models import try_download
+import glob
+import os
+import re
+import zipfile
+import pickle
+from io import BytesIO
+from typing import IO, Tuple
+import config
 
 RE_DIGITS = re.compile(r'[\+\-]?\d+')
 
@@ -89,191 +98,44 @@ def execute_query_expr(parsed, inputs):
     return r
 
 
-language_iso639 = dict([('ab', 'Abkhaz'),
-('aa', 'Afar'),
-('af', 'Afrikaans'),
-('ak', 'Akan'),
-('sq', 'Albanian'),
-('am', 'Amharic'),
-('ar', 'Arabic'),
-('an', 'Aragonese'),
-('hy', 'Armenian'),
-('as', 'Assamese'),
-('av', 'Avaric'),
-('ae', 'Avestan'),
-('ay', 'Aymara'),
-('az', 'Azerbaijani'),
-('bm', 'Bambara'),
-('ba', 'Bashkir'),
-('eu', 'Basque'),
-('be', 'Belarusian'),
-('bn', 'Bengali'),
-('bh', 'Bihari'),
-('bi', 'Bislama'),
-('bs', 'Bosnian'),
-('br', 'Breton'),
-('bg', 'Bulgarian'),
-('my', 'Burmese'),
-('ca', 'Catalan'),
-('ch', 'Chamorro'),
-('ce', 'Chechen'),
-('ny', 'Chichewa'),
-('zh', 'Chinese'),
-('cv', 'Chuvash'),
-('kw', 'Cornish'),
-('co', 'Corsican'),
-('cr', 'Cree'),
-('hr', 'Croatian'),
-('cs', 'Czech'),
-('da', 'Danish'),
-('dv', 'Divehi'),
-('nl', 'Dutch'),
-('dz', 'Dzongkha'),
-('en', 'English'),
-('eo', 'Esperanto'),
-('et', 'Estonian'),
-('ee', 'Ewe'),
-('fo', 'Faroese'),
-('fj', 'Fijian'),
-('fi', 'Finnish'),
-('fr', 'French'),
-('ff', 'Fula'),
-('gl', 'Galician'),
-('ka', 'Georgian'),
-('de', 'German'),
-('el', 'Greek'),
-('gn', 'Guaraní'),
-('gu', 'Gujarati'),
-('ht', 'Haitian'),
-('ha', 'Hausa'),
-('he', 'Hebrew'),
-('hz', 'Herero'),
-('hi', 'Hindi'),
-('ho', 'Hiri Motu'),
-('hu', 'Hungarian'),
-('ia', 'Interlingua'),
-('id', 'Indonesian'),
-('ie', 'Interlingue'),
-('ga', 'Irish'),
-('ig', 'Igbo'),
-('ik', 'Inupiaq'),
-('io', 'Ido'),
-('is', 'Icelandic'),
-('it', 'Italian'),
-('iu', 'Inuktitut'),
-('ja', 'Japanese'),
-('jv', 'Javanese'),
-('kl', 'Kalaallisut'),
-('kn', 'Kannada'),
-('kr', 'Kanuri'),
-('ks', 'Kashmiri'),
-('kk', 'Kazakh'),
-('km', 'Khmer'),
-('ki', 'Kikuyu'),
-('rw', 'Kinyarwanda'),
-('ky', 'Kirghiz'),
-('kv', 'Komi'),
-('kg', 'Kongo'),
-('ko', 'Korean'),
-('ku', 'Kurdish'),
-('kj', 'Kwanyama'),
-('la', 'Latin'),
-('lb', 'Luxembourgish'),
-('lg', 'Luganda'),
-('li', 'Limburgish'),
-('ln', 'Lingala'),
-('lo', 'Lao'),
-('lt', 'Lithuanian'),
-('lu', 'Luba-Katanga'),
-('lv', 'Latvian'),
-('gv', 'Manx'),
-('mk', 'Macedonian'),
-('mg', 'Malagasy'),
-('ms', 'Malay'),
-('ml', 'Malayalam'),
-('mt', 'Maltese'),
-('mi', 'Māori'),
-('mr', 'Marathi'),
-('mh', 'Marshallese'),
-('mn', 'Mongolian'),
-('na', 'Nauru'),
-('nv', 'Navajo'),
-('nb', 'Norwegian Bokmål'),
-('nd', 'North Ndebele'),
-('ne', 'Nepali'),
-('ng', 'Ndonga'),
-('nn', 'Norwegian Nynorsk'),
-('no', 'Norwegian'),
-('ii', 'Nuosu'),
-('nr', 'South Ndebele'),
-('oc', 'Occitan'),
-('oj', 'Ojibwe'),
-('cu', 'Old Church Slavonic'),
-('om', 'Oromo'),
-('or', 'Oriya'),
-('os', 'Ossetian, Ossetic'),
-('pa', 'Panjabi, Punjabi'),
-('pi', 'Pāli'),
-('fa', 'Persian'),
-('pl', 'Polish'),
-('ps', 'Pashto, Pushto'),
-('pt', 'Portuguese'),
-('qu', 'Quechua'),
-('rm', 'Romansh'),
-('rn', 'Kirundi'),
-('ro', 'Romanian, Moldavan'),
-('ru', 'Russian'),
-('sa', 'Sanskrit'),
-('sc', 'Sardinian'),
-('sd', 'Sindhi'),
-('se', 'Northern Sami'),
-('sm', 'Samoan'),
-('sg', 'Sango'),
-('sr', 'Serbian'),
-('gd', 'Scottish Gaelic'),
-('sn', 'Shona'),
-('si', 'Sinhala'),
-('sk', 'Slovak'),
-('sl', 'Slovene'),
-('so', 'Somali'),
-('st', 'Southern Sotho'),
-('es', 'Spanish'),
-('su', 'Sundanese'),
-('sw', 'Swahili'),
-('ss', 'Swati'),
-('sv', 'Swedish'),
-('ta', 'Tamil'),
-('te', 'Telugu'),
-('tg', 'Tajik'),
-('th', 'Thai'),
-('ti', 'Tigrinya'),
-('bo', 'Tibetan'),
-('tk', 'Turkmen'),
-('tl', 'Tagalog'),
-('tn', 'Tswana'),
-('to', 'Tonga'),
-('tr', 'Turkish'),
-('ts', 'Tsonga'),
-('tt', 'Tatar'),
-('tw', 'Twi'),
-('ty', 'Tahitian'),
-('ug', 'Uyghur'),
-('uk', 'Ukrainian'),
-('ur', 'Urdu'),
-('uz', 'Uzbek'),
-('ve', 'Venda'),
-('vi', 'Vietnamese'),
-('vo', 'Volapük'),
-('wa', 'Walloon'),
-('cy', 'Welsh'),
-('wo', 'Wolof'),
-('fy', 'Western Frisian'),
-('xh', 'Xhosa'),
-('yi', 'Yiddish'),
-('yo', 'Yoruba'),
-('za', 'Zhuang'),
-('zu', 'Zulu'),
-# non-ISO, used only for simplicity
-('chs', 'Chinese Simplieifed'),
-('cht', 'Chinese Traditional')
-])
+def expand_file_patterns(patterns : list, names_only = False) -> Tuple[IO, str]:
+    """
+    读取文件（包括压缩包内容）或网址，其中文件名可以使用 */? 通配符，网址可以使用 {num1-num2} 形式给定迭代范围
+    Returns:
+        Tuple[IO, str]: IO 为内容，str 为文件名或网址
+    """
+            
+    for pattern in patterns:
+        if pattern.startswith('https://') or pattern.startswith('http://'):
+            urls = []
+            iterate = re.search(r'\{(\d+\-\d+)\}', pattern)
+            if iterate:
+                start, end=map(int,iterate.group(1).split('-'))
+                for i in range(start, end+1):
+                    urls.append(pattern.replace(iterate.group(0), str(i)))
+            else:
+                urls = [pattern]
+            for url in urls:
+                if names_only:
+                    yield url
+                else:
+                    yield BytesIO(try_download(url, '/'.join(url.split('/')[:-1]))), url
+        else:
+            if not pattern.startswith('sources/'):
+                pattern = os.path.join(config.storage, pattern)
+            for f in glob.glob(pattern):
+                if not names_only and f.endswith('.zip') or f.endswith('.epub'):
+                    with zipfile.ZipFile(f) as z:                    
+                        for f_ in z.filelist:
+                            yield z.open(f_), f + '#' + f_.filename
+                elif os.path.isdir(f):
+                    patterns.append(f + '/*')
+                else:
+                    if names_only:
+                        yield f
+                    else:
+                        yield open(f, 'rb'), f
+
+
+with open(os.path.join(config.rootpath, 'models_data', 'language_iso639'), 'rb') as flang:
+    language_iso639 = pickle.load(flang)

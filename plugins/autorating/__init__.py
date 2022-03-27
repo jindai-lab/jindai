@@ -23,7 +23,7 @@ def predict(i):
 class AutoRating(ImageOrAlbumStage):
     """使用自训练模型进行打分"""
         
-    def resolve_image(self, i: ImageItem):
+    def resolve_image(self, i: ImageItem, context):
         i.rating = predict(i.image)
         i.save()
         return i
@@ -38,7 +38,7 @@ class OpenNsfw(ImageOrAlbumStage):
         self.runner = OpenNSFWInferenceRunner.load()
         ImageItem.set_field('nsfw', float)
         
-    def resolve_image(self, i: ImageItem):
+    def resolve_image(self, i: ImageItem, context):
         i.nsfw = float(self.runner.infer(i.image_raw.read()))
         i.save()
         return i

@@ -17,7 +17,7 @@ class TesseractOCR(ImageOrAlbumStage):
         self.lang = langs.split(',')[0].split('-')[0]
         self.tesseract = safe_import('pytesseract')
 
-    def resolve_image(self, p : ImageItem):
+    def resolve_image(self, p : ImageItem, context):
         p.content = self.tesseract.image_to_string(p.image).encode("utf-8")
         p.lang = self.lang
         return p

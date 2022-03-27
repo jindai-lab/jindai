@@ -54,7 +54,7 @@ class ImageHash(ImageOrAlbumStage):
     """建立图像哈希检索
     """
 
-    def resolve_image(self, i : ImageItem):
+    def resolve_image(self, i : ImageItem, context):
         try:
             dh, wh = i.dhash, i.whash
             if dh and wh: return i
@@ -85,7 +85,7 @@ class ImageHashDuplications(ImageOrAlbumStage):
         from bson import binary
         return binary.Binary(bytes.fromhex(f'{x:016x}'))
 
-    def resolve_image(self, i: ImageItem):
+    def resolve_image(self, i: ImageItem, context):
         if not i.dhash: return
         if not isinstance(i.dhash, bytes): self.logger(type(i).__name__, i.as_dict())
         dh2 = v(i.dhash)

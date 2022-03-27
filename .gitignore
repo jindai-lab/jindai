@@ -4,6 +4,7 @@
 config.py
 temp_*.py
 sources/
+blockly/
 texts/
 models_data
 .vsccode/

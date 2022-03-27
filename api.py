@@ -13,6 +13,7 @@ import sys
 import config
 import base64
 from plugin import PluginManager
+from pipelines.dbquerydatasource import DBQueryDataSource
 from helpers import *
 
 
@@ -44,37 +45,6 @@ class NumpyEncoder(json.JSONEncoder):
 
 app.json_encoder = NumpyEncoder
 app.json_decoder = MongoJSONDecoder
-
-
-def valid_task(j):
-
-    j = dict(j)
-
-    def _valid_args(t, args):
-        argnames = inspect.getfullargspec(t.__init__).args[1:]
-        toremove = []
-        for k in args:
-            if k not in argnames or args[k] is None:
-                toremove.append(k)
-        for k in toremove:
-            del args[k]
-
-        return args
-
-    if 'datasource' not in j:
-        j['datasource'] = 'DBQueryDataSource'
-    if 'datasource_config' not in j:
-        j['datasource_config'] = {}
-
-    _valid_args(Task.datasource_ctx[j['datasource']], j['datasource_config'])
-
-    if 'pipeline' not in j:
-        j['pipeline'] = []
-
-    for name, args in j['pipeline']:
-        _valid_args(Pipeline.pipeline_ctx[name], args)
-
-    return j
 
 
 def task_authorized():
@@ -428,7 +398,6 @@ def delete_item(album_items: dict):
 @app.route('/api/tasks/', methods=['PUT'])
 @rest()
 def create_task(**task):
-    task = valid_task(task)
     task.pop('shortcut_map', None)
     task = TaskDBO(**task)
     task.creator = logined()
@@ -453,7 +422,6 @@ def delete_task(id):
 @rest()
 def update_task(id, **task):
     _id = ObjectId(id)
-    task = valid_task(task)
     if '_id' in task:
         del task['_id']
     return {'acknowledged': TaskDBO.query((F.id == _id) & task_authorized()).update(Fn.set(task)).acknowledged, 'updated': task}
@@ -477,6 +445,9 @@ def help(pipe_or_ds):
 
     def _doc(cl):
         args_docs = {}
+        cl_doc = cl.__doc__ or ''
+        cl = getattr(cl, '_Implementation', cl)
+        
         for l in (cl.__init__.__doc__ or '').strip().split('\n'):
             m = re.search(r'(\w+)\s\((.+?)\):\s(.*)', l)
             if m:
@@ -498,13 +469,13 @@ def help(pipe_or_ds):
 
         return {
             'name': cl.__name__,
-            'doc': (cl.__doc__ or '').strip(),
+            'doc': (cl.__doc__ or cl_doc).strip(),
             'args': [
                 {'name': k, 'type': v.get('type'), 'description': v.get('description'), 'default': v.get('default')} for k, v in args_docs.items() if 'type' in v
             ]
         }
 
-    ctx = Pipeline.pipeline_ctx if pipe_or_ds == 'pipelines' else Task.datasource_ctx
+    ctx = Pipeline.pipeline_ctx
     r = defaultdict(dict)
     for k, v in ctx.items():
         name = sys.modules[v.__module__].__doc__ or v.__module__.split(
@@ -601,7 +572,7 @@ def search(q='', req='', sort='', limit=100, offset=0, mongocollections=[], grou
 
     qstr = '?'+_stringify(qparsed)
 
-    ds = Task.datasource_ctx['DBQueryDataSource'](qstr, **params)
+    ds = DBQueryDataSource.implementation(qstr, **params)
     results = None
 
     if page_args:
@@ -766,12 +737,13 @@ def put_storage(key):
 
 @app.route('/api/quicktask', methods=['POST'])
 @rest()
-def quick_task(query='', raw=False, mongocollection=''):
-    if query.startswith('datasource='):
-        q = parser.eval(query)
-        r = Task(datasource=q[0]['datasource'], pipeline=q[1:]).execute()
+def quick_task(query='', pipeline='', raw=False, mongocollection=''):
+    if pipeline:
+        q = parser.eval(pipeline)
+        r = Task(pipeline=q).execute()
     else:
-        r = Task(datasource=('DBQueryDataSource', {'query': query, 'raw': raw, 'mongocollections': mongocollection}), pipeline=[
+        r = Task(pipeline=[
+            ('DBQueryDataSource', {'query': query, 'raw': raw, 'mongocollections': mongocollection}),
             ('AccumulateParagraphs', {}),
         ]).execute()
 

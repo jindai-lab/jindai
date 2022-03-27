@@ -15,20 +15,21 @@ import traceback
 
 
 class ImageOrAlbumStage(PipelineStage):
-    
-    def resolve(self, p : Paragraph) -> Union[Paragraph, ImageItem]:
+
+    def resolve(self, p: Paragraph) -> Union[Paragraph, ImageItem]:
         items = p.images if p.images else [ImageItem(p)]
-        
+
         for i in items:
             try:
-                self.resolve_image(i)
+                self.resolve_image(i, p)
+                i.save()
             except Exception as ex:
                 self.logger(i.id, self.__class__.__name__, ex)
                 self.logger(traceback.format_tb(ex.__traceback__))
-        
+
         return p
 
-    def resolve_image(self, i : ImageItem):
+    def resolve_image(self, i: ImageItem, context):
         return i
 
 
@@ -46,7 +47,7 @@ class CheckImage(ImageOrAlbumStage):
     """获取图像基本信息
     """
 
-    def resolve_image(self, p : ImageItem):
+    def resolve_image(self, p: ImageItem, context):
         if p.source.get('url', '').split('.')[-1].lower() in ('mp4', 'avi'):
             return
         try:
@@ -67,7 +68,7 @@ class ImageGrayScale(ImageOrAlbumStage):
     """图像灰度化
     """
 
-    def resolve_image(self, i : ImageItem):
+    def resolve_image(self, i: ImageItem, context):
         i.image = i.image.convert('L')
         return i
 
@@ -84,7 +85,7 @@ class ImageBW(ImageOrAlbumStage):
         assert 0 < threshold < 256
         self.table = [0] * int(threshold) + [1] * (256-int(threshold))
 
-    def resolve_image(self, i : ImageItem):
+    def resolve_image(self, i: ImageItem, context):
         i.image = i.image.point(self.table, '1')
         return i
 
@@ -102,7 +103,7 @@ class ImageBWAdaptive(ImageOrAlbumStage):
         self.block_size = block_size
         self.offset = offset
 
-    def resolve_image(self, i : ImageItem):
+    def resolve_image(self, i: ImageItem, context):
         safe_import('skimage', 'scikit-image')
         from skimage.filters import threshold_local
         img = np.array(i.image.convert('L'))
@@ -115,7 +116,7 @@ class ImageBWAdaptive(ImageOrAlbumStage):
 class ImageEnhance(ImageOrAlbumStage):
     """图像增强
     """
-    
+
     def __init__(self, method, args):
         """
         Args:
@@ -123,9 +124,10 @@ class ImageEnhance(ImageOrAlbumStage):
             args (str): 调用的参数，以回车分隔，类型将自动转换
         """
         self.method = method
-        self.args = [parser.expand_literal(l) for l in args.split('\n')] if args else []
+        self.args = [parser.expand_literal(
+            l) for l in args.split('\n')] if args else []
 
-    def resolve_image(self, i : ImageItem):
+    def resolve_image(self, i: ImageItem, context):
         i.image = getattr(ImageOps, self.method)(i.image, *self.args)
         return i
 
@@ -145,7 +147,7 @@ class ImageResize(ImageOrAlbumStage):
         self.percentage = 0 <= max_height < 1 and 0 <= max_width < 1
         self.max_width, self.max_height = max_width, max_height
 
-    def resolve_image(self, i : ImageItem):
+    def resolve_image(self, i: ImageItem, context):
         w, h = self.max_width, self.max_height
         if self.percentage:
             w, h = int(w * i.image.width), int(h * i.image.height)
@@ -171,15 +173,16 @@ class ImageCrop(ImageOrAlbumStage):
         self.box = (top, left, right, bottom)
         self.percentage = 0 <= top < 1 and 0 <= left < 1 and 0 <= right < 1 and 0 <= bottom < 1
 
-    def resolve_image(self, i : ImageItem):
+    def resolve_image(self, i: ImageItem, context):
         width, height = i.image.size
         top, left, right, bottom = self.box
         if self.percentage:
-            top, left, right, bottom = int(top * height), int(left * width), int(right * width), int(bottom * height)
+            top, left, right, bottom = int(
+                top * height), int(left * width), int(right * width), int(bottom * height)
         i.image = i.image.crop((left, top, width - right, height - bottom))
         return i
 
-    
+
 class ImageRotate(ImageOrAlbumStage):
     """图像旋转
     """
@@ -192,7 +195,7 @@ class ImageRotate(ImageOrAlbumStage):
         assert degree in (90, 180, 270, 0), "Degree must in (0, 90, 180, 270)"
         self.degree = degree
 
-    def resolve_image(self, i : ImageItem):
+    def resolve_image(self, i: ImageItem, context):
         i.image = i.image.rotate(90, Image.NEAREST, expand=1)
         return i
 
@@ -210,20 +213,21 @@ class DumpImages(ImageOrAlbumStage):
         if not os.path.exists(self.folder):
             os.makedirs(self.folder, exist_ok=True)
 
-    def resolve_image(self, i : ImageItem):
-        f = os.path.basename(i.source.get('url', i.source.get('file', ''))).lower()
+    def resolve_image(self, i: ImageItem, context):
+        f = os.path.basename(i.source.get(
+            'url', i.source.get('file', ''))).lower()
         if f.endswith('.pdf'):
             f = f[:-4] + f'_{i.pdfpage:04d}.jpg'
         f = os.path.join(self.folder, f)
         i.image.save(f)
         delattr(i, 'image')
         return i
-    
-    
+
+
 class DownloadImages(ImageOrAlbumStage):
     """下载图像
     """
-    
+
     def __init__(self, proxy='') -> None:
         """
         Args:
@@ -234,22 +238,19 @@ class DownloadImages(ImageOrAlbumStage):
             'http': proxy, 'https': proxy
         } if proxy else {}
 
-    def resolve(self, p: Paragraph) -> Union[Paragraph, ImageItem]:
-        self.post = p
-        return super().resolve(p)
-    
-    def resolve_image(self, i : ImageItem):
+    def resolve_image(self, i: ImageItem, post):
         if not i.id:
             i.save()
-            
-        content = try_download(i.source['url'], self.post.source.get('url', ''), proxies=self.proxies)
-        if not content: return
+
+        content = try_download(i.source['url'], post.source.get(
+            'url', ''), proxies=self.proxies)
+        if not content:
+            return
         with self.mgr:
             self.mgr.write(content, str(i.id))
             self.logger(i.id, len(content))
         i.source = {'file': 'blocks.h5', 'url': i.source['url']}
         i.flag = 0
-        i.save()
 
 
 class QRCodeScanner(PipelineStage):
@@ -296,14 +297,15 @@ class VideoFrame(ImageOrAlbumStage):
         self.field = field
         self.cv2 = safe_import('cv2', 'opencv-python-headless')
 
-    def resolve_image(self, i: ImageItem):
+    def resolve_image(self, i: ImageItem, context):
         cv2 = self.cv2
 
         thumb = f'{ObjectId()}.thumb.jpg'
         temp_file = tempfile.mktemp()
         read_from = temp_file
 
-        ext = (i.source.get('url') or i.source.get('file') or '.').rsplit('.', 1)[-1]
+        ext = (i.source.get('url') or i.source.get(
+            'file') or '.').rsplit('.', 1)[-1]
         if ext.lower() not in ('mp4', 'avi'):
             self.logger(f'skip {ext} data')
             return
@@ -323,10 +325,11 @@ class VideoFrame(ImageOrAlbumStage):
             if not os.path.exists(read_from):
                 self.logger(f'{read_from} not found')
                 return
-            
+
             cap = cv2.VideoCapture(read_from)
 
-            frame_num = int(cap.get(cv2.CAP_PROP_FRAME_COUNT) * self.frame_num) if self.frame_num < 1 else int(self.frame_num)
+            frame_num = int(cap.get(cv2.CAP_PROP_FRAME_COUNT) *
+                            self.frame_num) if self.frame_num < 1 else int(self.frame_num)
 
             if cap.isOpened():
                 cap.set(cv2.CAP_PROP_POS_FRAMES, frame_num)
@@ -339,7 +342,8 @@ class VideoFrame(ImageOrAlbumStage):
                         mgr.write(pic, thumb)
                     setattr(i, self.field, thumb)
                     i.save()
-                    self.logger(f'wrote {temp_file} frame#{frame_num} to {thumb}')
+                    self.logger(
+                        f'wrote {temp_file} frame#{frame_num} to {thumb}')
         except Exception as ex:
             self.logger(ex)
 
