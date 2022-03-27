@@ -161,10 +161,10 @@ def logs_view(task):
             time.sleep(1)
 
         while task._task.alive:
-            yield from task._task.fetch_log()
+            yield from task._task.log_fetch()
             time.sleep(0.1)
 
-        yield from task._task.fetch_log()
+        yield from task._task.log_fetch()
         yield 'returned: ' + str(type(task._task.returned)) + '\n'
 
         yield 'finished.\n'
