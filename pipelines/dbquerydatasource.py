@@ -38,7 +38,8 @@ class DBQueryDataSource(DataSourceStage):
                 groups (无:none|按组:group|按来源:source|分组和来源:both): 分组
             """
             self.raw = raw
-            self.mongocollections = mongocollections.split('\n') if isinstance(mongocollections, str) else mongocollections
+            self.mongocollections = mongocollections.split('\n') if isinstance(
+                mongocollections, str) else mongocollections
             if query.startswith('??'):
                 self.aggregation = True
                 self.querystr = query[2:]
@@ -49,7 +50,8 @@ class DBQueryDataSource(DataSourceStage):
                 elif re.search(r'[\,\=\|\%:@\*`]', query):
                     pass
                 else:
-                    query = ','.join([f'`{_.strip().lower().replace("`", "")}`' for _ in jieba.cut(query) if _.strip()])
+                    query = ','.join(
+                        [f'`{_.strip().lower().replace("`", "")}`' for _ in jieba.cut(query) if _.strip()])
                 self.querystr = query
 
             self.query = parser.eval(self.querystr)
@@ -65,7 +67,7 @@ class DBQueryDataSource(DataSourceStage):
                 self.query = self.query[:-1]
 
             self.groups = groups
-            
+
             if groups != 'none':
                 groupping = []
                 if groups == 'source':
@@ -73,17 +75,25 @@ class DBQueryDataSource(DataSourceStage):
                 else:
                     groupping = [Fn.addFields(
                         group_id=Fn.filter(input=Var.keywords, as_='t',
-                                    cond=Fn.substrCP(Var._t, 0, 1) == '*')
+                                           cond=Fn.substrCP(Var._t, 0, 1) == '*')
                     )(), Fn.unwind(
                         path=Var.group_id, preserveNullAndEmptyArrays=groups == 'both'
                     )()]
-                
+
+                if groups == 'both':
+                    groupping += [
+                        Fn.group(orig=Fn.first('$$ROOT'), _id=Fn.ifNull(Var.group_id, Fn.concat(
+                            'source.url=`', Fn.toString(Var['source.url']), '`')), count=Fn.sum(1))(),
+                        Fn.replaceRoot(newRoot=Fn.mergeObjects(
+                            '$orig', {'group_id': '$_id', 'count': '$count'}))()
+                    ]
+
                 if not self.aggregation:
                     self.aggregation = True
                     self.query = [{'$match': self.query}] + groupping
                 else:
                     self.query += groupping
-            
+
             self.limit = limit
             self.sort = sort.split(',') if sort else []
             self.skips = {}
@@ -91,18 +101,20 @@ class DBQueryDataSource(DataSourceStage):
 
         def fetch_rs(self, mongocollection, sort=None, limit=-1, skip=-1):
             rs = Paragraph.get_coll(mongocollection)
-            
+
             if sort is None:
                 sort = self.sort
             if skip < 0:
                 skip = self.skips.get(mongocollection, 0)
             if limit < 0:
                 limit = self.limit
-            
+
             if self.aggregation:
-                agg = self.query if isinstance(self.query, list) else [self.query]
+                agg = self.query if isinstance(
+                    self.query, list) else [self.query]
                 if sort:
-                    agg.append({'$sort': SON(parser.eval_sort(','.join(sort)))})
+                    agg.append(
+                        {'$sort': SON(parser.eval_sort(','.join(sort)))})
                 if skip > 0:
                     agg.append({'$skip': skip})
                 if limit > 0:
@@ -110,7 +122,7 @@ class DBQueryDataSource(DataSourceStage):
                 rs = rs.aggregate(agg, raw=self.raw, allowDiskUse=True)
             else:
                 rs = rs.query(self.query)
-                
+
                 if sort:
                     rs = rs.sort(*sort)
                 if skip > 0:
@@ -147,10 +159,10 @@ class DBQueryDataSource(DataSourceStage):
                 return sum([self.fetch_rs(r, sort=[], limit=0, skip=0).count() for r in self.mongocollections])
             except:
                 return -1
-        
-     
+
+
 class ImageItemDataSource(DataSourceStage):
-    """图像项目数据源"""        
+    """图像项目数据源"""
     class _Implementation(DataSourceStage._Implementation):
         """图像项目数据源"""
 
@@ -178,13 +190,13 @@ class ImageItemDataSource(DataSourceStage):
 
         def fetch(self) -> Iterable[ImageItem]:
             yield from self.rs
-            
-    
+
+
 class ImageImportDataSource(DataSourceStage):
     """从本地文件或网址导入图像到图集
     """
     class _Implementation(DataSourceStage._Implementation):
-        
+
         def __init__(self, locs, dataset='默认图集', tags='', proxy='', excluding_patterns=''):
             """
             Args:
@@ -239,7 +251,8 @@ class ImageImportDataSource(DataSourceStage):
                             z.extractall('__zip{}'.format(hash(loc)))
                     elif os.path.isdir(loc):
                         self.logger(loc)
-                        l += [(loc, os.path.join(loc, _)) for _ in os.listdir(loc)]
+                        l += [(loc, os.path.join(loc, _))
+                              for _ in os.listdir(loc)]
                     elif os.path.isfile(loc):
                         l.append((loc, loc))
                 return l
@@ -342,7 +355,7 @@ class ImageImportDataSource(DataSourceStage):
                         imgs += re.findall(
                             r'(zoomfile|data-original|data-src|src|file|data-echo)=["\'](.*?)["\']', img)
                     imgs += re.findall(r'<a[^>]+(href)="([^"]*?\.jpe?g)"',
-                                    html, flags=re.I)
+                                       html, flags=re.I)
                     self.logger(len(imgs), 'images found.')
 
                 for _, img in imgs:
