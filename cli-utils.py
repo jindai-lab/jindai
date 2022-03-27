@@ -14,7 +14,7 @@ import os
 import numpy as np
 
 
-def mongodb(coll):
+def _mongodb(coll):
     return Meta.db.database[coll]
 
 
@@ -36,7 +36,8 @@ def cli():
 @click.option('--query')
 def export(query, output):
     Task = _init_task()
-    task = Task(datasource=('DBQueryDataSource', {'query': query}), pipeline=[
+    task = Task(pipeline=[
+        ('DBQueryDataSource', {'query': query}),
         ('AccumulateParagraphs', {}),
         ('Export', {'format': 'xlsx', 'inp': 'return'})
     ])
@@ -55,8 +56,8 @@ def task(task_id, concurrent=0):
     Task = _init_task()
     task = Task.from_dbo(TaskDBO.first((F.id == task_id) if re.match(r'[0-9a-f]{24}', task_id) else (F.name == task_id)))
     if concurrent > 0: task.pipeline.concurrent = concurrent
-    task.log = print
-    task.pipeline.tqdm = True
+    task.logger = print
+    task.verbose = True
     result = task.execute()
     print(result)
     exit(0)
@@ -162,7 +163,7 @@ def dump(output, colls):
     with zipfile.ZipFile(output, 'w', zipfile.ZIP_DEFLATED) as z:
         for coll in colls or Meta.db.database.list_collection_names():
             fo = BytesIO()
-            for p in tqdm(mongodb(coll).find(), total=mongodb(coll).count_documents({})):
+            for p in tqdm(_mongodb(coll).find(), total=_mongodb(coll).count_documents({})):
                 fo.write(jsonenc.encode(p).encode('utf-8') + b'\n')
             fo.seek(0)
             z.writestr(coll, fo.read())
@@ -213,8 +214,8 @@ def restore(infile, colls, force):
         """
         try:
             if force:
-                mongodb(coll).delete_many({'_id': {'$in': [p['_id'] for p in ps]}})
-            mongodb(coll).insert_many(ps, ordered=False,
+                _mongodb(coll).delete_many({'_id': {'$in': [p['_id'] for p in ps]}})
+            _mongodb(coll).insert_many(ps, ordered=False,
                                         bypass_document_validation=True)
         except Exception as ex:
             print(ex.__class__.__name__)

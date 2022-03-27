@@ -785,3 +785,23 @@ class OutlineFilter(PipelineStage):
         p.outline = '.'.join(self.nums)
         p.save()
         return p
+
+
+class ConditionalAssignment(PipelineStage):
+    """按条件赋值字段"""
+
+    def __init__(self, cond, field):
+        """
+        Args:
+            cond (QUERY): 一行一个检查的条件，与最终要赋予的值之间用=>连缀
+            field (str): 要赋值的字段
+        """
+        self.cond = [parser.eval(_) for _ in cond.split('\n')]
+        self.field = field
+
+    def resolve(self, p):
+        for c, v in self.cond:
+            if execute_query_expr(c, p):
+                setattr(p, self.field, v if not isinstance(v, str) or not v.startswith('$') else getattr(p, v[1:], None))
+                break
+        return p

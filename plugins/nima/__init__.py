@@ -13,7 +13,7 @@ class NIMAEval(ImageOrAlbumStage):
         nima_init(MODEL)
         self.predict = nima_predict
 
-    def resolve_image(self, i: ImageItem):
+    def resolve_image(self, i: ImageItem, context):
         for (_, mean) in self.predict([i.image]):
             i.ava_eval = mean
             i.save()

@@ -1,26 +1,18 @@
 """工作流程控制
 """
 
+from typing import Tuple
 from pipeline import PipelineStage, Pipeline
 from .utils import execute_query_expr
-from models import TaskDBO, F, parser
+from models import Paragraph, TaskDBO, F, parser
 
 
-class Repeat(PipelineStage):
-    """重复"""
-
-    def __init__(self, pipeline, times=1, until=''):
-        """
-        Args:
-            pipeline (pipeline): 要重复执行的流程
-            times (int): 重复的次数
-            until (QUERY): 重复的终止条件
-        """
-        self.times = times
-        self.until = parser.eval(until) if until else None
-        self.pipeline = Pipeline(pipeline, 1, False)
-
+class FlowControlStage(PipelineStage):
+    def __init__(self) -> None:
+        super().__init__()
         self._logger = print
+        self._next = None
+        self._pipelines = [getattr(self, a) for a in dir(self) if isinstance(getattr(self, a), Pipeline)]
 
     @property
     def logger(self):
@@ -29,27 +21,53 @@ class Repeat(PipelineStage):
     @logger.setter
     def logger(self, val):
         self._logger = val
-        self.pipeline.logger = val
+        for pl in self._pipelines:
+            pl.logger = val
+            
+    @property
+    def next(self):
+        return self._next
+    
+    @next.setter
+    def next(self, val):
+        self._next = val
+        for pl in self._pipelines:
+            if pl.stages:
+                pl.stages[-1].next = val
+    
 
-    def resolve(self, p):
-        p = [p]
-        if self.until:
-            flag = True
-            times = 0
-            while flag and times != self.times:
-                times += 1
-                p = self.pipeline.applyParagraphs(p)
-                for p_ in p:
-                    if execute_query_expr(self.until, p_):
-                        flag = False
-                        break
+class RepeatWhile(FlowControlStage):
+    """重复"""
+
+    def __init__(self, pipeline, times=1, cond=''):
+        """
+        Args:
+            pipeline (pipeline): 要重复执行的流程
+            times (int): 重复的次数
+            cond (QUERY): 重复的条件
+        """
+        self.times = times
+        self.times_key = f'REPEATWHILE_{id(self)}_TIMES_COUNTER'
+        self.cond = parser.eval(cond) if cond else f'{self.times_key} < {times}'
+        self.pipeline = Pipeline(pipeline, 1, False)
+        super().__init__()
+
+    def flow(self, p):
+        if p[self.times_key] is None:
+            p[self.times_key] = 0
+        
+        flag = execute_query_expr(self.cond, p)
+        p[self.times_key] += 1
+        
+        if flag and self.pipeline.stages:
+            self.pipeline.stages[-1].next = self
+            yield p, self.pipeline.stages[0]
         else:
-            for i in range(self.times):
-                p = self.pipeline.applyParagraphs(p)
-        yield from p
+            p[self.times_key] = None
+            yield p, self.next
 
 
-class Condition(PipelineStage):
+class Condition(FlowControlStage):
     """条件判断"""
 
     def __init__(self, cond, iftrue, iffalse):
@@ -60,50 +78,21 @@ class Condition(PipelineStage):
             iffalse (pipeline): 条件不成立时执行的流程
         """
         self.cond = parser.eval(cond)
-        self.iftrue = Pipeline(iftrue, 1, False)
-        self.iffalse = Pipeline(iffalse, 1, False)
-
-        self._logger = print
-
-    @property
-    def logger(self):
-        return self._logger
-
-    @logger.setter
-    def logger(self, val):
-        self._logger = val
-        self.iffalse.logger = val
-        self.iftrue.logger = val
-
-    def resolve(self, p):
-        if execute_query_expr(self.cond, p):
-            p = self.iftrue.applyParagraphs([p])
+        self.iftrue = Pipeline(iftrue)
+        self.iffalse = Pipeline(iffalse)
+        super().__init__()
+    
+    def flow(self, p):
+        pl = self.iftrue
+        if not execute_query_expr(self.cond, p):
+            pl = self.iffalse
+        if pl.stages:
+            yield p, pl.stages[0]
         else:
-            p = self.iffalse.applyParagraphs([p])
-        yield from p
+            yield p, self.next
 
 
-class ConditionalAssignment(PipelineStage):
-    """按条件赋值字段"""
-
-    def __init__(self, cond, field):
-        """
-        Args:
-            cond (QUERY): 一行一个检查的条件，与最终要赋予的值之间用=>连缀
-            field (str): 要赋值的字段
-        """
-        self.cond = [parser.eval(_) for _ in cond.split('\n')]
-        self.field = field
-
-    def resolve(self, p):
-        for c, v in self.cond:
-            if execute_query_expr(c, p):
-                setattr(p, self.field, v if not isinstance(v, str) or not v.startswith('$') else getattr(p, v[1:], None))
-                break
-        return p
-
-
-class CallTask(PipelineStage):
+class CallTask(FlowControlStage):
     """调用其他任务（流程）"""
 
     def __init__(self, task, pipeline_only=False, params=''):
@@ -121,10 +110,7 @@ class CallTask(PipelineStage):
             params = parser.eval(params)
             for k, v in params.items():
                 secs = k.split('.')
-                if secs[0] == 'datasource':
-                    target = t.datasource_config
-                else:
-                    target = t.pipeline
+                target = t.pipeline
                 for sec in secs[1:-1]:
                     if sec.isnumeric():
                         assert isinstance(target, list) and len(target) > int(sec), '请指定正确的下标，从0开始'
@@ -138,56 +124,19 @@ class CallTask(PipelineStage):
                 target[sec] = v
         
         self.task = Task.from_dbo(t)
-        self.task.pipeline.concurrent = 1
-        
-        self._logger = print
-
-    @property
-    def logger(self):
-        return self._logger
-
-    @logger.setter
-    def logger(self, val):
-        self._logger = val
-        self.task.pipeline.logger = val
-        self.task.datasource.logger = val
-
-    def resolve(self, p):
         if self.pipeline_only:
-            yield from self.task.pipeline.applyParagraphs([p])
+            self.pipeline = self.task.pipeline
+        
+        super().__init__()
+        
+    def flow(self, p):
+        if self.pipeline_only and self.pipeline.stages:
+            yield p, self.pipeline.stages[0]
         else:
-            yield p
+            yield p, self.next
     
     def summarize(self, r):
         if self.pipeline_only:
-            return self.task.pipeline.summarize()
+            return self.pipeline.summarize()
         else:
             return self.task.execute()
-
-
-class AlternativeDataSource(PipelineStage):
-    """从另一数据源中导入"""
-
-    def __init__(self, datasource, config_map):
-        """
-        Args:
-            datasource (DATASOURCE): 数据源名称
-            config_map (QUERY): 新数据源参数对应关系，格式为 <参数名>=<常量>|$<字段名> ，多个参数之间用 , 隔开。
-        """
-        self.datasource = datasource
-        self.config_map = parser.eval(config_map)
-        assert isinstance(self.config_map, dict), "数据源参数对应关系格式错误"
-
-    def replace_val(self, p):
-        d = {}
-        for k, v in self.config_map.items():
-            if isinstance(v, str) and v.startswith('$'):
-                d[k] = getattr(p, v[1:])
-            else:
-                d[k] = v
-        return d
-
-    def resolve(self, p):
-        from task import Task
-        t = Task.from_dbo(TaskDBO(datasource=self.datasource, datasource_config=self.replace_val(p)))
-        yield from t.datasource.fetch()

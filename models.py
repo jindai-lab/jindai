@@ -43,28 +43,31 @@ def _object_id(params):
         return ObjectId.from_datetime(params)
     return ObjectId()
 
+
 def _expand(*args):
     return [Fn.unwind('$images')(), Fn.lookup(from_='imageitem', localField='images', foreignField='_id', as_='images')()]
+
 
 parser = QueryExprParser(abbrev_prefixes={None: 'keywords=', '_': 'images.', '?': 'source.url%'}, allow_spacing=True, functions={
     'groupby': _expr_groupby,
     'object_id': _object_id,
-    'expand': _expand 
+    'expand': _expand
 }, force_timestamp=False)
 
 
 def _pdf_image(file, page, **kwargs):
     buf = BytesIO()
     page = int(page)
-    
+
     if file.endswith('.pdf'):
         for file in [file, os.path.join(config.storage, file)]:
-            if os.path.exists(file): break
+            if os.path.exists(file):
+                break
         else:
             return 'Not found', 404
 
         img, = convert_from_path(file, 120, first_page=page+1,
-                                last_page=page+1, fmt='png') or [None]
+                                 last_page=page+1, fmt='png') or [None]
         if img:
             img.save(buf, format='png')
             buf.seek(0)
@@ -76,7 +79,8 @@ class StringOrDate(DbObjectInitializer):
 
     def __init__(self):
         def func(a=None, *args):
-            if not a: return ''
+            if not a:
+                return ''
             try:
                 a = parser.parse_literal(a)
                 if isinstance(a, datetime.datetime):
@@ -88,7 +92,7 @@ class StringOrDate(DbObjectInitializer):
 
 
 class LengthedIO:
-    
+
     def __init__(self, f, sz):
         self._f = f
         self._sz = sz
@@ -126,13 +130,14 @@ class ImageItem(db.DbObject):
     @image.setter
     def image(self, value):
         self._image = value
-        self._image_flag = True        
+        self._image_flag = True
 
     @property
     def image_raw(self) -> BytesIO:
         if self.source.get('file'):
             fn = self.source['file']
-            if fn.startswith('/'): fn = fn[1:]
+            if fn.startswith('/'):
+                fn = fn[1:]
             if fn.lower().endswith('.pdf') and self.source.get('page') is not None:
                 return _pdf_image(file=fn, page=self.source['page'])
             elif fn == 'blocks.h5':
@@ -179,7 +184,7 @@ class Paragraph(db.DbObject):
     pagenum = Anything
     lang = str
     images = dbo.DbObjectCollection(ImageItem)
-    
+
     @classmethod
     def on_initialize(cls):
         cls.ensure_index('dataset')
@@ -205,7 +210,8 @@ class Paragraph(db.DbObject):
             if not isinstance(i, ImageItem):
                 self.images.remove(i)
                 continue
-            if i.id is None: i.save()
+            if i.id is None:
+                i.save()
         super().save()
 
     @staticmethod
@@ -216,7 +222,7 @@ class Paragraph(db.DbObject):
             return _Temp
 
         return Paragraph
-    
+
     @staticmethod
     def get_converter(coll):
         a = Paragraph.get_coll(coll)
@@ -250,12 +256,12 @@ class Dataset(db.DbObject):
 class TaskDBO(db.DbObject):
 
     name = str
+    params = dict
     pipeline = list
-    datasource = str
-    datasource_config = dict
     resume_next = bool
     last_run = datetime.datetime
-    concurrent = DbObjectInitializer(lambda *x: 3 if len(x) == 0 else int(x), int)
+    concurrent = DbObjectInitializer(
+        lambda *x: 3 if len(x) == 0 else int(x), int)
     shortcut_map = dict
     creator = str
     shared = bool
@@ -272,10 +278,10 @@ class User(db.DbObject):
     def encrypt_password(u, p):
         up = '{}_corpus_{}'.format(u, p).encode('utf-8')
         return '{}:{}'.format(u, sha1(up).hexdigest())
-    
+
     def set_password(self, password_plain=''):
         self.password = User.encrypt_password(self.username, password_plain)
-    
+
     @staticmethod
     def authenticate(u, p):
         if User.first((F.username == u) & (F.password == User.encrypt_password(u, p))):
@@ -285,7 +291,7 @@ class User(db.DbObject):
 
 
 class Token(db.DbObject):
-    
+
     user = str
     token = str
     expire = float
@@ -301,7 +307,8 @@ class Token(db.DbObject):
                 t.save()
             return t
         else:
-            t = Token.first((F.token == token_string) & (F.expire > time.time()))
+            t = Token.first((F.token == token_string)
+                            & (F.expire > time.time()))
             if t:
                 Token._cache[token_string] = t
                 return t
@@ -312,23 +319,23 @@ class Token(db.DbObject):
         for t in Token._cache.values():
             if t.user == user:
                 t.expire = 0
-        Token.query(F.user==user).delete()
+        Token.query(F.user == user).delete()
 
     @property
     def roles(self):
         if not hasattr(self, '_roles'):
             self._roles = User.first(F.username == self.user).roles
         return self._roles
-        
 
-def get_context(directory : str, parent_class : Type) -> Dict:
+
+def get_context(directory: str, parent_class: Type) -> Dict:
     modules = [
-                directory + '.' + os.path.basename(f).split('.')[0]
-                for f in glob.glob(os.path.join(os.path.dirname(__file__), directory, "*.py"))
-            ] + [
-                directory + '.' + f.split(os.path.sep)[-2]
-                for f in glob.glob(os.path.join(os.path.dirname(__file__), directory, '*/__init__.py'))
-            ]
+        directory + '.' + os.path.basename(f).split('.')[0]
+        for f in glob.glob(os.path.join(os.path.dirname(__file__), directory, "*.py"))
+    ] + [
+        directory + '.' + f.split(os.path.sep)[-2]
+        for f in glob.glob(os.path.join(os.path.dirname(__file__), directory, '*/__init__.py'))
+    ]
     ctx = {}
     for mm in modules:
         try:
@@ -341,7 +348,7 @@ def get_context(directory : str, parent_class : Type) -> Dict:
     return ctx
 
 
-def try_download(url: str, referer: str = '', attempts: int = 3, proxies = {}) -> Union[bytes, None]:
+def try_download(url: str, referer: str = '', attempts: int = 3, proxies={}) -> Union[bytes, None]:
     """Try download from url
 
     Args:

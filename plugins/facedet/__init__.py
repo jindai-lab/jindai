@@ -23,7 +23,7 @@ class FaceDet(ImageOrAlbumStage):
             bufi = image.crop((x, y, x + w, y + h))
             yield bufi
     
-    def resolve_image(self, i: ImageItem):
+    def resolve_image(self, i: ImageItem, context):
         f = i.image_raw
         if not f: return
         i.faces = []
