@@ -28,7 +28,7 @@ class PipelineStage:
         if isinstance(rp, IterableClass):
             for p in rp:
                 yield p, self.next
-        else:
+        elif rp is not None:
             yield rp, self.next
 
 
@@ -51,6 +51,7 @@ class DataSourceStage(PipelineStage):
         args = p.as_dict()
         Pipeline.ensure_args(type(self)._Implementation, args)
         instance = type(self)._Implementation(**args)
+        instance.logger = self.logger
         yield from instance.fetch()
 
 
