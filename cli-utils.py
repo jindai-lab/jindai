@@ -36,7 +36,7 @@ def cli():
 @click.option('--query')
 def export(query, output):
     Task = _init_task()
-    task = Task(pipeline=[
+    task = Task(stages=[
         ('DBQueryDataSource', {'query': query}),
         ('AccumulateParagraphs', {}),
         ('Export', {'format': 'xlsx', 'inp': 'return'})
