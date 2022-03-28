@@ -4,12 +4,12 @@ import codecs
 from concurrent.futures import ThreadPoolExecutor
 from sys import implementation
 from urllib.parse import urljoin
-
 from bs4 import BeautifulSoup as B
-from models import ImageItem, Paragraph, parser, try_download
-from pipeline import DataSourceStage
 
-from .utils import *
+from models import ImageItem, Paragraph, parser
+from pipeline import DataSourceStage
+from storage import expand_path, expand_patterns, truncate_path, safe_open
+
 
 class HTMLDataSource(DataSourceStage):
     """从HTML网页中读取语段，每个网页计作一个语段
@@ -38,7 +38,7 @@ class HTMLDataSource(DataSourceStage):
 
                 for para in b.select(self.paragraph_selector) if self.paragraph_selector else [b]:
                     p = Paragraph(
-                        lang=self.lang, content='', source={'url' if '://' in fn else 'file': fname}, pagenum=1,
+                        lang=self.lang, content='', source={'url' if '://' in fn else 'file': truncate_path(fn)}, pagenum=1,
                         dataset=self.name, outline=outline,
                         keywords=[]
                     )
@@ -63,12 +63,12 @@ class HTMLDataSource(DataSourceStage):
 
                 del b
 
-            for fp, fn in expand_file_patterns(self.files):
+            for fn in expand_patterns(self.files):
                 self.logger('reading from', fn)
                 ol = ''
                 if '#' in fn:
-                    fn, ol = fn.split('#', 1)
-                yield from import_html_src(fn, fp, ol)
+                    fpath, ol = fn.split('#', 1)
+                yield from import_html_src(fpath, safe_open(fn), ol)
 
 
 class TextDataSource(DataSourceStage):
@@ -89,9 +89,12 @@ class TextDataSource(DataSourceStage):
             self.content = content.split('\n')
 
         def fetch(self):
-            for fp, fn in expand_file_patterns(self.content):
-                for i, l in enumerate(fp):
-                    yield Paragraph(content=codecs.decode(l), source={'url' if '://' in fn else 'file': fn}, dataset=self.name, lang=self.lang, outline=f'{i+1:06d}')
+            for fn in expand_patterns(self.content):
+                for i, l in enumerate(safe_open(fn)):
+                    yield Paragraph(content=codecs.decode(l), 
+                            source={'url' if '://' in fn else 'file': truncate_path(fn)}, 
+                            dataset=self.name, lang=self.lang, outline=f'{i+1:06d}')
+
 
 class LinesDataSource(DataSourceStage):
     """从直接输入的文本中获得语段，每行一个语段
@@ -119,8 +122,8 @@ class WebPageListingDataSource(DataSourceStage):
     class _Implementation(DataSourceStage._Implementation):
 
         def __init__(self, dataset, patterns,
-                    mongocollection='', lang='auto', detail_link='', list_link='', proxy='', list_depth=1, tags='',
-                    img_pattern='img[src]|[zoomfile]|[data-original]|[data-src]|[file]|[data-echo]'.replace('|', '\n')) -> None:
+                     mongocollection='', lang='auto', detail_link='', list_link='', proxy='', list_depth=1, tags='',
+                     img_pattern='img[src]|[zoomfile]|[data-original]|[data-src]|[file]|[data-echo]'.replace('|', '\n')) -> None:
             """
             Args:
                 patterns (str): 列表页面模式
@@ -151,7 +154,7 @@ class WebPageListingDataSource(DataSourceStage):
             self.convert = Paragraph.get_converter(mongocollection)
 
         def read_html(self, url):
-            html = try_download(url, proxies=self.proxies)
+            html = safe_open(url, proxies=self.proxies).read()
             if not html:
                 self.logger('Cannot read from', url)
                 return
@@ -168,7 +171,7 @@ class WebPageListingDataSource(DataSourceStage):
 
             b = self.read_html(url)
             p = Paragraph(source={'url': url},
-                        dataset=self.dataset, lang=self.lang)
+                          dataset=self.dataset, lang=self.lang)
             p.content = self.get_text(b)
             p.keywords = self.tags
             p.title = self.get_text(b.find('title'))
@@ -204,8 +207,7 @@ class WebPageListingDataSource(DataSourceStage):
 
         def fetch(self):
 
-            queue = [(p, 1) for p in expand_file_patterns(
-                self.patterns, names_only=True)]
+            queue = [(p, 1) for p in expand_patterns(self.patterns)]
             visited = set()
 
             def _do_parse(q_tup):
@@ -252,7 +254,7 @@ class BiblioDataSource(DataSourceStage):
                 raise NotImplemented()
 
             self.method = getattr(self, format)
-            self.files = expand_file_patterns(content.split('\n'))
+            self.files = expand_patterns(content)
             self.dataset = dataset
             self.lang = lang
 

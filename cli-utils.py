@@ -44,7 +44,7 @@ def export(query, output):
 
     xlsx = task.execute()
 
-    with open(output, 'wb') as fo:
+    with safe_open(output, 'wb') as fo:
         fo.write(xlsx)
     exit(0)
 

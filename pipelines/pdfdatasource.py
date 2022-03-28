@@ -7,7 +7,7 @@ from pdf2image import convert_from_path
 from models import Paragraph
 from PyMongoWrapper import F, Fn, Var
 from pipeline import DataSourceStage
-from .utils import *
+from storage import expand_patterns, safe_open, truncate_path
 
 
 class PDFDataSource(DataSourceStage):
@@ -26,7 +26,7 @@ class PDFDataSource(DataSourceStage):
         super().__init__()
         self.name = dataset_name
         self.lang = lang
-        self.files = expand_file_patterns(content.split('\n'), names_only=True)
+        self.files = expand_patterns(content)
         self.mongocollection = mongocollection
 
     def fetch(self):
@@ -37,14 +37,10 @@ class PDFDataSource(DataSourceStage):
         }
         
         for pdf in self.files:
-            pdffile = pdf
-            if pdf.startswith('sources/'):
-                pdf = pdf[len('sources/'):]
-            
             min_page = existent.get(pdf)
             min_page = 0 if min_page is None else (min_page + 1)
             
-            doc = fitz.open(pdffile)
+            doc = fitz.open(stream=safe_open(pdf, 'rb'))
             pages = doc.pageCount
             self.logger('importing', pdf, 'from page', min_page)
 
@@ -54,7 +50,7 @@ class PDFDataSource(DataSourceStage):
                 label = doc[p].get_label()
                 lines = doc[p].getText()
                 try:
-                    yield para_coll(lang=lang, content=lines.encode('utf-8', errors='ignore').decode('utf-8'), source={'file': pdf,
+                    yield para_coll(lang=lang, content=lines.encode('utf-8', errors='ignore').decode('utf-8'), source={'file': truncate_path(pdf),
                         'page': p}, pagenum=label or (p+1), dataset=self.name)
                 except Exception as e:
                     self.logger(pdffile, p+1, e)

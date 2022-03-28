@@ -13,6 +13,7 @@ from models import Paragraph
 from pipeline import DataSourceStage
 from plugin import Plugin
 from helpers import safe_import
+from storage import expand_path
 
 
 class AutoCompletionPlugin(Plugin):
@@ -55,7 +56,7 @@ class AutoCompletionPlugin(Plugin):
                 """
                 super().__init__()
             
-                relative = lambda x: os.path.join(config.rootpath, 'models_data/autocompletion', x)
+                relative = lambda x: expand_path(f'models_data/autocompletion/{x}')
                 config_path = relative('config.json')
                 checkpoint_path = relative('gpt.ckpt')
                 dict_path = relative('vocab.txt')

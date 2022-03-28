@@ -2,6 +2,7 @@
 
 from models import Paragraph
 from pipeline import PipelineStage
+from storage import safe_open
 import pickle
 
 
@@ -11,7 +12,7 @@ class HanziChaizi(PipelineStage):
     """
 
     def __init__(self) -> None:
-        with open('models_data/chaizi.pkl', 'rb') as fi:
+        with safe_open('models_data/chaizi.pkl', 'rb') as fi:
             self.dict = pickle.load(fi)
 
     def resolve(self, p: Paragraph) -> Paragraph:

@@ -59,7 +59,7 @@ class PluginManager:
         # load plugins
 
         import plugins as _plugins
-        pls = getattr(config, 'plugins', ['*'])
+        pls = config.plugins
         if pls == ['*']:
             pls = list(get_context('plugins', Plugin).values())
 

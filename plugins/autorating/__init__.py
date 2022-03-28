@@ -2,8 +2,8 @@ import os
 from PIL import Image
 import config
 from helpers import safe_import
+from storage import expand_path
 from plugin import Plugin
-
 from pipelines.imageproc import ImageOrAlbumStage
 from models import ImageItem
 from .inference_model import InferenceModel, load_state
@@ -14,7 +14,7 @@ model = None
 def predict(i):
     global model
     if model is None:
-        state = load_state(os.path.join(config.rootpath, 'models_data', 'autorating_best.pth'))
+        state = load_state(expand_path('models_data/autorating_best.pth'))
         model = InferenceModel(state)
        
     return float(model.predict_from_pil_image(i).numpy()[0])

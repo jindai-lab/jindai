@@ -1,7 +1,6 @@
-from helpers import safe_import
 from pipeline import PipelineStage
 from models import Paragraph, Dataset, parser, db
-from .utils import execute_query_expr, language_iso639
+from helpers import execute_query_expr, language_iso639, safe_import
 from PyMongoWrapper.dbo import DbObject, DbObjectCollection
 from PyMongoWrapper import F, QueryExprParser
 from opencc import OpenCC
@@ -17,7 +16,7 @@ import threading
 import statistics
 import re
 import json
-f"""基本操作"""
+"""基本操作"""
 
 
 safe_import('transliterate')
@@ -375,18 +374,21 @@ class ArrayField(PipelineStage):
         Args:
             field (str): 字段名
             push (bool): 添加（true）或删除（false）
-            elements (str): 添加或删除的元素；使用分号分隔，作为表达式运算
+            elements (str): 添加或删除的元素，每行一个 $ 开头的字段名或常量
         """
         self.field = field
-        self.elements = parser.eval(elements)
+        self.elements = [parser.eval(ele) for ele in elements.split('\n')]
         self.push = push
 
     def resolve(self, p: Paragraph) -> Paragraph:
+        if p[self.field] is None and self.push:
+            p[self.field] = []
         if not isinstance(p[self.field], (list, DbObjectCollection)):
             return p
         for ele in self.elements:
-            if ele.startswith('$'):
+            if isinstance(ele, str) and ele.startswith('$'):
                 ele = getattr(p, ele[1:], '')
+                if ele is None: continue
             if self.push:
                 p[self.field].append(ele)
             else:

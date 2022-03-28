@@ -11,10 +11,9 @@ from urllib.parse import urljoin
 import zipfile
 import jieba
 import re
-from models import ImageItem, Paragraph, parser, try_download
+from models import ImageItem, Paragraph, parser
 from PyMongoWrapper import F, Fn, Var
 from pipeline import DataSourceStage
-from storage import StorageManager
 from PIL import Image
 from bson import SON
 
@@ -267,35 +266,36 @@ class ImageImportDataSource(DataSourceStage):
 
             albums = defaultdict(Paragraph)
 
-            with StorageManager() as mgr:
-                for loc, _f in sorted(__list_all(locs)):
-                    if _f.split('.')[-1] in ['txt', 'log', 'xlsx', 'xls', 'zip', 'csv'] or _f.endswith('.mp4.thumb.jpg'):
+            for loc, _f in sorted(__list_all(locs)):
+                if _f.split('.')[-1] in ['txt', 'log', 'xlsx', 'xls', 'zip', 'csv'] or _f.endswith('.mp4.thumb.jpg'):
+                    continue
+                pu = loc.split('/')[-1]
+                ftime = __get_mtime(_f)
+
+                p = albums[pu]
+                if not p.source:
+                    p.source = {'url': pu}
+                    p.keywords += self.keywords
+                    p.pdate = datetime.datetime.utcfromtimestamp(ftime)
+                    p.dataset = self.dataset
+
+                i = ImageItem(source={'url': _f})
+                fn = __expand_zip(_f)
+                if not _f.lower().endswith(('.mp4', '.avi')):
+                    try:
+                        im = Image.open(fn)
+                        i.width, i.height = im.size
+                    except Exception as ex:
+                        self.logger('Error while handling', fn, ':', ex)
                         continue
-                    pu = loc.split('/')[-1]
-                    ftime = __get_mtime(_f)
 
-                    p = albums[pu]
-                    if not p.source:
-                        p.source = {'url': pu}
-                        p.keywords += self.keywords
-                        p.pdate = datetime.datetime.utcfromtimestamp(ftime)
-                        p.dataset = self.dataset
-
-                    i = ImageItem(source={'url': _f})
-                    fn = __expand_zip(_f)
-                    if not _f.lower().endswith(('.mp4', '.avi')):
-                        try:
-                            im = Image.open(fn)
-                            i.width, i.height = im.size
-                        except Exception as ex:
-                            self.logger('Error while handling', fn, ':', ex)
-                            continue
-
-                    i.save()
-                    if mgr.write(fn, i.id):
-                        i.source = dict(i.source, file='blocks.h5')
-                    i.save()
-                    p.images.append(i)
+                i.save()
+                with safe_open(f'hdf5://{i.id}', 'wb') as fo:
+                    fo.write(open(fn).read())
+                
+                i.source = dict(i.source, file='blocks.h5')
+                i.save()
+                p.images.append(i)
 
             albums = albums.values()
 
@@ -334,7 +334,7 @@ class ImageImportDataSource(DataSourceStage):
                     title = ''
                 else:
                     self.logger(url)
-                    html = try_download(url, proxies=self.proxies)
+                    html = safe_open(url, proxies=self.proxies).read()
                     assert html, 'Download failed.'
                     try:
                         html = html.decode('utf-8')

@@ -2,9 +2,10 @@ import os
 from plugin import Plugin
 from pipelines.imageproc import ImageOrAlbumStage
 import config
+from storage import expand_path
 from models import ImageItem
 
-MODEL = os.path.join(config.rootpath, 'models_data', 'nima.pkl')
+MODEL = expand_path('models_data/nima.pkl')
 
 
 class NIMAEval(ImageOrAlbumStage):

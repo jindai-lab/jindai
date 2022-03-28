@@ -7,7 +7,7 @@ import pandas as pd
 
 from models import Paragraph
 from pipeline import DataSourceStage
-from .utils import expand_file_patterns
+from storage import expand_patterns, truncate_path
 
 
 class WordDataSource(DataSourceStage):
@@ -15,17 +15,17 @@ class WordDataSource(DataSourceStage):
     """
     class _Implementation(DataSourceStage._Implementation):
 
-        def __init__(self, dataset, lang, files):
+        def __init__(self, dataset, lang, content):
             """
             Args:
                 dataset_name (DATASET): 数据集名称
                 lang (LANG): 语言标识
-                files (files): Word文档列表
+                content (files): Word文档列表
             """
             super().__init__()
             self.name = dataset
             self.lang = lang
-            self.files = expand_file_patterns(files.split('\n'), names_only=True)
+            self.files = expand_patterns(content)
             
         def call_abiword(self, file):
             fn = tempfile.mktemp()
@@ -41,7 +41,7 @@ class WordDataSource(DataSourceStage):
                 doc = self.call_abiword(f)
                 if doc:
                     p = Paragraph(
-                        lang=self.lang, content=doc, source={'file': f}, pagenum=1,
+                        lang=self.lang, content=doc, source={'file': truncate_path(f)}, pagenum=1,
                         dataset=self.name, outline=''
                     )
                     yield p
@@ -63,8 +63,7 @@ class ExcelDataSource(DataSourceStage):
                 lang (LANG): 语言标识
             '''
             super().__init__()
-            self.files = expand_file_patterns(
-                content.split('\n'), names_only=True)
+            self.files = expand_patterns(content)
             self.dataset = dataset
             self.lang = lang
 
