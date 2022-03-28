@@ -507,7 +507,7 @@ def search(q='', req='', sort='', limit=100, offset=0, mongocollections=[], grou
                 s.append(k + '=' + _stringify(v))
             return '(' + ','.join(s) + ')'
         elif isinstance(r, str):
-            return '`' + json.dumps(r, ensure_ascii=False)[1:-1].replace('`', '\\`') + '`'
+            return json.dumps(r, ensure_ascii=False)
         elif isinstance(r, (int, float)):
             return str(r)
         elif isinstance(r, datetime.datetime):
@@ -521,7 +521,7 @@ def search(q='', req='', sort='', limit=100, offset=0, mongocollections=[], grou
         else:
             return '_json(`' + json.dumps(r, ensure_ascii=False) + '`)'
 
-    if not req or not q:
+    if not req and not q:
         if count:
             return 0
         else:
@@ -572,7 +572,7 @@ def search(q='', req='', sort='', limit=100, offset=0, mongocollections=[], grou
 
     qstr = '?'+_stringify(qparsed)
 
-    ds = DBQueryDataSource.implementation(qstr, **params)
+    ds = DBQueryDataSource._Implementation(qstr, **params)
     results = None
 
     if page_args:
@@ -740,12 +740,17 @@ def put_storage(key):
 def quick_task(query='', pipeline='', raw=False, mongocollection=''):
     if pipeline:
         q = parser.eval(pipeline)
-        r = Task(pipeline=q).execute()
+        args = q[0]
+        if isinstance(args, tuple):
+            args = args[1]
+        elif isinstance(args, dict):
+            args, = args.values()
+        r = Task(stages=q, params=args).execute()
     else:
-        r = Task(pipeline=[
-            ('DBQueryDataSource', {'query': query, 'raw': raw, 'mongocollections': mongocollection}),
+        r = Task(stages=[
+            ('DBQueryDataSource', {}),
             ('AccumulateParagraphs', {}),
-        ]).execute()
+        ], params={'query': query, 'raw': raw, 'mongocollections': mongocollection}).execute()
 
     return expand_rs(r)
 
