@@ -1,24 +1,21 @@
 """图像相关的简单处理
 """
-
 import os
 import tempfile
 from typing import Union
 from bson import ObjectId
 import numpy as np
 from helpers import safe_import
-from models import Paragraph, F, ImageItem, Paragraph, parser, try_download
+from models import Paragraph, F, ImageItem, Paragraph, parser
 from PIL import Image, ImageOps
 from pipeline import PipelineStage
-from storage import StorageManager
+from storage import safe_open
 import traceback
 
 
 class ImageOrAlbumStage(PipelineStage):
-
     def resolve(self, p: Paragraph) -> Union[Paragraph, ImageItem]:
         items = p.images if p.images else [ImageItem(p)]
-
         for i in items:
             try:
                 self.resolve_image(i, p)
@@ -26,7 +23,6 @@ class ImageOrAlbumStage(PipelineStage):
             except Exception as ex:
                 self.logger(i.id, self.__class__.__name__, ex)
                 self.logger(traceback.format_tb(ex.__traceback__))
-
         return p
 
     def resolve_image(self, i: ImageItem, context):
@@ -233,7 +229,6 @@ class DownloadImages(ImageOrAlbumStage):
         Args:
             proxy (str): 代理服务器
         """
-        self.mgr = StorageManager()
         self.proxies = {
             'http': proxy, 'https': proxy
         } if proxy else {}
@@ -241,14 +236,18 @@ class DownloadImages(ImageOrAlbumStage):
     def resolve_image(self, i: ImageItem, post):
         if not i.id:
             i.save()
-
-        content = try_download(i.source['url'], post.source.get(
-            'url', ''), proxies=self.proxies)
-        if not content:
+        
+        try:
+            content = safe_open(i.source['url'], referer=post.source.get(
+                'url', ''), proxies=self.proxies).read()
+            assert content
+        except:
             return
-        with self.mgr:
-            self.mgr.write(content, str(i.id))
+        
+        with safe_open(f'hdf5://{i.id}', 'wb') as fo:
+            fo.write(content)
             self.logger(i.id, len(content))
+        
         i.source = {'file': 'blocks.h5', 'url': i.source['url']}
         i.flag = 0
 
@@ -299,26 +298,28 @@ class VideoFrame(ImageOrAlbumStage):
 
     def resolve_image(self, i: ImageItem, context):
         cv2 = self.cv2
-
         thumb = f'{ObjectId()}.thumb.jpg'
         temp_file = tempfile.mktemp()
-        read_from = temp_file
+        read_from = ''
 
+        # check file type by extension name
         ext = (i.source.get('url') or i.source.get(
             'file') or '.').rsplit('.', 1)[-1]
         if ext.lower() not in ('mp4', 'avi'):
             self.logger(f'skip {ext} data')
             return
-
+        
         try:
+            # read video data
             storage = i.source.get('file')
             if storage == 'blocks.h5':
-                with open(temp_file, 'wb') as fo:
+                with safe_open(temp_file, 'wb') as fo:
                     blen = fo.write(i.image_raw.read())
                 if not blen:
                     self.logger(f'unable to fetch data from blocks.h5: {i.id}')
                     os.unlink(temp_file)
                     return
+                read_from = temp_file
             else:
                 read_from = storage
 
@@ -326,8 +327,8 @@ class VideoFrame(ImageOrAlbumStage):
                 self.logger(f'{read_from} not found')
                 return
 
+            # generate video thumbnail
             cap = cv2.VideoCapture(read_from)
-
             frame_num = int(cap.get(cv2.CAP_PROP_FRAME_COUNT) *
                             self.frame_num) if self.frame_num < 1 else int(self.frame_num)
 
@@ -336,18 +337,21 @@ class VideoFrame(ImageOrAlbumStage):
                 rval, frame = cap.read()
                 cap.release()
                 if rval:
+                    # write to hdf5
                     rval, npa = cv2.imencode('.jpg', frame)
                     pic = npa.tobytes()
-                    with StorageManager() as mgr:
-                        mgr.write(pic, thumb)
+                    with safe_open(f'hdf5://{thumb}', 'wb') as fo:
+                        fo.write(pic)
+                    
                     setattr(i, self.field, thumb)
                     i.save()
-                    self.logger(
-                        f'wrote {temp_file} frame#{frame_num} to {thumb}')
+                    self.logger(f'wrote {temp_file} frame#{frame_num} to {thumb}')
+
         except Exception as ex:
             self.logger(ex)
 
+        # clear up temp file
         if os.path.exists(temp_file):
             os.unlink(temp_file)
-
+        
         return i

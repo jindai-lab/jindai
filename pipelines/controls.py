@@ -3,7 +3,7 @@
 
 from typing import Tuple
 from pipeline import PipelineStage, Pipeline
-from .utils import execute_query_expr
+from helpers import execute_query_expr
 from models import Paragraph, TaskDBO, F, parser
 
 

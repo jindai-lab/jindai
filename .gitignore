@@ -1,16 +1,13 @@
 *.pdf
 *.tsv
 *.txt
-config.py
 temp_*.py
 sources/
 blockly/
-texts/
-models_data
 .vsccode/
 gpt.*
 .DS_*
-
+config-*.yaml
 *.zip
 blocks*
 

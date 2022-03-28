@@ -1,0 +1,12 @@
+allowed_ips:
+  172.24.0.3: hocadmon
+concurrent: 3
+file_serve:
+  books/: http://my-nas/books/
+mongo: 172.17.0.1:27017
+mongoDbName: hamster
+plugins:
+- '*'
+rootpath: /app/
+secret_key: '!'
+storage: :root:/sources

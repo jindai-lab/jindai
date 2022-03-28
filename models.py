@@ -7,7 +7,6 @@ import time
 from hashlib import sha1
 from typing import Dict, Type, Union
 from io import BytesIO
-from pdf2image import convert_from_path
 
 from flask import request
 import requests
@@ -17,7 +16,7 @@ from PyMongoWrapper import F, Fn, MongoOperand, QueryExprParser, dbo
 from PyMongoWrapper.dbo import Anything, DbObjectInitializer, MongoConnection
 
 import config
-from storage import StorageManager
+from storage import safe_open
 
 db = MongoConnection('mongodb://' + config.mongo + '/' + config.mongoDbName)
 
@@ -55,26 +54,6 @@ parser = QueryExprParser(abbrev_prefixes={None: 'keywords=', '_': 'images.', '?'
 }, force_timestamp=False)
 
 
-def _pdf_image(file, page, **kwargs):
-    buf = BytesIO()
-    page = int(page)
-
-    if file.endswith('.pdf'):
-        for file in [file, os.path.join(config.storage, file)]:
-            if os.path.exists(file):
-                break
-        else:
-            return 'Not found', 404
-
-        img, = convert_from_path(file, 120, first_page=page+1,
-                                 last_page=page+1, fmt='png') or [None]
-        if img:
-            img.save(buf, format='png')
-            buf.seek(0)
-
-    return buf
-
-
 class StringOrDate(DbObjectInitializer):
 
     def __init__(self):
@@ -89,21 +68,6 @@ class StringOrDate(DbObjectInitializer):
                 return a
 
         super().__init__(func, None)
-
-
-class LengthedIO:
-
-    def __init__(self, f, sz):
-        self._f = f
-        self._sz = sz
-
-    def __len__(self):
-        return self._sz
-
-    def __getattribute__(self, name: str):
-        if name.startswith('_'):
-            return object.__getattribute__(self, name)
-        return getattr(self._f, name)
 
 
 class ImageItem(db.DbObject):
@@ -136,20 +100,14 @@ class ImageItem(db.DbObject):
     def image_raw(self) -> BytesIO:
         if self.source.get('file'):
             fn = self.source['file']
-            if fn.startswith('/'):
-                fn = fn[1:]
             if fn.lower().endswith('.pdf') and self.source.get('page') is not None:
-                return _pdf_image(file=fn, page=self.source['page'])
+                return safe_open('{file}#pdf/png:{page}'.format(**self.source), 'rb')
             elif fn == 'blocks.h5':
-                vt = self.source.get('block_id', self.id)
-                return StorageManager().read(vt)
+                return safe_open(f"hdf5://{self.source.get('block_id', self.id)}", 'rb')
             else:
-                if not os.path.exists(fn):
-                    fn = os.path.join(config.storage, fn)
-                fin = open(fn, 'rb')
-                return LengthedIO(fin, os.stat(fn).st_size)
+                return safe_open(fn, 'rb')
         elif self.source.get('url'):
-            return BytesIO(try_download(self.source['url']))
+            return safe_open(self.source['url'], 'rb')
 
     def save(self):
         im = self._image
@@ -157,9 +115,9 @@ class ImageItem(db.DbObject):
             self._image = None
             self.source['file'] = 'blocks.h5'
 
-            with StorageManager() as mgr:
+            with safe_open(f'hdf5://{self.id}', 'wb') as fo:
                 buf = im.tobytes('jpeg')
-                mgr.write(buf, self.id)
+                fo.write(buf)
 
         super().save()
         self._image = im
@@ -346,40 +304,3 @@ def get_context(directory: str, parent_class: Type) -> Dict:
         except Exception as ie:
             print('Error while importing', mm, ':', ie)
     return ctx
-
-
-def try_download(url: str, referer: str = '', attempts: int = 3, proxies={}) -> Union[bytes, None]:
-    """Try download from url
-
-    Args:
-        url (str): url
-        referer (str, optional): referer url
-        attempts (int, optional): max attempts
-
-    Returns:
-        Union[bytes, None]: response content or None if failed
-    """
-
-    buf = None
-    for itry in range(attempts):
-        try:
-            if '://' not in url and os.path.exists(url):
-                buf = open(url, 'rb').read()
-            else:
-                code = -1
-                if isinstance(url, tuple):
-                    url, referer = url
-                headers = {
-                    "user-agent": "Mozilla/5.1 (Windows NT 6.0) Gecko/20180101 Firefox/23.5.1", "referer": referer.encode('utf-8')}
-                try:
-                    r = requests.get(url, headers=headers, cookies={},
-                                     proxies=proxies, verify=False, timeout=60)
-                    buf = r.content
-                    code = r.status_code
-                except requests.exceptions.ProxyError:
-                    buf = None
-            if code != -1:
-                break
-        except Exception as ex:
-            time.sleep(1)
-    return buf

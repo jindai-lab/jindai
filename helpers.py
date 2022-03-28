@@ -1,8 +1,9 @@
 import importlib
-import requests
 import os
 import re
 import sys
+import pickle
+import tempfile
 import time
 import traceback
 from collections import defaultdict
@@ -10,17 +11,20 @@ from concurrent.futures import ThreadPoolExecutor
 from functools import wraps
 from typing import IO, Union
 
+import requests
 import werkzeug.wrappers.response
 from flask import Response, jsonify, request, send_file, stream_with_context
 from PyMongoWrapper import F
 
 import config
-from models import MongoJSONEncoder, Paragraph, Token, User, get_context, parser
+from models import (MongoJSONEncoder, Paragraph, Token, User, get_context,
+                    parser)
+from storage import safe_open
 
 
 def _me(p=''):
     p = str(p)
-    if p: 
+    if p:
         p += ':'
     return p + logined()
 
@@ -33,7 +37,8 @@ def safe_import(module_name, package_name=''):
         importlib.import_module(module_name)
     except ImportError:
         import subprocess
-        subprocess.call([sys.executable, '-m', 'pip', 'install', package_name or module_name])
+        subprocess.call([sys.executable, '-m', 'pip',
+                        'install', package_name or module_name])
     return importlib.import_module(module_name)
 
 
@@ -43,15 +48,18 @@ def rest(login=True, cache=False, role=''):
         def wrapped(*args, **kwargs):
             try:
                 if login and not logined(role):
-                    raise Exception(f'Forbidden. Client: {request.remote_addr}')
+                    raise Exception(
+                        f'Forbidden. Client: {request.remote_addr}')
                 if request.json:
                     kwargs.update(**request.json)
                 f = func(*args, **kwargs)
-                if isinstance(f, (tuple, Response, werkzeug.wrappers.response.Response)): return f
+                if isinstance(f, (tuple, Response, werkzeug.wrappers.response.Response)):
+                    return f
                 resp = jsonify({'result': f})
             except Exception as ex:
-                resp = jsonify({'exception': str(ex), 'tracestack': traceback.format_tb(ex.__traceback__)})
-            
+                resp = jsonify(
+                    {'exception': str(ex), 'tracestack': traceback.format_tb(ex.__traceback__)})
+
             resp.headers.add("Access-Control-Allow-Origin", "*")
             if cache:
                 resp.headers.add("Cache-Control", "public,max-age=86400")
@@ -62,10 +70,11 @@ def rest(login=True, cache=False, role=''):
 
 
 def logined(role=''):
-    t = Token.check(request.headers.get('X-Authentication-Token', request.cookies.get('token')))
+    t = Token.check(request.headers.get(
+        'X-Authentication-Token', request.cookies.get('token')))
     if t and (not role or role in t.roles):
         return t.user
-    if request.remote_addr in getattr(config, 'allowed_ips', {}):
+    if request.remote_addr in config.allowed_ips:
         return config.allowed_ips[request.remote_addr]
 
 
@@ -143,7 +152,8 @@ def serve_file(p: Union[str, IO], ext: str = '', file_size: int = 0) -> Response
 
 
 def serve_proxy(server, path):
-    resp = requests.get(f'http://{server}/{path}', headers={'Host': 'localhost:8080'})
+    resp = requests.get(f'http://{server}/{path}',
+                        headers={'Host': 'localhost:8080'})
     return Response(resp.content, headers=dict(resp.headers))
 
 
@@ -173,3 +183,94 @@ def logs_view(task):
                     mimetype="text/plain",
                     content_type="text/event-stream"
                     )
+
+
+RE_DIGITS = re.compile(r'[\+\-]?\d+')
+
+
+def execute_query_expr(parsed, inputs):
+
+    def _opr(k):
+        oprname = {
+            'lte': 'le',
+            'gte': 'ge',
+            '': 'eq'
+        }.get(k, k)
+        return '__' + oprname + '__'
+
+    def _getattr(o, k, default=None):
+        if '.' in k:
+            for k_ in k.split('.'):
+                o = _getattr(o, k_, default)
+            return o
+
+        if isinstance(o, dict):
+            return o.get(k, default)
+        elif isinstance(o, list) and RE_DIGITS.match(k):
+            return o[int(k)] if 0 <= int(k) < len(o) else default
+        else:
+            return getattr(o, k, default)
+
+    def _hasattr(o, k):
+        if '.' in k:
+            for k_ in k.split('.')[:-1]:
+                o = _getattr(o, k_)
+            k = k.split('.')[-1]
+
+        if isinstance(o, dict):
+            return k in o
+        elif isinstance(o, list) and RE_DIGITS.match(k):
+            return 0 <= int(k) < len(o)
+        else:
+            return hasattr(o, k)
+
+    def _test_inputs(inputs, v, k='eq'):
+        oprname = _opr(k)
+        if oprname == '__in__':
+            return inputs in v
+        elif oprname == '__size__':
+            return len(inputs) == v
+
+        if isinstance(inputs, list):
+            rr = False
+            for v_ in inputs:
+                rr = rr or _getattr(v_, oprname)(v)
+                if rr:
+                    break
+        else:
+            rr = _getattr(inputs, oprname)(v)
+        return rr is True
+    r = True
+    assert isinstance(
+        parsed, dict), 'QueryExpr should be parsed first and well-formed.'
+    for k, v in parsed.items():
+        if k.startswith('$'):
+            if k == '$and':
+                rr = True
+                for v_ in v:
+                    rr = rr and execute_query_expr(v_, inputs)
+            elif k == '$or':
+                rr = False
+                for v_ in v:
+                    rr = rr or execute_query_expr(v_, inputs)
+                    if rr:
+                        break
+            elif k == '$not':
+                rr = not execute_query_expr(v, inputs)
+            elif k == '$regex':
+                rr = re.search(v, inputs) is not None
+            elif k == '$options':
+                continue
+            else:
+                rr = _test_inputs(inputs, v, k[1:])
+            r = r and rr
+        elif not isinstance(v, dict) or not [1 for v_ in v if v_.startswith('$')]:
+            r = r and _test_inputs(_getattr(inputs, k), v)
+        else:
+            r = r and execute_query_expr(v, _getattr(
+                inputs, k) if _hasattr(inputs, k) else None)
+    return r
+
+
+with safe_open('models_data/language_iso639', 'rb') as flang:
+    language_iso639 = pickle.load(flang)

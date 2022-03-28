@@ -20,8 +20,6 @@ from helpers import *
 app = Flask(__name__)
 app.config['SECRET_KEY'] = config.secret_key
 je = dbo.create_dbo_json_encoder(json.JSONEncoder)
-with open('restarting', 'wb'):
-    pass
 
 
 class NumpyEncoder(json.JSONEncoder):
@@ -678,7 +676,7 @@ def serve_image(coll=None, storage_id=None, ext=None):
     else:
         i = ImageItem(source=request.args.to_dict())
         fn = i.source.get('file', '')
-        for fkey, fmapped in getattr(config, 'file_serve', {}).items():
+        for fkey, fmapped in config.file_serve.items():
             if fn.startswith(fkey):
                 return redirect(fmapped + fn[len(fkey):])
 
@@ -730,8 +728,8 @@ def serve_image(coll=None, storage_id=None, ext=None):
 @app.route('/api/put_storage/<key>', methods=['POST'])
 @rest()
 def put_storage(key):
-    with StorageManager() as mgr:
-        mgr.write(base64.b64decode(request.data), key)
+    with safe_open(f'hdf5://{key}', 'wb') as fo:
+        fo.write(base64.b64decode(request.data))
     return True
 
 
@@ -824,7 +822,7 @@ def index(p='index.html'):
         p + '.html',
         os.path.join('ui/dist', p)
     ]:
-        if path.startswith('ui/') and getattr(config, 'ui_proxy', ''):
+        if path.startswith('ui/') and config.ui_proxy:
             return serve_proxy(config.ui_proxy, path=p)
         if os.path.exists(path) and os.path.isfile(path):
             return serve_file(path)

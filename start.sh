@@ -1,4 +1,5 @@
 #!/bin/bash
+rm /tmp/tmp*
 which python3 || (sed -i s@security.ubuntu@mirrors.aliyun@ /etc/apt/sources.list && \
     sed -i s@archive.ubuntu@mirrors.aliyun@ /etc/apt/sources.list && apt-get update && apt-get install -yqq python3 python3-pip && \
     pip3 config set global.index-url https://mirrors.aliyun.com/pypi/simple && pip3 install gunicorn && pip3 install -r /app/requirements.txt)

@@ -105,7 +105,7 @@ class ImageHashDuplications(ImageOrAlbumStage):
 
     def summarize(self, r):
         k = tempfile.mktemp()
-        self.fo = open(k + '.tsv', 'w')
+        self.fo = safe_open(k + '.tsv', 'w')
         for l in self.results:
             self.fo.write(l)
         self.fo.close()
@@ -127,7 +127,7 @@ class Hashing(Plugin):
                 return Response('')
 
             def __parse_compare_results():
-                with open(p) as fi:
+                with safe_open(p, 'r') as fi:
                     for l in fi:
                         r = l.strip().split('\t')
                         if len(r) < 3:
