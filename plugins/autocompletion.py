@@ -46,52 +46,54 @@ class AutoCompletionPlugin(Plugin):
             """从输入的提示文本自动生成
             """
 
-            def __init__(self, dataset_name, prompts, n=5, topp=0.9):
-                """
-                Args:
-                    dataset_name (DATASET): 数据集名称
-                    prompts (str): 提示文本，一行一个
-                    n (int): 针对每个提示文本生成的样本数量
-                    topp (float): 概率阈值
-                """
-                super().__init__()
-            
-                relative = lambda x: expand_path(f'models_data/autocompletion/{x}')
-                config_path = relative('config.json')
-                checkpoint_path = relative('gpt.ckpt')
-                dict_path = relative('vocab.txt')
+            class _Implementation(DataSourceStage._Implementation):
 
-                self.article_completion = ArticleCompletion(
-                    start_id=None,
-                    end_id=511,
-                    maxlen=64,
-                    minlen=32
-                )
-                me.model = build_transformer_model(
-                    config_path=config_path,
-                    checkpoint_path=checkpoint_path,
-                    segment_vocab_size=0,
-                    application='lm',
-                )
-                self.article_completion.tokenizer = Tokenizer(dict_path, do_lower_case=True)
+                def __init__(self, dataset_name, prompts, n=5, topp=0.9):
+                    """
+                    Args:
+                        dataset_name (DATASET): 数据集名称
+                        prompts (str): 提示文本，一行一个
+                        n (int): 针对每个提示文本生成的样本数量
+                        topp (float): 概率阈值
+                    """
+                    super().__init__()
+                
+                    relative = lambda x: expand_path(f'models_data/autocompletion/{x}')
+                    config_path = relative('config.json')
+                    checkpoint_path = relative('gpt.ckpt')
+                    dict_path = relative('vocab.txt')
 
-                self.dataset_name = dataset_name
-                self.lang = 'chs'
-                self.prompts = prompts.split('\n')
-                self.n = n
-                self.topp = topp
+                    self.article_completion = ArticleCompletion(
+                        start_id=None,
+                        end_id=511,
+                        maxlen=64,
+                        minlen=32
+                    )
+                    me.model = build_transformer_model(
+                        config_path=config_path,
+                        checkpoint_path=checkpoint_path,
+                        segment_vocab_size=0,
+                        application='lm',
+                    )
+                    self.article_completion.tokenizer = Tokenizer(dict_path, do_lower_case=True)
 
-            def count(self):
-                return self.n * len(self.prompts)
+                    self.dataset_name = dataset_name
+                    self.lang = 'chs'
+                    self.prompts = prompts.split('\n')
+                    self.n = n
+                    self.topp = topp
 
-            def fetch(self):
-                for prompt in self.prompts:
-                    for r in self.article_completion.generate(prompt, self.n, self.topp):
-                        yield Paragraph(
-                            content=r,
-                            lang='chs',
-                            dataset=self.dataset_name,
-                            source={'text': prompt}
-                        )
+                def count(self):
+                    return self.n * len(self.prompts)
 
-        me.register_pipelines([AutoCompletionDataSource])
+                def fetch(self):
+                    for prompt in self.prompts:
+                        for r in self.article_completion.generate(prompt, self.n, self.topp):
+                            yield Paragraph(
+                                content=r,
+                                lang='chs',
+                                dataset=self.dataset_name,
+                                source={'text': prompt}
+                            )
+
+        me.register_pipelines(locals())

@@ -42,15 +42,10 @@ def _object_id(params):
         return ObjectId.from_datetime(params)
     return ObjectId()
 
-
-def _expand(*args):
-    return [Fn.unwind('$images')(), Fn.lookup(from_='imageitem', localField='images', foreignField='_id', as_='images')()]
-
-
 parser = QueryExprParser(abbrev_prefixes={None: 'keywords=', '_': 'images.', '?': 'source.url%'}, allow_spacing=True, functions={
     'groupby': _expr_groupby,
     'object_id': _object_id,
-    'expand': _expand
+    'expand': lambda *x: [Fn.unwind('$images')(), Fn.lookup(from_='imageitem', localField='images', foreignField='_id', as_='images')()]
 }, force_timestamp=False)
 
 
@@ -303,4 +298,5 @@ def get_context(directory: str, parent_class: Type) -> Dict:
                     ctx[k] = m.__dict__[k]
         except Exception as ie:
             print('Error while importing', mm, ':', ie)
+    
     return ctx

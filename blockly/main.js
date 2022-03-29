@@ -66,75 +66,74 @@ function save() {
 }
 
 function load() {
-  $.when($.get('/api/help/pipelines'), $.get('/api/help/datasources'), $.get('/api/tasks')).done((pls, dss, tss) => {
+  $.when($.get('/api/help/pipelines'), $.get('/api/tasks')).done((pls, tss) => {
     var toolbox = {
       kind: "categoryToolbox",
       contents: []
     }
-    pls = pls[0].result; dss = dss[0].result; tss = tss[0].result;
-    [[dss, 'ds'], [pls, 'pl']].forEach(group_object => {
-      const atype = group_object[1]
+    pls = pls[0].result; tss = tss[0].result;
+  
+    toolbox.contents.push({
+      kind: 'category',
+      name: '过程处理',
+      contents: []
+    })
+    for (var group in pls) {
       toolbox.contents.push({
         kind: 'category',
-        name: atype == 'ds' ? '数据源' : '过程处理',
+        name: group,
+        colour: 160,
         contents: []
       })
-      for (var group in group_object[0]) {
-        toolbox.contents.push({
-          kind: 'category',
-          name: group,
-          colour: atype == 'ds' ? 220 : 160,
-          contents: []
-        })
-        let toolbox_contents = toolbox.contents.slice(-1)[0].contents
-        let items = group_object[0][group]
-        for (var item_key in items) {
-          let item = items[item_key]
-          let obj = {
-            previousStatement: atype == 'ds' ? undefined : null,
-            nextStatement: null,
-            colour: atype == 'ds' ? 220 : 160,
-            message0: `${item.name} ${item.doc}`,
-          }
-          _blocks_dict[item.name] = item;
-          for (var i = 0; i < item.args.length; ++i) {
-            let arg = item.args[i]
-            arg.description = arg.description || arg.name
-            obj[`message${i + 1}`] = arg.description.includes('%1') ? arg.description : `${arg.description}：%1`
-            obj[`args${i + 1}`] = [arg.type.includes('|') ? {
-              type: 'field_dropdown',
-              name: arg.name,
-              options: arg.type.split('|').map(x => x.includes(':') ? x.split(':') : [x, x])
-            } : ['float', 'int'].includes(arg.type) ? {
-              type: 'field_number',
-              name: arg.name
-            } : 'bool' == arg.type ? {
-              type: 'field_checkbox',
-              name: arg.name
-            } : 'TASK' == arg.type ? {
-              type: 'field_dropdown',
-              name: arg.name,
-              options: tss.map(x => [x.name, x._id])
-            } : 'pipeline' == arg.type ? {
-              type: 'input_statement',
-              name: arg.name
-            } : {
-              type: 'input_value',
-              name: arg.name
-            }]
-          }
-          Blockly.Blocks[item.name] = {
-            init: function () {
-              this.jsonInit(obj)
-            }
-          }
-          toolbox_contents.push({
-            kind: 'block',
-            type: item.name
-          })
+      let toolbox_contents = toolbox.contents.slice(-1)[0].contents
+      let items = pls[group]
+      for (var item_key in items) {
+        let item = items[item_key]
+        let obj = {
+          previousStatement: null,
+          nextStatement: null,
+          colour: 160,
+          message0: `${item.name} ${item.doc}`,
         }
+        _blocks_dict[item.name] = item;
+        for (var i = 0; i < item.args.length; ++i) {
+          let arg = item.args[i]
+          arg.description = arg.description || arg.name
+          obj[`message${i + 1}`] = arg.description.includes('%1') ? arg.description : `${arg.description}：%1`
+          obj[`args${i + 1}`] = [arg.type.includes('|') ? {
+            type: 'field_dropdown',
+            name: arg.name,
+            options: arg.type.split('|').map(x => x.includes(':') ? x.split(':') : [x, x])
+          } : ['float', 'int'].includes(arg.type) ? {
+            type: 'field_number',
+            name: arg.name
+          } : 'bool' == arg.type ? {
+            type: 'field_checkbox',
+            name: arg.name
+          } : 'TASK' == arg.type ? {
+            type: 'field_dropdown',
+            name: arg.name,
+            options: tss.map(x => [x.name, x._id])
+          } : 'pipeline' == arg.type ? {
+            type: 'input_statement',
+            name: arg.name
+          } : {
+            type: 'input_value',
+            name: arg.name
+          }]
+        }
+        Blockly.Blocks[item.name] = {
+          init: function () {
+            this.jsonInit(obj)
+          }
+        }
+        toolbox_contents.push({
+          kind: 'block',
+          type: item.name
+        })
       }
-    })
+    }
+
     toolbox.contents.push({
       kind: 'category',
       name: '常量',

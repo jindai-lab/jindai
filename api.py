@@ -444,6 +444,7 @@ def help(pipe_or_ds):
     def _doc(cl):
         args_docs = {}
         cl_doc = cl.__doc__ or ''
+        cl_name = cl.__name__
         cl = getattr(cl, '_Implementation', cl)
         
         for l in (cl.__init__.__doc__ or '').strip().split('\n'):
@@ -466,7 +467,7 @@ def help(pipe_or_ds):
                     args_defaults[arg], ensure_ascii=False)
 
         return {
-            'name': cl.__name__,
+            'name': cl_name,
             'doc': (cl.__doc__ or cl_doc).strip(),
             'args': [
                 {'name': k, 'type': v.get('type'), 'description': v.get('description'), 'default': v.get('default')} for k, v in args_docs.items() if 'type' in v
@@ -485,6 +486,7 @@ def help(pipe_or_ds):
 @app.route('/api/history')
 @rest()
 def history():
+    History.query(F.created_at < datetime.datetime.utcnow() - datetime.timedelta(days=30)).delete()
     return list(History.query(F.user == logined()).sort(-F.created_at).limit(100))
 
 
@@ -519,7 +521,7 @@ def search(q='', req='', sort='', limit=100, offset=0, mongocollections=[], grou
         else:
             return '_json(`' + json.dumps(r, ensure_ascii=False) + '`)'
 
-    if not req and not q:
+    if not req:
         if count:
             return 0
         else:
@@ -700,12 +702,12 @@ def serve_image(coll=None, storage_id=None, ext=None):
         return buf.getvalue()
 
     if buf:
-        length = len(buf.getvalue()) if hasattr(buf, 'getvalue') else len(buf)
+        length = len(buf.getvalue()) if hasattr(buf, 'getvalue') else getattr(buf, 'st_size', -1)
 
         if request.args.get('enhance', ''):
             img = Image.open(buf)
             buf = BytesIO()
-            ImageOps.autocontrast(img).save(p, 'jpeg')
+            ImageOps.autocontrast(img).save(buf, 'jpeg')
             # brightness = ImageStat.Stat(img).mean[0]
             # if brightness < 0.2:
             # ImageEnhance.Brightness(img).enhance(1.2).save(p, 'jpeg')

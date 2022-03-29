@@ -10,13 +10,12 @@ from models import Paragraph, TaskDBO, F, parser
 class FlowControlStage(PipelineStage):
     def __init__(self) -> None:
         super().__init__()
-        self._logger = print
         self._next = None
         self._pipelines = [getattr(self, a) for a in dir(self) if isinstance(getattr(self, a), Pipeline)]
 
     @property
     def logger(self):
-        return self._logger
+        return lambda *x: self._logger(self.__class__.__name__, '|', *x)
 
     @logger.setter
     def logger(self, val):
@@ -49,7 +48,7 @@ class RepeatWhile(FlowControlStage):
         self.times = times
         self.times_key = f'REPEATWHILE_{id(self)}_TIMES_COUNTER'
         self.cond = parser.eval(cond) if cond else f'{self.times_key} < {times}'
-        self.pipeline = Pipeline(pipeline, 1, False)
+        self.pipeline = Pipeline(pipeline, self.logger)
         super().__init__()
 
     def flow(self, p):
@@ -78,8 +77,8 @@ class Condition(FlowControlStage):
             iffalse (pipeline): 条件不成立时执行的流程
         """
         self.cond = parser.eval(cond)
-        self.iftrue = Pipeline(iftrue)
-        self.iffalse = Pipeline(iffalse)
+        self.iftrue = Pipeline(iftrue, self.logger)
+        self.iffalse = Pipeline(iffalse, self.logger)
         super().__init__()
     
     def flow(self, p):

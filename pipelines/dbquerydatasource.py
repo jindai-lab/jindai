@@ -112,8 +112,12 @@ class DBQueryDataSource(DataSourceStage):
                 agg = self.query if isinstance(
                     self.query, list) else [self.query]
                 if sort:
-                    agg.append(
-                        {'$sort': SON(parser.eval_sort(','.join(sort)))})
+                    if sort == ['random']:
+                        agg.append({'$sample': {'size': limit}})
+                        limit = 0
+                    else:
+                        agg.append(
+                            {'$sort': SON(parser.eval_sort(','.join(sort)))})
                 if skip > 0:
                     agg.append({'$skip': skip})
                 if limit > 0:

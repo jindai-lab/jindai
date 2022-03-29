@@ -12,8 +12,16 @@ class PipelineStage:
     """
 
     def __init__(self) -> None:
-        self.logger = print
+        self._logger = print
         self.next = None
+
+    @property
+    def logger(self):
+        return lambda *x: self._logger(self.__class__.__name__, '|', *x)
+
+    @logger.setter
+    def logger(self, val):
+        self._logger = val
 
     def resolve(self, p: Paragraph) -> Paragraph:
         return p
@@ -44,11 +52,13 @@ class DataSourceStage(PipelineStage):
         def fetch(self):
             pass
 
-    def __init__(self, **kws) -> None:
+    def __init__(self, **params) -> None:
         super().__init__()
+        self.params = params
 
     def resolve(self, p: Paragraph) -> Paragraph:
-        args = p.as_dict()
+        args = dict(**self.params)
+        args.update(p.as_dict())
         Pipeline.ensure_args(type(self)._Implementation, args)
         instance = type(self)._Implementation(**args)
         instance.logger = self.logger
@@ -69,13 +79,14 @@ class Pipeline:
             del args[k]
 
 
-    def __init__(self, stages: List[Union[Tuple[str, Dict], List, Dict, PipelineStage]]):
+    def __init__(self, stages: List[Union[Tuple[str, Dict], List, Dict, PipelineStage]], logger = print):
         """
         Args:
             stages: 表示各阶段的 Tuple[<名称>, <配置>], List[<名称>, <配置>], 形如 {$<名称> : <配置>} 的参数所构成的列表，或直接由已初始化好的 PipelineStage
         """
         
         self.stages = []
+        self.logger = logger
         if stages:
             for stage in stages:
                 if isinstance(stage, dict):
@@ -88,8 +99,7 @@ class Pipeline:
                     t = Pipeline.pipeline_ctx[name]
                     Pipeline.ensure_args(t, kwargs)
                     stage = t(**kwargs)
-                stage.logger = lambda *args: self.logger(
-                    '>', stage.__class__.__name__, *args)
+                stage.logger = self.logger
 
                 if len(self.stages):
                     self.stages[-1].next = stage
