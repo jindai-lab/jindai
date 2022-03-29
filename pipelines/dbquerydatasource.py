@@ -11,6 +11,7 @@ from urllib.parse import urljoin
 import zipfile
 import jieba
 import re
+from storage import safe_open
 from models import ImageItem, Paragraph, parser
 from PyMongoWrapper import F, Fn, Var
 from pipeline import DataSourceStage
@@ -37,23 +38,19 @@ class DBQueryDataSource(DataSourceStage):
                 groups (无:none|按组:group|按来源:source|分组和来源:both): 分组
             """
             self.raw = raw
+            self.querystr = query
+            
+            if not mongocollections: mongocollections = ''
             self.mongocollections = mongocollections.split('\n') if isinstance(
                 mongocollections, str) else mongocollections
+            
             if query.startswith('??'):
-                self.aggregation = True
-                self.querystr = query[2:]
-            else:
-                self.aggregation = False
-                if query.startswith('?'):
-                    query = query[1:]
-                elif re.search(r'[\,\=\|\%:@\*`]', query):
-                    pass
-                else:
-                    query = ','.join(
-                        [f'`{_.strip().lower().replace("`", "")}`' for _ in jieba.cut(query) if _.strip()])
-                self.querystr = query
+                query = '[];' + query[2:]
+            elif query.startswith('?'):
+                query = query[1:]
 
-            self.query = parser.eval(self.querystr)
+            self.query = parser.eval(query)
+            self.aggregation = isinstance(query, list)
             if isinstance(self.query, list):
                 self.aggregation = True
 
@@ -69,9 +66,7 @@ class DBQueryDataSource(DataSourceStage):
 
             if groups != 'none':
                 groupping = []
-                if groups == 'source':
-                    groupping = [Fn.addFields(group_id='$source')]
-                else:
+                if groups != 'source':
                     groupping = [Fn.addFields(
                         group_id=Fn.filter(input=Var.keywords, as_='t',
                                            cond=Fn.substrCP(Var._t, 0, 1) == '*')
@@ -79,13 +74,12 @@ class DBQueryDataSource(DataSourceStage):
                         path=Var.group_id, preserveNullAndEmptyArrays=groups == 'both'
                     )()]
 
-                if groups == 'both':
-                    groupping += [
-                        Fn.group(orig=Fn.first('$$ROOT'), _id=Fn.ifNull(Var.group_id, Fn.concat(
-                            'source.url=`', Fn.toString(Var['source.url']), '`')), count=Fn.sum(1))(),
-                        Fn.replaceRoot(newRoot=Fn.mergeObjects(
-                            '$orig', {'group_id': '$_id', 'count': '$count'}))()
-                    ]
+                groupping += [
+                    Fn.group(orig=Fn.first('$$ROOT'), _id=Fn.ifNull(Var.group_id, Fn.concat(
+                        'source.file=`', Fn.toString(Var['source.file']), '`),source.url=`', Fn.toString(Var['source.url']), '`')), count=Fn.sum(1))(),
+                    Fn.replaceRoot(newRoot=Fn.mergeObjects(
+                        '$orig', {'group_id': '$_id', 'count': '$count'}))()
+                ]
 
                 if not self.aggregation:
                     self.aggregation = True
@@ -134,7 +128,6 @@ class DBQueryDataSource(DataSourceStage):
                 if limit > 0:
                     rs = rs.limit(limit)
 
-            print(rs.aggregators if self.aggregation else rs)
             return rs
 
         def fetch_all_rs(self):

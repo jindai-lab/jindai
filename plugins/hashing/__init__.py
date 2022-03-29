@@ -158,6 +158,7 @@ class Hashing(Plugin):
             if not os.path.exists(p):
                 return Response('')
             
+            buf = ''
             for i1, i2, score in resolve_dups(p, int(request.args.get('q', 10))):
                 buf += '{} {} {}\n'.format(i1.id, i2.id, score)
             return Response(buf)

@@ -122,6 +122,7 @@ class CallTask(FlowControlStage):
                 sec = secs[-1]
                 target[sec] = v
         
+        self._pipelines = []
         self.task = Task.from_dbo(t)
         if self.pipeline_only:
             self.pipeline = self.task.pipeline
