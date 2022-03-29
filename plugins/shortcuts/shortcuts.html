@@ -25,7 +25,7 @@
     var data = [];
 
     $.get('shortcuts', function (resp) {
-      data = Object.keys(resp.result || {}).map(x => ({key: x, value: resp.result[x]})).sort().concat([{key: '', value: ''}])
+      data = Object.keys(resp.result || {}).map(x => ({key: x.toString(), value: resp.result[x]})).sort().concat([{key: '', value: ''}])
       render()
     })
 
