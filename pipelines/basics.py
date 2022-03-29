@@ -834,6 +834,8 @@ class KeywordsReplacement(PipelineStage):
     def resolve(self, p):
         arr = p[self.arr]
         if self.from_tag in arr:
+            arr = list(arr)
             arr.remove(self.from_tag)
             arr.append(self.to_tag)
+            p[self.arr] = arr
         return p
