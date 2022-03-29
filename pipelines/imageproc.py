@@ -9,7 +9,7 @@ from helpers import safe_import
 from models import Paragraph, F, ImageItem, Paragraph, parser
 from PIL import Image, ImageOps
 from pipeline import PipelineStage
-from storage import safe_open
+from storage import safe_open, expand_path
 import traceback
 
 
@@ -311,8 +311,8 @@ class VideoFrame(ImageOrAlbumStage):
         
         try:
             # read video data
-            storage = i.source.get('file')
-            if storage == 'blocks.h5':
+            filename = i.source.get('file')
+            if filename == 'blocks.h5':
                 with safe_open(temp_file, 'wb') as fo:
                     blen = fo.write(i.image_raw.read())
                 if not blen:
@@ -321,7 +321,7 @@ class VideoFrame(ImageOrAlbumStage):
                     return
                 read_from = temp_file
             else:
-                read_from = storage
+                read_from = expand_path(filename)
 
             if not os.path.exists(read_from):
                 self.logger(f'{read_from} not found')

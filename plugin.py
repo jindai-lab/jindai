@@ -27,7 +27,7 @@ class Plugin:
             pipeline_classes = pipeline_classes.values()
 
         for c in pipeline_classes:
-            if isinstance(c, type) and issubclass(c, PipelineStage):
+            if isinstance(c, type) and issubclass(c, PipelineStage) and c is not PipelineStage:
                 Pipeline.pipeline_ctx[c.__name__] = c
     
 

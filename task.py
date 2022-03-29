@@ -31,8 +31,7 @@ class Task:
         self._logs = deque()
         self.verbose = verbose
         
-        self.pipeline = Pipeline(stages)
-        self.pipeline.logger = self.logger
+        self.pipeline = Pipeline(stages, self.logger)
         self.params = params
         
         if tqdm:

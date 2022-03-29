@@ -377,7 +377,15 @@ class ArrayField(PipelineStage):
             elements (str): 添加或删除的元素，每行一个 $ 开头的字段名或常量
         """
         self.field = field
-        self.elements = [parser.eval(ele) for ele in elements.split('\n')]
+        self.elements = []
+        try:
+            arr = parser.eval(arr)
+            assert isinstance(arr, list)
+            self.elements = arr
+        except:
+            for ele in elements.split('\n'):
+                e = parser.eval(ele)
+                self.elements.append(e)
         self.push = push
 
     def resolve(self, p: Paragraph) -> Paragraph:
@@ -806,4 +814,26 @@ class ConditionalAssignment(PipelineStage):
             if execute_query_expr(c, p):
                 setattr(p, self.field, v if not isinstance(v, str) or not v.startswith('$') else getattr(p, v[1:], None))
                 break
+        return p
+
+
+class KeywordsReplacement(PipelineStage):
+    """替换关键词（标签）"""
+
+    def __init__(self, from_tag, to_tag, arr='keywords'):
+        """
+        Args:
+            from_tag (str): 原标签
+            to_tag (str): 目标标签
+            arr (str): 替换的数组字段（默认为标签）
+        """
+        self.from_tag = from_tag
+        self.to_tag = to_tag
+        self.arr = arr
+
+    def resolve(self, p):
+        arr = p[self.arr]
+        if self.from_tag in arr:
+            arr.remove(self.from_tag)
+            arr.append(self.to_tag)
         return p

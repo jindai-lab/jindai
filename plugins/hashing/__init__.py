@@ -50,6 +50,38 @@ def flips(x, n, lm=0):
                 yield __x
 
 
+def resolve_dups(tmp_file_name, slimit):
+
+    def __parse_compare_results():
+        with safe_open(tmp_file_name, 'r') as fi:
+            for l in fi:
+                r = l.strip().split('\t')
+                if len(r) < 3:
+                    continue
+                id1, id2, score = r
+                if id1 == id2:
+                    continue
+                yield id1, id2, int(score)
+
+    def __get_items():
+        ids = set()
+        for id1, id2, s in __parse_compare_results():
+            ids.add(id1)
+            ids.add(id2)
+        items = {}
+        for i in ImageItem.query(F.flag.eq(0) & F.id.in_([ObjectId(_) for _ in ids])):
+            items[str(i.id)] = i
+        return items
+
+    items = __get_items()
+    for id1, id2, score in sorted(__parse_compare_results(),
+                                    key=lambda x: x[2]):
+        if score > slimit:
+            continue
+        if id1 in items and id2 in items:
+            yield items[id1], items[id2], score
+
+
 class ImageHash(ImageOrAlbumStage):
     """建立图像哈希检索
     """
@@ -125,37 +157,9 @@ class Hashing(Plugin):
             p = request.args.get('key', '') + '.tsv'
             if not os.path.exists(p):
                 return Response('')
-
-            def __parse_compare_results():
-                with safe_open(p, 'r') as fi:
-                    for l in fi:
-                        r = l.strip().split('\t')
-                        if len(r) < 3:
-                            continue
-                        id1, id2, score = r
-                        if id1 == id2:
-                            continue
-                        yield id1, id2, int(score)
-
-            def __get_items():
-                ids = set()
-                for id1, id2, s in __parse_compare_results():
-                    ids.add(id1)
-                    ids.add(id2)
-                items = {}
-                for i in ImageItem.query(F.flag.eq(0) & F.id.in_([ObjectId(_) for _ in ids])):
-                    items[str(i.id)] = i
-                return items
-
-            buf = ''
-            slimit = int(request.args.get('q', 10))
-            items = __get_items()
-            for id1, id2, score in sorted(__parse_compare_results(),
-                                          key=lambda x: x[2]):
-                if score > slimit:
-                    continue
-                if id1 in items and id2 in items:
-                    buf += '{} {} {}\n'.format(id1, id2, score)
+            
+            for i1, i2, score in resolve_dups(p, int(request.args.get('q', 10))):
+                buf += '{} {} {}\n'.format(i1.id, i2.id, score)
             return Response(buf)
 
         @app.route('/api/plugins/compare')

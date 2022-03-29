@@ -282,7 +282,9 @@ def safe_open(path: str, mode='rb', allowed_locations: list = None, **params):
         return _pdf_image(fpath, int(page), **params)
 
     else:
-        return open(fpath, mode)
+        buf = open(fpath, mode)
+        buf.st_size = os.stat(fpath).st_size
+        return buf
 
 
 def truncate_path(path, base=None):
