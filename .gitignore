@@ -7,7 +7,7 @@ blockly/
 .vsccode/
 gpt.*
 .DS_*
-config-*.yaml
+config*.yaml
 *.zip
 blocks*
 
@@ -120,3 +120,5 @@ blocks*.h5
 
 models_data/
 config-jindai.py
+sources
+config.yaml

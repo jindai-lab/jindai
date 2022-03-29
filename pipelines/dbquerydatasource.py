@@ -111,10 +111,11 @@ class DBQueryDataSource(DataSourceStage):
             if self.aggregation:
                 agg = self.query if isinstance(
                     self.query, list) else [self.query]
-                if sort:
+                if sort and sort != ['_id']:
                     if sort == ['random']:
                         agg.append({'$sample': {'size': limit}})
                         limit = 0
+                        skip = 0
                     else:
                         agg.append(
                             {'$sort': SON(parser.eval_sort(','.join(sort)))})
@@ -133,6 +134,7 @@ class DBQueryDataSource(DataSourceStage):
                 if limit > 0:
                     rs = rs.limit(limit)
 
+            print(rs.aggregators if self.aggregation else rs)
             return rs
 
         def fetch_all_rs(self):
