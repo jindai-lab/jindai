@@ -44,7 +44,7 @@ class Shortcuts(Plugin):
 
     def css_callback(self):
         return ','.join(
-            ['.gallery-description .t_' + v for k, v in self.read_shortcuts().items() if not v.startswith('(') and '&' not in v]) + '{ color:orange!important; }' + '''
+            ['.gallery-description .t_' + v for k, v in self.read_shortcuts().items() if not k.startswith(':')]) + '{ color:orange!important; }' + '''
             #shortcuts-input #hints {
                 list-style: none;
                 text-align: left;

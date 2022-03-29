@@ -11,6 +11,7 @@ from pipeline import Pipeline
 from io import BytesIO
 import sys
 import config
+import jieba
 import base64
 from plugin import PluginManager
 from pipelines.dbquerydatasource import DBQueryDataSource
@@ -534,6 +535,16 @@ def search(q='', req='', sort='', limit=100, offset=0, mongocollections=[], grou
         'skip': offset or 0,
         'limit': limit,
     }
+
+    expr = False
+    if q.startswith('?'):
+        q = q[1:]
+        expr = True
+    elif re.search(r'[,.~=&|()><\'"`]', q):
+        expr = True
+    
+    if not expr:
+        q = '`' + '`,`'.join([_.strip() for _ in jieba.cut(q) if _.strip()]) + '`'
 
     qparsed = parser.eval(q)
     req = parser.eval(req)
