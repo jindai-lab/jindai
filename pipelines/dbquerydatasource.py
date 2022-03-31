@@ -63,37 +63,26 @@ class DBQueryDataSource(DataSourceStage):
 
             self.groups = groups
 
-            if groups != 'none':
-                groupping = []
-                if groups == 'source':
-                    #groupping = [Fn.addFields(group_id=None)()]
-                    pass
+            groupping = ''        
+            if groups == 'none':
+                pass
+            elif groups == 'group':
+                groupping = 'addFields(group_id=filter(input=$keywords,as=t,cond=eq(substrCP($$t;0;1);"*")));unwind(path=$group_id,preserveNullAndEmptyArrays=false);addFields(keywords=[$group_id])'
+            elif groups == 'source':
+                groupping = 'addFields(group_id=$source)'
+            elif groups == 'both':
+                groupping = 'addFields(group_id=filter(input=$keywords,as=t,cond=eq(substrCP($$t;0;1);"*")));unwind(path=$group_id,preserveNullAndEmptyArrays=true);addFields(group_id=ifNull($group_id;$source))'
+                
+            if groupping:
+                groupping += '=>groupby(id=$group_id, count=sum(1))'
+                groupping = parser.eval(groupping)
+
+                if self.aggregation:
+                    self.query += groupping
                 else:
-                    groupping = [Fn.addFields(
-                        group_id=Fn.filter(input=Var.keywords, as_='t',
-                                           cond=Fn.substrCP(Var._t, 0, 1) == '*')
-                    )(), Fn.unwind(
-                        path=Var.group_id, preserveNullAndEmptyArrays=groups != 'group'
-                    )()]
-
-                groupping += [
-                    Fn.addFields(group_id=Fn.ifNull(Var.group_id, Fn.concat(
-                        Fn.cond(Var['source.file'], '', Fn.concat('source.file=`', Fn.toString(Var['source.file']), '`),')),
-                        'source.url=`', Fn.toString(Var['source.url']), '`')
-                    ))(),
-                    Fn.group(orig=Fn.first('$$ROOT'), _id=Var.group_id, count=Fn.sum(1))(),
-                    Fn.replaceRoot(newRoot=Fn.mergeObjects(
-                        '$orig', {'group_id': '$_id', 'count': '$count'}))()
-                ]
-
-                print(groupping)
-
-                if not self.aggregation:
                     self.aggregation = True
                     self.query = [{'$match': self.query}] + groupping
-                else:
-                    self.query += groupping
-
+                
             self.limit = limit
             self.sort = sort.split(',') if sort else []
             self.skips = {}
