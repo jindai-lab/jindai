@@ -5,6 +5,7 @@ from concurrent.futures import ThreadPoolExecutor
 from sys import implementation
 from urllib.parse import urljoin
 from bs4 import BeautifulSoup as B
+import re
 
 from models import ImageItem, Paragraph, parser
 from pipeline import DataSourceStage
@@ -168,8 +169,9 @@ class WebPageListingDataSource(DataSourceStage):
             return ''
 
         def parse_detail(self, url):
-
             b = self.read_html(url)
+            return
+            
             p = Paragraph(source={'url': url},
                           dataset=self.dataset, lang=self.lang)
             p.content = self.get_text(b)
@@ -196,7 +198,7 @@ class WebPageListingDataSource(DataSourceStage):
             b = self.read_html(url)
             if not b:
                 self.logger(f'Cannot read list from {url}')
-                return
+                return []
 
             links = {
                 urljoin(url, a['href'])
@@ -222,7 +224,9 @@ class WebPageListingDataSource(DataSourceStage):
                         yield u, level
 
                 if level == self.list_depth or self.detail_link.search(url):
-                    yield self.parse_detail(url), level
+                    r = self.parse_detail(url)
+                    if r:
+                        yield r, level
 
             while queue:
                 self.logger(f'Queuing {len(queue)} urls')
