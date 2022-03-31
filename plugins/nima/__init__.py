@@ -9,6 +9,9 @@ MODEL = expand_path('models_data/nima.pkl')
 
 
 class NIMAEval(ImageOrAlbumStage):
+    """图像质量自动评价
+    """
+    
     def __init__(self):
         from .test import predict as nima_predict, load_state as nima_init
         nima_init(MODEL)

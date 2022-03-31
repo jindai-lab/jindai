@@ -540,11 +540,12 @@ def search(q='', req='', sort='', limit=100, offset=0, mongocollections=[], grou
     if q.startswith('?'):
         q = q[1:]
         expr = True
-    elif re.search(r'[,.~=&|()><\'"`@_*\-]', q):
+    elif re.search(r'[,.~=&|()><\'"`@_*\-%]', q):
         expr = True
     
     if not expr:
-        q = '`' + '`,`'.join([_.strip() for _ in jieba.cut(q) if _.strip()]) + '`'
+        q = '`' + '`,`'.join([_.strip().lower().replace('`', '\\`') for _ in jieba.cut(q) if _.strip()]) + '`'
+        if q == '``': q = ''
 
     qparsed = parser.eval(q)
     req = parser.eval(req)

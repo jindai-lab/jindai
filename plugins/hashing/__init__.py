@@ -52,7 +52,7 @@ def flips(x, n, lm=0):
 
 def resolve_dups(tmp_file_name, slimit):
 
-    def __parse_compare_results():
+    def _parse_compare_results():
         with safe_open(tmp_file_name, 'r') as fi:
             for l in fi:
                 r = l.strip().split('\t')
@@ -63,9 +63,9 @@ def resolve_dups(tmp_file_name, slimit):
                     continue
                 yield id1, id2, int(score)
 
-    def __get_items():
+    def _get_items():
         ids = set()
-        for id1, id2, s in __parse_compare_results():
+        for id1, id2, s in _parse_compare_results():
             ids.add(id1)
             ids.add(id2)
         items = {}
@@ -73,8 +73,8 @@ def resolve_dups(tmp_file_name, slimit):
             items[str(i.id)] = i
         return items
 
-    items = __get_items()
-    for id1, id2, score in sorted(__parse_compare_results(),
+    items = _get_items()
+    for id1, id2, score in sorted(_parse_compare_results(),
                                     key=lambda x: x[2]):
         if score > slimit:
             continue
@@ -216,7 +216,7 @@ class Hashing(Plugin):
 
             results = sorted(results, key=lambda x: x.score)[
                 offset:offset + limit]
-            return results
+            return single_item('', iid) + [{'spacer': 'spacer'}] + results
     
     def get_pages(self):
         return {

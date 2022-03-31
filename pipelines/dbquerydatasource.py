@@ -9,7 +9,6 @@ from sys import implementation
 from typing import Iterable, List
 from urllib.parse import urljoin
 import zipfile
-import jieba
 import re
 from storage import safe_open
 from models import ImageItem, Paragraph, parser
@@ -66,20 +65,28 @@ class DBQueryDataSource(DataSourceStage):
 
             if groups != 'none':
                 groupping = []
-                if groups != 'source':
+                if groups == 'source':
+                    #groupping = [Fn.addFields(group_id=None)()]
+                    pass
+                else:
                     groupping = [Fn.addFields(
                         group_id=Fn.filter(input=Var.keywords, as_='t',
                                            cond=Fn.substrCP(Var._t, 0, 1) == '*')
                     )(), Fn.unwind(
-                        path=Var.group_id, preserveNullAndEmptyArrays=groups == 'both'
+                        path=Var.group_id, preserveNullAndEmptyArrays=groups != 'group'
                     )()]
 
                 groupping += [
-                    Fn.group(orig=Fn.first('$$ROOT'), _id=Fn.ifNull(Var.group_id, Fn.concat(
-                        'source.file=`', Fn.toString(Var['source.file']), '`),source.url=`', Fn.toString(Var['source.url']), '`')), count=Fn.sum(1))(),
+                    Fn.addFields(group_id=Fn.ifNull(Var.group_id, Fn.concat(
+                        Fn.cond(Var['source.file'], '', Fn.concat('source.file=`', Fn.toString(Var['source.file']), '`),')),
+                        'source.url=`', Fn.toString(Var['source.url']), '`')
+                    ))(),
+                    Fn.group(orig=Fn.first('$$ROOT'), _id=Var.group_id, count=Fn.sum(1))(),
                     Fn.replaceRoot(newRoot=Fn.mergeObjects(
                         '$orig', {'group_id': '$_id', 'count': '$count'}))()
                 ]
+
+                print(groupping)
 
                 if not self.aggregation:
                     self.aggregation = True
@@ -229,13 +236,13 @@ class ImageImportDataSource(DataSourceStage):
         def import_local(self, locs) -> List[Paragraph]:
             zips = []
 
-            def __expand_zip(src):
+            def _expand_zip(src):
                 if '.zip#' in src:
                     src = os.path.join('__zip{}'.format(
                         hash(src[:src.find('#')])), src[src.find('#')+1:])
                 return src
 
-            def __list_all(locs):
+            def _list_all(locs):
                 locs = list(locs)
                 l = []
                 for loc in locs:
@@ -265,7 +272,7 @@ class ImageImportDataSource(DataSourceStage):
 
             albums = defaultdict(Paragraph)
 
-            for loc, _f in sorted(__list_all(locs)):
+            for loc, _f in sorted(_list_all(locs)):
                 if _f.split('.')[-1] in ['txt', 'log', 'xlsx', 'xls', 'zip', 'csv'] or _f.endswith('.mp4.thumb.jpg'):
                     continue
                 pu = loc.split('/')[-1]
@@ -279,7 +286,7 @@ class ImageImportDataSource(DataSourceStage):
                     p.dataset = self.dataset
 
                 i = ImageItem(source={'url': _f})
-                fn = __expand_zip(_f)
+                fn = _expand_zip(_f)
                 if not _f.lower().endswith(('.mp4', '.avi')):
                     try:
                         im = Image.open(fn)
