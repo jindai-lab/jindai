@@ -43,7 +43,7 @@ def create_albums(posts_imported: List[Paragraph]):
     Args:
         posts_imported (List[Paragraph]): posts representing imported files
     """
-    def __expand_twi_url(zipfn):
+    def _expand_twi_url(zipfn):
         a = zipfn.split('-', 2)
         if len(a) != 3:
             return zipfn
@@ -60,7 +60,7 @@ def create_albums(posts_imported: List[Paragraph]):
 
     for i in items:
         fn = i.source['url'].split('/')[-1].split('#')[-1][:-5]
-        pu = __expand_twi_url(fn)
+        pu = _expand_twi_url(fn)
         p = albums[pu]
         if p.source.get('url') != pu:
             author = '@' + fn.split('-')[0]

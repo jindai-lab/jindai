@@ -839,3 +839,39 @@ class KeywordsReplacement(PipelineStage):
             arr.append(self.to_tag)
             p[self.arr] = arr
         return p
+
+
+class MongoCollectionBatchOper(PipelineStage):
+    """数据库批处理"""
+
+    def __init__(self, mongocollection='', updates='[]'):
+        """
+        Args:
+            mongocollection (str): 要处理的数据库
+            updates (QUERY): 要执行的更新，应表示为一个列表，其中的每个元素为 (query; update)，如 (keywords=test; pull(keywords=key)) 。update 可为 set, pull, unset 等，也可使用聚合
+        """
+        self.collection = Paragraph.get_coll(mongocollection)
+        updates = parser.eval('[];' + updates)
+        self.updates = []
+        
+        def _assert(cond, info=''):
+            assert cond, '更新格式不正确：' + repr(info)
+
+        _assert(isinstance(updates, list))
+        for tup in updates:
+            _assert(len(tup) == 2, updates)
+            query, update = tup
+            if isinstance(update, dict):
+                assert len(update) == 1, '更新格式不正确'
+                for k in update:
+                    assert k.startswith('$'), '更新格式不正确'
+            elif isinstance(update, list):
+                pass
+            else:
+                assert False, '更新格式不正确'
+            self.updates.append((query, update))
+
+    def summarize(self, r):
+        for query, update in self.updates:
+            self.collection.db.update_many(query, update)
+        return True
