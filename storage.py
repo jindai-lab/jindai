@@ -1,14 +1,17 @@
-import os
-from typing import Union, Tuple
 import glob
-from io import BytesIO
-import numpy as np
-import h5py
-from threading import Lock
+import os
+import re
 import tempfile
-import requests
 import time
+from io import BytesIO
+from threading import Lock
+from typing import Tuple, Union
+
+import h5py
+import numpy as np
+import requests
 from pdf2image import convert_from_path
+
 import config
 
 
