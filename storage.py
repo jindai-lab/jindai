@@ -1,6 +1,7 @@
 import os
 from typing import Union, Tuple
 import glob
+import re
 from io import BytesIO
 import numpy as np
 import h5py
@@ -265,7 +266,7 @@ def safe_open(path: str, mode='rb', allowed_locations: list = None, **params):
         else:
             return Hdf5WriteBuffer(item_id)
 
-    fpath = expand_path(path)
+    fpath = expand_path(path, allowed_locations)
 
     if '#zip/' in path:
         assert mode in ('rb', 'wb')
