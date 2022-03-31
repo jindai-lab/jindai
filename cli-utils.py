@@ -51,13 +51,11 @@ def export(query, output):
 
 @cli.command('task')
 @click.argument('task_id')
-@click.option('--concurrent', type=int)
+@click.option('--concurrent', type=int, default=10)
 def task(task_id, concurrent=0):
     Task = _init_task()
-    task = Task.from_dbo(TaskDBO.first((F.id == task_id) if re.match(r'[0-9a-f]{24}', task_id) else (F.name == task_id)))
+    task = Task.from_dbo(TaskDBO.first((F.id == task_id) if re.match(r'[0-9a-f]{24}', task_id) else (F.name == task_id)), logger='print', verbose=True)
     if concurrent > 0: task.pipeline.concurrent = concurrent
-    task.logger = print
-    task.verbose = True
     result = task.execute()
     print(result)
     exit(0)
