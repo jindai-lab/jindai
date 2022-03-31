@@ -58,10 +58,16 @@ class PluginManager:
 
         # load plugins
 
-        import plugins as _plugins
-        pls = config.plugins
-        if pls == ['*']:
-            pls = list(get_context('plugins', Plugin).values())
+        all_plugins = get_context('plugins', Plugin)
+        pls = []
+        for pl in config.plugins:
+            if pl == '*':
+                pls += list(all_plugins.keys())
+            elif pl.startswith('~'):
+                if pl[1:] in pls:
+                    pls.remove(pl[1:])
+            else:
+                pls.append(pl)
 
         for pl in pls:
             if isinstance(pl, tuple) and len(pl) == 2:
@@ -70,14 +76,11 @@ class PluginManager:
                 kwargs = {}
 
             if isinstance(pl, str):
-                if '.' in pl:
-                    plpkg, plname = pl.rsplit('.', 1)
-                    pkg = __import__('plugins.' + plpkg)
-                    for seg in pl.split('.'):
-                        pkg = getattr(pkg, seg)
-                    pl = pkg
-                else:
-                    pl = getattr(_plugins, pl)
+                pl = all_plugins.get(pl)
+                
+            if not pl:
+                print('Plugin', pl, 'not found.')
+                continue
 
             try:
                 pl = pl(app, **kwargs)
