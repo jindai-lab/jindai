@@ -2,5 +2,8 @@
     "python.pythonPath": "/bin/python3",
     "python.linting.pylintEnabled": true,
     "python.linting.enabled": true,
-    "python.autoComplete.extraPaths": ["./"],
+    "python.autoComplete.extraPaths": [
+        "./"
+    ],
+    "python.linting.flake8Enabled": false,
 }
