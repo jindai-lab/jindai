@@ -175,7 +175,7 @@ class TwitterDataSource(DataSourceStage):
 
                 try:
                     st = self.api.GetStatus(stid)
-                except:
+                except Exception:
                     continue
 
                 p = self.parse_status(st, allow_video=True)

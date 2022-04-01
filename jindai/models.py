@@ -5,9 +5,8 @@ import time
 from hashlib import sha1
 from io import BytesIO
 
-from bson import ObjectId
 from PIL import Image
-from PyMongoWrapper import F, Fn, MongoOperand, QueryExprParser, dbo
+from PyMongoWrapper import F, Fn, MongoOperand, QueryExprParser, dbo, ObjectId
 from PyMongoWrapper.dbo import (Anything,
                                 DbObjectInitializer, MongoConnection)
 

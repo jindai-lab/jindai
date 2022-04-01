@@ -2,9 +2,9 @@
 
 import hashlib
 from typing import List
-from bson import ObjectId
+from PyMongoWrapper import F, ObjectId
 from jindai.helpers import *
-from jindai.models import Paragraph, F
+from jindai.models import Paragraph
 from jindai import Plugin
 
 from .imageproc import *

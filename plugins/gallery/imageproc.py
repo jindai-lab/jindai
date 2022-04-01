@@ -5,8 +5,8 @@ import tempfile
 import traceback
 from typing import Union
 import numpy as np
-from bson import ObjectId
 from PIL import Image, ImageOps
+from PyMongoWrapper import ObjectId
 
 from jindai import PipelineStage, expand_path, safe_open
 from jindai.helpers import safe_import

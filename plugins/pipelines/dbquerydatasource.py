@@ -9,6 +9,7 @@ from typing import Iterable, List
 from urllib.parse import urljoin
 import zipfile
 import re
+from PyMongoWrapper import F
 from jindai import  safe_open
 from jindai.models import ImageItem, Paragraph, parser, F
 from jindai.pipeline import  DataSourceStage
@@ -153,7 +154,7 @@ class DBQueryDataSource(DataSourceStage):
         def count(self):
             try:
                 return sum([self.fetch_rs(r, sort=[], limit=0, skip=0).count() for r in self.mongocollections])
-            except:
+            except Exception:
                 return -1
 
 
@@ -335,13 +336,13 @@ class ImageImportDataSource(DataSourceStage):
                     assert html, 'Download failed.'
                     try:
                         html = html.decode('utf-8')
-                    except:
+                    except Exception:
                         try:
                             html = html.decode('gbk')
-                        except:
+                        except Exception:
                             try:
                                 html = html.decode('euc-jp')
-                            except:
+                            except Exception:
                                 html = html.decode('utf-8', errors='ignore')
                     title = re.search(r'<title>(.*?)</title>', html) or ''
                     if title:

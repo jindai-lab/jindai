@@ -11,10 +11,9 @@ from typing import IO, Union
 
 import jieba
 import numpy as np
-from bson import ObjectId
 from flask import Flask, Response, json, redirect, request, send_file
 from PIL import Image, ImageOps
-from PyMongoWrapper import F, Fn, MongoOperand
+from PyMongoWrapper import F, Fn, MongoOperand, ObjectId
 from PyMongoWrapper.dbo import create_dbo_json_decoder, create_dbo_json_encoder
 
 from jindai import Pipeline, Plugin, PluginManager, Task
