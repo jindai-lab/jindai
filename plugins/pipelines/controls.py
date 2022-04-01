@@ -1,9 +1,10 @@
 """工作流程控制
 """
 
+from PyMongoWrapper import F
 from jindai import  PipelineStage, Pipeline
 from jindai.helpers import execute_query_expr
-from jindai.models import TaskDBO, F, parser
+from jindai.models import TaskDBO, parser
 
 
 class FlowControlStage(PipelineStage):

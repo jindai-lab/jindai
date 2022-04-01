@@ -14,6 +14,7 @@ class WordDataSource(DataSourceStage):
     """从Word文档中导入语段
     """
     class Implementation(DataSourceStage.Implementation):
+        """Impl"""
 
         def __init__(self, dataset, lang, content):
             """
@@ -26,32 +27,33 @@ class WordDataSource(DataSourceStage):
             self.name = dataset
             self.lang = lang
             self.files = expand_patterns(content)
-            
+
         def call_abiword(self, file):
-            fn = tempfile.mktemp()
-            subprocess.call(['abiword', '--to', 'txt', '-o', fn, file])
-            if os.path.exists(fn):
-                with open(fn, encoding='utf-8') as fi:
-                    res = fi.read()
-                os.unlink(fn)
+            """Call abiword to extract text from a word document"""
+            filename = tempfile.mktemp()
+            subprocess.call(['abiword', '--to', 'txt', '-o', filename, file])
+            if os.path.exists(filename):
+                with open(filename, encoding='utf-8') as input_file:
+                    res = input_file.read()
+                os.unlink(filename)
                 return res
 
         def fetch(self):
-            for f in self.files:
-                doc = self.call_abiword(f)
+            for file in self.files:
+                doc = self.call_abiword(file)
                 if doc:
-                    p = Paragraph(
-                        lang=self.lang, content=doc, source={'file': truncate_path(f)}, pagenum=1,
+                    para = Paragraph(
+                        lang=self.lang, content=doc,
+                        source={'file': truncate_path(file)}, pagenum=1,
                         dataset=self.name, outline=''
                     )
-                    yield p
-                    
+                    yield para
 
 
 class ExcelDataSource(DataSourceStage):
     """从Excel文档中导入语段数据
     """
-    
+
     class Implementation(DataSourceStage.Implementation):
         """从 Excel 导入数据"""
 
@@ -68,12 +70,12 @@ class ExcelDataSource(DataSourceStage):
             self.lang = lang
 
         def fetch(self) -> Iterable[Paragraph]:
-            for f in self.files:
-                df = pd.read_excel(f)
-                for _, r in df.iterrows():
-                    d = r.to_dict()
-                    if 'dataset' not in d:
-                        d['dataset'] = self.dataset
-                    if 'lang' not in d:
-                        d['lang'] = self.lang
-                    yield Paragraph(**d)
+            for file in self.files:
+                dataframe = pd.read_excel(file)
+                for _, row in dataframe.iterrows():
+                    data = row.to_dict()
+                    if 'dataset' not in data:
+                        data['dataset'] = self.dataset
+                    if 'lang' not in data:
+                        data['lang'] = self.lang
+                    yield Paragraph(**data)

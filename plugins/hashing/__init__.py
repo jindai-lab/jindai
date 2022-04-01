@@ -9,9 +9,10 @@ import imagehash
 from bson import binary
 from flask import Response, request
 from PIL import Image
+from PyMongoWrapper import F, ObjectId
 from jindai import *
 from jindai.helpers import serve_file
-from jindai.models import F, ImageItem, ObjectId, Paragraph
+from jindai.models import ImageItem, Paragraph
 from plugins.gallery import ImageOrAlbumStage, single_item
 
 
@@ -142,7 +143,7 @@ class ImageHash(ImageOrAlbumStage):
         except (IOError, AssertionError):
             pass
         i.save()
-        
+
 
 class ImageHashDuplications(ImageOrAlbumStage):
     """进行图像哈希去重
@@ -195,6 +196,7 @@ class ImageHashDuplications(ImageOrAlbumStage):
 
 
 class Hashing(Plugin):
+    """哈希插件"""
 
     def __init__(self, app):
         super().__init__(app)
@@ -240,7 +242,7 @@ class Hashing(Plugin):
             pgroups = [g
                        for g in (Paragraph.first(F.images == ObjectId(iid)) or Paragraph()).keywords
                        if g.startswith('*')
-                       ] or [(Paragraph.first(F.images == ObjectId(iid)) 
+                       ] or [(Paragraph.first(F.images == ObjectId(iid))
                               or Paragraph()).source.get('url', '')]
             dha, dhb = to_int(image_item.dhash), to_int(image_item.whash)
             results = []

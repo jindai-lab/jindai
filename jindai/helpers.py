@@ -15,7 +15,6 @@ import requests
 import werkzeug.wrappers.response
 from flask import Response, jsonify, request, send_file, stream_with_context
 
-from . import Task
 from .config import instance as config
 from .models import Token, parser
 from .storage import safe_open
@@ -159,7 +158,7 @@ def serve_proxy(server, path):
     return Response(resp.content, headers=dict(resp.headers))
 
 
-def logs_view(task: Task):
+def logs_view(task):
     """Provide log stream of given TaskDBO
     """
 

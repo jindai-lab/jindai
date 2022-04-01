@@ -6,10 +6,10 @@ import re
 import time
 from threading import Thread
 
-from bson import ObjectId
+from PyMongoWrapper import ObjectId, F
 from jindai import Plugin
 from jindai.helpers import rest, safe_import
-from jindai.models import F, TaskDBO, db
+from jindai.models import TaskDBO, db
 
 schedule = safe_import('schedule')
 

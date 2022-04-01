@@ -13,10 +13,10 @@ import click
 import h5py
 import numpy as np
 import requests
-from bson import ObjectId
 from flask import Flask
 from tqdm import tqdm
 
+from PyMongoWrapper import ObjectId
 from PyMongoWrapper.dbo import create_dbo_json_encoder
 from . import Plugin, PluginManager, Task, safe_open
 from .helpers import get_context

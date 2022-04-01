@@ -30,7 +30,6 @@ class PipelineStage:
 
     def summarize(self, result) -> Any:
         """Reduce 阶段，处理上一步骤返回的结果"""
-        return result
 
     def flow(self, paragraph: Union[Paragraph, IterableClass]) -> Tuple:
         """实现流程控制

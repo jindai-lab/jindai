@@ -2,8 +2,9 @@
 """
 
 import fitz
+from PyMongoWrapper import F, Fn, Var
 from jindai import expand_patterns, safe_open, truncate_path
-from jindai.models import Paragraph, F, Fn, Var
+from jindai.models import Paragraph
 from jindai.pipeline import DataSourceStage
 
 

@@ -1,9 +1,10 @@
 """自动标签"""
 import re
 
+from PyMongoWrapper import F, ObjectId
 from jindai import PipelineStage, Plugin
 from jindai.helpers import rest
-from jindai.models import F, db, ObjectId
+from jindai.models import db
 
 
 class AutoTag(db.DbObject):
