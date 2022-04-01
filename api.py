@@ -490,32 +490,34 @@ def history():
 @rest()
 def search(q='', req='', sort='', limit=100, offset=0, mongocollections=[], groups='none', count=False, **kws):
 
-    def _stringify(r):
-        if r is None:
+    def _stringify(obj):
+        if obj is None:
             return ''
-        if isinstance(r, dict):
+        if isinstance(obj, dict):
             s = []
-            for k, v in r.items():
-                if k == '$options':
+            for key, val in obj.items():
+                if key == '$options':
                     continue
-                if k == '_id':
-                    k = 'id'
-                s.append(k + '=' + _stringify(v))
+                if key.startswith('$'):
+                    s.append(key[1:] + '(' + _stringify(val) + ')')
+                if key == '_id':
+                    key = 'id'
+                s.append(key + '=' + _stringify(val))
             return '(' + ','.join(s) + ')'
-        elif isinstance(r, str):
-            return json.dumps(r, ensure_ascii=False)
-        elif isinstance(r, (int, float)):
-            return str(r)
-        elif isinstance(r, datetime.datetime):
-            return r.isoformat()+"Z"
-        elif isinstance(r, list):
-            return '[' + ','.join([_stringify(e) for e in r]) + ']'
-        elif isinstance(r, bool):
+        elif isinstance(obj, str):
+            return json.dumps(obj, ensure_ascii=False)
+        elif isinstance(obj, (int, float)):
+            return str(obj)
+        elif isinstance(obj, datetime.datetime):
+            return obj.isoformat()+"Z"
+        elif isinstance(obj, list):
+            return '[' + ','.join([_stringify(e) for e in obj]) + ']'
+        elif isinstance(obj, bool):
             return str(bool).lower()
-        elif isinstance(r, ObjectId):
-            return 'ObjectId(' + str(r) + ')'
+        elif isinstance(obj, ObjectId):
+            return 'ObjectId(' + str(obj) + ')'
         else:
-            return '_json(`' + json.dumps(r, ensure_ascii=False) + '`)'
+            return '_json(`' + json.dumps(obj, ensure_ascii=False) + '`)'
 
     if not req:
         if count:
