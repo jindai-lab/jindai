@@ -1,15 +1,19 @@
-from jindai import Plugin
+from jindai import Plugin, expand_path
 from plugins.gallery import ImageOrAlbumStage
-from jindai import  expand_path
 from jindai.models import ImageItem
 
 MODEL = expand_path('models_data/nima.pkl')
+try:
+    import torch
+except ImportError as e:
+    print("Please install pytorch first.")
+    raise e
 
 
 class NIMAEval(ImageOrAlbumStage):
     """图像质量自动评价
     """
-    
+
     def __init__(self):
         from .test import predict as nima_predict, load_state as nima_init
         nima_init(MODEL)

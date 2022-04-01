@@ -5,14 +5,13 @@
 # refer to https://github.com/huawei-noah/Pretrained-Language-Model/tree/master/NEZHA-Gen-TensorFlow for further info
 
 import os
+
 os.environ['TF_KERAS'] = '1'
 import numpy as np
-
-from jindai.models import Paragraph
-from jindai.pipeline import  DataSourceStage
-from jindai import Plugin
+from jindai import Plugin, expand_path
 from jindai.helpers import safe_import
-from jindai import  expand_path
+from jindai.models import Paragraph
+from jindai.pipeline import DataSourceStage
 
 
 class AutoCompletionPlugin(Plugin):
@@ -22,8 +21,8 @@ class AutoCompletionPlugin(Plugin):
         
         safe_import('bert4keras')
         from bert4keras.models import build_transformer_model
-        from bert4keras.tokenizers import Tokenizer
         from bert4keras.snippets import AutoRegressiveDecoder
+        from bert4keras.tokenizers import Tokenizer
         
         me.model = None
         

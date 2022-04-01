@@ -6,6 +6,11 @@ from plugins.gallery import ImageOrAlbumStage
 from .inference_model import InferenceModel, load_state
 
 model = None
+try:
+    import torch
+except ImportError as e:
+    print("Please install pytorch first.")
+    raise e
 
 
 def predict(i):

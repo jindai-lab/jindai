@@ -30,7 +30,11 @@ class Shortcuts(Plugin):
         @app.route('/api/plugins/shortcuts.html')
         def _shortcuts_html():
             return serve_file(os.path.join(os.path.dirname(__file__), 'shortcuts.html'))
-    
+
+        @app.route('/api/plugins/shortcuts-jquery.min.js')
+        def _jquery_js():
+            return serve_file(os.path.join(os.path.dirname(__file__), 'jquery.min.js'))
+
     def read_shortcuts(self):
         r = Meta.first(F.shortcuts.exists(1)) or Meta()
         shortcuts = r.shortcuts or {}
