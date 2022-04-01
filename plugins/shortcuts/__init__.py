@@ -35,7 +35,7 @@ class Shortcuts(Plugin):
             return serve_file(os.path.join(os.path.dirname(__file__), 'shortcuts.html'))
 
         @app.route('/api/plugins/shortcuts-jquery.min.js')
-        def _jquery_js():
+        def _shortcuts_jquery_js():
             return serve_file(os.path.join(os.path.dirname(__file__), 'jquery.min.js'))
 
     def read_shortcuts(self):

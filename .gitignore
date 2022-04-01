@@ -114,3 +114,5 @@ plugins/blockly/blockly
 plugins/jiayan
 plugins/nima
 plugins/facedet
+plugins/blockly/zh-hans.js
+plugins/blockly/jquery-3.6.0.min.js
