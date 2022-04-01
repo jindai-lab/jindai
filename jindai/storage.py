@@ -220,11 +220,10 @@ def expand_path(path: Union[Tuple[str], str]):
 
     path = path.replace('/', os.path.sep)
 
-    if allowed_locations is None:
-        allowed_locations = [
-            os.path.join(tempfile.gettempdir(), tempfile.gettempprefix()),
-            config.storage
-        ]
+    allowed_locations = [
+        os.path.join(tempfile.gettempdir(), tempfile.gettempprefix()),
+        config.storage
+    ]
 
     if not path.startswith(tuple(allowed_locations)):
         if path.startswith((os.path.altsep or os.path.sep, os.path.sep)):
