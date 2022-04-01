@@ -1,13 +1,8 @@
-*.pdf
-*.tsv
-*.txt
 temp_*.py
-sources/
 .vsccode/
 .DS_*
 config*.yaml
 *.zip
-blockly/blockly
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
@@ -114,9 +109,5 @@ venv.bak/
 # mypy
 .mypy_cache/
 
-blocks*.h5
-
-models_data/
-config-jindai.py
 sources
-config.yaml
+plugins/blockly/blockly
