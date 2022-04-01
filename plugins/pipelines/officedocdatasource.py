@@ -13,7 +13,7 @@ from jindai.pipeline import DataSourceStage
 class WordDataSource(DataSourceStage):
     """从Word文档中导入语段
     """
-    class _Implementation(DataSourceStage._Implementation):
+    class Implementation(DataSourceStage.Implementation):
 
         def __init__(self, dataset, lang, content):
             """
@@ -52,7 +52,7 @@ class ExcelDataSource(DataSourceStage):
     """从Excel文档中导入语段数据
     """
     
-    class _Implementation(DataSourceStage._Implementation):
+    class Implementation(DataSourceStage.Implementation):
         """从 Excel 导入数据"""
 
         def __init__(self, content, dataset, lang) -> None:

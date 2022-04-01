@@ -14,7 +14,7 @@ from jindai import expand_path, expand_patterns, truncate_path, safe_open
 class HTMLDataSource(DataSourceStage):
     """从HTML网页中读取语段，每个网页计作一个语段
     """
-    class _Implementation(DataSourceStage._Implementation):
+    class Implementation(DataSourceStage.Implementation):
 
         def __init__(self, dataset_name, lang, content, fields='content="//text"', paragraph_selector=''):
             """
@@ -74,7 +74,7 @@ class HTMLDataSource(DataSourceStage):
 class TextDataSource(DataSourceStage):
     """从文本文件中读取语段
     """
-    class _Implementation(DataSourceStage._Implementation):
+    class Implementation(DataSourceStage.Implementation):
 
         def __init__(self, dataset_name, lang, content):
             """
@@ -99,7 +99,7 @@ class TextDataSource(DataSourceStage):
 class LinesDataSource(DataSourceStage):
     """从直接输入的文本中获得语段，每行一个语段
     """
-    class _Implementation(DataSourceStage._Implementation):
+    class Implementation(DataSourceStage.Implementation):
 
         def __init__(self, dataset_name, lang="auto", content=""):
             """
@@ -119,7 +119,7 @@ class LinesDataSource(DataSourceStage):
 
 class WebPageListingDataSource(DataSourceStage):
     """从网页列表中导入语段"""
-    class _Implementation(DataSourceStage._Implementation):
+    class Implementation(DataSourceStage.Implementation):
 
         def __init__(self, dataset, patterns,
                      mongocollection='', lang='auto', detail_link='', list_link='', proxy='', list_depth=1, tags='',
@@ -242,7 +242,7 @@ class WebPageListingDataSource(DataSourceStage):
 class BiblioDataSource(DataSourceStage):
     """从 endnote 文献条目产生语段
     """
-    class _Implementation(DataSourceStage._Implementation):
+    class Implementation(DataSourceStage.Implementation):
 
         def __init__(self, content, dataset, lang='chs', format='endnote') -> None:
             """

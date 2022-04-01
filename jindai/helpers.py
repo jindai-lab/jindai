@@ -1,3 +1,4 @@
+"""辅助函数"""
 import importlib
 import os
 import re
@@ -6,41 +7,42 @@ import pickle
 import glob
 import time
 import traceback
-from concurrent.futures import ThreadPoolExecutor
 from functools import wraps
 from typing import IO, Union, Type, Dict
 
+import subprocess
 import requests
 import werkzeug.wrappers.response
 from flask import Response, jsonify, request, send_file, stream_with_context
-from PyMongoWrapper import F
 
-from . import config
+from . import Task
+from .config import instance as config
 from .models import Token, parser
 from .storage import safe_open
 
 
-def _me(p=''):
-    p = str(p)
-    if p:
-        p += ':'
-    return p + logined()
+def _me(param=''):
+    param = str(param)
+    if param:
+        param += ':'
+    return param + logined()
 
 
 parser.functions['me'] = _me
 
 
 def safe_import(module_name, package_name=''):
+    """Safe import module"""
     try:
         importlib.import_module(module_name)
     except ImportError:
-        import subprocess
         subprocess.call([sys.executable, '-m', 'pip',
                         'install', package_name or module_name])
     return importlib.import_module(module_name)
 
 
 def rest(login=True, cache=False, role=''):
+    """Rest API"""
     def do_rest(func):
         @wraps(func)
         def wrapped(*args, **kwargs):
@@ -50,10 +52,11 @@ def rest(login=True, cache=False, role=''):
                         f'Forbidden. Client: {request.remote_addr}')
                 if request.json:
                     kwargs.update(**request.json)
-                f = func(*args, **kwargs)
-                if isinstance(f, (tuple, Response, werkzeug.wrappers.response.Response)):
-                    return f
-                resp = jsonify({'result': f})
+                result = func(*args, **kwargs)
+                if isinstance(result, (tuple, Response, werkzeug.wrappers.response.Response)):
+                    return result
+
+                resp = jsonify({'result': result})
             except Exception as ex:
                 resp = jsonify(
                     {'exception': str(ex), 'tracestack': traceback.format_tb(ex.__traceback__)})
@@ -68,20 +71,20 @@ def rest(login=True, cache=False, role=''):
 
 
 def logined(role=''):
-    t = Token.check(request.headers.get(
+    """Check user login and role"""
+    token = Token.check(request.headers.get(
         'X-Authentication-Token', request.cookies.get('token')))
-    if t and (not role or role in t.roles):
-        return t.user
+
+    if token and (not role or role in token.roles):
+        return token.user
+
     if request.remote_addr in config.allowed_ips:
         return config.allowed_ips[request.remote_addr]
 
-
-def tmap(func, iterable, n=10):
-    tpe = ThreadPoolExecutor(n)
-    return tpe.map(func, iterable)
+    return None
 
 
-def serve_file(p: Union[str, IO], ext: str = '', file_size: int = 0) -> Response:
+def serve_file(path_or_io: Union[str, IO], ext: str = '', file_size: int = 0) -> Response:
     """Serve static file or buffer
 
     Args:
@@ -92,12 +95,12 @@ def serve_file(p: Union[str, IO], ext: str = '', file_size: int = 0) -> Response
     Returns:
         Response: a flask response object
     """
-    if isinstance(p, str):
-        f = open(p, 'rb')
-        ext = p.rsplit('.', 1)[-1]
-        file_size = os.stat(p).st_size
+    if isinstance(path_or_io, str):
+        input_file = open(path_or_io, 'rb')
+        ext = path_or_io.rsplit('.', 1)[-1]
+        file_size = os.stat(path_or_io).st_size
     else:
-        f = p
+        input_file = path_or_io
 
     mimetype = {
         'html': 'text/html',
@@ -116,13 +119,13 @@ def serve_file(p: Union[str, IO], ext: str = '', file_size: int = 0) -> Response
     if file_size and file_size > 10 << 20:
         if range_header:
             # example: 0-1000 or 1250-
-            m = re.search('([0-9]+)-([0-9]*)', range_header)
-            g = m.groups()
+            matched_nums = re.search('([0-9]+)-([0-9]*)', range_header)
+            num_groups = matched_nums.groups()
             byte1, byte2 = 0, None
-            if g[0]:
-                byte1 = int(g[0])
-            if g[1]:
-                byte2 = int(g[1])
+            if num_groups[0]:
+                byte1 = int(num_groups[0])
+            if num_groups[1]:
+                byte2 = int(num_groups[1])
             if byte1 < file_size:
                 start = byte1
             if byte2:
@@ -133,29 +136,30 @@ def serve_file(p: Union[str, IO], ext: str = '', file_size: int = 0) -> Response
             length = file_size
 
         def _generate_chunks():
-            l = length
-            f.seek(start)
-            while l > 0:
-                chunk = f.read(min(l, 1 << 20))
-                l -= len(chunk)
+            coming_length = length
+            input_file.seek(start)
+            while coming_length > 0:
+                chunk = input_file.read(min(coming_length, 1 << 20))
+                coming_length -= len(chunk)
                 yield chunk
 
-        rv = Response(stream_with_context(_generate_chunks()), 206,
-                      content_type=mimetype, direct_passthrough=True)
-        rv.headers.add(
-            'Content-Range', 'bytes {0}-{1}/{2}'.format(start, start + length - 1, file_size))
-        return rv
-    else:
-        return send_file(f, mimetype=mimetype, conditional=True)
+        resp = Response(stream_with_context(_generate_chunks()), 206,
+                        content_type=mimetype, direct_passthrough=True)
+        resp.headers.add(
+            'Content-Range', f'bytes {start}-{start+length-1}/{file_size}')
+        return resp
+
+    return send_file(input_file, mimetype=mimetype, conditional=True)
 
 
 def serve_proxy(server, path):
+    """Serve proxy path"""
     resp = requests.get(f'http://{server}/{path}',
                         headers={'Host': 'localhost:8080'})
     return Response(resp.content, headers=dict(resp.headers))
 
 
-def logs_view(task):
+def logs_view(task: Task):
     """Provide log stream of given TaskDBO
     """
 
@@ -165,15 +169,15 @@ def logs_view(task):
         Yields:
             str: log text
         """
-        while task._task is None:
+        while task.task is None:
             time.sleep(1)
 
-        while task._task.alive:
-            yield from task._task.log_fetch()
+        while task.task.alive:
+            yield from task.task.log_fetch()
             time.sleep(0.1)
 
-        yield from task._task.log_fetch()
-        yield 'returned: ' + str(type(task._task.returned)) + '\n'
+        yield from task.task.log_fetch()
+        yield 'returned: ' + str(type(task.task.returned)) + '\n'
 
         yield 'finished.\n'
 
@@ -187,6 +191,7 @@ RE_DIGITS = re.compile(r'[\+\-]?\d+')
 
 
 def execute_query_expr(parsed, inputs):
+    """Check according to parsed query expression"""
 
     def _opr(k):
         oprname = {
@@ -196,85 +201,100 @@ def execute_query_expr(parsed, inputs):
         }.get(k, k)
         return '__' + oprname + '__'
 
-    def _getattr(o, k, default=None):
+    def _getattr(obj, k, default=None):
         if '.' in k:
-            for k_ in k.split('.'):
-                o = _getattr(o, k_, default)
-            return o
+            for key_seg in k.split('.'):
+                obj = _getattr(obj, key_seg, default)
+            return obj
 
-        if isinstance(o, dict):
-            return o.get(k, default)
-        elif isinstance(o, list) and RE_DIGITS.match(k):
-            return o[int(k)] if 0 <= int(k) < len(o) else default
-        else:
-            return getattr(o, k, default)
+        if isinstance(obj, dict):
+            return obj.get(k, default)
 
-    def _hasattr(o, k):
+        if isinstance(obj, list) and RE_DIGITS.match(k):
+            return obj[int(k)] if 0 <= int(k) < len(obj) else default
+
+        return getattr(obj, k, default)
+
+    def _hasattr(obj, k):
         if '.' in k:
-            for k_ in k.split('.')[:-1]:
-                o = _getattr(o, k_)
+            for key_seg in k.split('.')[:-1]:
+                obj = _getattr(obj, key_seg)
             k = k.split('.')[-1]
 
-        if isinstance(o, dict):
-            return k in o
-        elif isinstance(o, list) and RE_DIGITS.match(k):
-            return 0 <= int(k) < len(o)
-        else:
-            return hasattr(o, k)
+        if isinstance(obj, dict):
+            return k in obj
 
-    def _test_inputs(inputs, v, k='eq'):
+        if isinstance(obj, list) and RE_DIGITS.match(k):
+            return 0 <= int(k) < len(obj)
+
+        return hasattr(obj, k)
+
+    def _test_inputs(inputs, val, k='eq'):
         oprname = _opr(k)
+
         if oprname == '__in__':
-            return inputs in v
-        elif oprname == '__size__':
-            return len(inputs) == v
+            return inputs in val
+
+        if oprname == '__size__':
+            return len(inputs) == val
 
         if isinstance(inputs, list):
-            rr = False
-            for v_ in inputs:
-                rr = rr or _getattr(v_, oprname)(v)
-                if rr:
+            arr_result = False
+            for input_val in inputs:
+                arr_result = arr_result or _getattr(input_val, oprname)(val)
+                if arr_result:
                     break
         else:
-            rr = _getattr(inputs, oprname)(v)
-        return rr is True
-    r = True
+            arr_result = _getattr(inputs, oprname)(val)
+
+        return arr_result is True
+
+    result = True
     assert isinstance(
         parsed, dict), 'QueryExpr should be parsed first and well-formed.'
-    for k, v in parsed.items():
-        if k.startswith('$'):
-            if k == '$and':
-                rr = True
-                for v_ in v:
-                    rr = rr and execute_query_expr(v_, inputs)
-            elif k == '$or':
-                rr = False
-                for v_ in v:
-                    rr = rr or execute_query_expr(v_, inputs)
-                    if rr:
+
+    for key, val in parsed.items():
+        if key.startswith('$'):
+            if key == '$and':
+                arr_result = True
+                for element in val:
+                    arr_result = arr_result and execute_query_expr(
+                        element, inputs)
+            elif key == '$or':
+                arr_result = False
+                for element in val:
+                    arr_result = arr_result or execute_query_expr(
+                        element, inputs)
+                    if arr_result:
                         break
-            elif k == '$not':
-                rr = not execute_query_expr(v, inputs)
-            elif k == '$regex':
-                rr = re.search(v, inputs) is not None
-            elif k == '$options':
+            elif key == '$not':
+                arr_result = not execute_query_expr(val, inputs)
+            elif key == '$regex':
+                arr_result = re.search(val, inputs) is not None
+            elif key == '$options':
                 continue
             else:
-                rr = _test_inputs(inputs, v, k[1:])
-            r = r and rr
-        elif not isinstance(v, dict) or not [1 for v_ in v if v_.startswith('$')]:
-            r = r and _test_inputs(_getattr(inputs, k), v)
+                arr_result = _test_inputs(inputs, val, key[1:])
+
+            result = result and arr_result
+
+        elif not isinstance(val, dict) or not [1 for v_ in val if v_.startswith('$')]:
+
+            result = result and _test_inputs(_getattr(inputs, key), val)
         else:
-            r = r and execute_query_expr(v, _getattr(
-                inputs, k) if _hasattr(inputs, k) else None)
-    return r
+            result = result and execute_query_expr(val, _getattr(
+                inputs, key) if _hasattr(inputs, key) else None)
+
+    return result
 
 
 def get_context(directory: str, parent_class: Type) -> Dict:
-    
-    def _prefix(m):
-        return directory.replace(os.sep, '.') + '.' + m
-    
+    """Get context for given directory and parent class"""
+
+    def _prefix(name):
+        """Prefixing module name"""
+        return directory.replace(os.sep, '.') + '.' + name
+
     modules = [
         _prefix(os.path.basename(f).split('.')[0])
         for f in glob.glob(os.path.join(directory, "*.py"))
@@ -283,15 +303,17 @@ def get_context(directory: str, parent_class: Type) -> Dict:
         for f in glob.glob(os.path.join(directory, '*/__init__.py'))
     ]
     ctx = {}
-    for mm in modules:
+    for module_name in modules:
         try:
-            m = importlib.import_module(mm)
-            for k in m.__dict__:
-                if k != parent_class.__name__ and not k.startswith('_') and isinstance(m.__dict__[k], type) and issubclass(m.__dict__[k], parent_class):
-                    ctx[k] = m.__dict__[k]
-        except Exception as ie:
-            print('Error while importing', mm, ':', ie)
-            
+            module = importlib.import_module(module_name)
+            for k in module.__dict__:
+                if k != parent_class.__name__ and not k.startswith('_') and \
+                isinstance(module.__dict__[k], type) and \
+                issubclass(module.__dict__[k], parent_class):
+                    ctx[k] = module.__dict__[k]
+        except Exception as exception:
+            print('Error while importing', module_name, ':', exception)
+
     return ctx
 
 

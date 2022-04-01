@@ -1,6 +1,5 @@
 """基本操作"""
 
-import itertools
 import json
 import re
 import statistics
@@ -9,20 +8,12 @@ from io import BytesIO
 from itertools import chain
 from itertools import count as iter_count
 
-import jieba
-import pandas
 from bson import ObjectId
-from opencc import OpenCC
-from PyMongoWrapper import F, QueryExprParser
-from PyMongoWrapper.dbo import DbObject, DbObjectCollection
+from PyMongoWrapper import QueryExprParser
+from PyMongoWrapper.dbo import DbObject
 from jindai import PipelineStage
 from jindai.helpers import execute_query_expr, language_iso639, safe_import
-from jindai.models import Dataset, Paragraph, db, parser
-
-
-safe_import('transliterate')
-safe_import('nltk')
-pykakasi = safe_import('pykakasi')
+from jindai.models import Dataset, Paragraph, db, parser, F, DbObjectCollection
 
 
 class Passthrough(PipelineStage):
@@ -37,7 +28,7 @@ class TradToSimpChinese(PipelineStage):
     """繁体中文转为简体中文
     """
 
-    t2s = OpenCC('t2s')
+    t2s = safe_import('opencc', 'opencc-python-reimplementation').OpenCC('t2s')
 
     def resolve(self, p: Paragraph) -> Paragraph:
         p.content = TradToSimpChinese.t2s.convert(p.content)
@@ -86,16 +77,6 @@ class LanguageDetect(PipelineStage):
         return langdetect.detect(s)
 
 
-class JiebaCut(PipelineStage):
-    """使用结巴分词生成检索词
-    """
-
-    def resolve(self, p: Paragraph) -> Paragraph:
-        p.tokens = list(jieba.cut_for_search(p.content)
-                        if self.for_search else jieba.cut(p.content))
-        return p
-
-
 class WordStemmer(PipelineStage):
     """附加词干到 tokens 中（需要先进行切词）
     """
@@ -104,6 +85,7 @@ class WordStemmer(PipelineStage):
 
     @staticmethod
     def get_stemmer(lang):
+        safe_import('nltk')
         from nltk.stem.snowball import SnowballStemmer
         if lang not in WordStemmer._language_stemmers:
             lang = language_iso639.get(lang, lang).lower()
@@ -139,7 +121,7 @@ class LatinTransliterate(PipelineStage):
             append (bool): 是添加到结尾还是覆盖
         """
         self.append = append
-        import transliterate
+        transliterate = safe_import('transliterate')
         self.supported_languages = transliterate.get_available_language_codes()
         self.translit = transliterate.translit
 
@@ -158,8 +140,9 @@ class WordCut(PipelineStage):
     """多语种分词
     """
 
-    t2s = OpenCC('t2s')
-    kks = pykakasi.kakasi()
+    t2s = safe_import('opencc', 'opencc-python-reimplementation').OpenCC('t2s')
+    kks = safe_import('pykakasi').kakasi()
+    jieba = safe_import('jieba')
     stmr = WordStemmer(append=True)
     trlit = LatinTransliterate(append=True)
 
@@ -177,8 +160,8 @@ class WordCut(PipelineStage):
             p.content = WordCut.t2s.convert(p.content)
 
         if p.lang in ('chs', 'cht'):
-            p.tokens = list(jieba.cut_for_search(p.content)
-                            if self.for_search else jieba.cut(p.content))
+            p.tokens = list(WordCut.jieba.cut_for_search(p.content)
+                            if self.for_search else WordCut.jieba.cut(p.content))
         elif p.lang == 'ja':
             p.tokens = list(set(p.content))
             for i in WordCut.kks.convert(p.content):
@@ -313,6 +296,8 @@ class Export(PipelineStage):
         safe_import('xlsxwriter')
 
     def summarize(self, r):
+        
+        pandas = safe_import('pandas')
 
         def json_dump(v):
             try:
@@ -357,6 +342,7 @@ class AutoSummary(PipelineStage):
         self.count = count
 
     def resolve(self, p: Paragraph) -> Paragraph:
+        safe_import('textrank4zh')
         from textrank4zh import TextRank4Sentence
         tr4s = TextRank4Sentence()
         tr4s.analyze(text=p.content, lower=True, source='all_filters')
@@ -502,7 +488,7 @@ class Limit(PipelineStage):
             limit (int): 要返回的最大结果数量，0则不返回
         """
         self.limit = limit
-        self.counter = itertools.count()
+        self.counter = iter_count()
 
     def resolve(self, p: Paragraph):
         v = next(self.counter)

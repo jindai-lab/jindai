@@ -1,0 +1,6 @@
+[submodule "plugins/jiayan"]
+	path = plugins/jiayan
+	url = https://gist.github.com/zhuth/43ac2eb922657355f993504f1f38d97d
+[submodule "plugins/blockly/blockly"]
+	path = plugins/blockly/blockly
+	url = https://github.com/google/blockly
