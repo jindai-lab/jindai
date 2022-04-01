@@ -53,7 +53,7 @@ class TasksQueue(Plugin):
 
             return f'No such key: {key}', 404
 
-        @app.route('/api/queue/<path:_id>', methods=['DELETE'])
+        @app.route('/api/queue/<path:task_id>', methods=['DELETE'])
         @rest()
         def dequeue_task(task_id):
             if task_id in self.results:
@@ -63,13 +63,13 @@ class TasksQueue(Plugin):
 
             return self.remove(task_id)
 
-        @app.route('/api/queue/<path:_id>', methods=['GET'])
+        @app.route('/api/queue/<path:task_id>', methods=['GET'])
         @rest(cache=True)
-        def fetch_task(_id):
-            if _id not in self.results:
-                return Response('No such id: ' + _id, 404)
+        def fetch_task(task_id):
+            if task_id not in self.results:
+                return Response('No such id: ' + task_id, 404)
 
-            result = self.results[_id]
+            result = self.results[task_id]
 
             if isinstance(result, list):
                 offset, limit = int(request.args.get('offset', 0)), int(
@@ -93,7 +93,7 @@ class TasksQueue(Plugin):
                 return send_file(
                     buf, 'application/octstream',
                     as_attachment=True,
-                    attachment_filename=os.path.basename(f"{_id}.{result['__file_ext__']}"))
+                    attachment_filename=os.path.basename(f"{task_id}.{result['__file_ext__']}"))
 
             return jsonify(result)
 
