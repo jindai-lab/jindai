@@ -67,14 +67,18 @@ class DBQueryDataSource(DataSourceStage):
             if groups == 'none':
                 pass
             elif groups == 'group':
-                groupping = 'addFields(group_id=filter(input=$keywords,as=t,cond=eq(substrCP($$t;0;1);"*")));unwind(path=$group_id,preserveNullAndEmptyArrays=false);addFields(keywords=[$group_id])'
+                groupping = '''
+                    addFields(group_id=filter(input=$keywords,as=t,cond=eq(substrCP($$t;0;1);"*")));
+                    unwind(path=$group_id,preserveNullAndEmptyArrays=true);
+                    addFields(group_id=ifNull($group_id;ifNull($source.url;$source.file)))
+                '''
             elif groups == 'source':
-                groupping = 'addFields(group_id=$source)'
-            elif groups == 'both':
-                groupping = 'addFields(group_id=filter(input=$keywords,as=t,cond=eq(substrCP($$t;0;1);"*")));unwind(path=$group_id,preserveNullAndEmptyArrays=true);addFields(group_id=ifNull($group_id;$source))'
+                groupping = 'addFields(group_id=ifNull($source.url;$source.file))'
+            else: 
+                groupping = f'addFields(group_id=${groups})'
                 
             if groupping:
-                groupping += '=>groupby(id=$group_id, count=sum(1))'
+                groupping += '=>addFields(group_id=ifNull($group_id;ifNull($source.url;$source.file)))=>groupby(id=$group_id, count=sum(1))=>addFields(keywords=[toString($group_id)])'
                 groupping = parser.eval(groupping)
 
                 if self.aggregation:

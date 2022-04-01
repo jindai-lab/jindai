@@ -3,6 +3,7 @@ import glob
 import importlib
 import json
 import os
+import re
 import time
 from hashlib import sha1
 from typing import Dict, Type, Union
@@ -42,11 +43,17 @@ def _object_id(params):
         return ObjectId.from_datetime(params)
     return ObjectId()
 
-parser = QueryExprParser(abbrev_prefixes={None: 'keywords=', '_': 'images.', '?': 'source.url%'}, allow_spacing=True, functions={
-    'groupby': _expr_groupby,
-    'object_id': _object_id,
-    'expand': lambda *x: [Fn.unwind('$images')(), Fn.lookup(from_='imageitem', localField='images', foreignField='_id', as_='images')()]
-}, force_timestamp=False)
+parser = QueryExprParser(
+    abbrev_prefixes={None: 'keywords=', '_': 'images.', '?': 'source.url%'},
+    allow_spacing=True, 
+    functions={
+        'groupby': _expr_groupby,
+        'object_id': _object_id,
+        'expand': lambda *x: [Fn.unwind('$images')(), Fn.lookup(from_='imageitem', localField='images', foreignField='_id', as_='images')()],
+        'begin': lambda x: F.keywords.regex('^' + re.escape(x))
+    },
+    force_timestamp=False,
+)
 
 
 class StringOrDate(DbObjectInitializer):
@@ -158,7 +165,7 @@ class Paragraph(db.DbObject):
     def save(self):
         if 'mongocollection' in self.__dict__:
             del self.mongocollection
-        self.keywords = list(set(self.keywords))
+        self.keywords = [str(_).strip() for _ in set(self.keywords) if _ and str(_).strip()]
         for i in list(self.images):
             if not isinstance(i, ImageItem):
                 self.images.remove(i)
