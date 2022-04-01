@@ -25,4 +25,4 @@ class NIMAPlugin(Plugin):
 
     def __init__(self, app, **config):
         ImageItem.set_field('ava_eval', float)
-        self.register_pipelines([NIMAEval])        
+        self.register_pipelines(globals())
