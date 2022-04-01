@@ -1,27 +1,20 @@
+"""数据库对象"""
 import datetime
-import glob
-import importlib
-import json
-import os
 import re
 import time
 from hashlib import sha1
-from typing import Dict, Type, Union
 from io import BytesIO
 
-from flask import request
 from bson import ObjectId
 from PIL import Image
 from PyMongoWrapper import F, Fn, MongoOperand, QueryExprParser, dbo
-from PyMongoWrapper.dbo import Anything, DbObjectInitializer, MongoConnection
+from PyMongoWrapper.dbo import (Anything,
+                                DbObjectInitializer, MongoConnection)
 
-from . import config
+from .config import instance as config
 from .storage import safe_open
 
 db = MongoConnection('mongodb://' + config.mongo + '/' + config.mongoDbName)
-
-MongoJSONEncoder = dbo.create_dbo_json_encoder(json.JSONEncoder)
-MongoJSONDecoder = dbo.create_dbo_json_decoder(json.JSONDecoder)
 
 
 def _expr_groupby(params):
@@ -30,7 +23,11 @@ def _expr_groupby(params):
     if 'id' in params:
         params['_id'] = {k[1:]: k for k in params['id']}
         del params['id']
-    return Fn.group(orig=Fn.first('$$ROOT'), **params), Fn.replaceRoot(newRoot=Fn.mergeObjects('$orig', {'group_id': '$_id'}, {k: f'${k}' for k in params if k != '_id'}))
+    return [
+        Fn.group(orig=Fn.first('$$ROOT'), **params),
+        Fn.replaceRoot(newRoot=Fn.mergeObjects(
+            '$orig', {'group_id': '$_id'}, {k: f'${k}' for k in params if k != '_id'}))
+    ]
 
 
 def _object_id(params):
@@ -42,13 +39,18 @@ def _object_id(params):
         return ObjectId.from_datetime(params)
     return ObjectId()
 
+
 parser = QueryExprParser(
     abbrev_prefixes={None: 'keywords=', '_': 'images.', '?': 'source.url%'},
-    allow_spacing=True, 
+    allow_spacing=True,
     functions={
         'groupby': _expr_groupby,
         'object_id': _object_id,
-        'expand': lambda *x: [Fn.unwind('$images')(), Fn.lookup(from_='imageitem', localField='images', foreignField='_id', as_='images')()],
+        'expand': lambda *x: [
+            Fn.unwind('$images')(),
+            Fn.lookup(from_='imageitem', localField='images',
+                      foreignField='_id', as_='images')()
+        ],
         'begin': lambda x: F.keywords.regex('^' + re.escape(x))
     },
     force_timestamp=False,
@@ -56,22 +58,26 @@ parser = QueryExprParser(
 
 
 class StringOrDate(DbObjectInitializer):
+    """字符串或日期"""
 
     def __init__(self):
-        def func(a=None, *args):
-            if not a:
+
+        def func(*args):
+            if not args or not args[0]:
                 return ''
             try:
-                a = parser.parse_literal(a)
-                if isinstance(a, datetime.datetime):
-                    return a
-            except:
-                return a
+                arg = parser.parse_literal(args[0])
+                if isinstance(arg, datetime.datetime):
+                    return arg
+            except ValueError:
+                return arg
+            return ''
 
         super().__init__(func, None)
 
 
 class ImageItem(db.DbObject):
+    """图像项目信息"""
 
     flag = int
     rating = float
@@ -87,51 +93,59 @@ class ImageItem(db.DbObject):
 
     @property
     def image(self):
-        if self._image == None:
-            return Image.open(self.image_raw)
-        else:
-            return self._image
+        """图像信息"""
+        if self._image is None:
+            self._image = Image.open(self.image_raw)
+        return self._image
 
     @image.setter
     def image(self, value):
+        """设置图像"""
         self._image = value
         self._image_flag = True
 
     @property
     def image_raw(self) -> BytesIO:
+        """获取附带图像的原始字节缓冲"""
+
         if self.source.get('file'):
-            fn = self.source['file']
-            if fn.lower().endswith('.pdf') and self.source.get('page') is not None:
+            filename = self.source['file']
+            if filename.lower().endswith('.pdf') and self.source.get('page') is not None:
                 return safe_open('{file}#pdf/png:{page}'.format(**self.source), 'rb')
-            elif fn == 'blocks.h5':
+            if filename == 'blocks.h5':
                 return safe_open(f"hdf5://{self.source.get('block_id', self.id)}", 'rb')
-            else:
-                return safe_open(fn, 'rb')
-        elif self.source.get('url'):
+            return safe_open(filename, 'rb')
+        
+        if self.source.get('url'):
             return safe_open(self.source['url'], 'rb')
+        
+        return None
 
     def save(self):
-        im = self._image
+        """保存"""
+        image = self._image
         if self._image_flag:
             self._image = None
             self.source['file'] = 'blocks.h5'
 
-            with safe_open(f'hdf5://{self.id}', 'wb') as fo:
-                buf = im.tobytes('jpeg')
-                fo.write(buf)
+            with safe_open(f'hdf5://{self.id}', 'wb') as output:
+                buf = image.tobytes('jpeg')
+                output.write(buf)
 
         super().save()
-        self._image = im
+        self._image = image
         self._image_flag = False
 
     @classmethod
     def on_initialize(cls):
+        """初始化时调用"""
         cls.ensure_index('flag')
         cls.ensure_index('rating')
         cls.ensure_index('source')
 
 
 class Paragraph(db.DbObject):
+    """语段信息"""
 
     dataset = str
     author = str
@@ -156,15 +170,16 @@ class Paragraph(db.DbObject):
         cls.ensure_index('images')
 
     def as_dict(self, expand=False):
-        d = super().as_dict(expand)
-        for k in [_ for _ in d if _.startswith('_') and _ != '_id']:
-            del d[k]
-        return d
+        result = super().as_dict(expand)
+        for k in [_ for _ in result if _.startswith('_') and _ != '_id']:
+            del result[k]
+        return result
 
     def save(self):
         if 'mongocollection' in self.__dict__:
             del self.mongocollection
-        self.keywords = [str(_).strip() for _ in set(self.keywords) if _ and str(_).strip()]
+        self.keywords = [str(_).strip()
+                         for _ in set(self.keywords) if _ and str(_).strip()]
         for i in list(self.images):
             if not isinstance(i, ImageItem):
                 self.images.remove(i)
@@ -175,6 +190,8 @@ class Paragraph(db.DbObject):
 
     @staticmethod
     def get_coll(coll):
+        """获取指向特定数据库集合 Collection 的语段对象"""
+
         if coll and coll not in ('null', 'default', 'undefined', 'paragraph'):
             class _Temp(Paragraph):
                 _collection = coll
@@ -184,14 +201,17 @@ class Paragraph(db.DbObject):
 
     @staticmethod
     def get_converter(coll):
-        a = Paragraph.get_coll(coll)
-        if a is Paragraph:
+        """转换为指向特定数据库集合 Collection 的语段的转换器"""
+
+        temp = Paragraph.get_coll(coll)
+        if temp is Paragraph:
             return lambda x: x
-        else:
-            return lambda x: a(**a.as_dict())
+
+        return lambda x: temp(**x.as_dict())
 
 
 class History(db.DbObject):
+    """历史记录对象"""
 
     user = str
     created_at = datetime.datetime
@@ -199,11 +219,13 @@ class History(db.DbObject):
 
 
 class Meta(db.DbObject):
+    """元设置对象"""
 
     app_title = str
 
 
 class Dataset(db.DbObject):
+    """数据集信息"""
 
     allowed_users = list
     order_weight = int
@@ -213,6 +235,7 @@ class Dataset(db.DbObject):
 
 
 class TaskDBO(db.DbObject):
+    """任务对象"""
 
     name = str
     params = dict
@@ -227,6 +250,7 @@ class TaskDBO(db.DbObject):
 
 
 class User(db.DbObject):
+    """用户对象"""
 
     username = str
     password = str
@@ -234,54 +258,68 @@ class User(db.DbObject):
     datasets = list
 
     @staticmethod
-    def encrypt_password(u, p):
-        up = '{}_corpus_{}'.format(u, p).encode('utf-8')
-        return '{}:{}'.format(u, sha1(up).hexdigest())
+    def encrypt_password(username, password_plain):
+        """加密密码"""
+        user_pass_salt = f'{username}_corpus_{password_plain}'.encode('utf-8')
+        return f'{username}:{sha1(user_pass_salt).hexdigest()}'
 
     def set_password(self, password_plain=''):
+        """设置密码"""
         self.password = User.encrypt_password(self.username, password_plain)
 
     @staticmethod
-    def authenticate(u, p):
-        if User.first((F.username == u) & (F.password == User.encrypt_password(u, p))):
-            return u
-        else:
-            return None
+    def authenticate(username, password):
+        """认证授权"""
+
+        if User.first(F.username == username,
+                      F.password == User.encrypt_password(username, password)):
+            return username
+
+        return None
 
 
 class Token(db.DbObject):
+    """用户认证对象"""
 
     user = str
     token = str
     expire = float
-
     _cache = {}
 
     @staticmethod
     def check(token_string):
-        t = Token._cache.get(token_string)
-        if t and t.expire > time.time():
-            if t.expire - time.time() < 86400:
-                t.expire = time.time() + 86400
-                t.save()
-            return t
-        else:
-            t = Token.first((F.token == token_string)
+        """检查 token 是否有效"""
+
+        token = Token._cache.get(token_string)
+        if token and token.expire > time.time():
+            if token.expire - time.time() < 86400:
+                token.expire = time.time() + 86400
+                token.save()
+            return token
+
+        token = Token.first((F.token == token_string)
                             & (F.expire > time.time()))
-            if t:
-                Token._cache[token_string] = t
-                return t
-        return None
+        if token:
+            Token._cache[token_string] = token
+            return token
 
     @staticmethod
     def uncheck(user):
-        for t in Token._cache.values():
-            if t.user == user:
-                t.expire = 0
+        """注销用户登录"""
+
+        for token in Token._cache.values():
+            if token.user == user:
+                token.expire = 0
         Token.query(F.user == user).delete()
+
+    def __init__(self, **kwargs) -> None:
+        super().__init__(**kwargs)
+        self._roles = None
 
     @property
     def roles(self):
-        if not hasattr(self, '_roles'):
+        """获取用户角色"""
+
+        if self._roles is None:
             self._roles = User.first(F.username == self.user).roles
         return self._roles

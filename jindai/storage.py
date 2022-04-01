@@ -1,3 +1,5 @@
+"""数据存储访问"""
+
 import glob
 import os
 import re
@@ -6,87 +8,117 @@ import time
 from io import BytesIO
 from threading import Lock
 from typing import Tuple, Union
-
+import zipfile
 import h5py
 import numpy as np
 import requests
-from pdf2image import convert_from_path
+from pdf2image import convert_from_path as _pdf_convert
 
-from . import config
+from .config import instance as config
 
 
 class Hdf5Manager:
+    """HDF5 Manager"""
 
     files = [h5py.File(g, 'r') for g in glob.glob(os.path.join(
         config.storage, '*.h5')) if not g.endswith('blocks.h5')]
     base = os.path.join(config.storage, 'blocks.h5')
-    f = None
+    writable_file = None
     write_counter = 0
     _lock = Lock()
 
-    def __enter__(self, *args):
+    def __enter__(self, *_):
         Hdf5Manager._lock.acquire()
-        if not Hdf5Manager.f or Hdf5Manager.f.mode != 'r+':
-            if Hdf5Manager.f:
-                Hdf5Manager.f.close()
-            Hdf5Manager.f = h5py.File(Hdf5Manager.base, 'r+')
+        if not Hdf5Manager.writable_file or Hdf5Manager.writable_file.mode != 'r+':
+            if Hdf5Manager.writable_file:
+                Hdf5Manager.writable_file.close()
+            Hdf5Manager.writable_file = h5py.File(Hdf5Manager.base, 'r+')
         Hdf5Manager.write_counter = 0
         return self
 
-    def __exit__(self, *args):
-        Hdf5Manager.f.flush()
+    def __exit__(self, *_):
+        """Exit with block
+        """
+        Hdf5Manager.writable_file.flush()
         Hdf5Manager._lock.release()
 
-    def write(self, src, iid):
-        assert Hdf5Manager.f, 'Pleae use `with` statement.'
+    @staticmethod
+    def write(src, item_id):
+        """Write data from src to h5df file with specific item id
+
+        Args:
+            src (IO | bytes): bytes or io object to read bytes from
+            item_id (str): item id
+
+        Returns:
+            bool: True if success
+        """
+        assert Hdf5Manager.writable_file, 'Please use `with` statement.'
 
         if isinstance(src, bytes):
             src = BytesIO(src)
 
-        k = f'data/{iid}'
-        if k in Hdf5Manager.f:
-            del Hdf5Manager.f[k]
+        k = f'data/{item_id}'
+        if k in Hdf5Manager.writable_file:
+            del Hdf5Manager.writable_file[k]
 
-        Hdf5Manager.f[k] = np.frombuffer(src.read(), dtype='uint8')
+        Hdf5Manager.writable_file[k] = np.frombuffer(src.read(), dtype='uint8')
 
         return True
 
-    def read(self, item_id):
+    @staticmethod
+    def read(item_id: str) -> bytes:
+        """Read data from h5df file
+
+        Args:
+            item_id (str): id string
+
+        Raises:
+            OSError: Not found
+
+        Returns:
+            bytes: data
+        """
         if not os.path.exists(Hdf5Manager.base):
-            Hdf5Manager.f = h5py.File(Hdf5Manager.base, 'w')
-            Hdf5Manager.f.close()
-            Hdf5Manager.f = None
+            Hdf5Manager.writable_file = h5py.File(Hdf5Manager.base, 'w')
+            Hdf5Manager.writable_file.close()
+            Hdf5Manager.writable_file = None
 
-        if not Hdf5Manager.f:
-            Hdf5Manager.f = h5py.File(Hdf5Manager.base, 'r')
+        if not Hdf5Manager.writable_file:
+            Hdf5Manager.writable_file = h5py.File(Hdf5Manager.base, 'r')
 
-        k = f'data/{item_id}'
-        for f in [Hdf5Manager.f] + Hdf5Manager.files:
-            if k in f:
-                return BytesIO(f[k][:].tobytes())
+        key = f'data/{item_id}'
+        for block_file in [Hdf5Manager.writable_file] + Hdf5Manager.files:
+            if key in block_file:
+                return BytesIO(block_file[key][:].tobytes())
 
         raise OSError(f"No matched ID found: {item_id}")
 
-    def delete(self, item_id):
-        k = f'data/{item_id}'
-        for f in [Hdf5Manager.f] + Hdf5Manager.files:
-            if k in f:
-                del f[k]
+    def delete(self, item_id: str) -> None:
+        """Delete item id
+
+        Args:
+            item_id (str): ID string
+        """
+        key = f'data/{item_id}'
+        for block_file in [Hdf5Manager.writable_file] + Hdf5Manager.files:
+            if key in block_file:
+                del block_file[key]
 
 
-class Hdf5WriteBuffer(BytesIO):
+class _Hdf5WriteBuffer(BytesIO):
 
     def __init__(self, item_id, initial_bytes=b''):
         self.item_id = item_id
         super().__init__(initial_bytes)
 
     def close(self):
-        with Hdf5Manager() as mgr:
-            mgr.write(self.getvalue(), self.item_id)
+        with Hdf5Manager():
+            Hdf5Manager.write(self.getvalue(), self.item_id)
         super().close()
 
 
-class ZipWriteBuffer(BytesIO):
+class _ZipWriteBuffer(BytesIO):
 
     def __init__(self, path, zfile):
         self.path = path
@@ -95,11 +127,11 @@ class ZipWriteBuffer(BytesIO):
 
     def close(self):
         super().close()
-        with zipfile.ZipFile(path) as z:
-            z.writestr(self.zfile, self.getvalue())
+        with zipfile.ZipFile(self.path) as zip_file:
+            zip_file.writestr(self.zfile, self.getvalue())
 
 
-class RequestBuffer(BytesIO):
+class _RequestBuffer(BytesIO):
 
     def __init__(self, url, method='POST', **params):
         self.req = _build_request(url, method, **params)
@@ -111,12 +143,12 @@ class RequestBuffer(BytesIO):
         requests.Session().send(self.req.prepare())
 
 
-def _pdf_image(file, page, **kwargs):
+def _pdf_image(file, page, **_):
     buf = BytesIO()
     page = int(page)
 
-    img, = convert_from_path(file, 120, first_page=page+1,
-                             last_page=page+1, fmt='png') or [None]
+    img, = _pdf_convert(file, 120, first_page=page+1,
+                        last_page=page+1, fmt='png') or [None]
     if img:
         img.save(buf, format='png')
         buf.seek(0)
@@ -124,7 +156,8 @@ def _pdf_image(file, page, **kwargs):
     return buf
 
 
-def _build_request(url: str, method='GET', referer: str = '', proxies=None, headers=None, data=None, **params):
+def _build_request(url: str, method='GET', referer: str = '',
+                   headers=None, data=None, **_):
     if headers is None:
         headers = {}
 
@@ -141,7 +174,8 @@ def _build_request(url: str, method='GET', referer: str = '', proxies=None, head
     return requests.Request(url=url, method=method, headers=headers, cookies={}, data=data)
 
 
-def _try_download(url, attempts: int = 3, proxies=None, verify=False, timeout=60, **params) -> Union[bytes, None]:
+def _try_download(url, attempts: int = 3, proxies=None, verify=False, timeout=60,
+                  **params) -> Union[bytes, None]:
     """Try download from url
 
     Args:
@@ -155,7 +189,7 @@ def _try_download(url, attempts: int = 3, proxies=None, verify=False, timeout=60
 
     buf = None
     req = _build_request(url, **params).prepare()
-    for itry in range(attempts):
+    for _ in range(attempts):
         try:
             code = -1
             try:
@@ -166,12 +200,13 @@ def _try_download(url, attempts: int = 3, proxies=None, verify=False, timeout=60
                 buf = None
             if code != -1:
                 break
-        except Exception as ex:
+        except Exception:
             time.sleep(1)
+
     return buf
 
 
-def expand_path(path: Union[Tuple[str], str], allowed_locations: list = None):
+def expand_path(path: Union[Tuple[str], str]):
     """
     扩展本地文件系统路径
     """
@@ -224,18 +259,18 @@ def expand_patterns(patterns: Union[list, str]):
             yield from urls
         else:
             pattern = expand_path(pattern)
-            for f in glob.glob(pattern):
-                if f.endswith('.zip') or f.endswith('.epub'):
-                    with zipfile.ZipFile(f, 'r') as z:
-                        for zf in z.filelist:
-                            yield f + '#' + zf.filename
-                elif os.path.isdir(f):
-                    patterns.append(f + '/*')
+            for path in glob.glob(pattern):
+                if path.endswith('.zip') or path.endswith('.epub'):
+                    with zipfile.ZipFile(path, 'r') as zip_file:
+                        for zipped_item in zip_file.filelist:
+                            yield path + '#' + zipped_item.filename
+                elif os.path.isdir(path):
+                    patterns.append(path + '/*')
                 else:
-                    yield f
+                    yield path
 
 
-def safe_open(path: str, mode='rb', allowed_locations: list = None, **params):
+def safe_open(path: str, mode='rb', **params):
     """
     打开各种格式的文件。
     Args:
@@ -257,27 +292,27 @@ def safe_open(path: str, mode='rb', allowed_locations: list = None, **params):
         assert mode in ('rb', 'wb')
         if mode == 'rb':
             return BytesIO(_try_download(path, **params))
-        else:
-            return RequestBuffer(url, **params)
+
+        return _RequestBuffer(path, **params)
 
     if path.startswith('hdf5://'):
         assert mode in ('rb', 'wb')
         item_id = path.split('://', 1)[1]
         if mode == 'rb':
-            return Hdf5Manager().read(item_id)
-        else:
-            return Hdf5WriteBuffer(item_id)
+            return Hdf5Manager.read(item_id)
 
-    fpath = expand_path(path, allowed_locations)
+        return _Hdf5WriteBuffer(item_id)
+
+    fpath = expand_path(path)
 
     if '#zip/' in path:
         assert mode in ('rb', 'wb')
         _, zpath = path.split('#zip/', 1)
         if mode == 'rb':
-            with zipfile.ZipFile(fpath) as z:
-                return z.open(zpath)
+            with zipfile.ZipFile(fpath) as zip_file:
+                return zip_file.open(zpath)
         else:
-            return ZipWriteBuffer(path, zpath)
+            return _ZipWriteBuffer(path, zpath)
 
     elif '#pdf/png:' in path:
         assert mode == 'rb'
@@ -291,6 +326,7 @@ def safe_open(path: str, mode='rb', allowed_locations: list = None, **params):
 
 
 def truncate_path(path, base=None):
+    """Truncate path into base directory."""
     if base is None:
         base = config.storage
     if not base.endswith(os.path.sep):

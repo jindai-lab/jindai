@@ -1,36 +1,44 @@
+"""插件"""
 from collections import defaultdict
 from flask import Response
 from .helpers import rest
 from .pipeline import Pipeline, PipelineStage
-from . import config
+from .config import instance as config
 
 
 class Plugin:
-    
-    def __init__(self, app, **config) -> None:
-        self.config = config
+    """插件基类"""
+
+    def __init__(self, app, **conf) -> None:
+        self.config = conf
         self.app = app
-        
-    def get_pages(self):
+
+    def get_filters(self):
+        """获取特殊过滤器"""
         return {}
-    
+
     def get_callbacks(self):
+        """获取回调函数"""
         return []
-        
+
     def run_callback(self, name, *args, **kwargs):
+        """运行回调函数"""
         name = name.replace('-', '_') + '_callback'
         return getattr(self, name)(*args, **kwargs)
-    
+
     def register_pipelines(self, pipeline_classes):
+        """注册处理管道"""
         if isinstance(pipeline_classes, dict):
             pipeline_classes = pipeline_classes.values()
 
-        for c in pipeline_classes:
-            if isinstance(c, type) and issubclass(c, PipelineStage) and c is not PipelineStage:
-                Pipeline.ctx[c.__name__] = c
-    
+        for cls in pipeline_classes:
+            if isinstance(cls, type) and issubclass(cls, PipelineStage) \
+                and cls is not PipelineStage:
+                Pipeline.ctx[cls.__name__] = cls
+
 
 class PluginManager:
+    """插件模拟器"""
 
     def __init__(self, plugin_ctx, app) -> None:
         self.plugins = []
@@ -58,41 +66,42 @@ class PluginManager:
         # load plugins
 
         pls = []
-        for pl in config.plugins:
-            if pl == '*':
+        for plugin_name in config.plugins:
+            if plugin_name == '*':
                 pls += list(plugin_ctx.keys())
-            elif pl.startswith('~'):
-                if pl[1:] in pls:
-                    pls.remove(pl[1:])
+            elif plugin_name.startswith('~'):
+                if plugin_name[1:] in pls:
+                    pls.remove(plugin_name[1:])
             else:
-                pls.append(pl)
+                pls.append(plugin_name)
 
-        for pl in pls:
-            if isinstance(pl, tuple) and len(pl) == 2:
-                pl, kwargs = pl
+        for plugin_name in pls:
+            if isinstance(plugin_name, tuple) and len(plugin_name) == 2:
+                plugin_name, params = plugin_name
             else:
-                kwargs = {}
+                params = {}
 
-            if isinstance(pl, str):
-                pl = plugin_ctx.get(pl)
-                
-            if not pl:
-                print('Plugin', pl, 'not found.')
+            if isinstance(plugin_name, str):
+                plugin_name = plugin_ctx.get(plugin_name)
+
+            if not plugin_name:
+                print('Plugin', plugin_name, 'not found.')
                 continue
 
             try:
-                pl = pl(app, **kwargs)
+                plugin_name = plugin_name(app, **params)
 
-                self.pages.update(**pl.get_pages())
+                self.pages.update(**plugin_name.get_filters())
 
-                for name in pl.get_callbacks():
-                    self.callbacks[name].append(pl)
+                for name in plugin_name.get_callbacks():
+                    self.callbacks[name].append(plugin_name)
 
-                self.plugins.append(pl)
-                print('Registered plugin:', type(pl).__name__)
+                self.plugins.append(plugin_name)
+                print('Registered plugin:', type(plugin_name).__name__)
             except Exception as ex:
-                print('Error while registering plugin:', pl, ex)
+                print('Error while registering plugin:', plugin_name, ex)
                 continue
 
     def __iter__(self):
+        """获取所有已加载的插件"""
         yield from self.plugins

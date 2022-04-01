@@ -1,72 +1,108 @@
+"""图像哈希"""
+import os
 import tempfile
 from io import BytesIO
 from queue import deque
-from PIL import Image
-from plugins.gallery import *
+from typing import Union
+
 import imagehash
-
+from bson import binary
+from flask import Response, request
+from PIL import Image
 from jindai import *
-from jindai import Plugin
-from jindai.models import ImageItem
+from jindai.helpers import serve_file
+from jindai.models import F, ImageItem, ObjectId, Paragraph
+from plugins.gallery import ImageOrAlbumStage, single_item
 
 
-def dhash(im):
-    if isinstance(im, BytesIO):
-        im.seek(0)
-        im = Image.open(im)
-    dh = imagehash.dhash(im)
-    dh = bytes.fromhex(str(dh))
-    return dh
+def dhash(image: Union[Image.Image, BytesIO]) -> bytes:
+    """Generate d-hash for image
+
+    Args:
+        image (Image | BytesIO): PIL Image
+
+    Returns:
+        bytes: hash
+    """
+    if isinstance(image, BytesIO):
+        image.seek(0)
+        image = Image.open(image)
+    hash_val = imagehash.dhash(image)
+    hash_val = bytes.fromhex(str(hash_val))
+    return hash_val
 
 
-def whash(im):
-    if isinstance(im, BytesIO):
-        im.seek(0)
-        im = Image.open(im)
-    dh = imagehash.whash(im)
-    dh = bytes.fromhex(str(dh))
-    return dh
+def whash(image: Union[Image.Image, BytesIO]) -> bytes:
+    """Generate w-hash for image
+
+    Args:
+        image (Image): PIL Image
+
+    Returns:
+        bytes: hash
+    """
+    if isinstance(image, BytesIO):
+        image.seek(0)
+        image = Image.open(image)
+    hash_val = imagehash.whash(image)
+    hash_val = bytes.fromhex(str(hash_val))
+    return hash_val
 
 
-def bitcount(x):
-    return bin(x).count('1')
+def bitcount(val):
+    """Count 1's in a 64-bit integer"""
+    return bin(val).count('1')
 
 
-def v(x):
-    return int(x.hex(), 16)
+def to_int(val):
+    """Get int value of bytes"""
+    return int(val.hex(), 16)
+
+def to_binary(val):
+    """To binary
+
+    Args:
+        val (int): the value
+
+    Returns:
+        _type_: _description_
+    """
+    return binary.Binary(bytes.fromhex(f'{val:016x}'))
+
+def flip(val, bit_position):
+    """Flip the i-th bit in x"""
+    val ^= 1 << bit_position
+    return val
 
 
-def flip(x, i):
-    x ^= 1 << i
-    return x
-
-
-def flips(x, n, lm=0):
-    for i in range(lm, 64):
-        _x = flip(x, i)
-        if n == 1:
-            yield _x
+def flips(val, bit_num, least_position=0):
+    """Flip at most n bits for x"""
+    for i in range(least_position, 64):
+        new_val = flip(val, i)
+        if bit_num == 1:
+            yield new_val
         else:
-            for __x in flips(_x, n - 1, i + 1):
-                yield __x
+            for new_val in flips(new_val, bit_num - 1, i + 1):
+                yield new_val
 
 
 def resolve_dups(tmp_file_name, slimit):
+    """Resolve duplications from temp file, with scores < slimit"""
 
     def _parse_compare_results():
-        with safe_open(tmp_file_name, 'r') as fi:
-            for l in fi:
-                r = l.strip().split('\t')
-                if len(r) < 3:
+        with safe_open(tmp_file_name, 'r') as input_file:
+            for line in input_file:
+                row = line.strip().split('\t')
+                if len(row) < 3:
                     continue
-                id1, id2, score = r
+                id1, id2, score = row
                 if id1 == id2:
                     continue
                 yield id1, id2, int(score)
 
     def _get_items():
         ids = set()
-        for id1, id2, s in _parse_compare_results():
+        for id1, id2, _ in _parse_compare_results():
             ids.add(id1)
             ids.add(id2)
         items = {}
@@ -76,7 +112,7 @@ def resolve_dups(tmp_file_name, slimit):
 
     items = _get_items()
     for id1, id2, score in sorted(_parse_compare_results(),
-                                    key=lambda x: x[2]):
+                                  key=lambda x: x[2]):
         if score > slimit:
             continue
         if id1 in items and id2 in items:
@@ -87,63 +123,76 @@ class ImageHash(ImageOrAlbumStage):
     """建立图像哈希检索
     """
 
-    def resolve_image(self, i : ImageItem, context):
+    def resolve_image(self, i: ImageItem, _):
         try:
-            dh, wh = i.dhash, i.whash
-            if dh and wh: return i
+            i_dhash, i_whash = i.dhash, i.whash
+            if i_dhash and i_whash:
+                return i
 
-            f = i.image_raw
-            if not f: return
+            image_raw = i.image_raw
+            if not image_raw:
+                return None
 
-            if not dh:
-                dh = dhash(f) or ''
-            if not wh:
-                wh = whash(f) or ''
+            if not i_dhash:
+                i_dhash = i_dhash(image_raw) or ''
+            if not i_whash:
+                i_whash = i_whash(image_raw) or ''
 
-            i.dhash, i.whash = dh, wh
+            i.dhash, i.whash = i_dhash, i_whash
         except (IOError, AssertionError):
             pass
         i.save()
-
+        
 
 class ImageHashDuplications(ImageOrAlbumStage):
     """进行图像哈希去重
     """
-    
+
     def __init__(self) -> None:
+        super().__init__()
         self.results = deque()
         self.result_pairs = set()
 
-    def _unv(self, x):
-        from bson import binary
-        return binary.Binary(bytes.fromhex(f'{x:016x}'))
+    def resolve_image(self, i: ImageItem, _):
+        """处理图像哈希
+        """
+        if not i.dhash:
+            return
 
-    def resolve_image(self, i: ImageItem, context):
-        if not i.dhash: return
-        if not isinstance(i.dhash, bytes): self.logger(type(i).__name__, i.as_dict())
-        dh2 = v(i.dhash)
-        dhb2 = v(i.whash)
-        h2, w2 = i.height, i.width
+        if not isinstance(i.dhash, bytes):
+            self.logger(type(i).__name__, i.as_dict())
+        d_hash = to_int(i.dhash)
+        w_hash = to_int(i.whash)
+        image_height, image_width = i.height, i.width
+
         for j in ImageItem.query(F.dhash.in_(
-                [self._unv(x) for x in [dh2] + list(flips(dh2, 1)) + list(flips(dh2, 2))])):
-            id1 = j.id
-            if id1 == i.id or f'{i.id}-{id1}' in self.result_pairs or f'{id1}-{i.id}' in self.result_pairs: continue
-            self.result_pairs.add(f'{id1}-{i.id}')
-            a, b = i.id, id1
-            if j.width * j.height < w2 * h2: b, a = a, b
-            r = '{}\t{}\t{}'.format(a, b, bitcount(v(i.dhash) ^ dh2) + bitcount(v(j.whash) ^ dhb2))
-            self.logger(r)
-            self.results.append(r + '\n')
+                [to_binary(x)
+                 for x in [d_hash] + list(flips(d_hash, 1)) + list(flips(d_hash, 2))])):
+            target_id = j.id
+            if target_id == i.id or f'{i.id}-{target_id}' in self.result_pairs \
+                or f'{target_id}-{i.id}' in self.result_pairs:
+                continue
+
+            self.result_pairs.add(f'{target_id}-{i.id}')
+            id_a, id_b = i.id, target_id
+            if j.width * j.height < image_width * image_height:
+                id_b, id_a = id_a, id_b
+
+            result_line = f'{id_a}\t{id_b}\t' + \
+                f'{bitcount(to_int(i.dhash) ^ d_hash) + bitcount(to_int(j.whash) ^ w_hash)}'
+            self.logger(result_line)
+            self.results.append(result_line + '\n')
+
         return i
 
-    def summarize(self, r):
+    def summarize(self, _):
         k = tempfile.mktemp()
-        self.fo = safe_open(k + '.tsv', 'w')
-        for l in self.results:
-            self.fo.write(l)
-        self.fo.close()
+        output_file = safe_open(k + '.tsv', 'w')
+        for line in self.results:
+            output_file.write(line)
+        output_file.close()
         return {'redirect': '/api/plugins/compare?' + k}
-        
+
 
 class Hashing(Plugin):
 
@@ -152,65 +201,71 @@ class Hashing(Plugin):
         ImageItem.set_field('dhash', bytes)
         ImageItem.set_field('whash', bytes)
         self.register_pipelines([ImageHashDuplications, ImageHash])
-            
+
         @app.route('/api/plugins/compare.tsv')
         def _compare_tsv():
-            p = request.args.get('key', '') + '.tsv'
-            if not os.path.exists(p):
+            file_path = request.args.get('key', '') + '.tsv'
+            if not os.path.exists(file_path):
                 return Response('')
-            
+
             buf = ''
-            for i1, i2, score in resolve_dups(p, int(request.args.get('q', 10))):
-                buf += '{} {} {}\n'.format(i1.id, i2.id, score)
+            for item1, item2, score in resolve_dups(file_path, int(request.args.get('q', 10))):
+                buf += f'{item1.id} {item2.id} {score}\n'
             return Response(buf)
 
         @app.route('/api/plugins/compare')
         def _compare_html():
             return serve_file(os.path.join(os.path.dirname(__file__), 'compare.html'))
 
-        @app.route('/api/plugins/jquery.min.js')
+        @app.route('/api/plugins/hashing-jquery.min.js')
         def _jquery_js():
             return serve_file(os.path.join(os.path.dirname(__file__), 'jquery.min.js'))
 
-    def handle_page(self, ds, iid):
-        limit = ds.limit
-        offset = ds.skip
-        ds.limit = 0
-        ds.raw = False
-        
-        groups = ds.groups in ('both', 'group')
-        archive = ds.groups in ('both', 'source')
+    def handle_page(self, datasource_impl, iid):
+        """Handle page"""
+        limit = datasource_impl.limit
+        offset = datasource_impl.skip
+        datasource_impl.limit = 0
+        datasource_impl.raw = False
+
+        groups = datasource_impl.groups in ('both', 'group')
+        archive = datasource_impl.groups in ('both', 'source')
 
         if groups:
             return single_item('', iid)
         else:
-            it = ImageItem.first(F.id == iid)
-            if it.dhash is None:
+            image_item = ImageItem.first(F.id == iid)
+            if image_item.dhash is None:
                 return
-            pgroups = [g for g in (Paragraph.first(F.images == ObjectId(iid)) or Paragraph()).keywords if g.startswith(
-                '*')] or [(Paragraph.first(F.images == ObjectId(iid)) or Paragraph()).source.get('url', '')]
-            dha, dhb = v(it.dhash), v(it.whash)
+            pgroups = [g
+                       for g in (Paragraph.first(F.images == ObjectId(iid)) or Paragraph()).keywords
+                       if g.startswith('*')
+                       ] or [(Paragraph.first(F.images == ObjectId(iid)) 
+                              or Paragraph()).source.get('url', '')]
+            dha, dhb = to_int(image_item.dhash), to_int(image_item.whash)
             results = []
             groupped = {}
 
-            for p in ds.fetch():
-                for i in p.images:
-                    if i.id == it.id:
+            for paragraph in datasource_impl.fetch():
+                for i in paragraph.images:
+                    if i.id == image_item.id:
                         continue
                     if i.flag != 0 or i.dhash is None or i.dhash == b'':
                         continue
-                    dha1, dhb1 = v(i.dhash), v(i.whash)
+                    dha1, dhb1 = to_int(i.dhash), to_int(i.whash)
                     i.score = bitcount(dha ^ dha1) + bitcount(dhb ^ dhb1)
-                    po = Paragraph(**p.as_dict())
-                    po.images = [i]
-                    po.score = i.score
+                    new_paragraph = Paragraph(**paragraph.as_dict())
+                    new_paragraph.images = [i]
+                    new_paragraph.score = i.score
                     if archive:
-                        pgs = [g for g in p.keywords if g.startswith('*')]
-                        for g in pgs or [po.source['url']]:
-                            if g not in pgroups and (g not in groupped or groupped[g].score > po.score):
-                                groupped[g] = po
+                        groups = [g for g in paragraph.keywords if g.startswith('*')]
+                        for group in groups or [new_paragraph.source['url']]:
+                            if group not in pgroups and \
+                                (group not in groupped or groupped[group].score > \
+                                    new_paragraph.score):
+                                groupped[group] = new_paragraph
                     else:
-                        results.append(po)
+                        results.append(new_paragraph)
 
             if archive:
                 results = list(groupped.values())
@@ -218,8 +273,8 @@ class Hashing(Plugin):
             results = sorted(results, key=lambda x: x.score)[
                 offset:offset + limit]
             return single_item('', iid) + [{'spacer': 'spacer'}] + results
-    
-    def get_pages(self):
+
+    def get_filters(self):
         return {
             'sim': {
                 'format': 'sim/{imageitem._id}',
