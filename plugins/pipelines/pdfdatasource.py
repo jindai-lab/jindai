@@ -1,13 +1,11 @@
 """来自PDF
 """
 
-from genericpath import exists
 import fitz
-from pdf2image import convert_from_path
-from models import Paragraph
+from jindai import expand_patterns, safe_open, truncate_path
+from jindai.models import Paragraph
+from jindai.pipeline import DataSourceStage
 from PyMongoWrapper import F, Fn, Var
-from pipeline import DataSourceStage
-from storage import expand_patterns, safe_open, truncate_path
 
 
 class PDFDataSource(DataSourceStage):

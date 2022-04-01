@@ -1,12 +1,13 @@
-import imagehash
+import tempfile
+from io import BytesIO
+from queue import deque
 from PIL import Image
 from plugins.gallery import *
-from queue import deque
-from plugin import Plugin
-from storage import *
-from pipelines.imageproc import ImageOrAlbumStage
-from models import ImageItem
-import tempfile
+import imagehash
+
+from jindai import *
+from jindai import Plugin
+from jindai.models import ImageItem
 
 
 def dhash(im):

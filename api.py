@@ -1,21 +1,16 @@
-from dis import dis
-from flask import Flask, Response, jsonify, redirect, request, send_file, json
+from flask import Flask, Response, redirect, request, send_file, json
 from bson import ObjectId
 import datetime
 import inspect
 from PyMongoWrapper import *
 from collections import defaultdict
-from models import *
-from task import Task
-from pipeline import Pipeline
 from io import BytesIO
 import sys
-import config
 import jieba
 import base64
-from plugin import PluginManager
-from pipelines.dbquerydatasource import DBQueryDataSource
-from helpers import *
+from jindai import Task, PluginManager, Pipeline, config, Plugin
+from jindai.models import *
+from jindai.helpers import *
 
 
 app = Flask(__name__)
@@ -475,7 +470,7 @@ def help(pipe_or_ds):
             ]
         }
 
-    ctx = Pipeline.pipeline_ctx
+    ctx = Pipeline.ctx
     r = defaultdict(dict)
     for k, v in ctx.items():
         name = sys.modules[v.__module__].__doc__ or v.__module__.split(
@@ -584,7 +579,7 @@ def search(q='', req='', sort='', limit=100, offset=0, mongocollections=[], grou
 
     qstr = '?'+_stringify(qparsed)
 
-    ds = DBQueryDataSource._Implementation(qstr, **params)
+    ds = Pipeline.ctx['DBQueryDataSource']._Implementation(qstr, **params)
     results = None
 
     if page_args:
@@ -813,18 +808,6 @@ def set_meta(**vals):
     return True
 
 
-# BLOCKLY UI
-@app.route('/api/blockly/<path:p>')
-@app.route('/api/blockly/')
-def blockly_index(p='index.html'):
-    if re.match(r'^[0-9a-f]{24}$', p):
-        p = 'index.html'
-    fp = os.path.join('blockly', p)
-    if os.path.exists(fp) and os.path.isfile(fp):
-        return serve_file(fp)
-    return '', 404
-
-
 @app.route('/<path:p>', methods=['GET'])
 @app.route('/', methods=['GET'])
 def index(p='index.html'):
@@ -847,7 +830,8 @@ def index(p='index.html'):
 if os.path.exists('restarting'):
     os.unlink('restarting')
 
-app.plugins = PluginManager(app)
+plugin_ctx = get_context('plugins', Plugin)
+app.plugins = PluginManager(plugin_ctx, app)
 
 
 if __name__ == "__main__":

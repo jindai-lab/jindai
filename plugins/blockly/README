@@ -1,0 +1,4 @@
+Fetch all other files from:
+- https://github.com/google/blockly, for "core/", "media/", "*_compressed.js"
+- https://unpkg.com/blockly/msg/zh-hans.js, for "zh-hans.js"
+- https://code.jquery.com/jquery-3.6.0.min.js, for "jquery-3.6.0.min.js"

@@ -2,16 +2,15 @@
 """
 import os
 import tempfile
-from typing import Union
-from bson import ObjectId
-import numpy as np
-from helpers import safe_import
-from models import Paragraph, F, ImageItem, Paragraph, parser
-from PIL import Image, ImageOps
-from pipeline import PipelineStage
-from storage import safe_open, expand_path
 import traceback
+from typing import Union
+import numpy as np
+from bson import ObjectId
+from PIL import Image, ImageOps
 
+from jindai import PipelineStage, expand_path, safe_open
+from jindai.helpers import safe_import
+from jindai.models import ImageItem, Paragraph, parser
 
 class ImageOrAlbumStage(PipelineStage):
     def resolve(self, p: Paragraph) -> Union[Paragraph, ImageItem]:

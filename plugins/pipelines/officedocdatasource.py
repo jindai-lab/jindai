@@ -3,11 +3,11 @@ import os
 import subprocess
 import tempfile
 from typing import Iterable
-import pandas as pd
 
-from models import Paragraph
-from pipeline import DataSourceStage
-from storage import expand_patterns, truncate_path
+import pandas as pd
+from jindai import expand_patterns, truncate_path
+from jindai.models import Paragraph
+from jindai.pipeline import DataSourceStage
 
 
 class WordDataSource(DataSourceStage):

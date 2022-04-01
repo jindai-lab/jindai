@@ -3,13 +3,11 @@
 *.txt
 temp_*.py
 sources/
-blockly/
 .vsccode/
-gpt.*
 .DS_*
 config*.yaml
 *.zip
-blocks*
+blockly/blockly
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

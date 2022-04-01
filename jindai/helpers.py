@@ -3,23 +3,21 @@ import os
 import re
 import sys
 import pickle
-import tempfile
+import glob
 import time
 import traceback
-from collections import defaultdict
 from concurrent.futures import ThreadPoolExecutor
 from functools import wraps
-from typing import IO, Union
+from typing import IO, Union, Type, Dict
 
 import requests
 import werkzeug.wrappers.response
 from flask import Response, jsonify, request, send_file, stream_with_context
 from PyMongoWrapper import F
 
-import config
-from models import (MongoJSONEncoder, Paragraph, Token, User, get_context,
-                    parser)
-from storage import safe_open
+from . import config
+from .models import Token, parser
+from .storage import safe_open
 
 
 def _me(p=''):
@@ -270,6 +268,31 @@ def execute_query_expr(parsed, inputs):
             r = r and execute_query_expr(v, _getattr(
                 inputs, k) if _hasattr(inputs, k) else None)
     return r
+
+
+def get_context(directory: str, parent_class: Type) -> Dict:
+    
+    def _prefix(m):
+        return directory.replace(os.sep, '.') + '.' + m
+    
+    modules = [
+        _prefix(os.path.basename(f).split('.')[0])
+        for f in glob.glob(os.path.join(directory, "*.py"))
+    ] + [
+        _prefix(f.split(os.path.sep)[-2])
+        for f in glob.glob(os.path.join(directory, '*/__init__.py'))
+    ]
+    ctx = {}
+    for mm in modules:
+        try:
+            m = importlib.import_module(mm)
+            for k in m.__dict__:
+                if k != parent_class.__name__ and not k.startswith('_') and isinstance(m.__dict__[k], type) and issubclass(m.__dict__[k], parent_class):
+                    ctx[k] = m.__dict__[k]
+        except Exception as ie:
+            print('Error while importing', mm, ':', ie)
+            
+    return ctx
 
 
 with safe_open('models_data/language_iso639', 'rb') as flang:
