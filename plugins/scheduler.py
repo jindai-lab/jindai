@@ -5,9 +5,9 @@ from threading import Thread
 
 import schedule
 from bson import ObjectId
-from helpers import rest
-from models import F, TaskDBO, db
-from plugin import Plugin
+from jindai.helpers import rest
+from jindai.models import F, TaskDBO, db
+from jindai import Plugin
 
 
 class SchedulerJob(db.DbObject):

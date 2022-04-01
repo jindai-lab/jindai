@@ -1,8 +1,8 @@
 """汉字处理"""
 
-from models import Paragraph
-from pipeline import PipelineStage
-from storage import safe_open
+from jindai.models import Paragraph
+from jindai import  PipelineStage
+from jindai import  safe_open
 import pickle
 
 

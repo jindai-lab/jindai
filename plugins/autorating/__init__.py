@@ -1,11 +1,8 @@
-import os
-from PIL import Image
-import config
-from helpers import safe_import
-from storage import expand_path
-from plugin import Plugin
-from pipelines.imageproc import ImageOrAlbumStage
-from models import ImageItem
+from jindai import Plugin, expand_path
+from jindai.helpers import safe_import
+from jindai.models import ImageItem
+from plugins.gallery import ImageOrAlbumStage
+
 from .inference_model import InferenceModel, load_state
 
 model = None

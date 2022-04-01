@@ -5,15 +5,14 @@ import datetime
 import glob
 import os
 import shutil
-from sys import implementation
 from typing import Iterable, List
 from urllib.parse import urljoin
 import zipfile
 import re
-from storage import safe_open
-from models import ImageItem, Paragraph, parser
+from jindai import  safe_open
+from jindai.models import ImageItem, Paragraph, parser
 from PyMongoWrapper import F, Fn, Var
-from pipeline import DataSourceStage
+from jindai.pipeline import  DataSourceStage
 from PIL import Image
 from bson import SON
 
@@ -245,7 +244,7 @@ class ImageImportDataSource(DataSourceStage):
                         zips.append(loc)
                         self.logger(loc)
                         with zipfile.ZipFile(loc, 'r') as z:
-                            l += [(loc, loc + '#' + _) for _ in z.namelist()]
+                            l += [(loc, loc + '#zip/' + _) for _ in z.namelist()]
                             z.extractall('__zip{}'.format(hash(loc)))
                     elif os.path.isdir(loc):
                         self.logger(loc)

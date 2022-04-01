@@ -1,8 +1,8 @@
 """机器翻译
 """
-from helpers import safe_import
-from models import Paragraph
-from pipeline import PipelineStage
+from jindai.helpers import safe_import
+from jindai.models import Paragraph
+from jindai import  PipelineStage
 from opencc import OpenCC
 
 

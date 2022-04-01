@@ -1,10 +1,10 @@
 import re
-from helpers import rest
+from jindai.helpers import rest
 from bson import ObjectId
 
-from models import db, F
-from plugin import Plugin
-from pipeline import PipelineStage
+from jindai.models import db, F
+from jindai import Plugin
+from jindai import  PipelineStage
 
 
 class AutoTag(db.DbObject):

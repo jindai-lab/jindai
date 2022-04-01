@@ -1,9 +1,13 @@
 import hashlib
 from typing import List
 from bson import ObjectId
-from helpers import *
-from models import Paragraph, ImageItem
-from plugin import Plugin
+from jindai.helpers import *
+from jindai.models import Paragraph, ImageItem
+from jindai import Plugin
+
+from .imageproc import *
+from .ocr import *
+
 from PyMongoWrapper import F, Fn
 
 # HELPER FUNCS
@@ -35,6 +39,7 @@ class Gallery(Plugin):
 
     def __init__(self, app):
         super().__init__(app)
+        self.register_pipelines(globals())
 
         # ALBUM OPERATIONS
 

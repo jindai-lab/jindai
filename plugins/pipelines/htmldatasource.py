@@ -2,14 +2,13 @@
 """
 import codecs
 from concurrent.futures import ThreadPoolExecutor
-from sys import implementation
 from urllib.parse import urljoin
 from bs4 import BeautifulSoup as B
 import re
 
-from models import ImageItem, Paragraph, parser
-from pipeline import DataSourceStage
-from storage import expand_path, expand_patterns, truncate_path, safe_open
+from jindai.models import ImageItem, Paragraph, parser
+from jindai.pipeline import  DataSourceStage
+from jindai import expand_path, expand_patterns, truncate_path, safe_open
 
 
 class HTMLDataSource(DataSourceStage):

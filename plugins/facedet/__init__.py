@@ -1,14 +1,14 @@
 # facedet
 import base64
 from io import BytesIO
-from PyMongoWrapper.dbo import DbObjectCollection
-from models import Paragraph, ImageItem
-from pipelines.imageproc import ImageOrAlbumStage
-from plugins.gallery import single_item
 from PIL import Image
-from plugin import Plugin
-from plugins.hashing import bitcount, whash, v
 from PyMongoWrapper import F, Fn, ObjectId, Var
+from PyMongoWrapper.dbo import DbObjectCollection
+
+from jindai import Plugin
+from jindai.models import ImageItem, Paragraph
+from plugins.gallery import single_item, ImageOrAlbumStage
+from plugins.hashing import bitcount, v, whash
 
 
 class FaceDet(ImageOrAlbumStage):

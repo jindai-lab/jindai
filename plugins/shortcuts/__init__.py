@@ -1,8 +1,8 @@
-from flask import request
 import os
-from helpers import rest, serve_file
-from plugin import Plugin
-from models import F, Meta, parser
+
+from jindai import Plugin
+from jindai.helpers import rest, serve_file
+from jindai.models import F, Meta, parser
 
 
 class Shortcuts(Plugin):

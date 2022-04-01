@@ -7,10 +7,10 @@ from io import BytesIO
 from queue import deque
 
 from flask import Response, jsonify, request, send_file
-from helpers import logined, logs_view, rest
-from models import F, TaskDBO
-from plugin import Plugin
-from task import Task
+from jindai.helpers import logined, logs_view, rest
+from jindai.models import F, TaskDBO
+from jindai import Plugin
+from jindai.task import Task
 
 
 class TasksQueue(Plugin):

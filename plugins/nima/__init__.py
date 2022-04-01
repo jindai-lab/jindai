@@ -1,9 +1,7 @@
-import os
-from plugin import Plugin
-from pipelines.imageproc import ImageOrAlbumStage
-import config
-from storage import expand_path
-from models import ImageItem
+from jindai import Plugin
+from plugins.gallery import ImageOrAlbumStage
+from jindai import  expand_path
+from jindai.models import ImageItem
 
 MODEL = expand_path('models_data/nima.pkl')
 

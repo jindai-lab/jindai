@@ -4,16 +4,15 @@
 # codes from https://github.com/bojone/bert4keras/blob/master/examples/basic_language_model_nezha_gen_gpt.py
 # refer to https://github.com/huawei-noah/Pretrained-Language-Model/tree/master/NEZHA-Gen-TensorFlow for further info
 
-import config
 import os
 os.environ['TF_KERAS'] = '1'
 import numpy as np
 
-from models import Paragraph
-from pipeline import DataSourceStage
-from plugin import Plugin
-from helpers import safe_import
-from storage import expand_path
+from jindai.models import Paragraph
+from jindai.pipeline import  DataSourceStage
+from jindai import Plugin
+from jindai.helpers import safe_import
+from jindai import  expand_path
 
 
 class AutoCompletionPlugin(Plugin):

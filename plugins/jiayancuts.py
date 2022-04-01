@@ -1,10 +1,9 @@
-from pipeline import PipelineStage
-from plugin import Plugin
-from models import Paragraph
-from helpers import safe_import
-from storage import expand_path
-import os
-import config
+from jindai import  PipelineStage
+from jindai import Plugin
+from jindai.models import Paragraph
+from jindai.helpers import safe_import
+from jindai import  expand_path
+
 
 _init = lambda *x: x
 
