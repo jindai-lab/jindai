@@ -1,10 +1,11 @@
+"""配置文件"""
 import os
 from pathlib import Path
-import sys
 import yaml
 
 
 class ConfigObject:
+    """访问配置文件"""
 
     def __init__(self, config_file=None):
         self._orig = {
@@ -27,15 +28,17 @@ class ConfigObject:
                 if os.path.exists(config_file) and os.path.isfile(config_file):
                     break
 
-        with open(config_file, 'r') as fin:
+        with open(config_file, 'r', encoding='utf-8') as fin:
             self._orig.update(**yaml.safe_load(fin))
         if self._orig['rootpath'] == '':
-            self._orig['rootpath'] = str(Path(os.path.abspath(__file__)).parent.parent.absolute())
+            self._orig['rootpath'] = str(
+                Path(os.path.abspath(__file__)).parent.parent.absolute())
         if not self._orig['storage'].startswith('/'):
-            self._orig['storage'] = os.path.join(self._orig['rootpath'], self._orig['storage'])
-    
+            self._orig['storage'] = os.path.join(
+                self._orig['rootpath'], self._orig['storage'])
+
     def __getattr__(self, attr):
         return self._orig.get(attr)
 
 
-sys.modules[__name__] = ConfigObject()
+instance = ConfigObject()

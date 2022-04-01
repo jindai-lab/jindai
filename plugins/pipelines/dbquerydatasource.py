@@ -10,8 +10,7 @@ from urllib.parse import urljoin
 import zipfile
 import re
 from jindai import  safe_open
-from jindai.models import ImageItem, Paragraph, parser
-from PyMongoWrapper import F, Fn, Var
+from jindai.models import ImageItem, Paragraph, parser, F
 from jindai.pipeline import  DataSourceStage
 from PIL import Image
 from bson import SON
@@ -20,7 +19,7 @@ from bson import SON
 class DBQueryDataSource(DataSourceStage):
     """从数据库查询
     """
-    class _Implementation(DataSourceStage._Implementation):
+    class Implementation(DataSourceStage.Implementation):
         """从数据库查询
         """
 
@@ -160,7 +159,7 @@ class DBQueryDataSource(DataSourceStage):
 
 class ImageItemDataSource(DataSourceStage):
     """图像项目数据源"""
-    class _Implementation(DataSourceStage._Implementation):
+    class Implementation(DataSourceStage.Implementation):
         """图像项目数据源"""
 
         def __init__(self, cond='', limit=20, offset=0, raw=False, sort_keys='-_id'):
@@ -192,7 +191,7 @@ class ImageItemDataSource(DataSourceStage):
 class ImageImportDataSource(DataSourceStage):
     """从本地文件或网址导入图像到图集
     """
-    class _Implementation(DataSourceStage._Implementation):
+    class Implementation(DataSourceStage.Implementation):
 
         def __init__(self, locs, dataset='默认图集', tags='', proxy='', excluding_patterns=''):
             """

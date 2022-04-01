@@ -82,7 +82,7 @@ class TwitterDataSource(DataSourceStage):
     """导入社交网络信息
     """
     
-    class _Implementation(DataSourceStage._Implementation):
+    class Implementation(DataSourceStage.Implementation):
     
         def __init__(self, allow_video=False, allow_retweet=True, consumer_key='', consumer_secret='', access_token_key='', access_token_secret='',
                     import_username='',
@@ -272,7 +272,7 @@ class TwitterDataSource(DataSourceStage):
             elif arg.startswith('http://') or arg.startswith('https://'):
                 yield from self.import_twiimg(args)
             elif os.path.exists(arg) or glob.glob(arg):
-                yield from create_albums(list(ImageImportDataSource._Implementation('\n'.join(args)).fetch()))
+                yield from create_albums(list(ImageImportDataSource.Implementation('\n'.join(args)).fetch()))
             else:
                 yield from self.import_twitl()
         

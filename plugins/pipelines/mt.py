@@ -2,8 +2,7 @@
 """
 from jindai.helpers import safe_import
 from jindai.models import Paragraph
-from jindai import  PipelineStage
-from opencc import OpenCC
+from jindai import PipelineStage
 
 
 class MachineTranslation(PipelineStage):
@@ -17,27 +16,25 @@ class MachineTranslation(PipelineStage):
         """
         super().__init__()
 
-        safe_import('easynmt')
-        
-        from easynmt import EasyNMT
-        self.model = EasyNMT(model)
+        self.model = safe_import('easynmt').EasyNMT(model)
 
-        self.cc = None
+        self.opencc = None
         if to_lang == 'chs':
             to_lang = 'zh'
         elif to_lang == 'cht':
             to_lang = 'zh'
-            self.cc = OpenCC('s2t')
+            self.opencc =  safe_import('opencc', 'opencc-python-reimplemented').OpenCC('s2t')
 
-        self.to_lang = to_lang        
+        self.to_lang = to_lang
 
-    def resolve(self, p: Paragraph) -> Paragraph:
-        t = self.model.translate(p.content, source_lang=p.lang if p.lang not in ('chs', 'cht') else 'zh', target_lang=self.to_lang)
-        if self.cc:
-            t = self.cc.convert(t)
-        p.content = t
-        if p.id:
-            p._id = None
-            del p._orig['_id']
-        return p
-    
+    def resolve(self, paragraph: Paragraph) -> Paragraph:
+        """处理段落"""
+        t = self.model.translate(paragraph.content, source_lang=paragraph.lang if paragraph.lang not in (
+            'chs', 'cht') else 'zh', target_lang=self.to_lang)
+        if self.opencc:
+            t = self.opencc.convert(t)
+        paragraph.content = t
+        if paragraph.id:
+            paragraph._id = None
+            del paragraph._orig['_id']
+        return paragraph

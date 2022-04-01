@@ -9,11 +9,11 @@ from itertools import chain
 from itertools import count as iter_count
 
 from bson import ObjectId
-from PyMongoWrapper import F, QueryExprParser
-from PyMongoWrapper.dbo import DbObject, DbObjectCollection
+from PyMongoWrapper import QueryExprParser
+from PyMongoWrapper.dbo import DbObject
 from jindai import PipelineStage
 from jindai.helpers import execute_query_expr, language_iso639, safe_import
-from jindai.models import Dataset, Paragraph, db, parser
+from jindai.models import Dataset, Paragraph, db, parser, F, DbObjectCollection
 
 
 class Passthrough(PipelineStage):

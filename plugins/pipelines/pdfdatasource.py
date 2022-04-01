@@ -3,16 +3,15 @@
 
 import fitz
 from jindai import expand_patterns, safe_open, truncate_path
-from jindai.models import Paragraph
+from jindai.models import Paragraph, F, Fn, Var
 from jindai.pipeline import DataSourceStage
-from PyMongoWrapper import F, Fn, Var
 
 
 class PDFDataSource(DataSourceStage):
     """从PDF中导入语段
     """
 
-    class _Implementation(DataSourceStage._Implementation):
+    class Implementation(DataSourceStage.Implementation):
         
         def __init__(self, dataset_name, lang, content, mongocollection=''):
             """
@@ -53,4 +52,4 @@ class PDFDataSource(DataSourceStage):
                         yield para_coll(lang=lang, content=lines.encode('utf-8', errors='ignore').decode('utf-8'), source={'file': truncate_path(pdf),
                             'page': p}, pagenum=label or (p+1), dataset=self.name)
                     except Exception as e:
-                        self.logger(pdffile, p+1, e)
+                        self.logger(pdf, p+1, e)

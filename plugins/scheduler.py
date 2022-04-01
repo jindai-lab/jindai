@@ -1,23 +1,26 @@
+"""定时任务"""
+
 import datetime
 import os
 import re
-from sched import scheduler
+import time
 from threading import Thread
+
 from bson import ObjectId
+from jindai import Plugin
 from jindai.helpers import rest, safe_import
 from jindai.models import F, TaskDBO, db
-from jindai import Plugin
-
 
 schedule = safe_import('schedule')
 
 
 class SchedulerJob(db.DbObject):
-
+    """定时任务的数据库记录"""
     cron = str
 
 
 class JobTask:
+    """定时任务执行"""
 
     def __init__(self, app, task_id: str):
         self.task_dbo = TaskDBO.first(F.id == task_id)
@@ -25,16 +28,17 @@ class JobTask:
         self.app = app
 
     def __call__(self):
-        t = TaskDBO.first(F.id == self.task_dbo.id)
-        assert t
-        t.last_run = datetime.datetime.utcnow()
-        self.app.task_queue.enqueue(t, run_by='scheduler')
-        
+        dbo = TaskDBO.first(F.id == self.task_dbo.id)
+        assert dbo
+        dbo.last_run = datetime.datetime.utcnow()
+        self.app.task_queue.enqueue(dbo, run_by='scheduler')
+
     def __repr__(self) -> str:
         return f'{self.key}: {self.task_dbo.name}'
 
     @property
-    def dict(self):
+    def as_dict(self):
+        """返回表示本对象的词典"""
         return {
             'key': self.key,
             'name': self.task_dbo.name
@@ -42,39 +46,44 @@ class JobTask:
 
 
 class Scheduler(Plugin):
+    """定时任务调插件"""
 
     def cron(self, text):
         """
         Args:
-            text (str): 描述任务计划的短语。格式为：every <weekday>|<number>? <unit> [at <time>] do <task id>，例：every 5 days at 3:00 do 0123456789ab0123456789ab
+            text (str): 描述任务计划的短语。格式为：
+                every <weekday>|<number>? <unit> [at <time>] do <task id>，
+                例：every 5 days at 3:00 do 0123456789ab0123456789ab
         """
         text = text.lower()
-        a = None
+        executor = schedule.every
         context = ''
         jobs = []
-        
+
         for token in text.split():
             token = token.strip()
             if not token:
                 continue
             if token == 'every':
-                a = schedule.every
+                executor = schedule.every
                 context = 'start'
             elif re.match(r'\d+', token) and context == 'start':
-                a = a(int(token))
+                executor = executor(int(token))
                 context = 'every'
-            elif token.lower() in ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday', 'minute', 'minutes', 'second', 'seconds', 'hour', 'hours', 'week', 'weeks', 'day', 'days']:
+            elif token.lower() in ['monday', 'tuesday', 'wednesday', 'thursday', 'friday',
+                                   'saturday', 'sunday', 'minute', 'minutes', 'second',
+                                   'seconds', 'hour', 'hours', 'week', 'weeks', 'day', 'days']:
                 if context == 'start':
-                    a = a()
-                a = getattr(a, token.lower())
+                    executor = executor()
+                executor = getattr(executor, token.lower())
                 context = 'unit'
             elif re.match(r'\d{2}:\d{2}(:\d{2})?', token) and context == 'at':
-                a = a.at(token)
+                executor = executor.at(token)
                 context = 'unit'
             elif token in ['at', 'do']:
                 context = token
             elif re.match(r'[0-9a-fA-F]{24}', token) and context == 'do':
-                jobs.append(a.do(JobTask(self.app, token)))
+                jobs.append(executor.do(JobTask(self.app, token)))
                 context = 'end'
             else:
                 print(
@@ -83,34 +92,38 @@ class Scheduler(Plugin):
         return jobs
 
     def list_jobs(self, jobs):
+        """列出任务"""
         return [
-            dict(getattr(j.job_func.func, 'dict', {}),
+            dict(getattr(j.job_func.func, 'as_dict', {}),
                  repr=repr(j).split(' do')[0].lower())
             for j in jobs
         ]
 
     def reload_scheduler(self):
+        """重新加载定时任务"""
         SchedulerJob.query({}).delete()
         if schedule.jobs:
             for j in schedule.jobs:
                 SchedulerJob(
-                    cron=f"{repr(j).split(' do')[0].lower()} do {j.job_func.func.task_dbo.id}").save()
-            
+                    cron=f"{repr(j).split(' do')[0].lower()} do {j.job_func.func.task_dbo.id}"
+                ).save()
+
             self.run_background_thread()
 
     def run_background_thread(self):
+        """在后台运行"""
 
-        if self._thread is not None: return
+        if self._thread is not None:
+            return
 
         def background():
-            import time
             while self.running and schedule.jobs:
                 schedule.run_pending()
                 if os.path.exists('restarting'):
                     self.running = False
                 time.sleep(1)
             self._thread = None
-        
+
         self._thread = Thread(target=background)
         self._thread.start()
 
@@ -140,12 +153,12 @@ class Scheduler(Plugin):
                 for j in schedule.jobs
                 if j.job_func.func.key == key
             ]
-            for t in to_del:
-                schedule.jobs.remove(t)
+            for job in to_del:
+                schedule.jobs.remove(job)
             self.reload_scheduler()
             return len(to_del) > 0
 
         for j in SchedulerJob.query({}):
             self.cron(j.cron)
-        
+
         self.run_background_thread()
