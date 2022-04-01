@@ -568,9 +568,12 @@ def search(q='', req='', sort='', limit=100, offset=0,
             for key, val in obj.items():
                 if key == '$options':
                     continue
-                if key == '_id':
-                    key = 'id'
-                seq.append(key + '=' + _stringify(val))
+                elif key.startswith('$'):
+                    seq.append(key[1:] + '(' + _stringify(val) + ')')
+                elif key == '_id':
+                    seq.append('_id=' + _stringify(val))
+                else:
+                    seq.append(key + '=' + _stringify(val))
             return '(' + ','.join(seq) + ')'
         elif isinstance(obj, str):
             return json.dumps(obj, ensure_ascii=False)
@@ -897,15 +900,15 @@ def index(path='index.html'):
     if path.startswith('api/'):
         return Response('', 404)
     path = path or 'index.html'
-    for path in [
+    for file in [
         path,
         path + '.html',
         os.path.join('ui/dist', path)
     ]:
-        if path.startswith('ui/') and config.ui_proxy:
+        if file.startswith('ui/') and config.ui_proxy:
             return serve_proxy(config.ui_proxy, path=path)
-        if os.path.exists(path) and os.path.isfile(path):
-            return serve_file(path)
+        if os.path.exists(file) and os.path.isfile(file):
+            return serve_file(file)
 
     return serve_file('ui/dist/index.html')
 
