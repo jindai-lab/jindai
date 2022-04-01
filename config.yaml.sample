@@ -9,4 +9,4 @@ plugins:
 - '*'
 rootpath: /app/
 secret_key: '!'
-storage: :root:/sources
+storage: sources
