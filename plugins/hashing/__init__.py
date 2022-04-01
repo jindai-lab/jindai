@@ -168,7 +168,7 @@ class Hashing(Plugin):
         def _compare_html():
             return serve_file(os.path.join(os.path.dirname(__file__), 'compare.html'))
 
-        @app.route('/api/plugins/jquery.min.js')
+        @app.route('/api/plugins/hashing-jquery.min.js')
         def _jquery_js():
             return serve_file(os.path.join(os.path.dirname(__file__), 'jquery.min.js'))
 

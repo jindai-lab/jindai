@@ -1,13 +1,15 @@
 import datetime
 import os
 import re
+from sched import scheduler
 from threading import Thread
-
-import schedule
 from bson import ObjectId
-from jindai.helpers import rest
+from jindai.helpers import rest, safe_import
 from jindai.models import F, TaskDBO, db
 from jindai import Plugin
+
+
+schedule = safe_import('schedule')
 
 
 class SchedulerJob(db.DbObject):
@@ -50,7 +52,7 @@ class Scheduler(Plugin):
         a = None
         context = ''
         jobs = []
-
+        
         for token in text.split():
             token = token.strip()
             if not token:
