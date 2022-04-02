@@ -1,5 +1,6 @@
 """网页界面的 API"""
 import datetime
+import hashlib
 import inspect
 import os
 import re
@@ -68,6 +69,11 @@ def _expand_results(results):
                 if isinstance(r, Paragraph) else r for r in results]
 
     return results
+
+
+def _hashing(msg):
+    return hashlib.sha256(
+        msg.encode('utf-8')).hexdigest()[-9:]
 
 
 @app.route('/api/authenticate', methods=['POST'])
@@ -219,7 +225,7 @@ def write_storage(path=''):
     return sfs
 
 
-@app.route('/api/edit/<coll>/<pid>', methods=['POST'])
+@app.route('/api/collections/<coll>/<pid>', methods=['POST'])
 @rest()
 def modify_paragraph(coll, pid, **kws):
     """修改语段"""
@@ -245,7 +251,7 @@ def modify_paragraph(coll, pid, **kws):
     return True
 
 
-@app.route('/api/edit/<coll>/<pid>/pagenum', methods=['POST'])
+@app.route('/api/collections/<coll>/<pid>/pagenum', methods=['POST'])
 @rest()
 def modify_pagenum(coll, pid, sequential, new_pagenum, **_):
     """修改页码"""
@@ -275,15 +281,15 @@ def modify_pagenum(coll, pid, sequential, new_pagenum, **_):
     return False
 
 
-@app.route('/api/edit/<coll>/batch', methods=["GET", "POST"])
+@app.route('/api/collections/<coll>/batch', methods=["GET", "POST"])
 @rest()
 def batch(coll, ids, **kws):
     """Batch edit
     """
 
-    paragraphs = list(Paragraph.get_coll(coll).query(
+    paras = list(Paragraph.get_coll(coll).query(
         F.id.in_([ObjectId(_) if len(_) == 24 else _ for _ in ids])))
-    for para in paragraphs:
+    for para in paras:
         for field, val in kws.items():
             if field in ('$pull', '$push'):
                 for afield, aval in val.items():
@@ -301,12 +307,61 @@ def batch(coll, ids, **kws):
 
     return {
         str(p.id): p.as_dict()
-        for p in paragraphs
+        for p in paras
     }
 
 
-@app.route('/api/<coll>/split', methods=["GET", "POST"])
-@app.route('/api/<coll>/merge', methods=["GET", "POST"])
+@app.route('/api/collections/<coll>/group', methods=["GET", "POST"])
+@rest()
+def grouping(coll, ids, group='', ungroup=False):
+    """Grouping selected paragraphs
+
+    Returns:
+        Response: 'OK' if succeeded
+    """
+    paras = list(Paragraph.get_coll(coll).query(
+        F.id.in_([ObjectId(_) if len(_) == 24 else _ for _ in ids])))
+    if ungroup:
+        group_id = ''
+        for para in paras:
+            para.keywords = [
+                _ for _ in para.keywords if not _.startswith('*')]
+            para.save()
+    else:
+        if not paras:
+            return True
+        gids = []
+        for para in paras:
+            gids += [_ for _ in para.keywords if _.startswith('*')]
+        named = [_ for _ in gids if not _.startswith('*0')]
+        if group:
+            group_id = '*' + group
+        elif named:
+            group_id = min(named)
+        elif gids:
+            group_id = min(gids)
+        else:
+            group_id = '*0' + _hashing(min(map(lambda p: str(p.id), paras)))
+        for para in paras:
+            if group_id not in para.keywords:
+                para.keywords.append(group_id)
+                para.save()
+
+        gids = list(set(gids) - set(named))
+        if gids:
+            for para in Paragraph.query(F.keywords.in_(gids)):
+                for id0 in gids:
+                    if id0 in para.keywords:
+                        para.keywords.remove(id0)
+                if group_id not in para.keywords:
+                    para.keywords.append(group_id)
+                para.save()
+                
+    return group_id
+
+
+@app.route('/api/collections/<coll>/split', methods=["GET", "POST"])
+@app.route('/api/collections/<coll>/merge', methods=["GET", "POST"])
 @rest()
 def splitting(coll, ids):
     """Split or merge selected items/paragraphs into seperate/single paragraph(s)
@@ -314,31 +369,31 @@ def splitting(coll, ids):
     Returns:
         bool: True if succeeded
     """
-    paragraphs = list(Paragraph.get_coll(coll).query(
+    paras = list(Paragraph.get_coll(coll).query(
         F.id.in_([ObjectId(_) if len(_) == 24 else _ for _ in ids])))
 
     if request.path.endswith('/split'):
-        for para in paragraphs:
+        for para in paras:
+            para_dict = para.as_dict()
+            del para_dict['_id']
+            del para_dict['images']
             for i in para.images:
-                pnew = Paragraph(
-                    source={'url': para.source['url']},
-                    pdate=para.pdate, keywords=para.keywords, images=[i],
-                    dataset=para.dataset)
+                pnew = Paragraph(images=[i], **para_dict)
                 pnew.save()
             para.delete()
     else:
-        if not paragraphs:
+        if not paras:
             return False
 
-        first_para = paragraphs[0]
-        first_para.keywords = list(first_para.keywords)
-        first_para.images = list(first_para.images)
-        for para in paragraphs[1:]:
-            first_para.keywords += list(para.keywords)
-            first_para.images += list(para.images)
-        first_para.save()
+        para0 = paras[0]
+        para0.keywords = list(para0.keywords)
+        para0.images = list(para0.images)
+        for para in paras[1:]:
+            para0.keywords += list(para.keywords)
+            para0.images += list(para.images)
+        para0.save()
 
-        for para in paragraphs[1:]:
+        for para in paras[1:]:
             para.delete()
 
     return True
@@ -489,17 +544,15 @@ def update_task(task_id, **task):
 
 
 @app.route('/api/tasks/<task_id>', methods=['GET'])
-@app.route('/api/tasks/<offset>/<limit>', methods=['GET'])
 @app.route('/api/tasks/', methods=['GET'])
 @rest()
-def list_task(task_id='', offset=0, limit=50):
+def list_task(task_id=''):
     """列出任务"""
     if task_id:
         _id = ObjectId(task_id)
         return TaskDBO.first((F.id == _id) & _task_authorized())
     else:
-        return list(TaskDBO.query(_task_authorized()).sort(-F.last_run, -F.id)
-                    .skip(int(offset)).limit(int(limit)))
+        return list(TaskDBO.query(_task_authorized()).sort(-F.last_run, -F.id))
 
 
 @app.route('/api/help/pipelines')
