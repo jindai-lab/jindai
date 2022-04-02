@@ -15,6 +15,7 @@ from flask import Flask, Response, json, redirect, request, send_file
 from PIL import Image, ImageOps
 from PyMongoWrapper import F, Fn, MongoOperand, ObjectId
 from PyMongoWrapper.dbo import create_dbo_json_decoder, create_dbo_json_encoder
+import pyotp
 
 from jindai import Pipeline, Plugin, PluginManager, Task
 from jindai.config import instance as config
@@ -71,10 +72,11 @@ def _expand_results(results):
 
 @app.route('/api/authenticate', methods=['POST'])
 @rest(login=False)
-def authenticate(username, password, **_):
+def authenticate(username, password, otp='', **_):
     """认证"""
 
-    if User.authenticate(username, password):
+    username = User.authenticate(username, password, otp)
+    if username:
         Token.query((F.user == username) & (F.expire < time.time())).delete()
         token = User.encrypt_password(str(time.time()), str(time.time_ns()))
         Token(user=username, token=token, expire=time.time() + 86400).save()
@@ -90,6 +92,7 @@ def whoami():
         user = (User.first(F.username == logined()) or User(
             username=logined(), password='', roles=['admin'])).as_dict()
         del user['password']
+        user['otp_secret'] = True if user.get('otp_secret') else False
         return user
     return None
 
@@ -107,7 +110,7 @@ def log_out():
 @rest(role='admin')
 def admin_users(username='', password=None, roles=None, datasets=None, **_):
     """用户管理修改"""
-
+    result = None
     if username:
         user = User.first(F.username == username)
         if not user:
@@ -119,7 +122,7 @@ def admin_users(username='', password=None, roles=None, datasets=None, **_):
         if datasets is not None:
             user.datasets = datasets
         user.save()
-        return True
+        return result
     else:
         return list(User.query({}))
 
@@ -141,15 +144,25 @@ def admin_users_add(username, password, **_):
 
 @app.route('/api/account/', methods=['POST'])
 @rest()
-def user_change_password(old_password='', password='', **_):
-    """修改用户密码"""
-
+def user_change_password(old_password='', password='', otp=None, **_):
+    """修改用户密码或 OTP 设置"""
+    
     user = User.first(F.username == logined())
-    assert User.authenticate(logined(), old_password), '原密码错误'
-    user.set_password(password)
-    user.save()
-    user = user.as_dict()
-    del user['password']
+    if otp is None:
+        assert User.authenticate(logined(), old_password), '原密码错误'
+        user.set_password(password)
+        user.save()
+        user = user.as_dict()
+        del user['password']
+    else:
+        if otp:
+            user.otp_secret = pyotp.random_base32()
+            user.save()
+        else:
+            user.otp_secret = ''
+            user.save()
+        return user.otp_secret
+
     return user
 
 
