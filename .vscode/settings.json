@@ -6,4 +6,7 @@
         "./"
     ],
     "python.linting.flake8Enabled": false,
+    "python.analysis.extraPaths": [
+        "./"
+    ],
 }
