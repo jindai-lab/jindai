@@ -401,7 +401,7 @@ def splitting(coll, ids):
 
 @app.route('/api/imageitem/rating', methods=["GET", "POST"])
 @rest()
-def set_rating(ids, inc=1, val=0):
+def set_rating(ids, inc=1, val=0, least=0):
     """Increase or decrease the rating of selected items
     """
     items = list(ImageItem.query(
@@ -409,12 +409,14 @@ def set_rating(ids, inc=1, val=0):
     for i in items:
         if i is None:
             continue
-        old_value = i.rating
-        i.rating = val if val else round(2 * (i.rating)) / 2 + inc
-        if -1 <= i.rating <= 5:
-            i.save()
-        else:
-            i.rating = old_value
+        if val:
+            i.rating = val
+        elif inc:
+            i.rating = round(2 * (i.rating)) / 2 + inc
+        elif least:
+            i.rating = max(least, i.rating)
+        i.rating = min(max(-1, i.rating), 5)
+        i.save()
     return {
         str(i.id): i.rating
         for i in items
@@ -637,7 +639,7 @@ def search(q='', req='', sort='', limit=100, offset=0,
                 elif key.startswith('$'):
                     seq.append(key[1:] + '(' + _stringify(val) + ')')
                 elif key == '_id':
-                    seq.append('_id=' + _stringify(val))
+                    seq.append('id=' + _stringify(val))
                 else:
                     seq.append(key + '=' + _stringify(val))
             return '(' + ','.join(seq) + ')'
