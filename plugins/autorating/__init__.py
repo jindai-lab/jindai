@@ -33,21 +33,6 @@ class AutoRating(ImageOrAlbumStage):
         return i
 
 
-class OpenNsfw(ImageOrAlbumStage):
-    """使用 OpenNSFW 模型进行打分"""
-
-    def __init__(self):
-        super().__init__()
-        self.runner = safe_import(
-            'opennsfw_standalone', 'opennsfw-standalone').OpenNSFWInferenceRunner.load()
-        ImageItem.set_field('nsfw', float)
-
-    def resolve_image(self, i: ImageItem, _):
-        i.nsfw = float(self.runner.infer(i.image_raw.read()))
-        i.save()
-        return i
-
-
 class AutoRatingPlugin(Plugin):
     """自动评分插件"""
 
