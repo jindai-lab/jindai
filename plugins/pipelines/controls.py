@@ -9,9 +9,9 @@ from jindai.models import TaskDBO, parser
 
 class FlowControlStage(PipelineStage):
     def __init__(self) -> None:
-        super().__init__()
         self._next = None
         self._pipelines = [getattr(self, a) for a in dir(self) if isinstance(getattr(self, a), Pipeline)]
+        super().__init__()
 
     @property
     def logger(self):
@@ -47,7 +47,7 @@ class RepeatWhile(FlowControlStage):
         """
         self.times = times
         self.times_key = f'REPEATWHILE_{id(self)}_TIMES_COUNTER'
-        self.cond = parser.eval(cond) if cond else f'{self.times_key} < {times}'
+        self.cond = parser.eval(cond if cond else f'{self.times_key} < {times}')
         self.pipeline = Pipeline(pipeline, self.logger)
         super().__init__()
 
