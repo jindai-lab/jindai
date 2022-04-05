@@ -279,14 +279,6 @@ class ImageImportDataSource(DataSourceStage):
 
                 i = ImageItem(source={'url': _f})
                 fn = _expand_zip(_f)
-                if not _f.lower().endswith(('.mp4', '.avi')):
-                    try:
-                        im = Image.open(fn)
-                        i.width, i.height = im.size
-                    except Exception as ex:
-                        self.logger('Error while handling', fn, ':', ex)
-                        continue
-
                 i.save()
                 with safe_open(f'hdf5://{i.id}', 'wb') as fo:
                     fo.write(open(fn).read())

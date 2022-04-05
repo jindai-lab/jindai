@@ -110,7 +110,6 @@ venv.bak/
 .mypy_cache/
 
 sources
-plugins/blockly/blockly
 plugins/jiayan
 plugins/nima
 plugins/facedet

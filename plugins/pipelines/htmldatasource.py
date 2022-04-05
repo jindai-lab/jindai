@@ -28,7 +28,7 @@ class HTMLDataSource(DataSourceStage):
             super().__init__()
             self.name = dataset_name
             self.lang = lang
-            self.files = content.split('\n')
+            self.files = expand_patterns(content)
             self.fields = parser.eval(fields)
             self.paragraph_selector = paragraph_selector
 
@@ -38,7 +38,7 @@ class HTMLDataSource(DataSourceStage):
 
                 for para in b.select(self.paragraph_selector) if self.paragraph_selector else [b]:
                     p = Paragraph(
-                        lang=self.lang, content='', source={'url' if '://' in fn else 'file': truncate_path(fn)}, pagenum=1,
+                        lang=self.lang, content='', source={'url' if '://' in path else 'file': truncate_path(path)}, pagenum=1,
                         dataset=self.name, outline=outline,
                         keywords=[]
                     )
@@ -48,27 +48,27 @@ class HTMLDataSource(DataSourceStage):
                             field_path, field_attr = field_path.rsplit('//', 1)
                         else:
                             field_attr = 'text'
-                        els = para.select(field_path) if field_path else [para]
+                        elements = para.select(field_path) if field_path else [para]
                         value = []
-                        for el in els:
+                        for element in elements:
                             if field_attr == 'text':
-                                value.append(el.text)
+                                value.append(element.text)
                             elif field_attr == 'html':
-                                value.append(str(el))
-                            elif field_attr in el.attrs:
-                                value.append(el.attrs[field_attr])
+                                value.append(str(element))
+                            elif field_attr in element.attrs:
+                                value.append(element.attrs[field_attr])
                         setattr(p, field_name, value)
 
                     yield p
 
                 del b
 
-            for fn in expand_patterns(self.files):
-                self.logger('reading from', fn)
+            for path in self.files:
+                self.logger('reading from', path)
                 ol = ''
-                if '#' in fn:
-                    fpath, ol = fn.split('#', 1)
-                yield from import_html_src(fpath, safe_open(fn), ol)
+                if '#' in path:
+                    fpath, ol = path.split('#', 1)
+                yield from import_html_src(fpath, safe_open(path, 'rb'), ol)
 
 
 class TextDataSource(DataSourceStage):
