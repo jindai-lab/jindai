@@ -135,9 +135,9 @@ class ImageHash(ImageOrAlbumStage):
                 return None
 
             if not i_dhash:
-                i_dhash = i_dhash(image_raw) or ''
+                i_dhash = dhash(image_raw) or ''
             if not i_whash:
-                i_whash = i_whash(image_raw) or ''
+                i_whash = whash(image_raw) or ''
 
             i.dhash, i.whash = i_dhash, i_whash
         except (IOError, AssertionError):
