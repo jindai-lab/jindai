@@ -27,10 +27,11 @@ class FilterStopWords(PipelineStage):
             stopwords (str): 额外的停用词表，用空格分割
         """
         self.stopwords = set(stopwords.split())
+        super().__init__()
         
-    def resolve(self, p):
-        p.tokens = [_ for _ in p.tokens if _ not in self.stopwords and _ not in FilterStopWords._lang_stopwords.get(p.lang, [])]
-        return p
+    def resolve(self, paragraph):
+        paragraph.tokens = [_ for _ in paragraph.tokens if _ not in self.stopwords and _ not in FilterStopWords._lang_stopwords.get(paragraph.lang, [])]
+        return paragraph
 
 
 class LDA(PipelineStage):
@@ -44,28 +45,30 @@ class LDA(PipelineStage):
         """
         self.num_topics = num_topics
         self.dict = {}
+        self.array = None
+        self.result = {}
         self.mat = defaultdict(list)
         super().__init__()
 
-    def resolve(self, p : Paragraph) -> Paragraph:
-        self.mat[str(p.id)] = p.tokens
+    def resolve(self, paragraph : Paragraph) -> Paragraph:
+        self.mat[str(paragraph.id)] = paragraph.tokens
 
     def summarize(self, *args):
-        from gensim.models.ldamodel import LdaModel
+        model = safe_import('gensim.models_ldamodel').LdaModel
 
-        for s in self.mat.values():
-            for w in s:
-                if w not in self.dict:
-                    self.dict[w] = len(self.dict)
+        for sent_vec in self.mat.values():
+            for word_vec in sent_vec:
+                if word_vec not in self.dict:
+                    self.dict[word_vec] = len(self.dict)
 
         self.array = np.zeros((len(self.mat), len(self.dict)), dtype=int)
         
-        for _i, s in enumerate(self.mat.values()):
-            for w in s:
-                self.array[_i, self.dict[w]] += 1
+        for _i, sent_vec in enumerate(self.mat.values()):
+            for word_vec in sent_vec:
+                self.array[_i, self.dict[word_vec]] += 1
                
         id2word = {v: k for k, v in self.dict.items()}
-        lda = LdaModel(corpus=[list(zip(range(len(self.dict)), a)) for a in self.array],
+        lda = model(corpus=[list(zip(range(len(self.dict)), a)) for a in self.array],
                 id2word=id2word, num_topics=self.num_topics, passes=1)
         self.result = {}
         for _id, vec in zip(self.mat, self.array):
@@ -85,13 +88,13 @@ class Word2Vec(PipelineStage):
         Args:
             model_name (str): 模型名称，默认为多语言小模型
         '''
-        safe_import('text2vec')
-        import text2vec
+        text2vec = safe_import('text2vec')
         self.bert = text2vec.SBert(model_name)
+        super().__init__()
 
-    def resolve(self, p : Paragraph) -> Paragraph:
-        p.vec = self.bert.encode(p.content)
-        return p
+    def resolve(self, paragraph : Paragraph) -> Paragraph:
+        paragraph.vec = self.bert.encode(paragraph.content)
+        return paragraph
     
     
 class WordsBagVec(PipelineStage):
@@ -104,17 +107,18 @@ class WordsBagVec(PipelineStage):
         """
         self.words = {}
         self.dims = dims
+        super().__init__()
     
-    def resolve(self, p: Paragraph) -> Paragraph:
-        p.vec = np.zeros(self.dims, float)
-        for t in p.tokens:
+    def resolve(self, paragraph: Paragraph) -> Paragraph:
+        paragraph.vec = np.zeros(self.dims, float)
+        for t in paragraph.tokens:
             if t not in self.words:
                 if len(self.words) < self.dims:
                     self.words[t] = len(self.words)
-                    p.vec[self.words[t]] = 1
+                    paragraph.vec[self.words[t]] = 1
             else:
-                p.vec[self.words[t]] += 1
-        return p
+                paragraph.vec[self.words[t]] += 1
+        return paragraph
     
 
 class CosSimFSClassifier(AccumulateParagraphs):
@@ -133,16 +137,16 @@ class CosSimFSClassifier(AccumulateParagraphs):
         self.vecs = {}
         self.vecs_cnt = defaultdict(int)
 
-    def resolve(self, p : Paragraph) -> Paragraph:
-        super().resolve(p)
-        label = getattr(p, self.label_field, '')
+    def resolve(self, paragraph : Paragraph) -> Paragraph:
+        super().resolve(paragraph)
+        label = getattr(paragraph, self.label_field, '')
         if label:
             if label in self.vecs:
-                self.vecs[label] += p.vec
+                self.vecs[label] += paragraph.vec
             else:
-                self.vecs[label] = p.vec
+                self.vecs[label] = paragraph.vec
             self.vecs_cnt[label] += 1
-        return p
+        return paragraph
 
     def _infer(self, vec):
         vec = np.array(vec)
@@ -160,16 +164,17 @@ class CosSimFSClassifier(AccumulateParagraphs):
             self.vecs_cnt[l] += 1
         return l
 
-    def summarize(self, *args): 
-        for l in self.vecs:
-            self.vecs[l] = self.vecs[l] / np.linalg.norm(self.vecs[l])
-        for p in self.paragraphs:
-            if not hasattr(p, self.label_field):
-                setattr(p, self.label_field, self._infer(p.vec))
+    def summarize(self, *args):
+        for dim in self.vecs:
+            self.vecs[dim] = self.vecs[dim] / np.linalg.norm(self.vecs[dim])
+        for para in self.paragraphs:
+            if not hasattr(para, self.label_field):
+                setattr(para, self.label_field, self._infer(para.vec))
         return self.paragraphs
 
 
 class CosSimClustering(AccumulateParagraphs):
+    """余弦相似度聚类"""
 
     def __init__(self, min_community_size=10, threshold=0.75, label_field='label'):
         '''
@@ -186,16 +191,16 @@ class CosSimClustering(AccumulateParagraphs):
         safe_import('sentence_transformers')
 
 
-    def resolve(self, p):
-        super().resolve(p)
-        self.vecs.append(p.vec)
-        return p
+    def resolve(self, paragraph):
+        super().resolve(paragraph)
+        self.vecs.append(paragraph.vec)
+        return paragraph
 
     def summarize(self, *args):
-        from sentence_transformers import util
+        util = safe_import('sentence_transformers.util')
         vecs = np.array(self.vecs)
         clusters = util.community_detection(vecs, min_community_size=self.min_community_size, threshold=self.threshold)
-        for i, c in enumerate(clusters):
-            for idx in c:
+        for i, cluster in enumerate(clusters):
+            for idx in cluster:
                 setattr(self.paragraphs[idx], self.label_field, i+1)
         return self.paragraphs

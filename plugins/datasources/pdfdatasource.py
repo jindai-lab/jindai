@@ -2,10 +2,10 @@
 """
 
 import fitz
-from PyMongoWrapper import F, Fn, Var
-from jindai import expand_patterns, safe_open, truncate_path
+from jindai import expand_patterns, truncate_path
 from jindai.models import Paragraph
 from jindai.pipeline import DataSourceStage
+from PyMongoWrapper import F, Fn, Var
 
 
 class PDFDataSource(DataSourceStage):

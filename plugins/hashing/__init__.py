@@ -279,7 +279,7 @@ class Hashing(Plugin):
     def get_filters(self):
         return {
             'sim': {
-                'format': 'sim/{imageitem._id}',
+                'output_format': 'sim/{imageitem._id}',
                 'shortcut': 's',
                 'icon': 'mdi-image'
             }

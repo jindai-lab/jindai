@@ -21,8 +21,7 @@ class DBQueryDataSource(DataSourceStage):
     """从数据库查询
     """
     class Implementation(DataSourceStage.Implementation):
-        """从数据库查询
-        """
+        """Implementing datasource"""
 
         def __init__(self, query, mongocollections='', limit=0, skip=0, sort='', raw=False, groups='none'):
             """
@@ -161,7 +160,7 @@ class DBQueryDataSource(DataSourceStage):
 class ImageItemDataSource(DataSourceStage):
     """图像项目数据源"""
     class Implementation(DataSourceStage.Implementation):
-        """图像项目数据源"""
+        """Implementing datasource"""
 
         def __init__(self, cond='', limit=20, offset=0, raw=False, sort_keys='-_id'):
             """
@@ -192,7 +191,9 @@ class ImageItemDataSource(DataSourceStage):
 class ImageImportDataSource(DataSourceStage):
     """从本地文件或网址导入图像到图集
     """
+    
     class Implementation(DataSourceStage.Implementation):
+        """Implementing datasource"""
 
         def __init__(self, locs, dataset='默认图集', tags='', proxy='', excluding_patterns=''):
             """
