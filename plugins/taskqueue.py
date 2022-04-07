@@ -35,6 +35,10 @@ class MessageAnnouncer:
             except Full:
                 del self.listeners[i]
 
+    def log(self, *args):
+        """Announce log"""
+        self.announce(' '.join([str(_) for _ in args]))
+
 
 announcer = MessageAnnouncer()
 
@@ -68,36 +72,6 @@ class TasksQueue(Plugin):
             key = self.enqueue(task_dbo, run_by=logined())
             return key
 
-        @app.route('/api/queue/logs/<path:key>', methods=['GET'])
-        @rest()
-        def logs_task(key):
-            task = self.find(key)
-            if not task:
-                return f'No such key: {key}', 404
-
-            def generate():
-                """Generate log text from task object of the TaskDBO
-
-                Yields:
-                    str: log text
-                """
-                while task.task is None:
-                    time.sleep(1)
-
-                while task.task.alive:
-                    yield from task.task.log_fetch()
-                    time.sleep(0.1)
-
-                yield from task.task.log_fetch()
-                yield 'returned: ' + str(type(task.task.returned)) + '\n'
-
-                yield 'finished.\n'
-
-            return Response(stream_with_context(generate()), status=200,
-                            mimetype="text/plain",
-                            content_type="text/event-stream"
-                            )
-            
         @app.route('/api/queue/events', methods=['GET'])
         @rest()
         def listen_events():
@@ -105,8 +79,11 @@ class TasksQueue(Plugin):
             def stream():
                 messages = announcer.listen()
                 while True:
-                    messages.get()
-                    yield f'data: {json.dumps(self.filter_status())}\n\n'
+                    msg = messages.get()
+                    if msg == 'updated':
+                        yield f'data: {json.dumps(self.filter_status())}\n\n'
+                    else:
+                        yield f'data: {json.dumps({"log": msg})}\n\n'
 
             resp = Response(stream_with_context(stream()), status=200,
                             mimetype="text/event-stream")
@@ -119,7 +96,7 @@ class TasksQueue(Plugin):
         def dequeue_task(task_id):
             if task_id in self.results:
                 del self.results[task_id]
-                announcer.announce("updated")
+                announcer.announce('updated')
                 return True
 
             return self.remove(task_id)
@@ -210,7 +187,8 @@ class TasksQueue(Plugin):
                 tkey, task_dbo = self.queue.popleft()
                 self.task_queue[tkey] = task_dbo
                 try:
-                    task_dbo.task = Task.from_dbo(task_dbo)
+                    task_dbo.task = Task.from_dbo(task_dbo, logger=lambda *args:
+                        announcer.log(tkey, '|', *args))
                     task_dbo.task.run()
                 except Exception as ex:
                     self.results[tkey] = {
@@ -233,7 +211,8 @@ class TasksQueue(Plugin):
                         self.results[k] = val.task.returned
                 for k in done:
                     self.task_queue.pop(k)
-                announcer.announce("updated")
+                if done:
+                    announcer.announce("updated")
 
             time.sleep(0.5)
 
@@ -287,9 +266,7 @@ class TasksQueue(Plugin):
 
             return False
 
-        if _remove_queue(key):
-            return True
-
+        flag = _remove_queue(key) or _remove_running(key)
         announcer.announce("updated")
 
-        return _remove_running(key)
+        return flag

@@ -4,6 +4,7 @@ import traceback
 from collections import deque
 from concurrent.futures import ThreadPoolExecutor, wait
 from queue import Queue
+from typing import Callable
 
 from .helpers import safe_import
 from .models import Paragraph
@@ -13,7 +14,7 @@ from .pipeline import Pipeline
 class Task:
     """任务对象"""
 
-    def __init__(self, params: dict, stages, concurrent=3, logger: str = 'deque',
+    def __init__(self, params: dict, stages, concurrent=3, logger: Callable = print,
                  resume_next: bool = False, verbose: bool = False) -> None:
         """
         Args:
@@ -30,8 +31,7 @@ class Task:
         self.resume_next = resume_next
         self.concurrent = concurrent
 
-        self.logger = self.log_enqueue if logger == 'deque' else print
-        self._logs = deque()
+        self.logger = logger
         self.verbose = verbose
 
         self.pipeline = Pipeline(stages, self.logger)
@@ -115,16 +115,6 @@ class Task:
     def stop(self):
         """停止任务"""
         self.alive = False
-
-    def log_enqueue(self, *args):
-        """记录日志"""
-        log_str = ' '.join(map(str, args))
-        self._logs.append(log_str)
-
-    def log_fetch(self):
-        """获取日志"""
-        while self._logs:
-            yield self._logs.popleft() + '\n'
 
     @staticmethod
     def from_dbo(db_object, **kwargs):
