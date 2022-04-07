@@ -95,7 +95,8 @@ class ImageItem(db.DbObject):
     def image(self):
         """图像信息"""
         if self._image is None:
-            self._image = Image.open(self.image_raw)
+            with self.image_raw as buf:
+                self._image = Image.open(buf)
         return self._image
 
     @image.setter
