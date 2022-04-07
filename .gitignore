@@ -1,8 +1,8 @@
-temp_*.py
-.vsccode/
+.vscode/
 .DS_*
 config*.yaml
 *.zip
+temp_*.py
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
@@ -113,4 +113,3 @@ sources
 plugins/jiayan
 plugins/nima
 plugins/facedet
-plugins/nima
