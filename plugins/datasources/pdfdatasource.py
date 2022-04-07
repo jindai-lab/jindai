@@ -2,10 +2,11 @@
 """
 
 import fitz
+from PyMongoWrapper import F, Fn, Var
+
 from jindai import expand_patterns, truncate_path
 from jindai.models import Paragraph
 from jindai.pipeline import DataSourceStage
-from PyMongoWrapper import F, Fn, Var
 
 
 class PDFDataSource(DataSourceStage):
@@ -13,7 +14,8 @@ class PDFDataSource(DataSourceStage):
     """
 
     class Implementation(DataSourceStage.Implementation):
-        
+        """datasource implementation"""
+
         def __init__(self, dataset_name, lang, content, mongocollection=''):
             """
             Args:
@@ -33,26 +35,35 @@ class PDFDataSource(DataSourceStage):
             para_coll = Paragraph.get_coll(self.mongocollection)
             existent = {
                 a['_id']: a['pages']
-                for a in para_coll.aggregator.match(F.dataset == self.name).group(_id=Var['source.file'], pages=Fn.max(Var['source.page']))
+                for a in para_coll.aggregator.match(
+                    F.dataset == self.name
+                ).group(
+                    _id=Var['source.file'], pages=Fn.max(Var['source.page'])
+                )
             }
-            
+
             for pdf in self.files:
                 path = truncate_path(pdf)
                 min_page = existent.get(path)
                 min_page = 0 if min_page is None else (min_page + 1)
-                
+
                 doc = fitz.open(pdf)
                 pages = doc.pageCount
-                self.logger('importing', pdf, 'as', path, 'from page', min_page)
+                self.logger('importing', pdf, 'as',
+                            path, 'from page', min_page)
 
                 lang = self.lang
-                
-                for p in range(min_page, pages):
-                    label = doc[p].get_label()
-                    lines = doc[p].getText()
+
+                for page in range(min_page, pages):
+                    label = doc[page].get_label()
+                    lines = doc[page].getText()
                     try:
                         yield para_coll(
-                            lang=lang, content=lines.encode('utf-8', errors='ignore').decode('utf-8'),
-                            source={'file': path, 'page': p}, pagenum=label or (p+1), dataset=self.name)
-                    except Exception as e:
-                        self.logger(pdf, p+1, e)
+                            lang=lang, content=lines.encode(
+                                'utf-8', errors='ignore').decode('utf-8'),
+                            source={'file': path, 'page': page},
+                            pagenum=label or (page+1),
+                            dataset=self.name
+                        )
+                    except Exception as ex:
+                        self.logger(pdf, page+1, ex)

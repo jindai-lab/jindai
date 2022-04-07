@@ -2,7 +2,7 @@
 """
 
 from PyMongoWrapper import F
-from jindai import  PipelineStage, Pipeline, Task
+from jindai import PipelineStage, Pipeline, Task
 from jindai.helpers import execute_query_expr
 from jindai.models import TaskDBO, parser
 
@@ -12,7 +12,8 @@ class FlowControlStage(PipelineStage):
 
     def __init__(self) -> None:
         self._next = None
-        self._pipelines = [getattr(self, a) for a in dir(self) if isinstance(getattr(self, a), Pipeline)]
+        self._pipelines = [getattr(self, a) for a in dir(
+            self) if isinstance(getattr(self, a), Pipeline)]
         super().__init__()
 
     @property
@@ -25,19 +26,19 @@ class FlowControlStage(PipelineStage):
         self._logger = val
         for pipeline in self._pipelines:
             pipeline.logger = val
-            
+
     @property
     def next(self):
         """Next stage in pipeline"""
         return self._next
-    
+
     @next.setter
     def next(self, val):
         self._next = val
         for pipeline in self._pipelines:
             if pipeline.stages:
                 pipeline.stages[-1].next = val
-    
+
 
 class RepeatWhile(FlowControlStage):
     """重复"""
@@ -51,17 +52,18 @@ class RepeatWhile(FlowControlStage):
         """
         self.times = times
         self.times_key = f'REPEATWHILE_{id(self)}_TIMES_COUNTER'
-        self.cond = parser.eval(cond if cond else f'{self.times_key} < {times}')
+        self.cond = parser.eval(
+            cond if cond else f'{self.times_key} < {times}')
         self.pipeline = Pipeline(pipeline, self.logger)
         super().__init__()
 
     def flow(self, paragraph):
         if paragraph[self.times_key] is None:
             paragraph[self.times_key] = 0
-        
+
         flag = execute_query_expr(self.cond, paragraph)
         paragraph[self.times_key] += 1
-        
+
         if flag and self.pipeline.stages:
             self.pipeline.stages[-1].next = self
             yield paragraph, self.pipeline.stages[0]
@@ -84,7 +86,7 @@ class Condition(FlowControlStage):
         self.iftrue = Pipeline(iftrue, self.logger)
         self.iffalse = Pipeline(iffalse, self.logger)
         super().__init__()
-    
+
     def flow(self, paragraph):
         pipeline = self.iftrue
         if not execute_query_expr(self.cond, paragraph):
@@ -105,39 +107,41 @@ class CallTask(FlowControlStage):
             pipeline_only (bool): 仅调用任务中的处理流程，若为 false，则于 summarize 阶段完整调用该任务
             params (QUERY): 设置任务中各数据源和流程参数
         """
-        t = TaskDBO.first(F.id == task)
-        assert t, '指定的任务不存在'
+        task = TaskDBO.first(F.id == task)
+        assert task, '指定的任务不存在'
         self.pipeline_only = pipeline_only
         if params:
             params = parser.eval(params)
-            for k, v in params.items():
-                secs = k.split('.')
-                target = t.pipeline
+            for key, val in params.items():
+                secs = key.split('.')
+                target = task.pipeline
                 for sec in secs[1:-1]:
                     if sec.isnumeric():
-                        assert isinstance(target, list) and len(target) > int(sec), '请指定正确的下标，从0开始'
+                        assert isinstance(target, list) and len(
+                            target) > int(sec), '请指定正确的下标，从0开始'
                         target = target[int(sec)][1]
                     else:
                         assert sec in target, '不存在该参数'
                         target = target[sec]
-                        if isinstance(target, list) and len(target) == 2 and isinstance(target[0], str) and isinstance(target[1], dict):
+                        if isinstance(target, list) and len(target) == 2 and \
+                           isinstance(target[0], str) and isinstance(target[1], dict):
                             target = target[1]
                 sec = secs[-1]
-                target[sec] = v
-        
+                target[sec] = val
+
         self._pipelines = []
-        self.task = Task.from_dbo(t)
+        self.task = Task.from_dbo(task)
         if self.pipeline_only:
             self.pipeline = self.task.pipeline
-        
+
         super().__init__()
-        
+
     def flow(self, paragraph):
         if self.pipeline_only and self.pipeline.stages:
             yield paragraph, self.pipeline.stages[0]
         else:
             yield paragraph, self.next
-    
+
     def summarize(self, _):
         if self.pipeline_only:
             return self.pipeline.summarize()

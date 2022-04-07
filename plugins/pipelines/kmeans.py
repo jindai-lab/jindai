@@ -27,16 +27,17 @@ class KmeansClustering(PipelineStage):
         self.kmeans = KMeans(n_clusters=k)
         self.vector_field = vector_field
         self.paragraphs = []
+        super().__init__()
 
-    def resolve(self, p: Paragraph) -> Paragraph:
-        self.paragraphs.append(p)
-        return p
+    def resolve(self, paragraph: Paragraph) -> Paragraph:
+        self.paragraphs.append(paragraph)
+        return paragraph
 
     def _get_vec(self, i):
         vec = getattr(self.paragraphs[i], self.vector_field)
         return vec
 
-    def summarize(self, *args):
+    def summarize(self, _):
         if len(self.paragraphs) == 0:
             return []
         mat = np.zeros((len(self.paragraphs), len(self._get_vec(0))), 'float')
@@ -66,23 +67,24 @@ class DrawClusters(PipelineStage):
         self.notation_field = notation_field
         self.notation_length = notation_length
         self.coordinates_field = coordinates_field
-        self.fig, self.ax = plt.subplots()
+        self.fig, self.axis = plt.subplots()
+        super().__init__()
 
-    def _get_label_coords_notation(self, p: Paragraph):
-        return getattr(p, self.label_field), getattr(p, self.coordinates_field), getattr(p, self.notation_field, '')[:self.notation_length]
+    def _get_label_coords_notation(self, paragraph: Paragraph):
+        return getattr(paragraph, self.label_field), getattr(paragraph, self.coordinates_field), getattr(paragraph, self.notation_field, '')[:self.notation_length]
 
-    def summarize(self, returned):
+    def summarize(self, result):
         buf = BytesIO()
         clusters = defaultdict(list)
 
-        for p in returned:
+        for p in result:
             label, coords, notation = self._get_label_coords_notation(p)
             clusters[label].append(coords)
-            self.ax.annotate(xy=coords, text=notation)
+            self.axis.annotate(xy=coords, text=notation)
 
         for label in clusters:
             mat = np.array(clusters[label])
-            self.ax.scatter(mat[:, 0], mat[:, 1], label=f'{label}')
+            self.axis.scatter(mat[:, 0], mat[:, 1], label=f'{label}')
 
         self.fig.savefig(buf, format='png')
 
@@ -104,22 +106,23 @@ class GenerateCooccurance(PipelineStage):
         Returns:
             共现矩阵，需要 GraphicClustering 绘图
         """
+        super().__init__()
         safe_import('sentence_transformers')
-
         self.method = weighted_by
         self.counter = Counter()
 
     def token(self, p):
+        """Count from tokens"""
         for i, t in enumerate(p.tokens):
             for m in p.tokens[i+1:]:
                 self.counter[f'{t}\n{m}'].inc()
 
-    def resolve(self, p: Paragraph) -> Paragraph:
+    def resolve(self, paragraph: Paragraph) -> Paragraph:
         if self.method == 'token':
-            self.token(p)
-        return p
+            self.token(paragraph)
+        return paragraph
 
-    def summarize(self, r):
+    def summarize(self, _):
         if self.method == 'vec_cos':
             from sentence_transformers.util import cos_sim
             c = {}
@@ -135,6 +138,7 @@ class GenerateCooccurance(PipelineStage):
 
 
 class GraphicClustering(PipelineStage):
+    """按无向图进行聚类"""
 
     def __init__(self, topk=1000) -> None:
         """
@@ -143,11 +147,12 @@ class GraphicClustering(PipelineStage):
         """
         self.topk = topk
         self.paragraphs = []
+        super().__init__()
 
-    def summarize(self, returned):
-        import networkx as nx
+    def summarize(self, result):
+        nx = safe_import('networkx')
         g = nx.Graph()
-        for (a, b), v in sorted(returned, key=lambda x: x[1], reverse=True)[:self.topk]:
+        for (a, b), v in sorted(result, key=lambda x: x[1], reverse=True)[:self.topk]:
             for i in (a, b):
                 if i not in g.nodes:
                     g.add_node(i)
@@ -155,8 +160,8 @@ class GraphicClustering(PipelineStage):
             self.logger(a, b, v)
 
         meta = ''
-        for i, c in enumerate(nx.connected_components(g)):
-            meta += f'{i+1}\t' + '; '.join(c) + '\n'
+        for i, cluster in enumerate(nx.connected_components(g)):
+            meta += f'{i+1}\t' + '; '.join(cluster) + '\n'
 
         self.logger(meta)
 
