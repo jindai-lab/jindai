@@ -51,7 +51,7 @@ class DataSourceStage(PipelineStage):
         """数据源的具体实现"""
 
         def __init__(self) -> None:
-            pass
+            self.logger = print
 
         def fetch(self):
             """获取实际数据"""

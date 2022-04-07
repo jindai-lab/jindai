@@ -49,7 +49,7 @@ def export(query, output_file):
     task_obj = Task(stages=[
         ('DBQueryDataSource', {'query': query}),
         ('AccumulateParagraphs', {}),
-        ('Export', {'format': 'xlsx', 'inp': 'return'})
+        ('Export', {'output_format': 'xlsx', 'inp': 'return'})
     ], params={'query': query})
 
     xlsx = task_obj.execute()
@@ -143,11 +143,14 @@ def storage_merge(infiles, output):
     for filename in infiles:
         filename = h5py.File(filename, 'r')
         for k in tqdm(filename['data']):
-            if k[:24] in items:
-                dat = filename[f'data/{k}']
-                total += len(dat)
-                output_file[f'data/{k}'] = np.frombuffer(dat[:].tobytes(),
-                                                dtype='uint8')
+            try:
+                if k[:24] in items:
+                    dat = filename[f'data/{k}']
+                    total += len(dat)
+                    output_file[f'data/{k}'] = np.frombuffer(dat[:].tobytes(),
+                                                    dtype='uint8')
+            except Exception as ex:
+                print(k, ex)
     output_file.close()
     print('Total:', total, 'bytes')
 

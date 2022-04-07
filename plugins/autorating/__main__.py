@@ -89,7 +89,7 @@ def validate_model(path_to_model_state, path_to_save_csv, path_to_images, batch_
 
 
 @cli.command("download-dataset")
-@click.option("--host", default="localhost:8877", type=str)
+@click.option("--host", default="localhost:8370", type=str)
 @click.option("--count", default=1500, type=int)
 @click.option("--dataset-dir", default='', type=str)
 def download_dataset(host, count, dataset_dir):
