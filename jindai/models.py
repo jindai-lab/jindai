@@ -4,6 +4,7 @@ import re
 import time
 from hashlib import sha1
 from io import BytesIO
+import pyotp
 
 from PIL import Image
 from PyMongoWrapper import F, Fn, MongoOperand, QueryExprParser, dbo, ObjectId
@@ -124,17 +125,17 @@ class ImageItem(db.DbObject):
     def save(self):
         """保存"""
         image = self._image
-        del self._image
+        self._image = None
+
         if self._image_flag:
             self.source['file'] = 'blocks.h5'
-
             with safe_open(f'hdf5://{self.id}', 'wb') as output:
                 buf = image.tobytes('jpeg')
                 output.write(buf)
+            self._image_flag = False
 
         super().save()
         self._image = image
-        self._image_flag = False
 
     @classmethod
     def on_initialize(cls):
@@ -256,6 +257,7 @@ class User(db.DbObject):
     password = str
     roles = list
     datasets = list
+    otp_secret = str
 
     @staticmethod
     def encrypt_password(username, password_plain):
@@ -268,8 +270,15 @@ class User(db.DbObject):
         self.password = User.encrypt_password(self.username, password_plain)
 
     @staticmethod
-    def authenticate(username, password):
+    def authenticate(username, password, otp=''):
         """认证授权"""
+        
+        if otp:
+            cond = (F.otp_secret != '') if username == '' else (F.username == username)
+            for user in User.query(cond):
+                totp = pyotp.TOTP(user.otp_secret)
+                if totp.verify(otp):
+                    return user.username
 
         if User.first(F.username == username,
                       F.password == User.encrypt_password(username, password)):

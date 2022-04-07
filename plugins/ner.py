@@ -1,9 +1,10 @@
 """命名实体识别
 """
-from jindai.helpers import safe_import
-from jindai import PipelineStage
-from jindai.models import Paragraph
 import re
+
+from jindai import PipelineStage, Plugin
+from jindai.helpers import safe_import
+from jindai.models import Paragraph
 
 
 class HanLPModel(PipelineStage):
@@ -24,14 +25,15 @@ class HanLPModel(PipelineStage):
             'OT': 'UD_ONTONOTES_TOK_POS_LEM_FEA_NER_SRL_DEP_SDP_CON_XLMR_BASE'
         }.get(pretrained, 'ZH')
         self.model = hanlp.load(getattr(hanlp.pretrained.mtl, pretrained))
+        super().__init__()
 
-    def resolve(self, p: Paragraph) -> Paragraph:
-        setattr(p, self.result, self.model(
-            p.content, tasks=self.result)[self.result])
-        return p
+    def resolve(self, paragraph: Paragraph) -> Paragraph:
+        setattr(paragraph, self.result, self.model(
+            paragraph.content, tasks=self.result)[self.result])
+        return paragraph
 
 
-class HanLPNER_ZH(PipelineStage):
+class HanlpNerZh(PipelineStage):
     """使用 HanLP 的预训练模型进行现代汉语命名实体识别（NER）
     """
 
@@ -48,7 +50,7 @@ class HanLPNER_ZH(PipelineStage):
         return paragraph
 
 
-class HanLPNER_JA(PipelineStage):
+class HanlpNerJa(PipelineStage):
     """使用 HanLP 的预训练模型进行日语命名实体识别（NER）
     """
 
@@ -58,10 +60,10 @@ class HanLPNER_JA(PipelineStage):
         self.model = hanlp.load(
             hanlp.pretrained.mtl.hanlp.pretrained.mtl.NPCMJ_UD_KYOTO_TOK_POS_CON_BERT_BASE_CHAR_JA)
 
-    def resolve(self, p: Paragraph) -> Paragraph:
-        p.ner = self.model(re.sub(r'\s', '', p.content),
+    def resolve(self, paragraph: Paragraph) -> Paragraph:
+        paragraph.ner = self.model(re.sub(r'\s', '', paragraph.content),
                            tasks='ner').get('ner', [])
-        return p
+        return paragraph
 
 
 class SpaCyNER(PipelineStage):
@@ -73,8 +75,7 @@ class SpaCyNER(PipelineStage):
         Args:
             lang (LANG): 语言
         """
-        safe_import('spacy')
-        import spacy
+        spacy = safe_import('spacy')
         model = {
             'en': 'en_core_web_sm',
             'chs': 'zh_core_web_sm',
@@ -84,11 +85,12 @@ class SpaCyNER(PipelineStage):
             'ru': 'ru_core_news_sm',
         }.get(lang, 'en_core_web_sm')
         self.model = spacy.load(model)
+        super().__init__()
 
-    def resolve(self, p: Paragraph) -> Paragraph:
-        p.ner = [(e.text, {'ORG': 'ORGANIZATION'}.get(e.label_, e.label_))
-                 for e in self.model(p.content).ents]
-        return p
+    def resolve(self, paragraph: Paragraph) -> Paragraph:
+        paragraph.ner = [(e.text, {'ORG': 'ORGANIZATION'}.get(e.label_, e.label_))
+                 for e in self.model(paragraph.content).ents]
+        return paragraph
 
 
 class AutoNER(PipelineStage):
@@ -102,26 +104,35 @@ class AutoNER(PipelineStage):
             ifja (hanlp|spacy): 日文命名实体识别的实现
         """
         self.models_meta = {
-            'chs': HanLPNER_ZH if ifchs == 'hanlp' else lambda: SpaCyNER('chs'),
-            'ja': HanLPNER_JA if ifja == 'hanlp' else lambda: SpaCyNER('ja'),
+            'chs': HanlpNerZh if ifchs == 'hanlp' else lambda: SpaCyNER('chs'),
+            'ja': HanlpNerJa if ifja == 'hanlp' else lambda: SpaCyNER('ja'),
             'de': lambda: SpaCyNER('de'),
             'fr': lambda: SpaCyNER('fr'),
             'ru': lambda: SpaCyNER('ru'),
             'en': lambda: SpaCyNER('en')
         }
         self.models = {}
+        super().__init__()
 
-    def resolve(self, p: Paragraph) -> Paragraph:
-        if p.lang not in self.models and p.lang in self.models_meta:
-            self.models[p.lang] = self.models_meta[p.lang]()
-        return self.models[p.lang].resolve(p)
+    def resolve(self, paragraph: Paragraph) -> Paragraph:
+        if paragraph.lang not in self.models and paragraph.lang in self.models_meta:
+            self.models[paragraph.lang] = self.models_meta[paragraph.lang]()
+        return self.models[paragraph.lang].resolve(paragraph)
 
 
 class NERAsTokens(PipelineStage):
     """将命名实体识别的结果作为词袋
     """
 
-    def resolve(self, p: Paragraph) -> Paragraph:
-        p.tokens = [_[0] + '/' + _[1]
-                    for _ in p.ner] if hasattr(p, 'ner') else []
-        return p
+    def resolve(self, paragraph: Paragraph) -> Paragraph:
+        paragraph.tokens = [token[0] + '/' + token[1]
+                    for token in paragraph.ner] if hasattr(paragraph, 'ner') else []
+        return paragraph
+
+
+class NERPlugin(Plugin):
+    """NER 插件"""
+
+    def __init__(self, app, **config):
+        super().__init__(app, **config)
+        self.register_pipelines(globals())

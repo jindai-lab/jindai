@@ -2,7 +2,7 @@
 """
 from jindai.helpers import safe_import
 from jindai.models import Paragraph
-from jindai import PipelineStage
+from jindai import PipelineStage, Plugin
 
 
 class MachineTranslation(PipelineStage):
@@ -38,3 +38,10 @@ class MachineTranslation(PipelineStage):
             paragraph._id = None
             del paragraph._orig['_id']
         return paragraph
+
+
+class MachineTranslationPlugin(Plugin):
+
+    def __init__(self, app, **config):
+        super().__init__(app, **config)
+        self.register_pipelines(globals())

@@ -21,8 +21,7 @@ class DBQueryDataSource(DataSourceStage):
     """从数据库查询
     """
     class Implementation(DataSourceStage.Implementation):
-        """从数据库查询
-        """
+        """Implementing datasource"""
 
         def __init__(self, query, mongocollections='', limit=0, skip=0, sort='', raw=False, groups='none'):
             """
@@ -161,7 +160,7 @@ class DBQueryDataSource(DataSourceStage):
 class ImageItemDataSource(DataSourceStage):
     """图像项目数据源"""
     class Implementation(DataSourceStage.Implementation):
-        """图像项目数据源"""
+        """Implementing datasource"""
 
         def __init__(self, cond='', limit=20, offset=0, raw=False, sort_keys='-_id'):
             """
@@ -192,7 +191,9 @@ class ImageItemDataSource(DataSourceStage):
 class ImageImportDataSource(DataSourceStage):
     """从本地文件或网址导入图像到图集
     """
+    
     class Implementation(DataSourceStage.Implementation):
+        """Implementing datasource"""
 
         def __init__(self, locs, dataset='默认图集', tags='', proxy='', excluding_patterns=''):
             """
@@ -279,14 +280,6 @@ class ImageImportDataSource(DataSourceStage):
 
                 i = ImageItem(source={'url': _f})
                 fn = _expand_zip(_f)
-                if not _f.lower().endswith(('.mp4', '.avi')):
-                    try:
-                        im = Image.open(fn)
-                        i.width, i.height = im.size
-                    except Exception as ex:
-                        self.logger('Error while handling', fn, ':', ex)
-                        continue
-
                 i.save()
                 with safe_open(f'hdf5://{i.id}', 'wb') as fo:
                     fo.write(open(fn).read())

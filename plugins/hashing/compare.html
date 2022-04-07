@@ -333,12 +333,17 @@
     }
 
     .post.item {
-      width: 300px;
+      width: 100%;
       display: inline-block;
     }
 
     .pair {
       clear: both;
+    }
+
+    .pair > div {
+      width: 50%;
+      max-width: 300px;
     }
   </style>
   <script src="hashing-jquery.min.js"></script>
@@ -378,9 +383,9 @@
           id2: line[1],
           diff: +line[2]
         };
-        disp[0].innerHTML += ('<div class="pair">{diff}</div>'.format(o));
+        disp[0].innerHTML += ('<div class="pair"></div>'.format(o));
         var pair = disp.children()[disp.children().length - 1]
-        pair.innerHTML += ('<div class="post item ' + (o.diff <= 1 ? "selected" : "") + '" data-id="{id1}">{id1}<img src="/api/image/imageitem/{id1}.jpg?w=400" /></div>'.format(o));
+        pair.innerHTML += ('<div class="post item ' + (o.diff <= 1 ? "selected" : "") + '" data-id="{id1}">{diff} {id1}<img src="/api/image/imageitem/{id1}.jpg?w=400" /></div>'.format(o));
         pair.innerHTML += ('<div class="post item" data-id="{id2}">{id2}<img src="/api/image/imageitem/{id2}.jpg?w=400" /></div><br>'.format(o));
       }
       location.hash = '#' + (offset);

@@ -2,37 +2,41 @@
 """
 
 from PyMongoWrapper import F
-from jindai import  PipelineStage, Pipeline
+from jindai import  PipelineStage, Pipeline, Task
 from jindai.helpers import execute_query_expr
 from jindai.models import TaskDBO, parser
 
 
 class FlowControlStage(PipelineStage):
+    """Base class for flow control pipeline stages"""
+
     def __init__(self) -> None:
-        super().__init__()
         self._next = None
         self._pipelines = [getattr(self, a) for a in dir(self) if isinstance(getattr(self, a), Pipeline)]
+        super().__init__()
 
     @property
     def logger(self):
+        """Logger"""
         return lambda *x: self._logger(self.__class__.__name__, '|', *x)
 
     @logger.setter
     def logger(self, val):
         self._logger = val
-        for pl in self._pipelines:
-            pl.logger = val
+        for pipeline in self._pipelines:
+            pipeline.logger = val
             
     @property
     def next(self):
+        """Next stage in pipeline"""
         return self._next
     
     @next.setter
     def next(self, val):
         self._next = val
-        for pl in self._pipelines:
-            if pl.stages:
-                pl.stages[-1].next = val
+        for pipeline in self._pipelines:
+            if pipeline.stages:
+                pipeline.stages[-1].next = val
     
 
 class RepeatWhile(FlowControlStage):
@@ -47,23 +51,23 @@ class RepeatWhile(FlowControlStage):
         """
         self.times = times
         self.times_key = f'REPEATWHILE_{id(self)}_TIMES_COUNTER'
-        self.cond = parser.eval(cond) if cond else f'{self.times_key} < {times}'
+        self.cond = parser.eval(cond if cond else f'{self.times_key} < {times}')
         self.pipeline = Pipeline(pipeline, self.logger)
         super().__init__()
 
-    def flow(self, p):
-        if p[self.times_key] is None:
-            p[self.times_key] = 0
+    def flow(self, paragraph):
+        if paragraph[self.times_key] is None:
+            paragraph[self.times_key] = 0
         
-        flag = execute_query_expr(self.cond, p)
-        p[self.times_key] += 1
+        flag = execute_query_expr(self.cond, paragraph)
+        paragraph[self.times_key] += 1
         
         if flag and self.pipeline.stages:
             self.pipeline.stages[-1].next = self
-            yield p, self.pipeline.stages[0]
+            yield paragraph, self.pipeline.stages[0]
         else:
-            p[self.times_key] = None
-            yield p, self.next
+            paragraph[self.times_key] = None
+            yield paragraph, self.next
 
 
 class Condition(FlowControlStage):
@@ -81,14 +85,14 @@ class Condition(FlowControlStage):
         self.iffalse = Pipeline(iffalse, self.logger)
         super().__init__()
     
-    def flow(self, p):
-        pl = self.iftrue
-        if not execute_query_expr(self.cond, p):
-            pl = self.iffalse
-        if pl.stages:
-            yield p, pl.stages[0]
+    def flow(self, paragraph):
+        pipeline = self.iftrue
+        if not execute_query_expr(self.cond, paragraph):
+            pipeline = self.iffalse
+        if pipeline.stages:
+            yield paragraph, pipeline.stages[0]
         else:
-            yield p, self.next
+            yield paragraph, self.next
 
 
 class CallTask(FlowControlStage):
@@ -101,7 +105,6 @@ class CallTask(FlowControlStage):
             pipeline_only (bool): 仅调用任务中的处理流程，若为 false，则于 summarize 阶段完整调用该任务
             params (QUERY): 设置任务中各数据源和流程参数
         """
-        from jindai.task import Task
         t = TaskDBO.first(F.id == task)
         assert t, '指定的任务不存在'
         self.pipeline_only = pipeline_only
@@ -129,13 +132,13 @@ class CallTask(FlowControlStage):
         
         super().__init__()
         
-    def flow(self, p):
+    def flow(self, paragraph):
         if self.pipeline_only and self.pipeline.stages:
-            yield p, self.pipeline.stages[0]
+            yield paragraph, self.pipeline.stages[0]
         else:
-            yield p, self.next
+            yield paragraph, self.next
     
-    def summarize(self, r):
+    def summarize(self, _):
         if self.pipeline_only:
             return self.pipeline.summarize()
         else:
