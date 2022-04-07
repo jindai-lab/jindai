@@ -158,34 +158,6 @@ def serve_proxy(server, path):
     return Response(resp.content, headers=dict(resp.headers))
 
 
-def logs_view(task):
-    """Provide log stream of given TaskDBO
-    """
-
-    def generate():
-        """Generate log text from task object of the TaskDBO
-
-        Yields:
-            str: log text
-        """
-        while task.task is None:
-            time.sleep(1)
-
-        while task.task.alive:
-            yield from task.task.log_fetch()
-            time.sleep(0.1)
-
-        yield from task.task.log_fetch()
-        yield 'returned: ' + str(type(task.task.returned)) + '\n'
-
-        yield 'finished.\n'
-
-    return Response(stream_with_context(generate()), status=200,
-                    mimetype="text/plain",
-                    content_type="text/event-stream"
-                    )
-
-
 RE_DIGITS = re.compile(r'[\+\-]?\d+')
 
 

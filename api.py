@@ -991,4 +991,4 @@ app.plugins = PluginManager(plugin_ctx, app)
 if __name__ == "__main__":
     os.environ['FLASK_ENV'] = 'development'
     port = os.environ.get('PORT', 8370)
-    app.run(debug=True, host='0.0.0.0', port=int(port))
+    app.run(debug=True, host='0.0.0.0', port=int(port), threaded=True)

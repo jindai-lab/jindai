@@ -1,20 +1,21 @@
 """来自数据库
 """
-from collections import defaultdict
 import datetime
 import glob
 import os
+import re
 import shutil
+import zipfile
+from collections import defaultdict
 from typing import Iterable, List
 from urllib.parse import urljoin
-import zipfile
-import re
-from PyMongoWrapper import F
-from jindai import  safe_open
-from jindai.models import ImageItem, Paragraph, parser, F
-from jindai.pipeline import  DataSourceStage
-from PIL import Image
 from bson import SON
+from PIL import Image
+from PyMongoWrapper import F
+
+from jindai import safe_open
+from jindai.models import ImageItem, Paragraph, parser
+from jindai.pipeline import DataSourceStage
 
 
 class DBQueryDataSource(DataSourceStage):
@@ -36,11 +37,12 @@ class DBQueryDataSource(DataSourceStage):
             """
             self.raw = raw
             self.querystr = query
-            
-            if not mongocollections: mongocollections = ''
+
+            if not mongocollections:
+                mongocollections = ''
             self.mongocollections = mongocollections.split('\n') if isinstance(
                 mongocollections, str) else mongocollections
-            
+
             if query.startswith('??'):
                 query = '[];' + query[2:]
             elif query.startswith('?'):
@@ -61,7 +63,7 @@ class DBQueryDataSource(DataSourceStage):
 
             self.groups = groups
 
-            groupping = ''        
+            groupping = ''
             if groups == 'none':
                 pass
             elif groups == 'group':
@@ -72,9 +74,9 @@ class DBQueryDataSource(DataSourceStage):
                 '''
             elif groups == 'source':
                 groupping = 'addFields(group_id=ifNull($source.url;$source.file))'
-            else: 
+            else:
                 groupping = f'addFields(group_id=${groups})'
-                
+
             if groupping:
                 groupping += '=>addFields(group_id=ifNull($group_id;ifNull($source.url;$source.file)))=>groupby(id=$group_id, count=sum(1))=>addFields(keywords=[toString($group_id)])'
                 groupping = parser.eval(groupping)
@@ -84,13 +86,15 @@ class DBQueryDataSource(DataSourceStage):
                 else:
                     self.aggregation = True
                     self.query = [{'$match': self.query}] + groupping
-                
+
             self.limit = limit
             self.sort = sort.split(',') if sort else []
             self.skips = {}
             self.skip = skip
 
         def fetch_rs(self, mongocollection, sort=None, limit=-1, skip=-1):
+            """Fetch result set for single mongo collection"""
+
             rs = Paragraph.get_coll(mongocollection)
 
             if sort is None:
@@ -129,11 +133,15 @@ class DBQueryDataSource(DataSourceStage):
             return rs
 
         def fetch_all_rs(self):
-            for c in self.mongocollections:
-                if self.skips.get(c, 0) >= 0:
-                    yield from self.fetch_rs(c)
+            """Fetch all result sets"""
+
+            for coll in self.mongocollections:
+                if self.skips.get(coll, 0) >= 0:
+                    yield from self.fetch_rs(coll)
 
         def fetch(self):
+            """Fetch results"""
+
             if self.skip is not None and self.skip > 0:
                 skip = self.skip
                 for c in self.mongocollections:
@@ -151,6 +159,7 @@ class DBQueryDataSource(DataSourceStage):
                 return self.fetch_all_rs()
 
         def count(self):
+            """Count documents, -1 if err"""
             try:
                 return sum([self.fetch_rs(r, sort=[], limit=0, skip=0).count() for r in self.mongocollections])
             except Exception:
@@ -191,7 +200,7 @@ class ImageItemDataSource(DataSourceStage):
 class ImageImportDataSource(DataSourceStage):
     """从本地文件或网址导入图像到图集
     """
-    
+
     class Implementation(DataSourceStage.Implementation):
         """Implementing datasource"""
 
@@ -245,7 +254,8 @@ class ImageImportDataSource(DataSourceStage):
                         zips.append(loc)
                         self.logger(loc)
                         with zipfile.ZipFile(loc, 'r') as z:
-                            l += [(loc, loc + '#zip/' + _) for _ in z.namelist()]
+                            l += [(loc, loc + '#zip/' + _)
+                                  for _ in z.namelist()]
                             z.extractall('__zip{}'.format(hash(loc)))
                     elif os.path.isdir(loc):
                         self.logger(loc)
@@ -283,7 +293,7 @@ class ImageImportDataSource(DataSourceStage):
                 i.save()
                 with safe_open(f'hdf5://{i.id}', 'wb') as fo:
                     fo.write(open(fn).read())
-                
+
                 i.source = dict(i.source, file='blocks.h5')
                 i.save()
                 p.images.append(i)

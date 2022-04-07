@@ -10,7 +10,7 @@ import twitter
 from jindai.models import ImageItem, Paragraph, parser, ObjectId, F
 from jindai.pipeline import DataSourceStage
 
-from plugins.pipelines.dbquerydatasource import ImageImportDataSource, parser
+from .dbquerydatasource import ImageImportDataSource, parser
 
 
 def find_post(url: str) -> Union[Paragraph, None]:
@@ -22,10 +22,11 @@ def find_post(url: str) -> Union[Paragraph, None]:
     Returns:
         Union[Paragraph, None]: Paragraph
     """
-    return Paragraph.first(F['source.url'].regex(r'https://twitter.com/.*/status/' + url.split('/')[-1]))
+    return Paragraph.first(F['source.url'].regex(
+        r'https://twitter.com/.*/status/' + url.split('/')[-1]))
 
 
-def twitter_id_from_timestamp(ts: float) -> int:
+def twitter_id_from_timestamp(stamp: float) -> int:
     """Get twitter id from timestamp
 
     Args:
@@ -34,7 +35,7 @@ def twitter_id_from_timestamp(ts: float) -> int:
     Returns:
         int: twitter id representing the timestamp
     """
-    return (int(ts * 1000) - 1288834974657) << 22
+    return (int(stamp * 1000) - 1288834974657) << 22
 
 
 def create_albums(posts_imported: List[Paragraph]):
@@ -52,28 +53,28 @@ def create_albums(posts_imported: List[Paragraph]):
 
     items = []
     impids = []
-    for p in posts_imported:
-        items += list(p.images)
-        impids.append(ObjectId(p.id))
+    for para in posts_imported:
+        items += list(para.images)
+        impids.append(ObjectId(para.id))
 
     albums = defaultdict(Paragraph)
 
     for i in items:
-        fn = i.source['url'].split('/')[-1].split('#')[-1][:-5]
-        pu = _expand_twi_url(fn)
-        p = albums[pu]
-        if p.source.get('url') != pu:
-            author = '@' + fn.split('-')[0]
-            p.keywords.append(author)
-            p.source = {'url': pu}
-            dtstr = ('--' + fn).rsplit('-', 2)[1].replace('_', '')
+        filename = i.source['url'].split('/')[-1].split('#')[-1][:-5]
+        page_url = _expand_twi_url(filename)
+        para = albums[page_url]
+        if para.source.get('url') != page_url:
+            author = '@' + filename.split('-')[0]
+            para.keywords.append(author)
+            para.source = {'url': page_url}
+            dtstr = ('--' + filename).rsplit('-', 2)[1].replace('_', '')
             if len(dtstr) == 14:
-                p.pdate = datetime.datetime(int(dtstr[:4]), *[int(_1 + _2) for _1, _2 in
+                para.pdate = datetime.datetime(int(dtstr[:4]), *[int(_1 + _2) for _1, _2 in
                           zip(dtstr[4::2], dtstr[5::2])])
-        p.images.append(i)
+        para.images.append(i)
     
-    for p in albums.values():
-        yield p
+    for para in albums.values():
+        yield para
 
     Paragraph.query(F.id.in_(impids)).delete()
 
@@ -83,6 +84,7 @@ class TwitterDataSource(DataSourceStage):
     """
     
     class Implementation(DataSourceStage.Implementation):
+        """implementing datasource"""
     
         def __init__(self, allow_video=False, allow_retweet=True, consumer_key='', consumer_secret='', access_token_key='', access_token_secret='',
                     import_username='',
@@ -120,22 +122,22 @@ class TwitterDataSource(DataSourceStage):
             self.proxies = {'http': proxy, 'https': proxy} if proxy else {}
             self.api = twitter.Api(consumer_key=consumer_key, consumer_secret=consumer_secret, access_token_key=access_token_key, access_token_secret=access_token_secret, proxies=self.proxies)
             
-        def parse_status(self, st, allow_video=None) -> Paragraph:
+        def parse_tweet(self, tweet, allow_video=None) -> Paragraph:
             """Parse twitter status
             Args:
                 st (twitter.status): status
             Returns:
                 Post: post
             """
-            l = f'https://twitter.com/{st.user.screen_name}/status/{st.id}'
-            author = '@' + st.user.screen_name
-            p = find_post(l)
+            l = f'https://twitter.com/{tweet.user.screen_name}/status/{tweet.id}'
+            author = '@' + tweet.user.screen_name
+            para = find_post(l)
             if allow_video is None:
                 allow_video = self.allow_video
             
-            if not p:
-                p = Paragraph(dataset='twitter', pdate=datetime.datetime.utcfromtimestamp(st.created_at_in_seconds), source={'url': l})
-                for m in st.media or []:
+            if not para:
+                para = Paragraph(dataset='twitter', pdate=datetime.datetime.utcfromtimestamp(tweet.created_at_in_seconds), source={'url': l})
+                for m in tweet.media or []:
                     if m.video_info:
                         if not allow_video:
                             continue  # skip videos
@@ -143,21 +145,21 @@ class TwitterDataSource(DataSourceStage):
                         if url.endswith('.m3u8'):
                             self.logger('found m3u8, pass', url)
                             continue
-                        p.images.append(ImageItem(source={'url': url}))
+                        para.images.append(ImageItem(source={'url': url}))
                     else:
-                        p.images.append(ImageItem(source={'url': m.media_url_https}))
-                if st.text.startswith('RT '):
-                    author = re.match(r'^RT (@.*?):', st.text)
+                        para.images.append(ImageItem(source={'url': m.media_url_https}))
+                if tweet.text.startswith('RT '):
+                    author = re.match(r'^RT (@.*?):', tweet.text)
                     if author:
                         author = author.group(1)
                     else:
                         author = ''
-                text = re.sub(r'https?://[^\s]+', '', st.text).strip()
-                p.keywords = [t.strip().strip('#') for t in re.findall(r'@[a-z_A-Z0-9]+', text) + re.findall(r'[#\s][^\s@]{,10}', text)] + [author]
-                p.keywords =[_ for _ in p.keywords if _]
-                p.content = text
-                p.author = author
-            return p
+                text = re.sub(r'https?://[^\s]+', '', tweet.text).strip()
+                para.keywords = [t.strip().strip('#') for t in re.findall(r'@[a-z_A-Z0-9]+', text) + re.findall(r'[#\s][^\s@]{,10}', text)] + [author]
+                para.keywords =[_ for _ in para.keywords if _]
+                para.content = text
+                para.author = author
+            return para
         
         def import_twiimg(self, ls: List[str]):
             """Import twitter posts from url strings
@@ -174,13 +176,13 @@ class TwitterDataSource(DataSourceStage):
                 stid = stid[stid.index('status') + 1]
 
                 try:
-                    st = self.api.GetStatus(stid)
+                    tweet = self.api.GetStatus(stid)
                 except Exception:
                     continue
 
-                p = self.parse_status(st, allow_video=True)
-                if p.images and not p.id:
-                    albums.append(p)
+                para = self.parse_tweet(tweet, allow_video=True)
+                if para.images and not para.id:
+                    albums.append(para)
 
             yield from albums
 
@@ -203,7 +205,7 @@ class TwitterDataSource(DataSourceStage):
                 tl = self.api.GetUserTimeline(
                     screen_name=user, count=100, max_id=max_id-1)
                 for st in tl:
-                    p = self.parse_status(st, allow_video=self.allow_video)
+                    p = self.parse_tweet(st, allow_video=self.allow_video)
                     if p.id: continue
                     before = min(before, st.created_at_in_seconds)
                     max_id = min(max_id, st.id)
@@ -221,26 +223,26 @@ class TwitterDataSource(DataSourceStage):
             if after == 0:
                 after = Paragraph.query(F['source.url'].regex(r'twitter\.com')).sort(-F.pdate).limit(1).first().pdate.timestamp()
             
-            o = twitter_id_from_timestamp(before or time.time())+1
-            p = None
+            twi_id = twitter_id_from_timestamp(before or time.time())+1
+            para = None
 
             for _i in range(100):
-                self.logger('twitl', o, after)
+                self.logger('twitl', twi_id, after)
                 albums = []
                 time.sleep(0.5)
                 try:
-                    tl = self.api.GetHomeTimeline(count=100, max_id=o-1)
-                    for st in tl:
-                        p = self.parse_status(st)
-                        if p.id: continue
-                        if not p.author and not self.allow_retweet:
+                    timeline = self.api.GetHomeTimeline(count=100, max_id=twi_id-1)
+                    for tweet in timeline:
+                        para = self.parse_tweet(tweet)
+                        if para.id: continue
+                        if not para.author and not self.allow_retweet:
                             continue
-                        o = min(st.id, o)
-                        if p.pdate.timestamp() < after:
+                        twi_id = min(tweet.id, twi_id)
+                        if para.pdate.timestamp() < after:
                             break
-                        if p.images and not p.id:
-                            albums.append(p)
-                    if p and p.pdate.timestamp() < after:
+                        if para.images and not para.id:
+                            albums.append(para)
+                    if para and para.pdate.timestamp() < after:
                         break
                 except Exception as ex:
                     self.logger('exception', ex.__class__.__name__, ex)

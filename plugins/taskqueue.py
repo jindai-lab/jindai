@@ -4,15 +4,39 @@ import os
 import threading
 import time
 import traceback
+import json
 from io import BytesIO
-from queue import deque
+from queue import deque, Queue, Full
 
-from flask import Response, jsonify, request, send_file
+from flask import Response, jsonify, request, send_file, stream_with_context
 from PyMongoWrapper import F
 from jindai import Plugin
-from jindai.helpers import logined, logs_view, rest
+from jindai.helpers import logined, rest
 from jindai.models import TaskDBO
 from jindai.task import Task
+
+
+class MessageAnnouncer:
+
+    def __init__(self):
+        self.listeners = []
+
+    def listen(self):
+        """listen to the announcer"""
+        q = Queue(maxsize=5)
+        self.listeners.append(q)
+        return q
+
+    def announce(self, msg):
+        """Announce message"""
+        for i in reversed(range(len(self.listeners))):
+            try:
+                self.listeners[i].put_nowait(msg)
+            except Full:
+                del self.listeners[i]
+
+
+announcer = MessageAnnouncer()
 
 
 class TasksQueue(Plugin):
@@ -47,18 +71,55 @@ class TasksQueue(Plugin):
         @app.route('/api/queue/logs/<path:key>', methods=['GET'])
         @rest()
         def logs_task(key):
-            task_dbo = self.find(key)
-            if task_dbo:
-                return logs_view(task_dbo)
+            task = self.find(key)
+            if not task:
+                return f'No such key: {key}', 404
 
-            return f'No such key: {key}', 404
+            def generate():
+                """Generate log text from task object of the TaskDBO
 
+                Yields:
+                    str: log text
+                """
+                while task.task is None:
+                    time.sleep(1)
+
+                while task.task.alive:
+                    yield from task.task.log_fetch()
+                    time.sleep(0.1)
+
+                yield from task.task.log_fetch()
+                yield 'returned: ' + str(type(task.task.returned)) + '\n'
+
+                yield 'finished.\n'
+
+            return Response(stream_with_context(generate()), status=200,
+                            mimetype="text/plain",
+                            content_type="text/event-stream"
+                            )
+            
+        @app.route('/api/queue/events', methods=['GET'])
+        @rest()
+        def listen_events():
+
+            def stream():
+                messages = announcer.listen()
+                while True:
+                    messages.get()
+                    yield f'data: {json.dumps(self.filter_status())}\n\n'
+
+            resp = Response(stream_with_context(stream()), status=200,
+                            mimetype="text/event-stream")
+            resp.headers['Cache-Control'] = 'no-cache'
+            resp.headers['X-Accel-Buffering'] = 'no'
+            return resp
+            
         @app.route('/api/queue/<path:task_id>', methods=['DELETE'])
         @rest()
         def dequeue_task(task_id):
             if task_id in self.results:
                 del self.results[task_id]
-                # emit('queue', self.status)
+                announcer.announce("updated")
                 return True
 
             return self.remove(task_id)
@@ -100,18 +161,22 @@ class TasksQueue(Plugin):
         @app.route('/api/queue/', methods=['GET'])
         @rest()
         def list_queue():
-            status = self.status
-            status['running'] = [_ for _ in status['running']
-                                 if logined('admin') or _.run_by == logined()]
-            status['finished'] = [_ for _ in status['finished']
-                                  if logined('admin') or not _.get('run_by') \
-                                    or _['run_by'] == logined()
-                                  ]
-            status['waiting'] = [_ for _ in status['waiting']
-                                 if logined('admin') or _.run_by == logined()
-                                 ]
-            return status
+            return self.filter_status()
 
+    def filter_status(self):
+        """Generate request-specific status"""
+        status = self.status
+        status['running'] = [_ for _ in status['running']
+                                if logined('admin') or _.run_by == logined()]
+        status['finished'] = [_ for _ in status['finished']
+                                if logined('admin') or not _.get('run_by') \
+                                or _['run_by'] == logined()
+                                ]
+        status['waiting'] = [_ for _ in status['waiting']
+                                if logined('admin') or _.run_by == logined()
+                                ]
+        return status
+            
     def start(self):
         """开始处理任务"""
         self.running = True
@@ -155,6 +220,7 @@ class TasksQueue(Plugin):
                             self.app.json_encoder().encode(task_dbo.as_dict())
                         ]}
                     self.task_queue.pop(tkey)
+                    announcer.announce("updated")
 
             elif not self.queue and not self.task_queue:  # all tasks done
                 self.running = False
@@ -167,6 +233,8 @@ class TasksQueue(Plugin):
                         self.results[k] = val.task.returned
                 for k in done:
                     self.task_queue.pop(k)
+                announcer.announce("updated")
+
             time.sleep(0.5)
 
     def enqueue(self, val, key='', run_by=''):
@@ -180,9 +248,9 @@ class TasksQueue(Plugin):
         if not self.running:
             self.start()
 
+        announcer.announce("updated")
         return key
-        # emit('queue', self.status)
-
+        
     def stop(self):
         """停止运行"""
         self.running = False
@@ -221,5 +289,7 @@ class TasksQueue(Plugin):
 
         if _remove_queue(key):
             return True
+
+        announcer.announce("updated")
 
         return _remove_running(key)
