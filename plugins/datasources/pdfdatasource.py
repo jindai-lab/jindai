@@ -2,10 +2,10 @@
 """
 
 import fitz
-from PyMongoWrapper import F, Fn, Var
-from jindai import expand_patterns, safe_open, truncate_path
+from jindai import expand_patterns, truncate_path
 from jindai.models import Paragraph
 from jindai.pipeline import DataSourceStage
+from PyMongoWrapper import F, Fn, Var
 
 
 class PDFDataSource(DataSourceStage):
@@ -37,12 +37,13 @@ class PDFDataSource(DataSourceStage):
             }
             
             for pdf in self.files:
-                min_page = existent.get(pdf)
+                path = truncate_path(pdf)
+                min_page = existent.get(path)
                 min_page = 0 if min_page is None else (min_page + 1)
                 
-                doc = fitz.open(stream=safe_open(pdf, 'rb'))
+                doc = fitz.open(pdf)
                 pages = doc.pageCount
-                self.logger('importing', pdf, 'from page', min_page)
+                self.logger('importing', pdf, 'as', path, 'from page', min_page)
 
                 lang = self.lang
                 
@@ -50,7 +51,8 @@ class PDFDataSource(DataSourceStage):
                     label = doc[p].get_label()
                     lines = doc[p].getText()
                     try:
-                        yield para_coll(lang=lang, content=lines.encode('utf-8', errors='ignore').decode('utf-8'), source={'file': truncate_path(pdf),
-                            'page': p}, pagenum=label or (p+1), dataset=self.name)
+                        yield para_coll(
+                            lang=lang, content=lines.encode('utf-8', errors='ignore').decode('utf-8'),
+                            source={'file': path, 'page': p}, pagenum=label or (p+1), dataset=self.name)
                     except Exception as e:
                         self.logger(pdf, p+1, e)

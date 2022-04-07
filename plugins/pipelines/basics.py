@@ -294,7 +294,7 @@ class Export(PipelineStage):
     """结果导出为文件
     """
 
-    def __init__(self, format='xlsx', limit=0) -> None:
+    def __init__(self, output_format='xlsx', limit=0) -> None:
         """导出结果
 
         Args:
@@ -302,7 +302,7 @@ class Export(PipelineStage):
             limit (int, optional): 最多导出的记录数量，0表示无限制。
         """
         super().__init__()
-        self.format = format
+        self.format = output_format
         self.limit = limit
 
     def summarize(self, result):

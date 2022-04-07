@@ -1,8 +1,8 @@
-temp_*.py
-.vsccode/
+.vscode/
 .DS_*
 config*.yaml
 *.zip
+temp_*.py
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
@@ -110,9 +110,6 @@ venv.bak/
 .mypy_cache/
 
 sources
-plugins/blockly/blockly
 plugins/jiayan
 plugins/nima
 plugins/facedet
-plugins/blockly/zh-hans.js
-plugins/blockly/jquery-3.6.0.min.js

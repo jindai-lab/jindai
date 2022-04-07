@@ -1,5 +1,6 @@
 """网页界面的 API"""
 import datetime
+import hashlib
 import inspect
 import os
 import re
@@ -15,6 +16,7 @@ from flask import Flask, Response, json, redirect, request, send_file
 from PIL import Image, ImageOps
 from PyMongoWrapper import F, Fn, MongoOperand, ObjectId
 from PyMongoWrapper.dbo import create_dbo_json_decoder, create_dbo_json_encoder
+import pyotp
 
 from jindai import Pipeline, Plugin, PluginManager, Task
 from jindai.config import instance as config
@@ -69,12 +71,18 @@ def _expand_results(results):
     return results
 
 
+def _hashing(msg):
+    return hashlib.sha256(
+        msg.encode('utf-8')).hexdigest()[-9:]
+
+
 @app.route('/api/authenticate', methods=['POST'])
 @rest(login=False)
-def authenticate(username, password, **_):
+def authenticate(username, password, otp='', **_):
     """认证"""
 
-    if User.authenticate(username, password):
+    username = User.authenticate(username, password, otp)
+    if username:
         Token.query((F.user == username) & (F.expire < time.time())).delete()
         token = User.encrypt_password(str(time.time()), str(time.time_ns()))
         Token(user=username, token=token, expire=time.time() + 86400).save()
@@ -90,6 +98,7 @@ def whoami():
         user = (User.first(F.username == logined()) or User(
             username=logined(), password='', roles=['admin'])).as_dict()
         del user['password']
+        user['otp_secret'] = True if user.get('otp_secret') else False
         return user
     return None
 
@@ -107,7 +116,7 @@ def log_out():
 @rest(role='admin')
 def admin_users(username='', password=None, roles=None, datasets=None, **_):
     """用户管理修改"""
-
+    result = None
     if username:
         user = User.first(F.username == username)
         if not user:
@@ -119,7 +128,7 @@ def admin_users(username='', password=None, roles=None, datasets=None, **_):
         if datasets is not None:
             user.datasets = datasets
         user.save()
-        return True
+        return result
     else:
         return list(User.query({}))
 
@@ -141,15 +150,25 @@ def admin_users_add(username, password, **_):
 
 @app.route('/api/account/', methods=['POST'])
 @rest()
-def user_change_password(old_password='', password='', **_):
-    """修改用户密码"""
-
+def user_change_password(old_password='', password='', otp=None, **_):
+    """修改用户密码或 OTP 设置"""
+    
     user = User.first(F.username == logined())
-    assert User.authenticate(logined(), old_password), '原密码错误'
-    user.set_password(password)
-    user.save()
-    user = user.as_dict()
-    del user['password']
+    if otp is None:
+        assert User.authenticate(logined(), old_password), '原密码错误'
+        user.set_password(password)
+        user.save()
+        user = user.as_dict()
+        del user['password']
+    else:
+        if otp:
+            user.otp_secret = pyotp.random_base32()
+            user.save()
+        else:
+            user.otp_secret = ''
+            user.save()
+        return user.otp_secret
+
     return user
 
 
@@ -206,7 +225,7 @@ def write_storage(path=''):
     return sfs
 
 
-@app.route('/api/edit/<coll>/<pid>', methods=['POST'])
+@app.route('/api/collections/<coll>/<pid>', methods=['POST'])
 @rest()
 def modify_paragraph(coll, pid, **kws):
     """修改语段"""
@@ -232,7 +251,7 @@ def modify_paragraph(coll, pid, **kws):
     return True
 
 
-@app.route('/api/edit/<coll>/<pid>/pagenum', methods=['POST'])
+@app.route('/api/collections/<coll>/<pid>/pagenum', methods=['POST'])
 @rest()
 def modify_pagenum(coll, pid, sequential, new_pagenum, **_):
     """修改页码"""
@@ -262,15 +281,15 @@ def modify_pagenum(coll, pid, sequential, new_pagenum, **_):
     return False
 
 
-@app.route('/api/edit/<coll>/batch', methods=["GET", "POST"])
+@app.route('/api/collections/<coll>/batch', methods=["GET", "POST"])
 @rest()
 def batch(coll, ids, **kws):
     """Batch edit
     """
 
-    paragraphs = list(Paragraph.get_coll(coll).query(
+    paras = list(Paragraph.get_coll(coll).query(
         F.id.in_([ObjectId(_) if len(_) == 24 else _ for _ in ids])))
-    for para in paragraphs:
+    for para in paras:
         for field, val in kws.items():
             if field in ('$pull', '$push'):
                 for afield, aval in val.items():
@@ -288,12 +307,61 @@ def batch(coll, ids, **kws):
 
     return {
         str(p.id): p.as_dict()
-        for p in paragraphs
+        for p in paras
     }
 
 
-@app.route('/api/<coll>/split', methods=["GET", "POST"])
-@app.route('/api/<coll>/merge', methods=["GET", "POST"])
+@app.route('/api/collections/<coll>/group', methods=["GET", "POST"])
+@rest()
+def grouping(coll, ids, group='', ungroup=False):
+    """Grouping selected paragraphs
+
+    Returns:
+        Response: 'OK' if succeeded
+    """
+    paras = list(Paragraph.get_coll(coll).query(
+        F.id.in_([ObjectId(_) if len(_) == 24 else _ for _ in ids])))
+    if ungroup:
+        group_id = ''
+        for para in paras:
+            para.keywords = [
+                _ for _ in para.keywords if not _.startswith('*')]
+            para.save()
+    else:
+        if not paras:
+            return True
+        gids = []
+        for para in paras:
+            gids += [_ for _ in para.keywords if _.startswith('*')]
+        named = [_ for _ in gids if not _.startswith('*0')]
+        if group:
+            group_id = '*' + group
+        elif named:
+            group_id = min(named)
+        elif gids:
+            group_id = min(gids)
+        else:
+            group_id = '*0' + _hashing(min(map(lambda p: str(p.id), paras)))
+        for para in paras:
+            if group_id not in para.keywords:
+                para.keywords.append(group_id)
+                para.save()
+
+        gids = list(set(gids) - set(named))
+        if gids:
+            for para in Paragraph.query(F.keywords.in_(gids)):
+                for id0 in gids:
+                    if id0 in para.keywords:
+                        para.keywords.remove(id0)
+                if group_id not in para.keywords:
+                    para.keywords.append(group_id)
+                para.save()
+                
+    return group_id
+
+
+@app.route('/api/collections/<coll>/split', methods=["GET", "POST"])
+@app.route('/api/collections/<coll>/merge', methods=["GET", "POST"])
 @rest()
 def splitting(coll, ids):
     """Split or merge selected items/paragraphs into seperate/single paragraph(s)
@@ -301,31 +369,31 @@ def splitting(coll, ids):
     Returns:
         bool: True if succeeded
     """
-    paragraphs = list(Paragraph.get_coll(coll).query(
+    paras = list(Paragraph.get_coll(coll).query(
         F.id.in_([ObjectId(_) if len(_) == 24 else _ for _ in ids])))
 
     if request.path.endswith('/split'):
-        for para in paragraphs:
+        for para in paras:
+            para_dict = para.as_dict()
+            del para_dict['_id']
+            del para_dict['images']
             for i in para.images:
-                pnew = Paragraph(
-                    source={'url': para.source['url']},
-                    pdate=para.pdate, keywords=para.keywords, images=[i],
-                    dataset=para.dataset)
+                pnew = Paragraph(images=[i], **para_dict)
                 pnew.save()
             para.delete()
     else:
-        if not paragraphs:
+        if not paras:
             return False
 
-        first_para = paragraphs[0]
-        first_para.keywords = list(first_para.keywords)
-        first_para.images = list(first_para.images)
-        for para in paragraphs[1:]:
-            first_para.keywords += list(para.keywords)
-            first_para.images += list(para.images)
-        first_para.save()
+        para0 = paras[0]
+        para0.keywords = list(para0.keywords)
+        para0.images = list(para0.images)
+        for para in paras[1:]:
+            para0.keywords += list(para.keywords)
+            para0.images += list(para.images)
+        para0.save()
 
-        for para in paragraphs[1:]:
+        for para in paras[1:]:
             para.delete()
 
     return True
@@ -333,7 +401,7 @@ def splitting(coll, ids):
 
 @app.route('/api/imageitem/rating', methods=["GET", "POST"])
 @rest()
-def set_rating(ids, inc=1, val=0):
+def set_rating(ids, inc=1, val=0, least=0):
     """Increase or decrease the rating of selected items
     """
     items = list(ImageItem.query(
@@ -341,12 +409,14 @@ def set_rating(ids, inc=1, val=0):
     for i in items:
         if i is None:
             continue
-        old_value = i.rating
-        i.rating = val if val else round(2 * (i.rating)) / 2 + inc
-        if -1 <= i.rating <= 5:
-            i.save()
-        else:
-            i.rating = old_value
+        if val:
+            i.rating = val
+        elif inc:
+            i.rating = round(2 * (i.rating)) / 2 + inc
+        elif least:
+            i.rating = max(least, i.rating)
+        i.rating = min(max(-1, i.rating), 5)
+        i.save()
     return {
         str(i.id): i.rating
         for i in items
@@ -476,17 +546,15 @@ def update_task(task_id, **task):
 
 
 @app.route('/api/tasks/<task_id>', methods=['GET'])
-@app.route('/api/tasks/<offset>/<limit>', methods=['GET'])
 @app.route('/api/tasks/', methods=['GET'])
 @rest()
-def list_task(task_id='', offset=0, limit=50):
+def list_task(task_id=''):
     """列出任务"""
     if task_id:
         _id = ObjectId(task_id)
         return TaskDBO.first((F.id == _id) & _task_authorized())
     else:
-        return list(TaskDBO.query(_task_authorized()).sort(-F.last_run, -F.id)
-                    .skip(int(offset)).limit(int(limit)))
+        return list(TaskDBO.query(_task_authorized()).sort(-F.last_run, -F.id))
 
 
 @app.route('/api/help/pipelines')
@@ -571,7 +639,7 @@ def search(q='', req='', sort='', limit=100, offset=0,
                 elif key.startswith('$'):
                     seq.append(key[1:] + '(' + _stringify(val) + ')')
                 elif key == '_id':
-                    seq.append('_id=' + _stringify(val))
+                    seq.append('id=' + _stringify(val))
                 else:
                     seq.append(key + '=' + _stringify(val))
             return '(' + ','.join(seq) + ')'
