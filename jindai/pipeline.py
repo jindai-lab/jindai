@@ -1,5 +1,7 @@
 """处理流程"""
 import inspect
+import json
+import re
 from typing import Dict, List, Tuple, Any, Type, Union
 from collections.abc import Iterable as IterableClass
 from .models import Paragraph
@@ -14,6 +16,47 @@ class PipelineStage:
     def __init__(self) -> None:
         self._logger = print
         self.next = None
+
+    @classmethod
+    def get_spec(cls):
+        """获取参数信息"""
+        return {
+            'name': cls.__name__,
+            'doc': (cls.__doc__ or '').strip(),
+            'args': PipelineStage._spec(cls)
+        }
+
+    @staticmethod
+    def _spec(stage_cls):
+        args_docs = {}
+
+        for line in (stage_cls.__init__.__doc__ or '').strip().split('\n'):
+            match = re.search(r'(\w+)\s\((.+?)\):\s(.*)', line)
+            if match:
+                matched_groups = match.groups()
+                if len(matched_groups) > 2:
+                    args_docs[matched_groups[0]] = {'type': matched_groups[1].split(
+                        ',')[0], 'description': matched_groups[2]}
+
+        args_spec = inspect.getfullargspec(stage_cls.__init__)
+        args_defaults = dict(zip(reversed(args_spec.args),
+                             reversed(args_spec.defaults or [])))
+
+        for arg in args_spec.args[1:]:
+            if arg not in args_docs:
+                args_docs[arg] = {}
+            if arg in args_defaults:
+                args_docs[arg]['default'] = json.dumps(
+                    args_defaults[arg], ensure_ascii=False)
+
+        return [
+             {
+                    'name': key,
+                    'type': val.get('type'),
+                    'description': val.get('description'),
+                    'default': val.get('default')
+                } for key, val in args_docs.items() if 'type' in val
+        ]
 
     @property
     def logger(self):
@@ -47,6 +90,14 @@ class DataSourceStage(PipelineStage):
     数据源阶段
     """
 
+    @classmethod
+    def get_spec(cls):
+        return {
+            'name': cls.__name__,
+            'doc': (cls.__doc__ or '').strip(),
+            'args': PipelineStage._spec(cls.Implementation)
+        }
+
     class Implementation:
         """数据源的具体实现"""
 
@@ -78,10 +129,9 @@ class Pipeline:
 
     @staticmethod
     def ensure_args(stage_type: Type, args: Dict):
-        """确保参数符合定义"""
+        """确保参数名称符合定义"""
+        argnames = [_['name'] for _ in stage_type.get__spec()['args']]
 
-        argnames = inspect.getfullargspec(
-            getattr(stage_type, 'Implementation', stage_type).__init__).args[1:]
         toremove = []
         for k in args:
             if k not in argnames or args[k] is None:

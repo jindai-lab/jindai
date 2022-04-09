@@ -1,7 +1,6 @@
 """网页界面的 API"""
 import datetime
 import hashlib
-import inspect
 import os
 import re
 import sys
@@ -413,7 +412,7 @@ def set_rating(ids, inc=1, val=0, least=0):
             i.rating = val
         elif inc:
             i.rating = round(2 * (i.rating)) / 2 + inc
-        elif least:
+        if least:
             i.rating = max(least, i.rating)
         i.rating = min(max(-1, i.rating), 5)
         i.save()
@@ -562,50 +561,12 @@ def list_task(task_id=''):
 def help_info():
     """提供任务处理帮助信息"""
 
-    def _doc(stage_type):
-        args_docs = {}
-        cl_doc = stage_type.__doc__ or ''
-        cl_name = stage_type.__name__
-        stage_type = getattr(stage_type, 'Implementation', stage_type)
-
-        for line in (stage_type.__init__.__doc__ or '').strip().split('\n'):
-            match = re.search(r'(\w+)\s\((.+?)\):\s(.*)', line)
-            if match:
-                matched_groups = match.groups()
-                if len(matched_groups) > 2:
-                    args_docs[matched_groups[0]] = {'type': matched_groups[1].split(
-                        ',')[0], 'description': matched_groups[2]}
-
-        args_spec = inspect.getfullargspec(stage_type.__init__)
-        args_defaults = dict(zip(reversed(args_spec.args),
-                             reversed(args_spec.defaults or [])))
-
-        for arg in args_spec.args[1:]:
-            if arg not in args_docs:
-                args_docs[arg] = {}
-            if arg in args_defaults:
-                args_docs[arg]['default'] = json.dumps(
-                    args_defaults[arg], ensure_ascii=False)
-
-        return {
-            'name': cl_name,
-            'doc': (stage_type.__doc__ or cl_doc).strip(),
-            'args': [
-                {
-                    'name': key,
-                    'type': val.get('type'),
-                    'description': val.get('description'),
-                    'default': val.get('default')
-                } for key, val in args_docs.items() if 'type' in val
-            ]
-        }
-
     ctx = Pipeline.ctx
     result = defaultdict(dict)
     for key, val in ctx.items():
-        name = sys.modules[val.__module__].__doc__ or val.__module__.split(
-            '.')[-1] if hasattr(val, '__module__') else key
-        result[name][key] = _doc(val)
+        name = (sys.modules[val.__module__].__doc__ or val.__module__.split(
+            '.')[-1] if hasattr(val, '__module__') else key).strip()
+        result[name][key] = val.get_spec()
     return result
 
 
