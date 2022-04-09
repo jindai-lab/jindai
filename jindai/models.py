@@ -95,8 +95,7 @@ class ImageItem(db.DbObject):
     def image(self):
         """图像信息"""
         if self._image is None:
-            with self.image_raw as buf:
-                self._image = Image.open(buf)
+            self._image = Image.open(self.image_raw)
         return self._image
 
     @image.setter
@@ -112,14 +111,14 @@ class ImageItem(db.DbObject):
         if self.source.get('file'):
             filename = self.source['file']
             if filename.lower().endswith('.pdf') and self.source.get('page') is not None:
-                return safe_open('{file}#pdf/png:{page}'.format(**self.source), 'rb')
+                return safe_open(f'{self.source["file"]}#pdf/png:{self.source["page"]}', 'rb')
             if filename == 'blocks.h5':
                 return safe_open(f"hdf5://{self.source.get('block_id', self.id)}", 'rb')
             return safe_open(filename, 'rb')
-        
+
         if self.source.get('url'):
             return safe_open(self.source['url'], 'rb')
-        
+
         return None
 
     def save(self):
@@ -272,9 +271,10 @@ class User(db.DbObject):
     @staticmethod
     def authenticate(username, password, otp=''):
         """认证授权"""
-        
+
         if otp:
-            cond = (F.otp_secret != '') if username == '' else (F.username == username)
+            cond = (F.otp_secret != '') if username == '' else (
+                F.username == username)
             for user in User.query(cond):
                 totp = pyotp.TOTP(user.otp_secret)
                 if totp.verify(otp):

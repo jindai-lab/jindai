@@ -22,13 +22,9 @@ class AutoRating(ImageOrAlbumStage):
         super().__init__()
         state = load_state(expand_path('models_data/autorating_best.pth'))
         self.model = InferenceModel(state)
-
-    def predict(self, i: Image):
-        """获取图像评分"""
-        return float(self.model.predict_from_pil_image(i).numpy()[0])
-
+    
     def resolve_image(self, i: ImageItem, _):
-        i.rating = self.predict(i.image)
+        i.rating = float(self.model.predict_from_pil_image(i.image).numpy()[0])
         i.save()
         return i
 
