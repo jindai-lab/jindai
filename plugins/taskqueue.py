@@ -17,6 +17,7 @@ from jindai.task import Task
 
 
 class MessageAnnouncer:
+    """Message announcer"""
 
     def __init__(self):
         self.listeners = []
@@ -198,7 +199,7 @@ class TasksQueue(Plugin):
                             self.app.json_encoder().encode(task_dbo.as_dict())
                         ]}
                     self.task_queue.pop(tkey)
-                    announcer.announce("updated")
+                announcer.announce("updated")
 
             elif not self.queue and not self.task_queue:  # all tasks done
                 self.running = False
