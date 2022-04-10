@@ -13,10 +13,9 @@ from bson import SON
 from PIL import Image
 from PyMongoWrapper import F
 
-from jindai import safe_open
+from jindai import safe_open, DBQuery
 from jindai.models import ImageItem, Paragraph, parser
 from jindai.pipeline import DataSourceStage
-
 
 class DBQueryDataSource(DataSourceStage):
     """从数据库查询
@@ -35,135 +34,10 @@ class DBQueryDataSource(DataSourceStage):
                 raw (bool): 若为 False（默认值）则返回 Paragraph 对象，否则返回原始数据，仅对于聚合查询有效
                 groups (无:none|按组:group|按来源:source|分组和来源:both): 分组
             """
-            self.raw = raw
-            self.querystr = query
+            self.dbquery = DBQuery(query, mongocollections, limit, skip, sort, raw, groups)
 
-            if not mongocollections:
-                mongocollections = ''
-            self.mongocollections = mongocollections.split('\n') if isinstance(
-                mongocollections, str) else mongocollections
-
-            if query.startswith('??'):
-                query = '[];' + query[2:]
-            elif query.startswith('?'):
-                query = query[1:]
-
-            self.query = parser.eval(query)
-            self.aggregation = isinstance(query, list)
-            if isinstance(self.query, list):
-                self.aggregation = True
-
-            if self.aggregation and len(self.query) > 1 and isinstance(self.query[0], str) and self.query[0].startswith('from'):
-                self.mongocollections = [self.query[0][4:]]
-                self.query = self.query[1:]
-
-            if self.aggregation and len(self.query) > 1 and '$raw' in self.query[-1]:
-                self.raw = self.query[-1]['$raw']
-                self.query = self.query[:-1]
-
-            self.groups = groups
-
-            groupping = ''
-            if groups == 'none':
-                pass
-            elif groups == 'group':
-                groupping = '''
-                    addFields(group_id=filter(input=$keywords,as=t,cond=eq(substrCP($$t;0;1);"*")));
-                    unwind(path=$group_id,preserveNullAndEmptyArrays=true);
-                    addFields(group_id=ifNull($group_id;ifNull($source.url;$source.file)))
-                '''
-            elif groups == 'source':
-                groupping = 'addFields(group_id=ifNull($source.url;$source.file))'
-            else:
-                groupping = f'addFields(group_id=${groups})'
-
-            if groupping:
-                groupping += '=>addFields(group_id=ifNull($group_id;ifNull($source.url;$source.file)))=>groupby(id=$group_id, count=sum(1))=>addFields(keywords=[toString($group_id)])'
-                groupping = parser.eval(groupping)
-
-                if self.aggregation:
-                    self.query += groupping
-                else:
-                    self.aggregation = True
-                    self.query = [{'$match': self.query}] + groupping
-
-            self.limit = limit
-            self.sort = sort.split(',') if sort else []
-            self.skips = {}
-            self.skip = skip
-
-        def fetch_rs(self, mongocollection, sort=None, limit=-1, skip=-1):
-            """Fetch result set for single mongo collection"""
-
-            rs = Paragraph.get_coll(mongocollection)
-
-            if sort is None:
-                sort = self.sort
-            if skip < 0:
-                skip = self.skips.get(mongocollection, 0)
-            if limit < 0:
-                limit = self.limit
-
-            if self.aggregation:
-                agg = self.query if isinstance(
-                    self.query, list) else [self.query]
-                if sort and sort != ['_id']:
-                    if sort == ['random']:
-                        agg.append({'$sample': {'size': limit}})
-                        limit = 0
-                        skip = 0
-                    else:
-                        agg.append(
-                            {'$sort': SON(parser.eval_sort(','.join(sort)))})
-                if skip > 0:
-                    agg.append({'$skip': skip})
-                if limit > 0:
-                    agg.append({'$limit': limit})
-                rs = rs.aggregate(agg, raw=self.raw, allowDiskUse=True)
-            else:
-                rs = rs.query(self.query)
-
-                if sort:
-                    rs = rs.sort(*sort)
-                if skip > 0:
-                    rs = rs.skip(skip)
-                if limit > 0:
-                    rs = rs.limit(limit)
-
-            return rs
-
-        def fetch_all_rs(self):
-            """Fetch all result sets"""
-
-            for coll in self.mongocollections:
-                if self.skips.get(coll, 0) >= 0:
-                    yield from self.fetch_rs(coll)
-
-        def fetch(self):
-            """Fetch results"""
-
-            if self.skip is not None and self.skip > 0:
-                skip = self.skip
-                for c in self.mongocollections:
-                    count = self.fetch_rs(c, sort=[], limit=0, skip=0).count()
-                    if count <= skip:
-                        skip -= count
-                        self.skips[c] = -1
-                    else:
-                        self.skips[c] = skip
-                        break
-
-            if len(self.mongocollections) == 1:
-                return self.fetch_rs(self.mongocollections[0])
-            else:
-                return self.fetch_all_rs()
-
-        def count(self):
-            """Count documents, -1 if err"""
-            try:
-                return sum([self.fetch_rs(r, sort=[], limit=0, skip=0).count() for r in self.mongocollections])
-            except Exception:
-                return -1
+        def fetch():
+            return self.dbquery.fetch()
 
 
 class ImageItemDataSource(DataSourceStage):

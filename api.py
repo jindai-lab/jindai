@@ -2,7 +2,6 @@
 import datetime
 import hashlib
 import os
-import re
 import sys
 import time
 from collections import defaultdict
@@ -10,45 +9,22 @@ from io import BytesIO
 from typing import IO, Union
 
 import jieba
-import numpy as np
-from flask import Flask, Response, json, redirect, request, send_file
+import pyotp
+from flask import Flask, Response, redirect, request, send_file
 from PIL import Image, ImageOps
 from PyMongoWrapper import F, Fn, MongoOperand, ObjectId
-from PyMongoWrapper.dbo import create_dbo_json_decoder, create_dbo_json_encoder
-import pyotp
 
-from jindai import Pipeline, Plugin, PluginManager, Task
+from jindai import DBQuery, Pipeline, Plugin, PluginManager, Task
 from jindai.config import instance as config
-from jindai.helpers import get_context, logined, rest, serve_file, serve_proxy
+from jindai.helpers import (get_context, logined, rest, serve_file, stringify,
+                            serve_proxy, JSONEncoder, JSONDecoder)
 from jindai.models import (Dataset, History, ImageItem, Meta, Paragraph,
                            TaskDBO, Token, User, parser)
 
 app = Flask(__name__)
 app.config['SECRET_KEY'] = config.secret_key
-JSONEncoderCls = create_dbo_json_encoder(json.JSONEncoder)
-
-
-class _NumpyEncoder(json.JSONEncoder):
-    def __init__(self, **kwargs):
-        kwargs['ensure_ascii'] = False
-        super().__init__(**kwargs)
-
-    def default(self, o):
-        """编码对象"""
-        if isinstance(o, np.ndarray):
-            return o.tolist()
-        if isinstance(o, np.int32):
-            return o.tolist()
-        if isinstance(o, Image.Image):
-            return str(o)
-        if isinstance(o, datetime.datetime):
-            return o.isoformat() + "Z"
-
-        return JSONEncoderCls.default(self, o)
-
-
-app.json_encoder = _NumpyEncoder
-app.json_decoder = create_dbo_json_decoder(json.JSONDecoder)
+app.json_encoder = JSONEncoder
+app.json_decoder = JSONDecoder
 
 
 def _task_authorized():
@@ -151,7 +127,7 @@ def admin_users_add(username, password, **_):
 @rest()
 def user_change_password(old_password='', password='', otp=None, **_):
     """修改用户密码或 OTP 设置"""
-    
+
     user = User.first(F.username == logined())
     if otp is None:
         assert User.authenticate(logined(), old_password), '原密码错误'
@@ -355,7 +331,7 @@ def grouping(coll, ids, group='', ungroup=False):
                 if group_id not in para.keywords:
                     para.keywords.append(group_id)
                 para.save()
-                
+
     return group_id
 
 
@@ -586,109 +562,22 @@ def search(q='', req='', sort='', limit=100, offset=0,
            mongocollections=None, groups='none', count=False, **_):
     """搜索"""
 
-    if mongocollections is None:
-        mongocollections = ['']
-
-    def _stringify(obj):
-        if obj is None:
-            return ''
-        if isinstance(obj, dict):
-            seq = []
-            for key, val in obj.items():
-                if key == '$options':
-                    continue
-                elif key.startswith('$'):
-                    seq.append(key[1:] + '(' + _stringify(val) + ')')
-                elif key == '_id':
-                    seq.append('id=' + _stringify(val))
-                else:
-                    seq.append(key + '=' + _stringify(val))
-            return '(' + ','.join(seq) + ')'
-        elif isinstance(obj, str):
-            return json.dumps(obj, ensure_ascii=False)
-        elif isinstance(obj, (int, float)):
-            return str(obj)
-        elif isinstance(obj, datetime.datetime):
-            return obj.isoformat()+"Z"
-        elif isinstance(obj, list):
-            return '[' + ','.join([_stringify(e) for e in obj]) + ']'
-        elif isinstance(obj, bool):
-            return str(bool).lower()
-        elif isinstance(obj, ObjectId):
-            return 'ObjectId(' + str(obj) + ')'
-        else:
-            return '_json(`' + json.dumps(obj, ensure_ascii=False) + '`)'
-
     if not req:
         if count:
             return 0
         else:
             return {'results': [], 'query': ''}
 
-    params = {
-        'mongocollections': '\n'.join(mongocollections),
-        'groups': groups,
-        'sort': sort or '_id',
-        'skip': offset or 0,
-        'limit': limit,
-    }
-
-    expr = False
-    if q.startswith('?'):
-        q = q[1:]
-        expr = True
-    elif re.search(r'[,.~=&|()><\'"`@_*\-%]', q):
-        expr = True
-
-    if not expr:
-        q = '`' + '`,`'.join([_.strip().lower().replace('`', '\\`')
-                             for _ in jieba.cut(q) if _.strip()]) + '`'
-        if q == '``':
-            q = ''
-
-    qparsed = parser.eval(q)
-    req = parser.eval(req)
-
-    # merge req into query
-    def merge_req(qparsed, req):
-        if isinstance(qparsed, dict):
-            return (MongoOperand(qparsed) & MongoOperand(req))()
-        elif isinstance(qparsed, list) and len(qparsed) > 0:
-            first_query = qparsed[0]
-            if isinstance(first_query, str):
-                first_query = {'$match': parser.eval(first_query)}
-            elif isinstance(first_query, dict) and \
-                    not [_ for _ in first_query if _.startswith('$')]:
-                first_query = {'$match': first_query}
-
-            if isinstance(first_query, dict) and '$match' in first_query:
-                return [
-                    {'$match':
-                     (MongoOperand(first_query['$match']) & MongoOperand(req))()}
-                ] + qparsed[1:]
-            else:
-                return [{'$match': req}] + qparsed[1:]
-        else:
-            return req
-
-    qparsed = merge_req(qparsed, req)
+    qparsed = DBQuery(q).query
 
     # test plugin pages
-    def test_plugin_pages(qparsed):
-        page_args = []
-        if isinstance(qparsed, list) and '$page' in qparsed[-1]:
-            qparsed, page_args = qparsed[:-1], qparsed[-1]['$page'].split('/')
-        return qparsed, page_args
+    if '$page' in qparsed[-1]:
+        qparsed, page_args = qparsed[:-1], qparsed[-1]['$page'].split('/')
+    else:
+        qparsed, page_args = q, []
 
-    qparsed, page_args = test_plugin_pages(qparsed)
-
-    if isinstance(qparsed, list) and len(qparsed) == 1 and '$match' in qparsed[0]:
-        qparsed = qparsed[0]['$match']
-
-    qstr = '?'+_stringify(qparsed)
-
-    datasource = Pipeline.ctx['DBQueryDataSource'].Implementation(
-        qstr, **params)
+    datasource = DBQuery([qparsed, req], mongocollections,
+                         limit, offset, sort or '_id', False, groups, jieba.cut)
     results = None
 
     if page_args:
@@ -705,9 +594,9 @@ def search(q='', req='', sort='', limit=100, offset=0,
             return datasource.count()
         results = _expand_results(datasource.fetch())
 
-    History(user=logined(), querystr=qstr,
+    History(user=logined(), querystr=stringify(datasource.query),
             created_at=datetime.datetime.utcnow()).save()
-    return {'results': results, 'query': qstr}
+    return {'results': results, 'query': datasource.query}
 
 
 @app.route('/api/datasets')
@@ -830,9 +719,6 @@ def serve_image(coll=None, storage_id=None, ext=None):
             img = Image.open(buf)
             buf = BytesIO()
             ImageOps.autocontrast(img).save(buf, 'jpeg')
-            # brightness = ImageStat.Stat(img).mean[0]
-            # if brightness < 0.2:
-            # ImageEnhance.Brightness(img).enhance(1.2).save(p, 'jpeg')
             buf.seek(0)
             ext = 'jpg'
 
