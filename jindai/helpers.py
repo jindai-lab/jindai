@@ -1,19 +1,25 @@
 """辅助函数"""
-import importlib
-import os
-import re
-import sys
-import pickle
 import glob
+import importlib
+import json
+import os
+import pickle
+import re
+import subprocess
+import sys
+import datetime
+from PIL import Image
 import time
 import traceback
 from functools import wraps
-from typing import IO, Union, Type, Dict
+from typing import IO, Dict, Type, Union
 
-import subprocess
+import numpy as np
 import requests
 import werkzeug.wrappers.response
+from bson import ObjectId
 from flask import Response, jsonify, request, send_file, stream_with_context
+from PyMongoWrapper.dbo import create_dbo_json_decoder, create_dbo_json_encoder
 
 from .config import instance as config
 from .models import Token, parser
@@ -279,13 +285,72 @@ def get_context(directory: str, parent_class: Type) -> Dict:
             module = importlib.import_module(module_name)
             for k in module.__dict__:
                 if k != parent_class.__name__ and not k.startswith('_') and \
-                isinstance(module.__dict__[k], type) and \
-                issubclass(module.__dict__[k], parent_class):
+                        isinstance(module.__dict__[k], type) and \
+                        issubclass(module.__dict__[k], parent_class):
                     ctx[k] = module.__dict__[k]
         except Exception as exception:
             print('Error while importing', module_name, ':', exception)
 
     return ctx
+
+
+def stringify(obj):
+    """
+    Stringify an obj in QueryExpr-compatible format
+    """
+    if obj is None:
+        return ''
+    if isinstance(obj, dict):
+        seq = []
+        for key, val in obj.items():
+            if key == '$options':
+                continue
+            elif key.startswith('$'):
+                seq.append(key[1:] + '(' + stringify(val) + ')')
+            elif key == '_id':
+                seq.append('id=' + stringify(val))
+            else:
+                seq.append(key + '=' + stringify(val))
+        return '(' + ','.join(seq) + ')'
+    elif isinstance(obj, str):
+        return json.dumps(obj, ensure_ascii=False)
+    elif isinstance(obj, (int, float)):
+        return str(obj)
+    elif isinstance(obj, datetime.datetime):
+        return obj.isoformat()+"Z"
+    elif isinstance(obj, list):
+        return '[' + ','.join([stringify(e) for e in obj]) + ']'
+    elif isinstance(obj, bool):
+        return str(bool).lower()
+    elif isinstance(obj, ObjectId):
+        return 'ObjectId(' + str(obj) + ')'
+    else:
+        return '_json(`' + json.dumps(obj, ensure_ascii=False) + '`)'
+
+
+JSONEncoderCls = create_dbo_json_encoder(json.JSONEncoder)
+
+
+class JSONEncoder(json.JSONEncoder):
+    def __init__(self, **kwargs):
+        kwargs['ensure_ascii'] = False
+        super().__init__(**kwargs)
+
+    def default(self, o):
+        """编码对象"""
+        if isinstance(o, np.ndarray):
+            return o.tolist()
+        if isinstance(o, np.int32):
+            return o.tolist()
+        if isinstance(o, Image.Image):
+            return str(o)
+        if isinstance(o, datetime.datetime):
+            return o.isoformat() + "Z"
+
+        return JSONEncoderCls.default(self, o)
+
+
+JSONDecoder = create_dbo_json_decoder(json.JSONDecoder)
 
 
 with safe_open('models_data/language_iso639', 'rb') as flang:

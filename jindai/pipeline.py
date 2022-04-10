@@ -116,7 +116,7 @@ class DataSourceStage(PipelineStage):
 
         args = dict(**self.params)
         args.update(paragraph.as_dict())
-        Pipeline.ensure_args(type(self).Implementation, args)
+        Pipeline.ensure_args(type(self), args)
         instance = type(self).Implementation(**args)
         instance.logger = self.logger
         yield from instance.fetch()
@@ -130,7 +130,7 @@ class Pipeline:
     @staticmethod
     def ensure_args(stage_type: Type, args: Dict):
         """确保参数名称符合定义"""
-        argnames = [_['name'] for _ in stage_type.get__spec()['args']]
+        argnames = [_['name'] for _ in stage_type.get_spec()['args']]
 
         toremove = []
         for k in args:
