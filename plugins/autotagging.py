@@ -27,7 +27,7 @@ class ApplyAutoTags(PipelineStage):
         for i in self.ats:
             pattern, from_tag, tag = i.pattern, i.from_tag, i.tag
             if (from_tag and from_tag in paragraph.keywords) or \
-            (pattern and re.search(pattern, paragraph.source['url'])):
+                    (pattern and re.search(pattern, paragraph.source['url'])):
                 if tag not in paragraph.keywords:
                     paragraph.keywords.append(tag)
                 if tag.startswith('@'):
@@ -39,9 +39,11 @@ class ApplyAutoTags(PipelineStage):
 class AutoTaggingPlugin(Plugin):
     """自动标签"""
 
-    def __init__(self, app) -> None:
-        super().__init__(app)
+    def __init__(self, pmanager, **_) -> None:
+        super().__init__(pmanager)
         self.register_pipelines(globals())
+
+        app = self.pmanager.app
 
         @app.route('/api/plugins/autotags', methods=['POST', 'PUT', 'GET'])
         @rest()

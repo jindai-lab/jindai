@@ -1,14 +1,14 @@
-"""数据库对象"""
+"""DB Objects"""
 import datetime
-import re
+import dateutil
 import time
 from hashlib import sha1
 from io import BytesIO
 import pyotp
 
 from PIL import Image
-from PyMongoWrapper import F, Fn, MongoOperand, QueryExprParser, dbo, ObjectId
-from PyMongoWrapper.dbo import (Anything,
+from PyMongoWrapper import F, Fn, Var
+from PyMongoWrapper.dbo import (Anything, DbObjectCollection,
                                 DbObjectInitializer, MongoConnection)
 
 from .config import instance as config
@@ -17,48 +17,8 @@ from .storage import safe_open
 db = MongoConnection('mongodb://' + config.mongo + '/' + config.mongoDbName)
 
 
-def _expr_groupby(params):
-    if isinstance(params, MongoOperand):
-        params = params()
-    if 'id' in params:
-        params['_id'] = {k[1:]: k for k in params['id']}
-        del params['id']
-    return [
-        Fn.group(orig=Fn.first('$$ROOT'), **params),
-        Fn.replaceRoot(newRoot=Fn.mergeObjects(
-            '$orig', {'group_id': '$_id'}, {k: f'${k}' for k in params if k != '_id'}))
-    ]
-
-
-def _object_id(params):
-    if isinstance(params, MongoOperand):
-        params = params()
-    if isinstance(params, str):
-        return ObjectId(params)
-    if isinstance(params, datetime.datetime):
-        return ObjectId.from_datetime(params)
-    return ObjectId()
-
-
-parser = QueryExprParser(
-    abbrev_prefixes={None: 'keywords=', '_': 'images.', '?': 'source.url%'},
-    allow_spacing=True,
-    functions={
-        'groupby': _expr_groupby,
-        'object_id': _object_id,
-        'expand': lambda *x: [
-            Fn.unwind('$images')(),
-            Fn.lookup(from_='imageitem', localField='images',
-                      foreignField='_id', as_='images')()
-        ],
-        'begin': lambda x: F.keywords.regex('^' + re.escape(x))
-    },
-    force_timestamp=False,
-)
-
-
 class StringOrDate(DbObjectInitializer):
-    """字符串或日期"""
+    """String or date"""
 
     def __init__(self):
 
@@ -66,7 +26,7 @@ class StringOrDate(DbObjectInitializer):
             if not args or not args[0]:
                 return ''
             try:
-                arg = parser.parse_literal(args[0])
+                arg = dateutil.parser.parse(args[0])
                 if isinstance(arg, datetime.datetime):
                     return arg
             except ValueError:
@@ -77,7 +37,7 @@ class StringOrDate(DbObjectInitializer):
 
 
 class ImageItem(db.DbObject):
-    """图像项目信息"""
+    """Image item"""
 
     flag = int
     rating = float
@@ -93,20 +53,20 @@ class ImageItem(db.DbObject):
 
     @property
     def image(self):
-        """图像信息"""
+        """Get the PIL.Image.Image object for the image"""
         if self._image is None:
             self._image = Image.open(self.image_raw)
         return self._image
 
     @image.setter
     def image(self, value):
-        """设置图像"""
+        """Set the associated image"""
         self._image = value
         self._image_flag = True
 
     @property
     def image_raw(self) -> BytesIO:
-        """获取附带图像的原始字节缓冲"""
+        """Get raw BytesIO for image data"""
 
         if self.source.get('file'):
             filename = self.source['file']
@@ -122,7 +82,7 @@ class ImageItem(db.DbObject):
         return None
 
     def save(self):
-        """保存"""
+        """Save image items"""
         image = self._image
         self._image = None
 
@@ -138,14 +98,14 @@ class ImageItem(db.DbObject):
 
     @classmethod
     def on_initialize(cls):
-        """初始化时调用"""
+        """Initialize indicies"""
         cls.ensure_index('flag')
         cls.ensure_index('rating')
         cls.ensure_index('source')
 
 
 class Paragraph(db.DbObject):
-    """语段信息"""
+    """Paragraph object"""
 
     dataset = str
     author = str
@@ -156,10 +116,12 @@ class Paragraph(db.DbObject):
     content = str
     pagenum = Anything
     lang = str
-    images = dbo.DbObjectCollection(ImageItem)
+    images = DbObjectCollection(ImageItem)
 
     @classmethod
     def on_initialize(cls):
+        """Initialize indecies
+        """
         cls.ensure_index('dataset')
         cls.ensure_index('author')
         cls.ensure_index('source')
@@ -169,13 +131,23 @@ class Paragraph(db.DbObject):
         cls.ensure_index('pagenum')
         cls.ensure_index('images')
 
-    def as_dict(self, expand=False):
+    def as_dict(self, expand: bool = False) -> dict:
+        """Convert the paragraph object to dict
+
+        :param expand: expand its members, defaults to False
+        :type expand: bool, optional
+        :return: a dict object representing the paragraph object
+        :rtype: dict
+        """
         result = super().as_dict(expand)
         for k in [_ for _ in result if _.startswith('_') and _ != '_id']:
             del result[k]
         return result
 
     def save(self):
+        """Save the paragraph
+        """
+
         if 'mongocollection' in self.__dict__:
             del self.mongocollection
         self.keywords = [str(_).strip()
@@ -190,7 +162,13 @@ class Paragraph(db.DbObject):
 
     @staticmethod
     def get_coll(coll):
-        """获取指向特定数据库集合 Collection 的语段对象"""
+        """Get subclass of Paragraph pointing to specific collection
+
+        :param coll: collection name in MongoDB
+        :type coll: str
+        :return: the subclass or Paragraph itself
+        :rtype: Type
+        """
 
         if coll and coll not in ('null', 'default', 'undefined', 'paragraph'):
             class _Temp(Paragraph):
@@ -201,7 +179,13 @@ class Paragraph(db.DbObject):
 
     @staticmethod
     def get_converter(coll):
-        """转换为指向特定数据库集合 Collection 的语段的转换器"""
+        """Get converter
+
+        :param coll: collection name in MongoDB
+        :type coll: str
+        :return: the converter function
+        :rtype: Callable[Paragraph]
+        """
 
         temp = Paragraph.get_coll(coll)
         if temp is Paragraph:
@@ -211,7 +195,7 @@ class Paragraph(db.DbObject):
 
 
 class History(db.DbObject):
-    """历史记录对象"""
+    """History record"""
 
     user = str
     created_at = datetime.datetime
@@ -219,13 +203,13 @@ class History(db.DbObject):
 
 
 class Meta(db.DbObject):
-    """元设置对象"""
+    """Meta settings"""
 
     app_title = str
 
 
 class Dataset(db.DbObject):
-    """数据集信息"""
+    """Dataset info"""
 
     allowed_users = list
     order_weight = int
@@ -235,7 +219,7 @@ class Dataset(db.DbObject):
 
 
 class TaskDBO(db.DbObject):
-    """任务对象"""
+    """Task DB Object"""
 
     name = str
     params = dict
@@ -250,7 +234,7 @@ class TaskDBO(db.DbObject):
 
 
 class User(db.DbObject):
-    """用户对象"""
+    """User"""
 
     username = str
     password = str
@@ -260,17 +244,39 @@ class User(db.DbObject):
 
     @staticmethod
     def encrypt_password(username, password_plain):
-        """加密密码"""
+        """Encrypt the password
+
+        :param username: username
+        :type username: str
+        :param password_plain: password in plain text
+        :type password_plain: str
+        :return: encrypted password
+        :rtype: str
+        """
         user_pass_salt = f'{username}_corpus_{password_plain}'.encode('utf-8')
         return f'{username}:{sha1(user_pass_salt).hexdigest()}'
 
     def set_password(self, password_plain=''):
-        """设置密码"""
+        """Set password for the user
+
+        :param password_plain: password in plain text, defaults to ''
+        :type password_plain: str, optional
+        """
         self.password = User.encrypt_password(self.username, password_plain)
 
     @staticmethod
     def authenticate(username, password, otp=''):
-        """认证授权"""
+        """Authenticate
+
+        :param username: user name
+        :type username: str
+        :param password: password in plain text
+        :type password: str
+        :param otp: one-time-password, defaults to ''
+        :type otp: str, optional
+        :return: user name if succeed, None otherwise
+        :rtype: str | None
+        """
 
         if otp:
             cond = (F.otp_secret != '') if username == '' else (
@@ -288,7 +294,7 @@ class User(db.DbObject):
 
 
 class Token(db.DbObject):
-    """用户认证对象"""
+    """User authentication token"""
 
     user = str
     token = str
@@ -297,7 +303,13 @@ class Token(db.DbObject):
 
     @staticmethod
     def check(token_string):
-        """检查 token 是否有效"""
+        """Check if token is valid
+
+        :param token_string: token
+        :type token_string: str
+        :return: if valid
+        :rtype: bool
+        """
 
         token = Token._cache.get(token_string)
         if token and token.expire > time.time():
@@ -314,7 +326,7 @@ class Token(db.DbObject):
 
     @staticmethod
     def uncheck(user):
-        """注销用户登录"""
+        """Log out user"""
 
         for token in Token._cache.values():
             if token.user == user:
@@ -327,7 +339,7 @@ class Token(db.DbObject):
 
     @property
     def roles(self):
-        """获取用户角色"""
+        """Get user roles"""
 
         if self._roles is None:
             self._roles = User.first(F.username == self.user).roles

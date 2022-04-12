@@ -23,7 +23,8 @@ class MachineTranslation(PipelineStage):
             to_lang = 'zh'
         elif to_lang == 'cht':
             to_lang = 'zh'
-            self.opencc =  safe_import('opencc', 'opencc-python-reimplemented').OpenCC('s2t')
+            self.opencc = safe_import(
+                'opencc', 'opencc-python-reimplemented').OpenCC('s2t')
 
         self.to_lang = to_lang
 
@@ -41,7 +42,9 @@ class MachineTranslation(PipelineStage):
 
 
 class MachineTranslationPlugin(Plugin):
+    """Plugin for machin translations
+    """
 
-    def __init__(self, app, **config):
-        super().__init__(app, **config)
+    def __init__(self, pmanager, **config):
+        super().__init__(pmanager, **config)
         self.register_pipelines(globals())

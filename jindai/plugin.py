@@ -1,49 +1,74 @@
-"""插件"""
+"""Plugin platform for jindai"""
 from collections import defaultdict
-from flask import Response
+from typing import Callable
+from flask import Response, Flask
+
 from .helpers import rest
 from .pipeline import Pipeline, PipelineStage
 from .config import instance as config
 
 
 class Plugin:
-    """插件基类"""
+    """Base class for plugins
+    """
 
-    def __init__(self, app, **conf) -> None:
+    def __init__(self, pmanager, **conf) -> None:
         self.config = conf
-        self.app = app
+        self.pmanager = pmanager
 
-    def get_filters(self):
-        """获取特殊过滤器"""
-        return {}
+    def register_filter(self, name: str, keybind: str, format_string: str,
+                        icon: str, handler: Callable) -> None:
+        """Register filter
 
-    def get_callbacks(self):
-        """获取回调函数"""
-        return []
+        :param name: filter name
+        :type name: str
+        :param keybind: keybind for ui
+        :type keybind: str
+        :param format_string: format string,
+            use {imageitem} and {paragraph} for the selected item
+        :type format_string: str
+        :param icon: mdi icon for ui button
+        :type icon: str
+        :param handler: handler function
+        :type handler: Callable
+        """
+        self.pmanager.filters[name] = {
+            'name': name,
+            'keybind': keybind,
+            'format': format_string,
+            'icon': icon,
+            'handler': handler
+        }
 
-    def run_callback(self, name, *args, **kwargs):
-        """运行回调函数"""
-        name = name.replace('-', '_') + '_callback'
-        return getattr(self, name)(*args, **kwargs)
+    def register_callback(self, name: str, handler: Callable):
+        """Register callback function
+
+        :param name: callback name
+        :type name: str
+        :param handler: handler function
+        :type handler: Callable
+        """
+        self.pmanager.callbacks[name].append(handler)
 
     def register_pipelines(self, pipeline_classes):
-        """注册处理管道"""
+        """Register pipeline stage"""
         if isinstance(pipeline_classes, dict):
             pipeline_classes = pipeline_classes.values()
 
         for cls in pipeline_classes:
             if isinstance(cls, type) and issubclass(cls, PipelineStage) \
-                and cls is not PipelineStage:
+                    and cls is not PipelineStage:
                 Pipeline.ctx[cls.__name__] = cls
 
 
 class PluginManager:
-    """插件模拟器"""
+    """Plugin manager"""
 
-    def __init__(self, plugin_ctx, app) -> None:
+    def __init__(self, plugin_ctx: dict, app: Flask) -> None:
         self.plugins = []
-        self.pages = {}
+        self.filters = {}
         self.callbacks = defaultdict(list)
+        self.app = app
 
         @app.route('/api/plugins/styles.css')
         def plugins_style():
@@ -52,16 +77,19 @@ class PluginManager:
             Returns:
                 Response: css document
             """
-            css = '\n'.join([p.run_callback('css')
-                            for p in self.callbacks['css']])
+            css = '\n'.join(
+                [handler() or '' for handler in self.callbacks['css']])
             return Response(css, mimetype='text/css')
 
-        @app.route('/api/plugins/pages', methods=["GET", "POST"])
+        @app.route('/api/plugins/filters', methods=["GET", "POST"])
         @rest()
         def plugin_pages():
-            """Returns names for special pages in every plugins
+            """Returns names for special filters in every plugins
             """
-            return self.pages
+            return [
+                dict(spec, handler='')
+                for spec in self.filters.values()
+            ]
 
         # load plugins
 
@@ -82,26 +110,22 @@ class PluginManager:
                 params = {}
 
             if isinstance(plugin_name, str):
-                plugin_name = plugin_ctx.get(plugin_name)
+                plugin_cls = plugin_ctx.get(plugin_name)
+            elif isinstance(plugin_name, type):
+                plugin_cls = plugin_name
 
-            if not plugin_name:
+            if not plugin_cls:
                 print('Plugin', plugin_name, 'not found.')
                 continue
 
             try:
-                plugin_name = plugin_name(app, **params)
-
-                self.pages.update(**plugin_name.get_filters())
-
-                for name in plugin_name.get_callbacks():
-                    self.callbacks[name].append(plugin_name)
-
-                self.plugins.append(plugin_name)
-                print('Registered plugin:', type(plugin_name).__name__)
+                plugin_instance = plugin_cls(self, **params)
+                self.plugins.append(plugin_instance)
+                print('Registered plugin:', type(plugin_instance).__name__)
             except Exception as ex:
                 print('Error while registering plugin:', plugin_name, ex)
                 continue
 
     def __iter__(self):
-        """获取所有已加载的插件"""
+        """Iterate through loaded plugins"""
         yield from self.plugins

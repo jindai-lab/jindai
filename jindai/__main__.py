@@ -1,4 +1,4 @@
-"""命令行界面"""
+"""CLI for jindai"""
 
 import base64
 import datetime
@@ -58,7 +58,6 @@ def export(query, output_file):
         output_file.write(xlsx)
 
 
-
 @cli.command('task')
 @click.argument('task_id')
 @click.option('--concurrent', type=int, default=10)
@@ -71,7 +70,6 @@ def run_task(id_or_name, concurrent=0):
         task.pipeline.concurrent = concurrent
     result = task.execute()
     print(result)
-
 
 
 @cli.command('enqueue')
@@ -148,7 +146,7 @@ def storage_merge(infiles, output):
                     dat = filename[f'data/{k}']
                     total += len(dat)
                     output_file[f'data/{k}'] = np.frombuffer(dat[:].tobytes(),
-                                                    dtype='uint8')
+                                                             dtype='uint8')
             except Exception as ex:
                 print(k, ex)
     output_file.close()
@@ -219,7 +217,7 @@ def _save_db(coll: str, records: Iterable[Dict], force):
             _mongodb(coll).delete_many(
                 {'_id': {'$in': [p['_id'] for p in records]}})
         _mongodb(coll).insert_many(records, ordered=False,
-                                    bypass_document_validation=True)
+                                   bypass_document_validation=True)
     except Exception as ex:
         print(ex.__class__.__name__)
 
@@ -264,7 +262,8 @@ def restore(infile, colls, force):
             buf = BytesIO(zip_file.read(coll))
             records = []
             for line in tqdm(buf):
-                record = json.loads(line.decode('utf-8'), object_hook=_restore_hook)
+                record = json.loads(line.decode('utf-8'),
+                                    object_hook=_restore_hook)
                 if (not restore_items and not restore_albums) or (
                     restore_items and (
                         (coll == 'imageitem' and record['_id'] in restore_items) or (
@@ -276,7 +275,7 @@ def restore(infile, colls, force):
                     records.append(record)
                 elif restore_albums and (
                     coll == 'paragraph' and (
-                        record['_id'] in restore_albums or \
+                        record['_id'] in restore_albums or
                             restore_albums.intersection(set(record['keywords'])))
                 ):
                     # print('\nfound match', p['_id'], p['images'])

@@ -10,9 +10,9 @@ from itertools import count as iter_count
 
 from PyMongoWrapper import F, QueryExprParser, ObjectId
 from PyMongoWrapper.dbo import DbObject, DbObjectCollection
-from jindai import PipelineStage
+from jindai import PipelineStage, parser
 from jindai.helpers import execute_query_expr, language_iso639, safe_import
-from jindai.models import Dataset, Paragraph, db, parser
+from jindai.models import Dataset, Paragraph, db
 
 
 class Passthrough(PipelineStage):
@@ -315,7 +315,8 @@ class Export(PipelineStage):
             except Exception:
                 return str(val)
 
-        result = [_.as_dict() if isinstance(_, DbObject) else _ for _ in result]
+        result = [_.as_dict() if isinstance(
+            _, DbObject) else _ for _ in result]
 
         if self.format == 'json':
             return {
@@ -552,7 +553,8 @@ class RegexReplace(PipelineStage):
         self.replacement = replacement
 
     def resolve(self, paragraph: Paragraph) -> Paragraph:
-        paragraph.content = self.regexp.sub(self.replacement, paragraph.content)
+        paragraph.content = self.regexp.sub(
+            self.replacement, paragraph.content)
         return paragraph
 
 

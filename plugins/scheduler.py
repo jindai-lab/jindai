@@ -127,10 +127,12 @@ class Scheduler(Plugin):
         self._thread = Thread(target=background)
         self._thread.start()
 
-    def __init__(self, app):
-        super().__init__(app)
+    def __init__(self, pmanager, **_):
+        super().__init__(pmanager)
         self._thread = None
         self.running = True
+
+        app = self.pmanager.app
 
         @app.route('/api/scheduler', methods=['GET'])
         @rest()

@@ -14,12 +14,12 @@ from flask import Flask, Response, redirect, request, send_file
 from PIL import Image, ImageOps
 from PyMongoWrapper import F, Fn, MongoOperand, ObjectId
 
-from jindai import DBQuery, Pipeline, Plugin, PluginManager, Task
+from jindai import DBQuery, parser, Pipeline, Plugin, PluginManager, Task
 from jindai.config import instance as config
 from jindai.helpers import (get_context, logined, rest, serve_file, stringify,
                             serve_proxy, JSONEncoder, JSONDecoder)
 from jindai.models import (Dataset, History, ImageItem, Meta, Paragraph,
-                           TaskDBO, Token, User, parser)
+                           TaskDBO, Token, User)
 
 app = Flask(__name__)
 app.config['SECRET_KEY'] = config.secret_key
@@ -571,7 +571,7 @@ def search(q='', req='', sort='', limit=100, offset=0,
     qparsed = DBQuery(q).query
 
     # test plugin pages
-    if '$page' in qparsed[-1]:
+    if len(qparsed) > 0 and '$page' in qparsed[-1]:
         qparsed, page_args = qparsed[:-1], qparsed[-1]['$page'].split('/')
     else:
         qparsed, page_args = q, []
@@ -581,13 +581,12 @@ def search(q='', req='', sort='', limit=100, offset=0,
     results = None
 
     if page_args:
-        for plugin in app.plugins:
-            if page_args[0] in plugin.get_filters():
-                if count:
-                    return limit
-                results = _expand_results(
-                    plugin.handle_page(datasource, *page_args[1:]))
-                break
+        handler = app.plugins.filters.get(page_args[0])
+        if handler:
+            if count:
+                return limit
+            results = _expand_results(
+                handler['handler'](datasource, *page_args[1:]))
 
     if results is None:
         if count:

@@ -2,9 +2,9 @@
 """
 
 from PyMongoWrapper import F
-from jindai import PipelineStage, Pipeline, Task
+from jindai import PipelineStage, Pipeline, Task, parser
 from jindai.helpers import execute_query_expr
-from jindai.models import TaskDBO, parser
+from jindai.models import TaskDBO
 
 
 class FlowControlStage(PipelineStage):

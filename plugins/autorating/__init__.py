@@ -22,7 +22,7 @@ class AutoRating(ImageOrAlbumStage):
         super().__init__()
         state = load_state(expand_path('models_data/autorating_best.pth'))
         self.model = InferenceModel(state)
-    
+
     def resolve_image(self, i: ImageItem, _):
         i.rating = float(self.model.predict_from_pil_image(i.image).numpy()[0])
         i.save()
@@ -32,6 +32,6 @@ class AutoRating(ImageOrAlbumStage):
 class AutoRatingPlugin(Plugin):
     """自动评分插件"""
 
-    def __init__(self, app, **config) -> None:
-        super().__init__(app, **config)
+    def __init__(self, pmanager, **config) -> None:
+        super().__init__(pmanager, **config)
         self.register_pipelines(globals())
