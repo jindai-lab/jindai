@@ -7,10 +7,11 @@ from collections import defaultdict
 from typing import List, Union
 
 import twitter
-from jindai.models import ImageItem, Paragraph, parser, ObjectId, F
+from jindai.models import ImageItem, Paragraph
 from jindai.pipeline import DataSourceStage
+from jindai.dbquery import parser, ObjectId, F
 
-from .dbquerydatasource import ImageImportDataSource, parser
+from .dbquerydatasource import ImageImportDataSource
 
 
 def find_post(url: str) -> Union[Paragraph, None]:

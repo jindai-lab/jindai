@@ -1,16 +1,16 @@
-"""处理流程"""
+"""Pipeline"""
 import inspect
 import json
 import re
-from typing import Dict, List, Tuple, Any, Type, Union
+from typing import Dict, List, Tuple, Any, Type, Union, Callable
 from collections.abc import Iterable as IterableClass
+from collections import defaultdict
 from .models import Paragraph
 
 
 class PipelineStage:
-    """
-    流程各阶段。返回应同样为一个段落记录（可以不与数据库中的一致）。
-    注意，针对段落的处理可能是并发进行的，流程处理阶段应尽量是无状态的。
+    """Stages of the process.
+    Note that processing against paragraphs may take place concurrently and that process processing stages should be stateless as far as possible.
     """
 
     def __init__(self) -> None:
@@ -19,7 +19,7 @@ class PipelineStage:
 
     @classmethod
     def get_spec(cls):
-        """获取参数信息"""
+        """Get specification info of the current stage"""
         return {
             'name': cls.__name__,
             'doc': (cls.__doc__ or '').strip(),
@@ -27,16 +27,40 @@ class PipelineStage:
         }
 
     @staticmethod
-    def _spec(stage_cls):
-        args_docs = {}
+    def _spec(stage_cls: Type):
+        """Get argument info for `__init__` method of stage_cls
 
-        for line in (stage_cls.__init__.__doc__ or '').strip().split('\n'):
-            match = re.search(r'(\w+)\s\((.+?)\):\s(.*)', line)
-            if match:
-                matched_groups = match.groups()
-                if len(matched_groups) > 2:
-                    args_docs[matched_groups[0]] = {'type': matched_groups[1].split(
-                        ',')[0], 'description': matched_groups[2]}
+        :param stage_cls: a class
+        :type stage_cls: Type
+        """
+
+        def _parse_docstring(docstring):
+            args_docs = defaultdict(dict)
+
+            if 'Args:' in docstring:
+                for line in docstring.strip().split('\n'):
+                    match = re.search(r'(\w+)\s+\((.+?)\):\s+(.*)', line)
+                    if match:
+                        arg_name, arg_type, arg_doc = match.groups()
+                        args_docs[arg_name] = {
+                            'type': arg_type.split(',')[0],
+                            'description': arg_doc
+                        }
+            elif ':param ' in docstring:
+                for line in docstring.strip().split('\n'):
+                    match = re.search(
+                        r':(param|type)(\s+\w+)?\s+(\w+):\s(.*)', line)
+                    if match:
+                        doc_directive, arg_type, arg_name, arg_doc = match.groups()
+                        if doc_directive == 'type':
+                            args_docs[arg_name]['type'] = arg_doc
+                        else:
+                            args_docs[arg_name]['description'] = arg_doc
+                            if arg_type and arg_type.strip():
+                                args_docs[arg_name]['type'] = arg_type.strip()
+            return args_docs
+
+        args_docs = _parse_docstring(stage_cls.__init__.__doc__ or '')
 
         args_spec = inspect.getfullargspec(stage_cls.__init__)
         args_defaults = dict(zip(reversed(args_spec.args),
@@ -50,32 +74,62 @@ class PipelineStage:
                     args_defaults[arg], ensure_ascii=False)
 
         return [
-             {
-                    'name': key,
-                    'type': val.get('type'),
-                    'description': val.get('description'),
-                    'default': val.get('default')
-                } for key, val in args_docs.items() if 'type' in val
+            {
+                'name': key,
+                'type': val.get('type'),
+                'description': val.get('description'),
+                'default': val.get('default')
+            } for key, val in args_docs.items() if 'type' in val
         ]
 
     @property
     def logger(self):
-        """获取日志记录方法"""
+        """Get logging method
+
+        :return: logging method
+        :rtype: Callable
+        """
         return lambda *x: self._logger(self.__class__.__name__, '|', *x)
 
     @logger.setter
-    def logger(self, val):
-        """设置日志记录方法"""
+    def logger(self, val: Callable):
+        """Setting logging method
+
+        :param val: logging method
+        :type val: Callable
+        """
         self._logger = val
 
     def resolve(self, paragraph: Paragraph) -> Paragraph:
-        """Map 阶段，处理段落"""
+        """Map period, handling paragraph.
 
-    def summarize(self, result) -> Any:
-        """Reduce 阶段，处理上一步骤返回的结果"""
+        :param paragraph: Paragraph to process
+        :type paragraph: Paragraph
+        :return: None if excluded from further processing;
+            A Paragraph object (which may not match the one in the database),
+            or iterable multiple objects for next stage.
+        :rtype: Paragraph | Iterable[Paragraph] | None
+        """
+
+    def summarize(self, result) -> Dict:
+        """Reduce period, handling result from the last stage
+
+        :param result: result from the last stage, None if the current stage
+            is placed at the first place
+        :type result: dict
+        :return: Summarized reuslt, None for default.
+        :rtype: dict | None
+        """
 
     def flow(self, paragraph: Union[Paragraph, IterableClass]) -> Tuple:
-        """实现流程控制
+        """Flow control
+
+        :param paragraph: Paragraph to process
+        :type paragraph: Union[Paragraph, IterableClass]
+        :return: Iterator
+        :rtype: Tuple
+        :yield: a tuple in form of (<result/iterable multiple results>, next pipeline stage)
+        :rtype: Iterator[Tuple]
         """
         results = self.resolve(paragraph)
         if isinstance(results, IterableClass):
@@ -86,12 +140,16 @@ class PipelineStage:
 
 
 class DataSourceStage(PipelineStage):
-    """
-    数据源阶段
+    """PipelineStage for data sources
     """
 
     @classmethod
     def get_spec(cls):
+        """Overwrite the method for getting specifications
+
+        :return: Name, docstring and argument info
+        :rtype: dict
+        """
         return {
             'name': cls.__name__,
             'doc': (cls.__doc__ or '').strip(),
@@ -99,20 +157,28 @@ class DataSourceStage(PipelineStage):
         }
 
     class Implementation:
-        """数据源的具体实现"""
+        """Implementing the data source"""
 
         def __init__(self) -> None:
             self.logger = print
 
         def fetch(self):
-            """获取实际数据"""
+            """Yield data (Paragraph objects)"""
 
     def __init__(self, **params) -> None:
         super().__init__()
         self.params = params
 
     def resolve(self, paragraph: Paragraph) -> Paragraph:
-        """用输入的语段信息更新数据源的参数"""
+        """Update the parameters of the data source with
+            the input paragraph
+
+        :param paragraph: Paragraph object containing parameters for data source
+        :type paragraph: Paragraph
+        :return: an iterator
+        :yield: Paragraphs from the data source
+        :rtype: Paragraph
+        """
 
         args = dict(**self.params)
         args.update(paragraph.as_dict())
@@ -123,13 +189,19 @@ class DataSourceStage(PipelineStage):
 
 
 class Pipeline:
-    """处理流程"""
+    """Pipeline"""
 
     ctx = {}
 
     @staticmethod
     def ensure_args(stage_type: Type, args: Dict):
-        """确保参数名称符合定义"""
+        """Ensure arguments are in compliance with definition
+
+        :param stage_type: the class to in compliance with
+        :type stage_type: Type
+        :param args: a dictionary containing arguments
+        :type args: Dict
+        """
         argnames = [_['name'] for _ in stage_type.get_spec()['args']]
 
         toremove = []
@@ -140,11 +212,16 @@ class Pipeline:
             del args[k]
 
     def __init__(self, stages: List[Union[Tuple[str, Dict], List, Dict, PipelineStage]],
-                 logger=print):
-        """
-        Args:
-            stages: 表示各阶段的 Tuple[<名称>, <配置>], List[<名称>, <配置>],
-                形如 {$<名称> : <配置>} 的参数所构成的列表，或直接由已初始化好的 PipelineStage
+                 logger: Callable = print):
+        """Initialize the pipeline
+
+        :param stages: pipeline stage info in one of the following forms:
+                - Tuple[<PipelineStage name>, <parameters>]
+                - List[<PipelineStage name>, <parameters>]
+                - {$<PipelineStage name> : <parameters>}
+        :type stages: List[Union[Tuple[str, Dict], List, Dict, PipelineStage]]
+        :param logger: Logging method, defaults to print
+        :type logger: Callable, optional
         """
 
         self.stages = []
@@ -169,8 +246,7 @@ class Pipeline:
                 self.stages.append(stage)
 
     def summarize(self):
-        """
-        Reduce 阶段
+        """Reduce period
         """
         returned = None
         for stage in self.stages:

@@ -16,7 +16,7 @@ class PDFDataSource(DataSourceStage):
     class Implementation(DataSourceStage.Implementation):
         """datasource implementation"""
 
-        def __init__(self, dataset_name, lang, content, mongocollection=''):
+        def __init__(self, dataset_name, lang, content, mongocollection='', skip_existed=True):
             """
             Args:
                 dataset_name (DATASET): 数据集名称
@@ -30,17 +30,22 @@ class PDFDataSource(DataSourceStage):
             self.lang = lang
             self.files = expand_patterns(content)
             self.mongocollection = mongocollection
+            self.skip_existed = skip_existed
 
         def fetch(self):
             para_coll = Paragraph.get_coll(self.mongocollection)
-            existent = {
-                a['_id']: a['pages']
-                for a in para_coll.aggregator.match(
-                    F.dataset == self.name
-                ).group(
-                    _id=Var['source.file'], pages=Fn.max(Var['source.page'])
-                )
-            }
+            if self.skip_existed:
+                existent = {
+                    a['_id']: a['pages']
+                    for a in para_coll.aggregator.match(
+                        F.dataset == self.name
+                    ).group(
+                        _id=Var['source.file'], pages=Fn.max(
+                            Var['source.page'])
+                    )
+                }
+            else:
+                existent = {}
 
             for pdf in self.files:
                 path = truncate_path(pdf)

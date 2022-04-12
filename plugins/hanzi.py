@@ -23,12 +23,11 @@ class HanziChaizi(PipelineStage):
             if c:
                 paragraph.chaizi.append(c)
         return paragraph
-    
+
 
 class ChaiziPlugin(Plugin):
     """汉字部首拆字插件"""
 
-    def __init__(self, app, **config):
-        super().__init__(app, **config)
+    def __init__(self, pmanager, **config):
+        super().__init__(pmanager, **config)
         self.register_pipelines(globals())
-    

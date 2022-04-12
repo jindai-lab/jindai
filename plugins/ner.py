@@ -131,8 +131,8 @@ class NERAsTokens(PipelineStage):
 
 
 class NERPlugin(Plugin):
-    """NER 插件"""
+    """NER Plugin"""
 
-    def __init__(self, app, **config):
-        super().__init__(app, **config)
+    def __init__(self, pmanager, **config):
+        super().__init__(pmanager, **config)
         self.register_pipelines(globals())

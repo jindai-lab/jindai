@@ -1,4 +1,4 @@
-"""数据存储访问"""
+"""File/Network storage access"""
 
 import glob
 import os
@@ -28,6 +28,11 @@ class Hdf5Manager:
     _lock = Lock()
 
     def __enter__(self, *_):
+        """Enter `with` block
+
+        :return: self
+        :rtype: Hdf5Manager
+        """
         Hdf5Manager._lock.acquire()
         if not Hdf5Manager.writable_file or Hdf5Manager.writable_file.mode != 'r+':
             if Hdf5Manager.writable_file:
@@ -37,7 +42,7 @@ class Hdf5Manager:
         return self
 
     def __exit__(self, *_):
-        """Exit with block
+        """Exit `with` block
         """
         Hdf5Manager.writable_file.flush()
         Hdf5Manager._lock.release()
@@ -46,13 +51,14 @@ class Hdf5Manager:
     def write(src, item_id):
         """Write data from src to h5df file with specific item id
 
-        Args:
-            src (IO | bytes): bytes or io object to read bytes from
-            item_id (str): item id
-
-        Returns:
-            bool: True if success
+        :param src: bytes or io object to read bytes from
+        :type src: IO | bytes
+        :param item_id: item id
+        :type item_id: str
+        :return: True if success
+        :rtype: bool
         """
+
         assert Hdf5Manager.writable_file, 'Please use `with` statement.'
 
         if isinstance(src, bytes):
@@ -70,15 +76,13 @@ class Hdf5Manager:
     def read(item_id: str) -> bytes:
         """Read data from h5df file
 
-        Args:
-            item_id (str): id string
-
-        Raises:
-            OSError: Not found
-
-        Returns:
-            bytes: data
+        :param item_id: id string
+        :type item_id: str
+        :raises OSError: Not found
+        :return: data
+        :rtype: BytesIO
         """
+
         if not os.path.exists(Hdf5Manager.base):
             Hdf5Manager.writable_file = h5py.File(Hdf5Manager.base, 'w')
             Hdf5Manager.writable_file.close()
@@ -95,10 +99,10 @@ class Hdf5Manager:
         raise OSError(f"No matched ID found: {item_id}")
 
     def delete(self, item_id: str) -> None:
-        """Delete item id
+        """Delete item key
 
-        Args:
-            item_id (str): ID string
+        :param item_id: item id
+        :type item_id: str
         """
         key = f'data/{item_id}'
         for block_file in [Hdf5Manager.writable_file] + Hdf5Manager.files:
@@ -107,20 +111,40 @@ class Hdf5Manager:
 
 
 class _Hdf5WriteBuffer(BytesIO):
+    """Buffer object for writing Hdf5
+    """
 
     def __init__(self, item_id, initial_bytes=b''):
+        """Initialize the buffer object
+
+        :param item_id: item id
+        :type item_id: str
+        :param initial_bytes: bytes for initialization, defaults to b''
+        :type initial_bytes: bytes, optional
+        """
         self.item_id = item_id
         super().__init__(initial_bytes)
 
     def close(self):
+        """close
+        """
         with Hdf5Manager():
             Hdf5Manager.write(self.getvalue(), self.item_id)
         super().close()
 
 
 class _ZipWriteBuffer(BytesIO):
+    """Buffer object for writing zip files
+    """
 
     def __init__(self, path, zfile):
+        """Initialize a buffer object for writing zip files
+
+        :param path: path for zip file
+        :type path: str
+        :param zfile: path inside the zip file
+        :type zfile: str
+        """
         self.path = path
         self.zfile = zfile
         super().__init__()
@@ -132,8 +156,17 @@ class _ZipWriteBuffer(BytesIO):
 
 
 class _RequestBuffer(BytesIO):
+    """Buffer object for post url requests
+    """
 
     def __init__(self, url, method='POST', **params):
+        """Initialize a buffer object for post requests
+
+        :param url: url
+        :type url: str
+        :param method: method for the request, defaults to 'POST'
+        :type method: str, optional
+        """
         self.req = _build_request(url, method, **params)
         super().__init__()
 
@@ -143,7 +176,16 @@ class _RequestBuffer(BytesIO):
         requests.Session().send(self.req.prepare())
 
 
-def _pdf_image(file, page, **_):
+def _pdf_image(file: str, page: int, **_) -> BytesIO:
+    """Get PNG file from PDF
+
+    :param file: PDF path
+    :type file: str
+    :param page: page index, starting form 0
+    :type page: int
+    :return: PNG bytes in a BytesIO
+    :rtype: BytesIO
+    """
     buf = BytesIO()
     page = int(page)
 
@@ -158,6 +200,22 @@ def _pdf_image(file, page, **_):
 
 def _build_request(url: str, method='GET', referer: str = '',
                    headers=None, data=None, **_):
+    """Build a request
+
+    :param url: target url
+    :type url: str
+    :param method: request  method, defaults to 'GET'
+    :type method: str, optional
+    :param referer: referer url, defaults to ''
+    :type referer: str, optional
+    :param headers: headers, defaults to None
+    :type headers: dict, optional
+    :param data: request body data, defaults to None
+    :type data: bytes, optional
+    :return: request context
+    :rtype: requests.Request
+    """
+
     if headers is None:
         headers = {}
 
@@ -178,13 +236,18 @@ def _try_download(url, attempts: int = 3, proxies=None, verify=False, timeout=60
                   **params) -> Union[bytes, None]:
     """Try download from url
 
-    Args:
-        url (str): url
-        referer (str, optional): referer url
-        attempts (int, optional): max attempts
-
-    Returns:
-        Union[bytes, None]: response content or None if failed
+    :param url: url
+    :type url: str
+    :param attempts: max times of attempts, defaults to 3
+    :type attempts: int, optional
+    :param proxies: proxies info in requests format, defaults to None
+    :type proxies: dict, optional
+    :param verify: verify ssl, defaults to False
+    :type verify: bool, optional
+    :param timeout: seconds to timeout, defaults to 60
+    :type timeout: int, optional
+    :return: response content or None if failed
+    :rtype: Union[bytes, None]
     """
 
     buf = None
@@ -207,9 +270,14 @@ def _try_download(url, attempts: int = 3, proxies=None, verify=False, timeout=60
 
 
 def expand_path(path: Union[Tuple[str], str]):
+    """Expand path to local storage path
+
+    :param path: the path to expand
+    :type path: Union[Tuple[str], str]
+    :return: str
+    :rtype: full/absolute path
     """
-    扩展本地文件系统路径
-    """
+
     if isinstance(path, tuple):
         path = os.path.sep.join([str(x) for x in path])
 
@@ -234,10 +302,14 @@ def expand_path(path: Union[Tuple[str], str]):
 
 
 def expand_patterns(patterns: Union[list, str]):
-    """
-    读取文件（包括压缩包内容）或网址，其中文件名可以使用 */? 通配符，网址可以使用 {num1-num2} 形式给定迭代范围
-    Returns:
-        Tuple[IO, str]: IO 为内容，str 为文件名或网址
+    """Get expanded paths according to wildcards patterns
+
+    :param patterns: patterns for looking up files.
+        Wildcards (*/?) supported for file system paths.
+        Brackets ({num1-num2}) supported for URLs.
+    :type patterns: Union[list, str]
+    :yield: full/absolute path
+    :rtype: str
     """
 
     if isinstance(patterns, str):
@@ -270,21 +342,26 @@ def expand_patterns(patterns: Union[list, str]):
 
 
 def safe_open(path: str, mode='rb', **params):
-    """
-    打开各种格式的文件。
-    Args:
-        path (str | tuple[str]): 可以是一个 tuple，也可以是字符串，为 tuple 时自动拼成字符串
-            除了常用的绝对和相对路径之外，还支持如下格式（按匹配优先级顺序）：
-            以 http:// 或 https:// 开头：时 params 支持 proxies, headers，mode 必须为 rb；
-            hdf5:// 开头：使用 hdf5Manager 读取或写入，mode 必须为 rb 或 wb；
-            包含 #zip/ ：将 # 前的作为 ZIP 压缩包文件路径，zip/ 后的作为包内的路径；
-            包含 #pdf/png ：将 # 前的作为 PDF 文件路径，pdf/png: 后的作为页号（从 0 开始），读取的是图像文件；
-            其余视为文件系统路径，其时 / 自动替换为对应平台的 / 或 \\。
+    """Open the path for read/write
 
-        mode (str): r, rb, w, wb, a, rb+ 等，取决于 path 的类型
+    :param path: file system path or URLs.
+            Relative and absolute paths are supported.
+            Paths are matched in the following priority:
+                - URLs starting with http:// or https:// 
+                  may use `proxies`, `referer`, and `headers` in `params`
+                - hdf5://<item id>
+                  mode muse be 'rb' or 'wb'
+                - <file path>#zip/<zip path>
+                  read a zipped file inside a tar specified by <file path>
+                - <file path>#pdf/png:<page>
+                  read PNG image from a PDF at page <page>
+                - (ordinary file system paths, with '/' replaced with `os.path.sep`
 
-        allowed_locations (list): 允许的文件系统路径，默认包含临时文件（包含默认临时文件前缀）和配置文件中所设置的 storage 路径
-            若不在允许的列表中，则将其视为一个相对于 storage 的路径
+    :type path: str
+    :param mode: mode for read or write, defaults to 'rb'
+    :type mode: str, optional
+    :return: opened file/IO buffer
+    :rtype: IO
     """
 
     if path.startswith(('http://', 'https://')):
@@ -325,7 +402,16 @@ def safe_open(path: str, mode='rb', **params):
 
 
 def truncate_path(path, base=None):
-    """Truncate path into base directory."""
+    """Truncate path if it belongs to the base directory.
+
+    :param path: file path
+    :type path: str
+    :param base: base directory path, defaults to None
+    :type base: str, optional
+
+    :return: truncated path
+    :rtype: str
+    """
     if base is None:
         base = config.storage
     if not base.endswith(os.path.sep):

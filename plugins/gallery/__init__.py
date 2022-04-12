@@ -38,6 +38,6 @@ def single_item(pid: str, iid: str) -> List[Paragraph]:
 class Gallery(Plugin):
     """相册插件"""
 
-    def __init__(self, app):
-        super().__init__(app)
+    def __init__(self, pmanager):
+        super().__init__(pmanager)
         self.register_pipelines(globals())

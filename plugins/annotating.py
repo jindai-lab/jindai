@@ -32,7 +32,7 @@ class Annotation(Paragraph):
     def query_by_paragraph(para: Paragraph):
         """Get annotations by paragraph"""
         return Annotation.query(F.paragraph_id == para.id,
-        F.paragraph_collection == (para.mongocollection or ''))
+                                F.paragraph_collection == (para.mongocollection or ''))
 
 
 def remove_spaces(text):
@@ -111,11 +111,12 @@ Paragraph.annotations = property(Annotation.query_by_paragraph)
 class AnnotatingPlugin(Plugin):
     """Plugin for annotating"""
 
-    def __init__(self, app, **config):
-        super().__init__(app, **config)
+    def __init__(self, pmanager, **config):
+        super().__init__(pmanager, **config)
         self.register_pipelines(globals())
+        app = self.pmanager.app
 
         @app.route('/api/plugins/annotations')
-        @rest()
-        def annoatations(id, collection):
-            return Annotation.query(F.user==logined(), F.paragraph_id == id, F.paragraph_colletion == collection)
+        @rest(mapping={'id': 'para_id'})
+        def annoatations(para_id, collection):
+            return Annotation.query(F.user == logined(), F.paragraph_id == id, F.paragraph_colletion == collection)

@@ -48,12 +48,13 @@ class TasksQueue(Plugin):
     """处理任务队列
     """
 
-    def __init__(self, app, n=3):
+    def __init__(self, pmanager, n=3):
         """
         Args:
             n (int, optional): 最大同时处理的任务数量
         """
-        super().__init__(app)
+        super().__init__(pmanager)
+        app = self.pmanager.app
         app.task_queue = self
         self.queue = deque()
         self.results = {}
@@ -63,9 +64,9 @@ class TasksQueue(Plugin):
         self._working_thread = None
 
         @app.route('/api/queue/', methods=['PUT'])
-        @rest()
-        def enqueue_task(id=''):
-            task_dbo = TaskDBO.first(F.id == id)
+        @rest(mapping={'id': 'task_id'})
+        def enqueue_task(task_id=''):
+            task_dbo = TaskDBO.first(F.id == task_id)
             assert task_dbo, 'No such task, or you do not have permission.'
             task_dbo.last_run = datetime.datetime.utcnow()
             task_dbo.save()
@@ -91,7 +92,7 @@ class TasksQueue(Plugin):
             resp.headers['Cache-Control'] = 'no-cache'
             resp.headers['X-Accel-Buffering'] = 'no'
             return resp
-            
+
         @app.route('/api/queue/<path:task_id>', methods=['DELETE'])
         @rest()
         def dequeue_task(task_id):
@@ -145,16 +146,16 @@ class TasksQueue(Plugin):
         """Generate request-specific status"""
         status = self.status
         status['running'] = [_ for _ in status['running']
-                                if logined('admin') or _.run_by == logined()]
+                             if logined('admin') or _.run_by == logined()]
         status['finished'] = [_ for _ in status['finished']
-                                if logined('admin') or not _.get('run_by') \
-                                or _['run_by'] == logined()
-                                ]
+                              if logined('admin') or not _.get('run_by')
+                              or _['run_by'] == logined()
+                              ]
         status['waiting'] = [_ for _ in status['waiting']
-                                if logined('admin') or _.run_by == logined()
-                                ]
+                             if logined('admin') or _.run_by == logined()
+                             ]
         return status
-            
+
     def start(self):
         """开始处理任务"""
         self.running = True
@@ -189,7 +190,7 @@ class TasksQueue(Plugin):
                 self.task_queue[tkey] = task_dbo
                 try:
                     task_dbo.task = Task.from_dbo(task_dbo, logger=lambda *args:
-                        announcer.log(tkey, '|', *args))
+                                                  announcer.log(tkey, '|', *args))
                     task_dbo.task.run()
                 except Exception as ex:
                     self.results[tkey] = {
@@ -230,7 +231,7 @@ class TasksQueue(Plugin):
 
         announcer.announce("updated")
         return key
-        
+
     def stop(self):
         """停止运行"""
         self.running = False

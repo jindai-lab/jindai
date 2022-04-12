@@ -9,7 +9,8 @@ from jindai.helpers import get_context
 class DatasourcePlugin(Plugin):
     """数据源插件"""
 
-    def __init__(self, app, **config):
-        super().__init__(app, **config)
-        ctx = get_context(os.path.join('plugins', 'datasources'), PipelineStage)
+    def __init__(self, pmanager, **config):
+        super().__init__(pmanager, **config)
+        ctx = get_context(os.path.join(
+            'plugins', 'datasources'), PipelineStage)
         self.register_pipelines(ctx)

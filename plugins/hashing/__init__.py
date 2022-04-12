@@ -59,6 +59,7 @@ def to_int(val):
     """Get int value of bytes"""
     return int(val.hex(), 16)
 
+
 def to_binary(val):
     """To binary
 
@@ -69,6 +70,7 @@ def to_binary(val):
         _type_: _description_
     """
     return binary.Binary(bytes.fromhex(f'{val:016x}'))
+
 
 def flip(val, bit_position):
     """Flip the i-th bit in x"""
@@ -171,7 +173,7 @@ class ImageHashDuplications(ImageOrAlbumStage):
                  for x in [d_hash] + list(flips(d_hash, 1)) + list(flips(d_hash, 2))])):
             target_id = j.id
             if target_id == i.id or f'{i.id}-{target_id}' in self.result_pairs \
-                or f'{target_id}-{i.id}' in self.result_pairs:
+                    or f'{target_id}-{i.id}' in self.result_pairs:
                 continue
 
             self.result_pairs.add(f'{target_id}-{i.id}')
@@ -198,11 +200,14 @@ class ImageHashDuplications(ImageOrAlbumStage):
 class Hashing(Plugin):
     """哈希插件"""
 
-    def __init__(self, app):
-        super().__init__(app)
+    def __init__(self, pmanager):
+        super().__init__(pmanager)
+        app = self.pmanager.app
         ImageItem.set_field('dhash', bytes)
         ImageItem.set_field('whash', bytes)
         self.register_pipelines([ImageHashDuplications, ImageHash])
+        self.register_filter(
+            'sim', keybind='s', format_string='sim/{imageitem._id}', icon='mdi-image', handler=self.handle_page)
 
         @app.route('/api/plugins/compare.tsv')
         def _compare_tsv():
@@ -260,10 +265,11 @@ class Hashing(Plugin):
                     new_paragraph.images = [i]
                     new_paragraph.score = i.score
                     if archive:
-                        groups = [g for g in paragraph.keywords if g.startswith('*')]
+                        groups = [
+                            g for g in paragraph.keywords if g.startswith('*')]
                         for group in groups or [new_paragraph.source['url']]:
                             if group not in pgroups and \
-                                (group not in groupped or groupped[group].score > \
+                                (group not in groupped or groupped[group].score >
                                     new_paragraph.score):
                                 groupped[group] = new_paragraph
                     else:
@@ -275,12 +281,3 @@ class Hashing(Plugin):
             results = sorted(results, key=lambda x: x.score)[
                 offset:offset + limit]
             return single_item('', iid) + [{'spacer': 'spacer'}] + results
-
-    def get_filters(self):
-        return {
-            'sim': {
-                'format': 'sim/{imageitem._id}',
-                'shortcut': 's',
-                'icon': 'mdi-image'
-            }
-        }

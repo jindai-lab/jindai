@@ -22,11 +22,19 @@ from flask import Response, jsonify, request, send_file, stream_with_context
 from PyMongoWrapper.dbo import create_dbo_json_decoder, create_dbo_json_encoder
 
 from .config import instance as config
-from .models import Token, parser
+from .models import Token
+from .dbquery import parser
 from .storage import safe_open
 
 
 def _me(param=''):
+    """Add me() Function for query
+
+    :param param: a string in query, defaults to ''
+    :type param: str, optional
+    :return: A string in form of "{param:}{logined user}"
+    :rtype: _type_
+    """
     param = str(param)
     if param:
         param += ':'
@@ -37,7 +45,15 @@ parser.functions['me'] = _me
 
 
 def safe_import(module_name, package_name=''):
-    """Safe import module"""
+    """Safe import module
+
+    :param module_name: module name
+    :type module_name: str
+    :param package_name: package name for pip, defaults to ''
+    :type package_name: str, optional
+    :return: the imported module
+    :rtype: Module
+    """
     try:
         importlib.import_module(module_name)
     except ImportError:
@@ -46,8 +62,23 @@ def safe_import(module_name, package_name=''):
     return importlib.import_module(module_name)
 
 
-def rest(login=True, cache=False, role=''):
-    """Rest API"""
+def rest(login=True, cache=False, role='', mapping=None):
+    """Rest API
+
+    :param login: require logged in, defaults to True
+    :type login: bool, optional
+    :param cache: use cache, defaults to False
+    :type cache: bool, optional
+    :param role: check user role, defaults to ''
+    :type role: str, optional
+    :param mapping: mapping json request body keys, defaults to None
+    :type mapping: dict, optional
+    :return: Flask response
+    :rtype: Response
+    """
+    if mapping is None:
+        mapping = {}
+
     def do_rest(func):
         @wraps(func)
         def wrapped(*args, **kwargs):
@@ -56,7 +87,8 @@ def rest(login=True, cache=False, role=''):
                     raise Exception(
                         f'Forbidden. Client: {request.remote_addr}')
                 if request.json:
-                    kwargs.update(**request.json)
+                    for key, val in request.json.items():
+                        kwargs[mapping.get(key, key)] = val
                 result = func(*args, **kwargs)
                 if isinstance(result, (tuple, Response, werkzeug.wrappers.response.Response)):
                     return result
@@ -76,7 +108,13 @@ def rest(login=True, cache=False, role=''):
 
 
 def logined(role=''):
-    """Check user login and role"""
+    """Check user login and role
+
+    :param role: str, defaults to ''
+    :type role: str, optional
+    :return: User name if passed, None if not
+    :rtype: Union[str, None]
+    """
     token = Token.check(request.headers.get(
         'X-Authentication-Token', request.cookies.get('token')))
 
@@ -158,7 +196,15 @@ def serve_file(path_or_io: Union[str, IO], ext: str = '', file_size: int = 0) ->
 
 
 def serve_proxy(server, path):
-    """Serve proxy path"""
+    """Serve from remote server
+
+    :param server: server host
+    :type server: str
+    :param path: path
+    :type path: str
+    :return: response from remote server
+    :rtype: Response
+    """
     resp = requests.get(f'http://{server}/{path}',
                         headers={'Host': 'localhost:8080'})
     return Response(resp.content, headers=dict(resp.headers))
@@ -168,7 +214,13 @@ RE_DIGITS = re.compile(r'[\+\-]?\d+')
 
 
 def execute_query_expr(parsed, inputs):
-    """Check according to parsed query expression"""
+    """Check according to parsed query expression
+
+    :param parsed: parsed QueryExpr
+    :type parsed: dict
+    :param inputs: input object
+    :type inputs: Union[Dict, List]
+    """
 
     def _opr(k):
         oprname = {
@@ -266,7 +318,15 @@ def execute_query_expr(parsed, inputs):
 
 
 def get_context(directory: str, parent_class: Type) -> Dict:
-    """Get context for given directory and parent class"""
+    """Get context for given directory and parent class
+
+    :param directory: directory path relative to the working directory
+    :type directory: str
+    :param parent_class: parent class of all defined classes to include
+    :type parent_class: Type
+    :return: a directory in form of {"ClassName": Class}
+    :rtype: Dict
+    """
 
     def _prefix(name):
         """Prefixing module name"""
@@ -295,8 +355,12 @@ def get_context(directory: str, parent_class: Type) -> Dict:
 
 
 def stringify(obj):
-    """
-    Stringify an obj in QueryExpr-compatible format
+    """Stringify an obj in QueryExpr-compatible format
+
+    :param obj: object
+    :type obj: Any
+    :return: str
+    :rtype: a QueryExpr-compatible string representing the object
     """
     if obj is None:
         return ''
@@ -332,12 +396,23 @@ JSONEncoderCls = create_dbo_json_encoder(json.JSONEncoder)
 
 
 class JSONEncoder(json.JSONEncoder):
+    """JSONEncoder for api use
+    """
+
     def __init__(self, **kwargs):
+        """Initialize the JSON Encoder
+        """
         kwargs['ensure_ascii'] = False
         super().__init__(**kwargs)
 
     def default(self, o):
-        """编码对象"""
+        """Encode the object o
+
+        :param o: the object
+        :type o: Any
+        :return: str or JSON-compatible objects
+        :rtype: Any
+        """
         if isinstance(o, np.ndarray):
             return o.tolist()
         if isinstance(o, np.int32):
@@ -350,8 +425,10 @@ class JSONEncoder(json.JSONEncoder):
         return JSONEncoderCls.default(self, o)
 
 
+"""JSONDecoder for api use"""
 JSONDecoder = create_dbo_json_decoder(json.JSONDecoder)
 
 
+"""ISO639 language codes"""
 with safe_open('models_data/language_iso639', 'rb') as flang:
     language_iso639 = pickle.load(flang)

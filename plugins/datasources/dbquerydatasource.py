@@ -9,13 +9,13 @@ import zipfile
 from collections import defaultdict
 from typing import Iterable, List
 from urllib.parse import urljoin
-from bson import SON
 from PIL import Image
 from PyMongoWrapper import F
 
-from jindai import safe_open, DBQuery
-from jindai.models import ImageItem, Paragraph, parser
+from jindai import safe_open, parser, DBQuery
+from jindai.models import ImageItem, Paragraph
 from jindai.pipeline import DataSourceStage
+
 
 class DBQueryDataSource(DataSourceStage):
     """从数据库查询
@@ -34,7 +34,8 @@ class DBQueryDataSource(DataSourceStage):
                 raw (bool): 若为 False（默认值）则返回 Paragraph 对象，否则返回原始数据，仅对于聚合查询有效
                 groups (无:none|按组:group|按来源:source|分组和来源:both): 分组
             """
-            self.dbquery = DBQuery(query, mongocollections, limit, skip, sort, raw, groups)
+            self.dbquery = DBQuery(
+                query, mongocollections, limit, skip, sort, raw, groups)
 
         def fetch():
             return self.dbquery.fetch()

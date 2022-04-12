@@ -1,4 +1,4 @@
-"""任务处理相关"""
+"""Task processing module for jindai"""
 import threading
 import traceback
 from collections import deque
@@ -12,18 +12,24 @@ from .pipeline import Pipeline
 
 
 class Task:
-    """任务对象"""
+    """Task object"""
 
     def __init__(self, params: dict, stages, concurrent=3, logger: Callable = print,
                  resume_next: bool = False, verbose: bool = False) -> None:
-        """
-        Args:
-            params (dict|Paragraph): 初始参数
-            stages (Any): 各流程阶段的信息
-            concurrent (int): 并发运行的数量
-            logger (str): 记录日志的方式，deque 或 print
-            verbose (bool): 进入和离开阶段时记录日志
-            tqdm (bool): 使用 tqdm 记录处理的段落数量
+        """Initialize the task object
+
+        :param params: Parameters, used as the first paragraph/input to the pipeline
+        :type params: dict
+        :param stages: Pipeline stages
+        :type stages: list
+        :param concurrent: thread pool size, defaults to 3
+        :type concurrent: int, optional
+        :param logger: the method to be called for logging, defaults to print
+        :type logger: Callable, optional
+        :param resume_next: continue execution when encountering errors, defaults to False
+        :type resume_next: bool, optional
+        :param verbose: logging debug info, defaults to False
+        :type verbose: bool, optional
         """
 
         self.alive = True
@@ -49,7 +55,12 @@ class Task:
             self.pbar = _FakeTqdm()
 
     def execute(self):
-        """执行任务"""
+        """Execute the task
+
+        :raises InterruptedError: when the task is interrupted
+        :return: Summarized result, or exception in execution
+        :rtype: dict
+        """
         tpe = ThreadPoolExecutor(max_workers=self.concurrent)
         self.pbar.n = 0
         queue = Queue()
@@ -93,11 +104,11 @@ class Task:
         except Exception as ex:
             self.alive = False
             return {'exception': str(ex), 'tracestack': traceback.format_tb(ex.__traceback__)}
-        
+
         return None
 
     def run(self):
-        """新建守护线程执行处理流程
+        """Create a daemon thread to execute the task
         """
         def _run():
             try:
@@ -118,7 +129,13 @@ class Task:
 
     @staticmethod
     def from_dbo(db_object, **kwargs):
-        """从数据库对象构建"""
+        """Get task from TaskDBO
+
+        :param db_object: TaskDBO
+        :type db_object: TaskDBO
+        :return: task object according to DBO
+        :rtype: Task
+        """
         if db_object.pipeline:
             return Task(params=db_object.pipeline[0][1],
                         stages=db_object.pipeline,

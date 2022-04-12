@@ -6,9 +6,9 @@ from concurrent.futures import ThreadPoolExecutor
 from urllib.parse import urljoin
 from bs4 import BeautifulSoup as B
 
-from jindai.models import ImageItem, Paragraph, parser
+from jindai.models import ImageItem, Paragraph
 from jindai.pipeline import DataSourceStage
-from jindai import expand_patterns, truncate_path, safe_open
+from jindai import expand_patterns, truncate_path, safe_open, parser
 
 
 class HTMLDataSource(DataSourceStage):

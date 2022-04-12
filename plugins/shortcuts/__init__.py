@@ -1,17 +1,20 @@
-"""快捷方式插件"""
+"""Shortcut plugin"""
 import os
+from PyMongoWrapper import F
 
-from jindai import Plugin
+from jindai import Plugin, parser
 from jindai.helpers import rest, serve_file
-from jindai.models import F, Meta, parser
+from jindai.models import Meta
 
 
 class Shortcuts(Plugin):
-    """快捷方式插件"""
+    """Shortcut plugin"""
 
-    def __init__(self, app):
-        super().__init__(app)
+    def __init__(self, pmanager):
+        super().__init__(pmanager)
         self.read_shortcuts()
+        self.register_callback('css', self.css_callback)
+        app = self.pmanager.app
 
         @app.route('/api/plugins/shortcuts', methods=['GET', 'POST'])
         @rest()
@@ -39,19 +42,16 @@ class Shortcuts(Plugin):
             return serve_file(os.path.join(os.path.dirname(__file__), 'jquery.min.js'))
 
     def read_shortcuts(self):
-        """读取快捷方式"""
-        shortcuts = (Meta.first(F.shortcuts.exists(1)) or Meta()).shortcuts or {}
+        """Read shortcuts from Meta settings"""
+        shortcuts = (Meta.first(F.shortcuts.exists(1))
+                     or Meta()).shortcuts or {}
         for key, val in shortcuts.items():
             if key.startswith(':'):
                 parser.set_shortcut(key[1:], val)
         return shortcuts
 
-    def get_callbacks(self):
-        """获取回调"""
-        return ['css']
-
     def css_callback(self):
-        """响应 CSS 回调"""
+        """Responding callback"""
         return ','.join(
             ['.gallery-description .t_' + v
              for k, v in self.read_shortcuts().items()

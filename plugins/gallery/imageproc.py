@@ -8,9 +8,9 @@ import numpy as np
 from PIL import Image, ImageOps
 from PyMongoWrapper import ObjectId
 
-from jindai import PipelineStage, expand_path, safe_open
+from jindai import PipelineStage, expand_path, safe_open, parser
 from jindai.helpers import safe_import
-from jindai.models import ImageItem, Paragraph, parser
+from jindai.models import ImageItem, Paragraph
 
 
 class ImageOrAlbumStage(PipelineStage):

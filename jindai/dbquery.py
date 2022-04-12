@@ -1,10 +1,50 @@
-"""提供数据库查询的基本操作"""
+"""提供数据库访问功能"""
 import re
-
+import datetime
 from bson import SON
-from PyMongoWrapper import MongoOperand
+from PyMongoWrapper import MongoOperand, F, Fn, ObjectId, QueryExprParser
 
-from .models import Paragraph, parser
+from .models import Paragraph
+
+
+def _expr_groupby(params):
+    if isinstance(params, MongoOperand):
+        params = params()
+    if 'id' in params:
+        params['_id'] = {k[1:]: k for k in params['id']}
+        del params['id']
+    return [
+        Fn.group(orig=Fn.first('$$ROOT'), **params),
+        Fn.replaceRoot(newRoot=Fn.mergeObjects(
+            '$orig', {'group_id': '$_id'}, {k: f'${k}' for k in params if k != '_id'}))
+    ]
+
+
+def _object_id(params):
+    if isinstance(params, MongoOperand):
+        params = params()
+    if isinstance(params, str):
+        return ObjectId(params)
+    if isinstance(params, datetime.datetime):
+        return ObjectId.from_datetime(params)
+    return ObjectId()
+
+
+parser = QueryExprParser(
+    abbrev_prefixes={None: 'keywords=', '_': 'images.', '?': 'source.url%'},
+    allow_spacing=True,
+    functions={
+        'groupby': _expr_groupby,
+        'object_id': _object_id,
+        'expand': lambda *x: [
+            Fn.unwind('$images')(),
+            Fn.lookup(from_='imageitem', localField='images',
+                      foreignField='_id', as_='images')()
+        ],
+        'begin': lambda x: F.keywords.regex('^' + re.escape(x))
+    },
+    force_timestamp=False,
+)
 
 
 class DBQuery:
@@ -53,7 +93,7 @@ class DBQuery:
                     query = ''
 
             # parse query
-            query = parser.eval(query)
+            query = parser.eval(query) or []
 
         if not isinstance(query, list):
             query = [query]
@@ -65,7 +105,7 @@ class DBQuery:
         if isinstance(first_query, str):
             first_query = {'$match': parser.eval(first_query)}
         elif isinstance(first_query, dict) and \
-                not [_ for _ in first_query if _.startswith('$')]:
+                not [_ for _ in first_query if _.startswith('$') and _ not in ('$and', '$or')]:
             first_query = {'$match': first_query}
 
         if first_query != query[0]:

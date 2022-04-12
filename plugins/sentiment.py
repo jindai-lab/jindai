@@ -19,6 +19,6 @@ class AutoSentimentAnalysis(PipelineStage):
 class SentimentAnalysisPlugin(Plugin):
     """情感分析插件"""
 
-    def __init__(self, app, **config):
-        super().__init__(app, **config)
+    def __init__(self, pmanager, **config):
+        super().__init__(pmanager, **config)
         self.register_pipelines(globals())
