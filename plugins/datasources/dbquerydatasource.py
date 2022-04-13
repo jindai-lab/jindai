@@ -37,7 +37,7 @@ class DBQueryDataSource(DataSourceStage):
             self.dbquery = DBQuery(
                 query, mongocollections, limit, skip, sort, raw, groups)
 
-        def fetch():
+        def fetch(self):
             return self.dbquery.fetch()
 
 

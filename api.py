@@ -16,7 +16,7 @@ from PyMongoWrapper import F, Fn, MongoOperand, ObjectId
 
 from jindai import DBQuery, parser, Pipeline, Plugin, PluginManager, Task
 from jindai.config import instance as config
-from jindai.helpers import (get_context, logined, rest, serve_file, stringify,
+from jindai.helpers import (get_context, logined, rest, serve_file,
                             serve_proxy, JSONEncoder, JSONDecoder)
 from jindai.models import (Dataset, History, ImageItem, Meta, Paragraph,
                            TaskDBO, Token, User)
@@ -571,8 +571,8 @@ def search(q='', req='', sort='', limit=100, offset=0,
     qparsed = DBQuery(q).query
 
     # test plugin pages
-    if len(qparsed) > 0 and '$page' in qparsed[-1]:
-        qparsed, page_args = qparsed[:-1], qparsed[-1]['$page'].split('/')
+    if len(qparsed) > 0 and '$plugin' in qparsed[-1]:
+        qparsed, page_args = qparsed[:-1], qparsed[-1]['$plugin'].split('/')
     else:
         qparsed, page_args = q, []
 
@@ -593,7 +593,7 @@ def search(q='', req='', sort='', limit=100, offset=0,
             return datasource.count()
         results = _expand_results(datasource.fetch())
 
-    History(user=logined(), querystr=stringify(datasource.query),
+    History(user=logined(), queries=[q, req],
             created_at=datetime.datetime.utcnow()).save()
     return {'results': results, 'query': datasource.query}
 
@@ -740,9 +740,12 @@ def quick_task(query='', pipeline='', raw=False, mongocollection=''):
     """快速任务"""
 
     if pipeline:
-        pipeline = parser.eval(pipeline)
+        if isinstance(pipeline, str):
+            pipeline = parser.eval(pipeline)
+        assert isinstance(pipeline, (list, tuple)
+                          ), f"Unknown format for pipeline: {pipeline}"
         args = pipeline[0]
-        if isinstance(args, tuple):
+        if isinstance(args, (list, tuple)):
             args = args[1]
         elif isinstance(args, dict):
             args, = args.values()

@@ -199,7 +199,7 @@ class History(db.DbObject):
 
     user = str
     created_at = datetime.datetime
-    querystr = str
+    queries = list
 
 
 class Meta(db.DbObject):
