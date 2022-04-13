@@ -354,44 +354,6 @@ def get_context(directory: str, parent_class: Type) -> Dict:
     return ctx
 
 
-def stringify(obj):
-    """Stringify an obj in QueryExpr-compatible format
-
-    :param obj: object
-    :type obj: Any
-    :return: str
-    :rtype: a QueryExpr-compatible string representing the object
-    """
-    if obj is None:
-        return ''
-    if isinstance(obj, dict):
-        seq = []
-        for key, val in obj.items():
-            if key == '$options':
-                continue
-            elif key.startswith('$'):
-                seq.append(key[1:] + '(' + stringify(val) + ')')
-            elif key == '_id':
-                seq.append('id=' + stringify(val))
-            else:
-                seq.append(key + '=' + stringify(val))
-        return '(' + ','.join(seq) + ')'
-    elif isinstance(obj, str):
-        return json.dumps(obj, ensure_ascii=False)
-    elif isinstance(obj, (int, float)):
-        return str(obj)
-    elif isinstance(obj, datetime.datetime):
-        return obj.isoformat()+"Z"
-    elif isinstance(obj, list):
-        return '[' + ','.join([stringify(e) for e in obj]) + ']'
-    elif isinstance(obj, bool):
-        return str(bool).lower()
-    elif isinstance(obj, ObjectId):
-        return 'ObjectId(' + str(obj) + ')'
-    else:
-        return '_json(`' + json.dumps(obj, ensure_ascii=False) + '`)'
-
-
 JSONEncoderCls = create_dbo_json_encoder(json.JSONEncoder)
 
 

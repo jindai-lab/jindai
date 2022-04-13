@@ -65,7 +65,7 @@ def run_task(id_or_name, concurrent=0):
     """Run task according to id or name"""
     _init_plugins()
     task = Task.from_dbo(TaskDBO.first((F.id == id_or_name) if re.match(
-        r'[0-9a-f]{24}', id_or_name) else (F.name == id_or_name)), logger='print', verbose=True)
+        r'[0-9a-f]{24}', id_or_name) else (F.name == id_or_name)), logger=print, verbose=True)
     if concurrent > 0:
         task.pipeline.concurrent = concurrent
     result = task.execute()

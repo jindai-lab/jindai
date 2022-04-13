@@ -238,6 +238,9 @@ class Pipeline:
                     stage_type = Pipeline.ctx[name]
                     Pipeline.ensure_args(stage_type, kwargs)
                     stage = stage_type(**kwargs)
+                assert isinstance(
+                    stage, PipelineStage), f'unknown format for {stage}'
+
                 stage.logger = self.logger
 
                 if self.stages:
