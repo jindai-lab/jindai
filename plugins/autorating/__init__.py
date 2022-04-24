@@ -24,7 +24,8 @@ class AutoRating(ImageOrAlbumStage):
         self.model = InferenceModel(state)
 
     def resolve_image(self, i: ImageItem, _):
-        i.rating = float(self.model.predict_from_pil_image(i.image).numpy()[0])
+        i.rating = (float(self.model.predict_from_pil_image(
+            i.image).numpy()[0]) + 1) / 2
         i.save()
         return i
 
