@@ -22,16 +22,16 @@ class SchedulerJob(db.DbObject):
 class JobTask:
     """定时任务执行"""
 
-    def __init__(self, app, task_id: str):
+    def __init__(self, pmanager, task_id: str):
         self.task_dbo = TaskDBO.first(F.id == task_id)
         self.key = ObjectId()
-        self.app = app
+        self.pmanager = pmanager
 
     def __call__(self):
         dbo = TaskDBO.first(F.id == self.task_dbo.id)
         assert dbo
         dbo.last_run = datetime.datetime.utcnow()
-        self.app.task_queue.enqueue(dbo, run_by='scheduler')
+        self.pmanager.task_queue.enqueue(dbo, run_by='scheduler')
 
     def __repr__(self) -> str:
         return f'{self.key}: {self.task_dbo.name}'
@@ -83,7 +83,7 @@ class Scheduler(Plugin):
             elif token in ['at', 'do']:
                 context = token
             elif re.match(r'[0-9a-fA-F]{24}', token) and context == 'do':
-                jobs.append(executor.do(JobTask(self.app, token)))
+                jobs.append(executor.do(JobTask(self.pmanager, token)))
                 context = 'end'
             else:
                 print(

@@ -388,9 +388,9 @@ def set_rating(ids, inc=1, val=0, least=0):
             i.rating = val
         elif inc:
             i.rating = round(2 * (i.rating)) / 2 + inc
-        if least:
-            i.rating = max(least, i.rating)
-        i.rating = min(max(-1, i.rating), 5)
+
+        i.rating = max(least, i.rating)
+        i.rating = min(i.rating, 5)
         i.save()
     return {
         str(i.id): i.rating
@@ -656,7 +656,7 @@ def set_datasets(dataset=None, datasets=None, rename=None, sources=None, **j):
 
     elif sources is not None:
         j = sources
-        coll = Dataset.first(F.id == j['_id'])
+        coll = Dataset.first(F.name == j['name'])
         if not coll:
             return False
 

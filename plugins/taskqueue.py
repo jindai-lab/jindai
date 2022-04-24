@@ -24,9 +24,9 @@ class MessageAnnouncer:
 
     def listen(self):
         """listen to the announcer"""
-        q = Queue(maxsize=5)
-        self.listeners.append(q)
-        return q
+        message_queue = Queue(maxsize=5)
+        self.listeners.append(message_queue)
+        return message_queue
 
     def announce(self, msg):
         """Announce message"""
@@ -55,7 +55,7 @@ class TasksQueue(Plugin):
         """
         super().__init__(pmanager)
         app = self.pmanager.app
-        app.task_queue = self
+        self.pmanager.task_queue = self
         self.queue = deque()
         self.results = {}
         self.task_queue = {}
@@ -197,7 +197,7 @@ class TasksQueue(Plugin):
                         'run_by': task_dbo.run_by,
                         'exception': f'初始化任务时出错: {ex.__class__.__name__}: {ex}',
                         'tracestack': traceback.format_tb(ex.__traceback__) + [
-                            self.app.json_encoder().encode(task_dbo.as_dict())
+                            self.pmanager.app.json_encoder().encode(task_dbo.as_dict())
                         ]}
                     self.task_queue.pop(tkey)
                 announcer.announce("updated")
