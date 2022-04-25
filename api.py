@@ -19,7 +19,7 @@ from jindai.config import instance as config
 from jindai.helpers import (get_context, logined, rest, serve_file,
                             serve_proxy, JSONEncoder, JSONDecoder)
 from jindai.models import (Dataset, History, ImageItem, Meta, Paragraph,
-                           TaskDBO, Token, User)
+                           TaskDBO, Token, User, Term)
 
 app = Flask(__name__)
 app.config['SECRET_KEY'] = config.secret_key
@@ -669,6 +669,19 @@ def set_datasets(dataset=None, datasets=None, rename=None, sources=None, **j):
         coll.save()
 
     return True
+
+
+@app.route("/api/term/<field>", methods=['POST'])
+@rest()
+def query_terms(field, pattern, regex=False):
+    """Query terms"""
+
+    if regex:
+        pattern = F.term.regex(pattern)
+    else:
+        pattern = F.term == pattern
+
+    return list(Term.query(F.field == field, pattern).limit(100))
 
 
 @app.route("/api/image/<coll>/<storage_id>.<ext>")

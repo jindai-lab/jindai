@@ -36,6 +36,28 @@ class StringOrDate(DbObjectInitializer):
         super().__init__(func, None)
 
 
+class Term(db.DbObject):
+    """Term indexing"""
+
+    term = str
+    field = str
+
+    @classmethod
+    def on_initialize(cls):
+        """Initialize indecies
+        """
+        cls.ensure_index('term')
+        cls.ensure_index('field')
+
+    @staticmethod
+    def write(term, field):
+        """"Save term into database"""
+        tobj = Term.first(F.term == term, F.field == field)
+        if term is not None:
+            return tobj
+        return Term(term=term, field=field).save()
+
+
 class ImageItem(db.DbObject):
     """Image item"""
 
@@ -150,8 +172,17 @@ class Paragraph(db.DbObject):
 
         if 'mongocollection' in self.__dict__:
             del self.mongocollection
+
         self.keywords = [str(_).strip()
                          for _ in set(self.keywords) if _ and str(_).strip()]
+
+        for field in ['keywords', 'author']:
+            vals = self[field]
+            if not isinstance(vals, list):
+                vals = [vals]
+            for val in vals:
+                Term.write(val, field)
+
         for i in list(self.images):
             if not isinstance(i, ImageItem):
                 self.images.remove(i)
