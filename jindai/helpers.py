@@ -16,6 +16,7 @@ from typing import IO, Dict, Type, Union
 
 import numpy as np
 import requests
+import iso639
 import werkzeug.wrappers.response
 from bson import ObjectId
 from flask import Response, jsonify, request, send_file, stream_with_context
@@ -392,5 +393,7 @@ JSONDecoder = create_dbo_json_decoder(json.JSONDecoder)
 
 
 """ISO639 language codes"""
-with safe_open('models_data/language_iso639', 'rb') as flang:
-    language_iso639 = pickle.load(flang)
+language_iso639 = {
+    lang.pt1: lang.name for lang in iso639.iter_langs() if lang.pt1 and lang.pt1 != 'zh'
+}
+language_iso639.update(chs='Chinese Simplified', cht='Chinese Traditional')

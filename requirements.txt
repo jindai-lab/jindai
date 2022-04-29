@@ -3,12 +3,12 @@ flask
 pymongo
 https://github.com/zhuth/PyMongoWrapper/archive/master.zip
 fitz
+iso639-lang
 click
 tqdm
 pdf2image
 pyyaml
 inotify
-hanzidentifier
 requests
 lxml
 h5py
