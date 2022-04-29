@@ -16,7 +16,7 @@ from PyMongoWrapper import F, Fn, MongoOperand, ObjectId
 
 from jindai import DBQuery, parser, Pipeline, Plugin, PluginManager, Task
 from jindai.config import instance as config
-from jindai.helpers import (get_context, logined, rest, serve_file,
+from jindai.helpers import (get_context, logined, rest, serve_file, language_iso639,
                             serve_proxy, JSONEncoder, JSONDecoder)
 from jindai.models import (Dataset, History, ImageItem, Meta, Paragraph,
                            TaskDBO, Token, User, Term)
@@ -544,6 +544,13 @@ def help_info():
             '.')[-1] if hasattr(val, '__module__') else key).strip()
         result[name][key] = val.get_spec()
     return result
+
+
+@app.route('/api/help/langs')
+@rest(cache=True)
+def help_langs():
+    """提供支持的语言信息"""
+    return language_iso639
 
 
 @app.route('/api/history')
