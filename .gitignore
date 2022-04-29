@@ -41,3 +41,4 @@ sources
 plugins/jiayan
 plugins/nima
 plugins/facedet
+plugins/autocompletion
