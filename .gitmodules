@@ -10,3 +10,6 @@
 [submodule "plugins/nima"]
 	path = plugins/nima
 	url = https://github.com/zhuth/jindai.plugins.nima
+[submodule "plugins/autocompletion"]
+	path = plugins/autocompletion
+	url = https://gist.github.com/zhuth/52cae0f9eddd7b8aa317f326928fdb96
