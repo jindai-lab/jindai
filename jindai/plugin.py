@@ -1,11 +1,18 @@
 """Plugin platform for jindai"""
+import glob
+from distutils.dir_util import copy_tree
+import os
+import tempfile
+import zipfile
 from collections import defaultdict
 from typing import Callable
-from flask import Response, Flask
 
-from .helpers import rest
-from .pipeline import Pipeline, PipelineStage
+from flask import Flask, Response
+
 from .config import instance as config
+from .helpers import rest
+from .storage import expand_path, safe_open
+from .pipeline import Pipeline, PipelineStage
 
 
 class Plugin:
@@ -129,3 +136,31 @@ class PluginManager:
     def __iter__(self):
         """Iterate through loaded plugins"""
         yield from self.plugins
+
+    def install(self, file_or_url: str):
+        """Install plugin from local file storage"""
+        if file_or_url.startswith('https://github.com/') and not file_or_url.endswith('.zip'):
+            file_or_url += '/archive/refs/heads/main.zip'
+        ziptar = safe_open(file_or_url)
+        tmpdir = tempfile.mkdtemp()
+        with zipfile.ZipFile(ziptar, 'r') as zipped:
+            zipped.extractall(path=tmpdir)
+
+        maindir = [adir for adir in glob.glob(os.path.join(
+            tmpdir, '*')) if os.path.isdir(adir) and not adir.startswith('.') and not adir.startswith('__')]
+        if not maindir:
+            raise ValueError(
+                f'No main directory found while attempting to install from {file_or_url}')
+        maindir = maindir[0]
+
+        for dirname in ('plugins', 'sources'):
+            source = os.path.join(maindir, dirname)
+            if not os.path.exists(source):
+                continue
+
+            if dirname == 'sources':
+                target = expand_path('/')
+            else:
+                target = os.path.join(config.rootpath, dirname)
+
+            copy_tree(source, target)

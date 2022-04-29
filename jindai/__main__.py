@@ -32,7 +32,7 @@ def _mongodb(coll):
 
 def _init_plugins():
     """Inititalize plugins"""
-    PluginManager(get_context('plugins', Plugin), Flask(__name__))
+    return PluginManager(get_context('plugins', Plugin), Flask(__name__))
 
 
 @click.group()
@@ -220,6 +220,13 @@ def _save_db(coll: str, records: Iterable[Dict], force):
                                    bypass_document_validation=True)
     except Exception as ex:
         print(ex.__class__.__name__)
+
+
+@cli.command('install-plugin')
+@click.argument('url')
+def install_plugin(url):
+    pmanager = _init_plugins()
+    pmanager.install(url)
 
 
 @cli.command('restore')
