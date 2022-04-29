@@ -34,6 +34,7 @@ class DBQueryDataSource(DataSourceStage):
                 raw (bool): 若为 False（默认值）则返回 Paragraph 对象，否则返回原始数据，仅对于聚合查询有效
                 groups (无:none|按组:group|按来源:source|分组和来源:both): 分组
             """
+            super().__init__()
             self.dbquery = DBQuery(
                 query, mongocollections, limit, skip, sort, raw, groups)
 
