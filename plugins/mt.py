@@ -1,8 +1,37 @@
 """机器翻译
 """
+import requests
+
 from jindai.helpers import safe_import
 from jindai.models import Paragraph
 from jindai import PipelineStage, Plugin
+
+
+class RemoteTranslation(PipelineStage):
+    """调用远程 API 进行机器翻译"""
+
+    def __init__(self, translator_url, to_lang='chs'):
+        """
+        Args:
+            to_lang (LANG): 目标语言标识
+            translator_url (str): 远程 API 网址
+        """
+        super().__init__()
+        self.url = translator_url
+        self.to_lang = 'ZH' if to_lang in (
+            'chs', 'cht') else to_lang.upper()
+
+    def resolve(self, paragraph: Paragraph) -> Paragraph:
+        """机器翻译段落"""
+        if not paragraph.content.strip():
+            return None
+
+        resp = requests.post(self.url, json={
+                             'text': paragraph.content, 'source_lang': paragraph.lang.upper() if paragraph.lang != 'auto' else 'auto', 'target_lang': self.to_lang})
+        result = (resp.json() or {}).get('data')
+        paragraph.content = result
+        paragraph.id = None
+        return paragraph
 
 
 class MachineTranslation(PipelineStage):
@@ -30,14 +59,12 @@ class MachineTranslation(PipelineStage):
 
     def resolve(self, paragraph: Paragraph) -> Paragraph:
         """处理段落"""
-        t = self.model.translate(paragraph.content, source_lang=paragraph.lang if paragraph.lang not in (
+        result = self.model.translate(paragraph.content, source_lang=paragraph.lang if paragraph.lang not in (
             'chs', 'cht') else 'zh', target_lang=self.to_lang)
         if self.opencc:
-            t = self.opencc.convert(t)
-        paragraph.content = t
-        if paragraph.id:
-            paragraph._id = None
-            del paragraph._orig['_id']
+            result = self.opencc.convert(result)
+        paragraph.content = result
+        paragraph.id = None
         return paragraph
 
 
