@@ -542,6 +542,8 @@ def help_info():
     for key, val in ctx.items():
         name = (sys.modules[val.__module__].__doc__ or val.__module__.split(
             '.')[-1] if hasattr(val, '__module__') else key).strip()
+        if key == "DataSourceStage":
+            continue
         result[name][key] = val.get_spec()
     return result
 

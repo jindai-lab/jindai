@@ -27,7 +27,10 @@ class RemoteTranslation(PipelineStage):
             return None
 
         resp = requests.post(self.url, json={
-                             'text': paragraph.content, 'source_lang': paragraph.lang.upper() if paragraph.lang != 'auto' else 'auto', 'target_lang': self.to_lang})
+                             'text': paragraph.content,
+                             'source_lang': paragraph.lang.upper()
+                             if paragraph.lang != 'auto' else 'auto',
+                             'target_lang': self.to_lang})
         result = (resp.json() or {}).get('data')
         paragraph.content = result
         paragraph.id = None
@@ -59,8 +62,9 @@ class MachineTranslation(PipelineStage):
 
     def resolve(self, paragraph: Paragraph) -> Paragraph:
         """处理段落"""
-        result = self.model.translate(paragraph.content, source_lang=paragraph.lang if paragraph.lang not in (
-            'chs', 'cht') else 'zh', target_lang=self.to_lang)
+        result = self.model.translate(paragraph.content,
+                                      source_lang=paragraph.lang if paragraph.lang not in (
+                                          'chs', 'cht') else 'zh', target_lang=self.to_lang)
         if self.opencc:
             result = self.opencc.convert(result)
         paragraph.content = result
