@@ -1,4 +1,5 @@
-"""网页界面的 API"""
+"""API Web Service"""
+
 import datetime
 import hashlib
 import os
@@ -14,12 +15,15 @@ from flask import Flask, Response, redirect, request, send_file
 from PIL import Image, ImageOps
 from PyMongoWrapper import F, Fn, MongoOperand, ObjectId
 
-from jindai import DBQuery, parser, Pipeline, Plugin, PluginManager, Task
-from jindai.config import instance as config
-from jindai.helpers import (get_context, logined, rest, serve_file, language_iso639,
-                            serve_proxy, JSONEncoder, JSONDecoder)
-from jindai.models import (Dataset, History, ImageItem, Meta, Paragraph,
-                           TaskDBO, Token, User, Term)
+from .dbquery import DBQuery, parser
+from .pipeline import Pipeline
+from .plugin import Plugin, PluginManager
+from .task import Task
+from .config import instance as config
+from .helpers import (get_context, logined, rest, serve_file, language_iso639,
+                      serve_proxy, JSONEncoder, JSONDecoder)
+from .models import (Dataset, History, ImageItem, Meta, Paragraph,
+                     TaskDBO, Token, User, Term)
 
 app = Flask(__name__)
 app.config['SECRET_KEY'] = config.secret_key
@@ -28,7 +32,7 @@ app.json_decoder = JSONDecoder
 
 
 def _task_authorized():
-    """是否有权限访问该任务"""
+    """Test if task is authorized to current user"""
 
     if logined('admin'):
         return MongoOperand({})
@@ -37,7 +41,7 @@ def _task_authorized():
 
 
 def _expand_results(results):
-    """将结果扩展为可返回的字典"""
+    """Expand results to serializable dicts"""
 
     if not isinstance(results, (str, dict, bytes)) and hasattr(results, '__iter__'):
         return [dict(r.as_dict(True), mongocollection=type(r).db.name)
@@ -47,14 +51,42 @@ def _expand_results(results):
 
 
 def _hashing(msg):
+    """Hashing message with SHA-256 and preserve last 9 hexadecimal digits"""
     return hashlib.sha256(
         msg.encode('utf-8')).hexdigest()[-9:]
+
+
+def _lang(inp):
+    """Apply language settings of current client"""
+    assert isinstance(inp, (str, dict)), "Input value must be string or dict"
+    if isinstance(inp, str):
+        result = ''
+        default_result = ''
+        for line in inp.split('\n'):
+            line = line.lstrip()
+            if line and not line.startswith('@'):
+                default_result += line + ' '
+            if request.lang and line.startswith('@' + request.lang + ' '):
+                result += line[len(request.lang) + 2:]
+        if not result:
+            result = default_result
+        result = result.strip()
+
+    else:  # dictionary
+        result = {}
+        for key in inp:
+            if isinstance(inp[key], (dict, str)):
+                result[key] = _lang(inp[key])
+            else:
+                result[key] = inp[key]
+
+    return result
 
 
 @app.route('/api/authenticate', methods=['POST'])
 @rest(login=False)
 def authenticate(username, password, otp='', **_):
-    """认证"""
+    """Authenticate current user"""
 
     username = User.authenticate(username, password, otp)
     if username:
@@ -68,7 +100,7 @@ def authenticate(username, password, otp='', **_):
 @app.route('/api/authenticate')
 @rest()
 def whoami():
-    """返回登录信息"""
+    """Returns logined user data, without otp_secret and password"""
     if logined():
         user = (User.first(F.username == logined()) or User(
             username=logined(), password='', roles=['admin'])).as_dict()
@@ -81,7 +113,7 @@ def whoami():
 @app.route('/api/authenticate', methods=['DELETE'])
 @rest()
 def log_out():
-    """登出"""
+    """Log out"""
     Token.uncheck(logined())
     return True
 
@@ -90,7 +122,8 @@ def log_out():
 @app.route('/api/users/<username>', methods=['GET', 'POST'])
 @rest(role='admin')
 def admin_users(username='', password=None, roles=None, datasets=None, **_):
-    """用户管理修改"""
+    """Change user profile and permissions"""
+
     result = None
     if username:
         user = User.first(F.username == username)
@@ -111,7 +144,7 @@ def admin_users(username='', password=None, roles=None, datasets=None, **_):
 @app.route('/api/users/', methods=['PUT'])
 @rest(role='admin')
 def admin_users_add(username, password, **_):
-    """添加用户"""
+    """Add new user"""
 
     if User.first(F.username == username):
         raise Exception('User already exists: ' + str(username))
@@ -126,7 +159,7 @@ def admin_users_add(username, password, **_):
 @app.route('/api/account/', methods=['POST'])
 @rest()
 def user_change_password(old_password='', password='', otp=None, **_):
-    """修改用户密码或 OTP 设置"""
+    """Change user passworld or OTP settings"""
 
     user = User.first(F.username == logined())
     if otp is None:
@@ -150,12 +183,13 @@ def user_change_password(old_password='', password='', otp=None, **_):
 @app.route('/api/users/<username>', methods=['DELETE'])
 @rest(role='admin')
 def admin_users_del(username):
-    """删除用户"""
+    """Delete user"""
+
     return User.query(F.username == username).delete()
 
 
 def _file_detail(path):
-    """获取文件详情"""
+    """Get detailed status of the file"""
 
     file_stat = os.stat(path)
     return {
@@ -172,7 +206,7 @@ def _file_detail(path):
 @app.route('/api/storage/', methods=['GET'])
 @rest()
 def list_storage(path=''):
-    """列出文件夹信息"""
+    """List out files in directory"""
 
     path = os.path.join(
         config.storage, path) if path and '..' not in path else config.storage
@@ -188,7 +222,7 @@ def list_storage(path=''):
 @app.route('/api/storage/', methods=['PUT'])
 @rest()
 def write_storage(path=''):
-    """写入存储文件夹"""
+    """Write to file storage"""
 
     path = os.path.join(
         config.storage, path) if path and '..' not in path else config.storage
@@ -203,7 +237,7 @@ def write_storage(path=''):
 @app.route('/api/collections/<coll>/<pid>', methods=['POST'])
 @rest()
 def modify_paragraph(coll, pid, **kws):
-    """修改语段"""
+    """Modify paragraph info"""
 
     pid = ObjectId(pid)
     para = Paragraph.get_coll(coll).first(F.id == pid)
@@ -229,7 +263,7 @@ def modify_paragraph(coll, pid, **kws):
 @app.route('/api/collections/<coll>/<pid>/pagenum', methods=['POST'])
 @rest()
 def modify_pagenum(coll, pid, sequential, new_pagenum, **_):
-    """修改页码"""
+    """Modify page numbers of the same source"""
 
     pid = ObjectId(pid)
     para = Paragraph.get_coll(coll).first(F.id == pid)
@@ -259,8 +293,7 @@ def modify_pagenum(coll, pid, sequential, new_pagenum, **_):
 @app.route('/api/collections/<coll>/batch', methods=["GET", "POST"])
 @rest()
 def batch(coll, ids, **kws):
-    """Batch edit
-    """
+    """Batch edit"""
 
     paras = list(Paragraph.get_coll(coll).query(
         F.id.in_([ObjectId(_) if len(_) == 24 else _ for _ in ids])))
@@ -421,7 +454,8 @@ def reset_storage(ids):
 @app.route('/api/imageitem/merge', methods=["POST"])
 @rest()
 def merge_items(pairs):
-    """将两两指定的 ImageItem 作为同一个图像的两个副本处理，保留第一项，删除第二项，并合并所在的 Paragraph
+    """Process the two specified ImageItems as two copies of the same image,
+       keeping the first one, deleting the second and merging the Paragraphs where they are located
     """
     for rese, dele in pairs:
         dele = ImageItem.first(F.id == dele)
@@ -453,7 +487,8 @@ def merge_items(pairs):
 @app.route('/api/imageitem/delete', methods=["POST"])
 @rest()
 def delete_item(album_items: dict):
-    """删除图像项目"""
+    """Remove ImageItem from paragraph"""
+
     del_items = set()
     for pid, items in album_items.items():
         para = Paragraph.first(F.id == pid)
@@ -481,7 +516,7 @@ def delete_item(album_items: dict):
 @app.route('/api/tasks/', methods=['PUT'])
 @rest()
 def create_task(**task):
-    """创建任务"""
+    """Create new task"""
 
     task.pop('shortcut_map', None)
     task = TaskDBO(**task)
@@ -493,14 +528,14 @@ def create_task(**task):
 @app.route('/api/tasks/shortcuts', methods=['GET'])
 @rest()
 def list_tasks_shortcuts():
-    """列出快捷任务"""
+    """List out quick tasks"""
     return list(TaskDBO.query((F.shortcut_map != {}) & _task_authorized()))
 
 
 @app.route('/api/tasks/<task_id>', methods=['DELETE'])
 @rest()
 def delete_task(task_id):
-    """删除任务"""
+    """Remove task"""
 
     _id = ObjectId(task_id)
     return TaskDBO.query(F.id == _id).delete()
@@ -509,7 +544,7 @@ def delete_task(task_id):
 @app.route('/api/tasks/<task_id>', methods=['POST'])
 @rest()
 def update_task(task_id, **task):
-    """更新任务信息"""
+    """Update task info"""
     task_id = ObjectId(task_id)
 
     if '_id' in task:
@@ -524,7 +559,8 @@ def update_task(task_id, **task):
 @app.route('/api/tasks/', methods=['GET'])
 @rest()
 def list_task(task_id=''):
-    """列出任务"""
+    """List out tasks"""
+
     if task_id:
         _id = ObjectId(task_id)
         return TaskDBO.first((F.id == _id) & _task_authorized())
@@ -535,7 +571,7 @@ def list_task(task_id=''):
 @app.route('/api/help/pipelines')
 @rest(cache=True)
 def help_info():
-    """提供任务处理帮助信息"""
+    """Provide help info for pipelines, with respect to preferred language"""
 
     ctx = Pipeline.ctx
     result = defaultdict(dict)
@@ -544,21 +580,23 @@ def help_info():
             '.')[-1] if hasattr(val, '__module__') else key).strip()
         if key == "DataSourceStage":
             continue
-        result[name][key] = val.get_spec()
+        name = _lang(name)
+        result[name][key] = _lang(val.get_spec())
     return result
 
 
 @app.route('/api/help/langs')
 @rest(cache=True)
 def help_langs():
-    """提供支持的语言信息"""
+    """Provide supported language codes"""
     return language_iso639
 
 
 @app.route('/api/history')
 @rest()
 def history():
-    """历史记录"""
+    """History records for the current user"""
+
     History.query(F.created_at < datetime.datetime.utcnow() -
                   datetime.timedelta(days=30)).delete()
     return list(
@@ -569,7 +607,7 @@ def history():
 @rest()
 def search(q='', req='', sort='', limit=100, offset=0,
            mongocollections=None, groups='none', count=False, **_):
-    """搜索"""
+    """Search"""
 
     if not req:
         if count:
@@ -610,7 +648,7 @@ def search(q='', req='', sort='', limit=100, offset=0,
 @app.route('/api/datasets')
 @rest()
 def get_datasets():
-    """获取用户有权限查看的数据集"""
+    """Get accessible datasets for the current user"""
 
     datasets = list(Dataset.query((F.allowed_users == []) | (
         F.allowed_users == logined())).sort(F.order_weight, F.name))
@@ -627,9 +665,9 @@ def get_datasets():
 
 
 @app.route('/api/datasets', methods=['POST'])
-@rest()
+@rest(role='admin')
 def set_datasets(dataset=None, datasets=None, rename=None, sources=None, **j):
-    """设置数据集信息"""
+    """Update dataset info"""
 
     if dataset is not None:
         if dataset.get('_id'):
@@ -697,7 +735,7 @@ def query_terms(field, pattern, regex=False):
 @app.route("/api/image")
 @rest(cache=True)
 def serve_image(coll=None, storage_id=None, ext=None):
-    """返回图像"""
+    """Serve images"""
 
     if coll and storage_id and len(storage_id) == 24:
         para = Paragraph.get_coll(coll).first(F.id == storage_id)
@@ -759,7 +797,7 @@ def serve_image(coll=None, storage_id=None, ext=None):
 @app.route('/api/quicktask', methods=['POST'])
 @rest()
 def quick_task(query='', pipeline='', raw=False, mongocollection=''):
-    """快速任务"""
+    """Perform quick tasks"""
 
     if pipeline:
         if isinstance(pipeline, str):
@@ -784,7 +822,7 @@ def quick_task(query='', pipeline='', raw=False, mongocollection=''):
 @app.route('/api/admin/db', methods=['POST'])
 @rest(role='admin')
 def dbconsole(mongocollection='', query='', operation='', operation_params='', preview=True):
-    """数据库控制台"""
+    """Database console for admin"""
 
     mongo = Paragraph.db.database[mongocollection]
     query = parser.eval(query)
@@ -809,21 +847,24 @@ def dbconsole(mongocollection='', query='', operation='', operation_params='', p
 @app.route('/api/admin/db/collections', methods=['GET'])
 @rest(role='admin')
 def dbconsole_collections():
-    """数据库控制台获取全部数据库集合"""
+    """Get all collections in current MongoDB database"""
+
     return Paragraph.db.database.list_collection_names()
 
 
 @app.route('/api/meta', methods=['GET'])
 @rest(login=False)
 def get_meta():
-    """获取元设置"""
+    """Get meta settings"""
+
     return Meta.first(F.app_title.exists(1)) or Meta()
 
 
 @app.route('/api/meta', methods=['POST'])
 @rest(role='admin')
 def set_meta(**vals):
-    """更新元设置"""
+    """Update meta settings"""
+
     result = Meta.first(F.app_title.exists(1)) or Meta()
     for key, val in vals.items():
         setattr(result, key, val)
@@ -834,7 +875,7 @@ def set_meta(**vals):
 @app.route('/<path:path>', methods=['GET'])
 @app.route('/', methods=['GET'])
 def index(path='index.html'):
-    """返回文件"""
+    """Serve static files"""
 
     if path.startswith('api/'):
         return Response('', 404)
@@ -853,6 +894,13 @@ def index(path='index.html'):
 
 
 def run_service(host='0.0.0.0', port=None):
+    """Run API web service
+
+    :param host: Host, defaults to '0.0.0.0'
+    :type host: str, optional
+    :param port: Port, defaults to None
+    :type port: int, optional
+    """
     if os.path.exists('restarting'):
         os.unlink('restarting')
 

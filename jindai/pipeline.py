@@ -39,19 +39,29 @@ class PipelineStage:
 
             if 'Args:' in docstring:
                 for line in docstring.strip().split('\n'):
+                    arg_name, arg_type, arg_doc = '', '', ''
                     match = re.search(r'(\w+)\s+\((.+?)\):\s+(.*)', line)
                     if match:
                         arg_name, arg_type, arg_doc = match.groups()
+                    else:
+                        arg_doc += line
+
+                    if arg_name:
                         args_docs[arg_name] = {
                             'type': arg_type.split(',')[0],
                             'description': arg_doc
                         }
             elif ':param ' in docstring:
+                doc_directive, arg_type, arg_name, arg_doc = '', '', '', ''
                 for line in docstring.strip().split('\n'):
                     match = re.search(
-                        r':(param|type)(\s+\w+)?\s+(\w+):\s(.*)', line)
+                        r':(param|type)(\s+\w+)?\s+(\w+):\s(.*)$', line)
                     if match:
                         doc_directive, arg_type, arg_name, arg_doc = match.groups()
+                    else:
+                        arg_doc += line.lstrip()
+
+                    if arg_name:
                         if doc_directive == 'type':
                             args_docs[arg_name]['type'] = arg_doc
                         else:

@@ -1,5 +1,6 @@
 """
-Annotating paragraphs
+Annotations
+bchs 标注
 """
 import re
 import fitz
@@ -19,7 +20,7 @@ class Annotation(Paragraph):
 
     @classmethod
     def on_initialize(cls):
-        """初始化时调用"""
+        """Ensure index on paragraph_id"""
         super().on_initialize()
         cls.ensure_index('paragraph_id')
 
@@ -79,7 +80,10 @@ def extract_annotation(filename):
 
 
 class AnnotationsFromPDF(DataSourceStage):
-    """导入 PDF 中的批注"""
+    """
+    Import annotations from PDF
+    @chs 导入 PDF 中的批注
+    """
 
     class Implementation(DataSourceStage.Implementation):
         """Implementing annotation fetching"""
@@ -87,8 +91,12 @@ class AnnotationsFromPDF(DataSourceStage):
         def __init__(self, content, mongocollection=''):
             """
             Args:
-                content (str): 要导入的 PDF
-                mongocollection (str): 对应的语段所在数据库
+                content (str):
+                    Import from files
+                    @chs 要导入的 PDF
+                mongocollection (str):
+                    Mongo Collection name to lookup
+                    @chs 对应的语段所在数据库
             """
             super().__init__()
             self.files = expand_patterns(content)

@@ -1,4 +1,4 @@
-"""提供数据库访问功能"""
+"""Database access functionality"""
 import re
 import datetime
 from bson import SON
@@ -48,11 +48,11 @@ parser = QueryExprParser(
 
 
 class DBQuery:
-    """提供数据库查询"""
+    """Database query class"""
 
     @staticmethod
     def _judge_type(query):
-        """判断是关键词匹配查询还是查询表达式"""
+        """Judge query mode: keywords or expression"""
 
         is_expr = False
         if query.startswith('?'):
@@ -64,7 +64,7 @@ class DBQuery:
 
     @staticmethod
     def _parse(query, wordcutter=None):
-        """解析查询（关键词或表达式），并强制其为聚合查询"""
+        """Parse query (keywords or expression) and convert it to aggregation query"""
 
         if wordcutter is None:
             def wordcutter(x): return list(set(x))
@@ -116,7 +116,7 @@ class DBQuery:
 
     @staticmethod
     def _merge_req(qparsed, req):
-        """将两个解析出的表达式合并"""
+        """Merge to parsed expressions"""
         if not req:
             return qparsed
 

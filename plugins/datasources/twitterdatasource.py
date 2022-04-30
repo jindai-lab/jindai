@@ -71,9 +71,9 @@ def create_albums(posts_imported: List[Paragraph]):
             dtstr = ('--' + filename).rsplit('-', 2)[1].replace('_', '')
             if len(dtstr) == 14:
                 para.pdate = datetime.datetime(int(dtstr[:4]), *[int(_1 + _2) for _1, _2 in
-                          zip(dtstr[4::2], dtstr[5::2])])
+                                                                 zip(dtstr[4::2], dtstr[5::2])])
         para.images.append(i)
-    
+
     for para in albums.values():
         yield para
 
@@ -81,31 +81,45 @@ def create_albums(posts_imported: List[Paragraph]):
 
 
 class TwitterDataSource(DataSourceStage):
-    """导入社交网络信息
     """
-    
+    Load from social network
+    @chs 导入社交网络信息
+    """
+
     class Implementation(DataSourceStage.Implementation):
         """implementing datasource"""
-    
+
         def __init__(self, allow_video=False, allow_retweet=True, consumer_key='', consumer_secret='', access_token_key='', access_token_secret='',
-                    import_username='',
-                    time_after='', time_before='',
-                    proxy=''
-                    ) -> None:
+                     import_username='',
+                     time_after='', time_before='',
+                     proxy=''
+                     ) -> None:
             """
 
             Args:
-                allow_video (bool, optional): 导入视频
-                allow_retweet (bool, optional): 导入转发
+                allow_video (bool, optional):
+                    Allow video
+                    @chs 导入视频
+                allow_retweet (bool, optional):
+                    Allow retweet
+                    @chs 导入转发
                 consumer_key (str, optional): API CONSUMER KEY
                 consumer_secret (str, optional): API CONSUMER SECRET
                 access_token_key (str, optional): API ACCESS TOKEN KEY
                 access_token_secret (str, optional): API ACCESS TOKEN SECRET
-                import_username (str, optional): 要导入用户名
-                time_after (str): 时间上限
-                time_before (str): 时间下限
-                proxy (str): 代理服务器
-            """        
+                import_username (str, optional):
+                    Import source, blank for timeline
+                    @chs 导入的用户名或留空以导入 Timeline
+                time_after (str):
+                    Time after
+                    @chs 时间上限
+                time_before (str):
+                    Time before
+                    @chs 时间下限
+                proxy (str):
+                    Proxy settings
+                    @chs 代理服务器
+            """
             super().__init__()
             self.allow_video = allow_video
             self.allow_retweet = allow_retweet
@@ -121,8 +135,9 @@ class TwitterDataSource(DataSourceStage):
             elif isinstance(self.time_after, datetime.datetime):
                 self.time_after = self.time_after.timestamp()
             self.proxies = {'http': proxy, 'https': proxy} if proxy else {}
-            self.api = twitter.Api(consumer_key=consumer_key, consumer_secret=consumer_secret, access_token_key=access_token_key, access_token_secret=access_token_secret, proxies=self.proxies)
-            
+            self.api = twitter.Api(consumer_key=consumer_key, consumer_secret=consumer_secret,
+                                   access_token_key=access_token_key, access_token_secret=access_token_secret, proxies=self.proxies)
+
         def parse_tweet(self, tweet, allow_video=None) -> Paragraph:
             """Parse twitter status
             Args:
@@ -135,9 +150,10 @@ class TwitterDataSource(DataSourceStage):
             para = find_post(l)
             if allow_video is None:
                 allow_video = self.allow_video
-            
+
             if not para:
-                para = Paragraph(dataset='twitter', pdate=datetime.datetime.utcfromtimestamp(tweet.created_at_in_seconds), source={'url': l})
+                para = Paragraph(dataset='twitter', pdate=datetime.datetime.utcfromtimestamp(
+                    tweet.created_at_in_seconds), source={'url': l})
                 for m in tweet.media or []:
                     if m.video_info:
                         if not allow_video:
@@ -148,7 +164,8 @@ class TwitterDataSource(DataSourceStage):
                             continue
                         para.images.append(ImageItem(source={'url': url}))
                     else:
-                        para.images.append(ImageItem(source={'url': m.media_url_https}))
+                        para.images.append(
+                            ImageItem(source={'url': m.media_url_https}))
                 if tweet.text.startswith('RT '):
                     author = re.match(r'^RT (@.*?):', tweet.text)
                     if author:
@@ -156,12 +173,13 @@ class TwitterDataSource(DataSourceStage):
                     else:
                         author = ''
                 text = re.sub(r'https?://[^\s]+', '', tweet.text).strip()
-                para.keywords = [t.strip().strip('#') for t in re.findall(r'@[a-z_A-Z0-9]+', text) + re.findall(r'[#\s][^\s@]{,10}', text)] + [author]
-                para.keywords =[_ for _ in para.keywords if _]
+                para.keywords = [t.strip().strip('#') for t in re.findall(
+                    r'@[a-z_A-Z0-9]+', text) + re.findall(r'[#\s][^\s@]{,10}', text)] + [author]
+                para.keywords = [_ for _ in para.keywords if _]
                 para.content = text
                 para.author = author
             return para
-        
+
         def import_twiimg(self, ls: List[str]):
             """Import twitter posts from url strings
             Args:
@@ -193,7 +211,7 @@ class TwitterDataSource(DataSourceStage):
             before = self.time_before
             after = self.time_after
             self.logger('twiuser', before, after)
-            
+
             if before < after:
                 before, after = after, before
 
@@ -207,14 +225,15 @@ class TwitterDataSource(DataSourceStage):
                     screen_name=user, count=100, max_id=max_id-1)
                 for st in tl:
                     p = self.parse_tweet(st, allow_video=self.allow_video)
-                    if p.id: continue
+                    if p.id:
+                        continue
                     before = min(before, st.created_at_in_seconds)
                     max_id = min(max_id, st.id)
                     if p.author != '@' + st.user.screen_name and not self.allow_retweet:
                         continue
                     if p.images and p.pdate.timestamp() > after:
                         albums.append(p)
-                
+
                 yield from albums
                 if not albums:
                     break
@@ -222,8 +241,9 @@ class TwitterDataSource(DataSourceStage):
         def import_twitl(self):
             after, before = self.time_after, self.time_before
             if after == 0:
-                after = Paragraph.query(F['source.url'].regex(r'twitter\.com')).sort(-F.pdate).limit(1).first().pdate.timestamp()
-            
+                after = Paragraph.query(F['source.url'].regex(
+                    r'twitter\.com')).sort(-F.pdate).limit(1).first().pdate.timestamp()
+
             twi_id = twitter_id_from_timestamp(before or time.time())+1
             para = None
 
@@ -232,10 +252,12 @@ class TwitterDataSource(DataSourceStage):
                 albums = []
                 time.sleep(0.5)
                 try:
-                    timeline = self.api.GetHomeTimeline(count=100, max_id=twi_id-1)
+                    timeline = self.api.GetHomeTimeline(
+                        count=100, max_id=twi_id-1)
                     for tweet in timeline:
                         para = self.parse_tweet(tweet)
-                        if para.id: continue
+                        if para.id:
+                            continue
                         if not para.author and not self.allow_retweet:
                             continue
                         twi_id = min(tweet.id, twi_id)
@@ -257,7 +279,8 @@ class TwitterDataSource(DataSourceStage):
             arg = args[0]
             if arg.startswith('@'):
                 if arg == '@' or arg.startswith('@%'):
-                    unames = sorted(map(lambda x: x.screen_name, self.api.GetFriends()))
+                    unames = sorted(
+                        map(lambda x: x.screen_name, self.api.GetFriends()))
                     if arg.startswith('@%'):
                         unames = [_ for _ in unames if re.search(arg[2:], _)]
                     before, after = self.time_before, self.time_after
@@ -278,4 +301,3 @@ class TwitterDataSource(DataSourceStage):
                 yield from create_albums(list(ImageImportDataSource.Implementation('\n'.join(args)).fetch()))
             else:
                 yield from self.import_twitl()
-        

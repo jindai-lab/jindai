@@ -1,5 +1,8 @@
-"""来自网页或文本文件
 """
+Import from web or file
+@chs 来自网页或文本文件
+"""
+
 import codecs
 import re
 from concurrent.futures import ThreadPoolExecutor
@@ -12,7 +15,9 @@ from jindai import expand_patterns, truncate_path, safe_open, parser
 
 
 class HTMLDataSource(DataSourceStage):
-    """从HTML网页中读取语段，每个网页计作一个语段
+    """
+    Read paragraphs from HTML pages, generate one Paragraph per page
+    @chs 从HTML网页中读取语段，每个网页计作一个语段
     """
     class Implementation(DataSourceStage.Implementation):
         """Implementing datasource"""
@@ -21,11 +26,21 @@ class HTMLDataSource(DataSourceStage):
                      fields='content="//text"', paragraph_selector=''):
             """
             Args:
-                dataset_name (DATASET): 数据集名称
-                lang (LANG): 语言标识
-                content (str): HTML或包含HTML的ZIP压缩包文件列表
-                paragraph_selector (str): 确定段落的 CSS 选择器，为空则整个网页作为一个段落
-                fields (str): 字段与搜索字符串的关系，形如 field=".css-selector//attribute"
+                dataset_name (DATASET): 
+                    Data name
+                    @chs 数据集名称
+                lang (LANG):
+                    Language code
+                    @chs 语言标识
+                content (str):
+                    Paths
+                    @chs HTML或包含HTML的ZIP压缩包文件列表
+                paragraph_selector (str):
+                    CSS selector for paragraph
+                    @chs 确定段落的 CSS 选择器，为空则整个网页作为一个段落
+                fields (str):
+                    Mapping element attribute to field, e.g. field=".css-selector//attribute"
+                    @chs 字段与搜索字符串的关系，形如 field=".css-selector//attribute"
             """
             super().__init__()
             self.name = dataset_name
@@ -80,17 +95,26 @@ class HTMLDataSource(DataSourceStage):
 
 
 class TextDataSource(DataSourceStage):
-    """从文本文件中读取语段
     """
+    Read Paragraphs from text files
+    @chs 从文本文件中读取语段
+    """
+
     class Implementation(DataSourceStage.Implementation):
         """Implementing datasource"""
 
         def __init__(self, dataset_name, lang, content):
             """
             Args:
-                dataset_name (DATASET): 数据集名称
-                lang (LANG): 语言标识
-                content (str): HTML或包含HTML的ZIP压缩包文件列表
+                dataset_name (DATASET): 
+                    Data name
+                    @chs 数据集名称
+                lang (LANG):
+                    Language code
+                    @chs 语言标识
+                content (str):
+                    Paths
+                    @chs HTML或包含HTML的ZIP压缩包文件列表
             """
             super().__init__()
             self.name = dataset_name
@@ -107,7 +131,9 @@ class TextDataSource(DataSourceStage):
 
 
 class LinesDataSource(DataSourceStage):
-    """从直接输入的文本中获得语段，每行一个语段
+    """
+    Import paragraphs from lines
+    @chs 从直接输入的文本中获得语段，每行一个语段
     """
     class Implementation(DataSourceStage.Implementation):
         """Implementing datasource"""
@@ -115,9 +141,15 @@ class LinesDataSource(DataSourceStage):
         def __init__(self, dataset_name, lang="auto", content=""):
             """
             Args:
-                dataset_name (DATASET): 数据集名称
-                lang (LANG): 语言标识
-                content (str): 一行一个语段
+                dataset_name (DATASET): 
+                    Data name
+                    @chs 数据集名称
+                lang (LANG):
+                    Language code
+                    @chs 语言标识
+                content (str):
+                    Text contents
+                    @chs 文本内容
             """
             super().__init__()
             self.name = dataset_name
@@ -134,7 +166,10 @@ DEFAULT_IMG_PATTERNS = 'img[src]|[zoomfile]|[data-original]|[data-src]|[file]|[d
 
 
 class WebPageListingDataSource(DataSourceStage):
-    """从网页列表中导入语段"""
+    """
+    Import web page listings
+    @chs 从网页列表中导入语段
+    """
     class Implementation(DataSourceStage.Implementation):
         """Implementing datasource"""
 
@@ -144,16 +179,36 @@ class WebPageListingDataSource(DataSourceStage):
                      img_pattern=DEFAULT_IMG_PATTERNS) -> None:
             """
             Args:
-                patterns (str): 列表页面模式
-                list_depth (int): 列表深度
-                proxy (str): 代理服务器
-                tags (str): 标签，一行一个
-                detail_link (str): 详情页面正则表达式
-                list_link (str): 列表页面正则表达式
-                dataset (str): 数据集名称
-                lang (str): 语言标记
-                img_pattern (str): 图像检索标记，一行一个
-                mongocollection (str): 数据库集合名
+                dataset (DATASET): 
+                    Data name
+                    @chs 数据集名称
+                lang (LANG):
+                    Language code
+                    @chs 语言标识
+                patterns (str):
+                    Patterns for web pages
+                    @chs 列表页面模式
+                list_depth (int):
+                    List depth
+                    @chs 列表深度
+                proxy (str): 
+                    Proxy settings
+                    @chs 代理服务器
+                tags (str):
+                    Tags, one tag per line
+                    @chs 标签，一行一个
+                detail_link (str):
+                    Regex for detailed page URL
+                    @chs 详情页面正则表达式
+                list_link (str):
+                    Regex for listing page URL
+                    @chs 列表页面正则表达式
+                img_pattern (str):
+                    Image pattern
+                    @chs 图像检索标记，一行一个
+                mongocollection (str):
+                    Mongo Collection name
+                    @chs 数据库集合名
             """
             super().__init__()
             self.proxies = {} if not proxy else {
@@ -237,7 +292,7 @@ class WebPageListingDataSource(DataSourceStage):
             def _do_parse(q_tup):
                 url, level = q_tup
                 if url in visited or Paragraph.get_coll(self.mongocollection).first(
-                    {'source.url': url}):
+                        {'source.url': url}):
                     return
 
                 visited.add(url)
@@ -264,7 +319,9 @@ class WebPageListingDataSource(DataSourceStage):
 
 
 class BiblioDataSource(DataSourceStage):
-    """从 endnote 文献条目产生语段
+    """
+    Import paragraph from EndNote bibliography items
+    @chs 从 EndNote 文献条目产生语段
     """
     class Implementation(DataSourceStage.Implementation):
         """Implementing datasource"""
@@ -272,10 +329,18 @@ class BiblioDataSource(DataSourceStage):
         def __init__(self, content, dataset, lang='chs', input_format='endnote') -> None:
             """
             Args:
-                content (str): 文件名或通配符，一行一个
-                lang (LANG): 语言标识
-                dataset (DATASET): 集合名称
-                format (endnote|bibtex): 文献条目信息格式
+                dataset_name (DATASET):
+                    Data name
+                    @chs 数据集名称
+                lang (LANG):
+                    Language code
+                    @chs 语言标识
+                content (str):
+                    Paths
+                    @chs 文件列表
+                format (endnote|other, unsupported):
+                    Format
+                    @chs 文献条目信息格式
             """
             super().__init__()
             if not hasattr(self, input_format):

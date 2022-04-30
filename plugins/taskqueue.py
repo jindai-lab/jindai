@@ -45,13 +45,13 @@ announcer = MessageAnnouncer()
 
 
 class TasksQueue(Plugin):
-    """处理任务队列
+    """Handling queue
     """
 
     def __init__(self, pmanager, n=3):
         """
         Args:
-            n (int, optional): 最大同时处理的任务数量
+            n (int, optional): maximal concurrent tasks
         """
         super().__init__(pmanager)
         app = self.pmanager.app
@@ -144,6 +144,7 @@ class TasksQueue(Plugin):
 
     def filter_status(self):
         """Generate request-specific status"""
+
         status = self.status
         status['running'] = [_ for _ in status['running']
                              if logined('admin') or _.run_by == logined()]
@@ -157,14 +158,16 @@ class TasksQueue(Plugin):
         return status
 
     def start(self):
-        """开始处理任务"""
+        """Start handling tasks"""
+
         self.running = True
         self._working_thread = threading.Thread(target=self.working)
         self._working_thread.start()
 
     @property
     def status(self) -> dict:
-        """任务队列状态"""
+        """Queue status"""
+
         return {
             'running': list(self.task_queue),
             'finished': [{
@@ -183,7 +186,8 @@ class TasksQueue(Plugin):
         }
 
     def working(self):
-        """处理任务队列"""
+        """Handling the queue"""
+
         while self.running:
             if self.queue and len(self.task_queue) < self.parallel_n:  # can run new task
                 tkey, task_dbo = self.queue.popleft()
@@ -219,7 +223,8 @@ class TasksQueue(Plugin):
             time.sleep(0.5)
 
     def enqueue(self, val, key='', run_by=''):
-        """将新任务加入队列"""
+        """Enqueue new task"""
+
         val.run_by = run_by
         if not key:
             key = f'{val.name}@{datetime.datetime.utcnow().strftime("%Y%m%d %H%M%S")}'
@@ -233,11 +238,13 @@ class TasksQueue(Plugin):
         return key
 
     def stop(self):
-        """停止运行"""
+        """Stop handling"""
+
         self.running = False
 
     def find(self, key: str):
-        """返回指定任务"""
+        """Find and return specified task"""
+
         if key in self.task_queue:
             return self.task_queue[key]
 
@@ -247,7 +254,7 @@ class TasksQueue(Plugin):
         return None
 
     def remove(self, key: str):
-        """删除指定任务"""
+        """Remove/stop specified task"""
 
         def _remove_queue(key):
             todel = None

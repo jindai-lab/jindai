@@ -1,4 +1,4 @@
-"""数据源插件"""
+"""Plugin for loading data sources"""
 
 import os
 
@@ -7,7 +7,7 @@ from jindai.helpers import get_context
 
 
 class DatasourcePlugin(Plugin):
-    """数据源插件"""
+    """Datasource Plugin"""
 
     def __init__(self, pmanager, **config):
         super().__init__(pmanager, **config)

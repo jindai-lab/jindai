@@ -1,4 +1,6 @@
-"""处理用户通过网页上传的文档"""
+"""Handling File Uploads
+@chs 处理用户通过网页上传的文档
+"""
 
 import tempfile
 
@@ -8,7 +10,9 @@ from jindai.pipeline import DataSourceStage
 
 
 class FileUploadDataSource(DataSourceStage):
-    """上传文件
+    """
+    Use user-uploaded temporary file for input
+    @chs 上传文件
     """
 
     class Implementation(DataSourceStage.Implementation):
@@ -17,8 +21,12 @@ class FileUploadDataSource(DataSourceStage):
         def __init__(self, file='file', field='content'):
             """
             Args:
-                file (file:pdf,html,zip,txt): 上传的文件
-                field (str): 文件名写入到字段中
+                file (file:pdf,html,zip,txt):
+                    File data-url string
+                    @chs 上传的文件
+                field (str):
+                    Field to store temporary file name
+                    @chs 文件名写入到的字段
             """
             super().__init__()
             self.files = self.parse_data_uri(file)
@@ -32,7 +40,7 @@ class FileUploadDataSource(DataSourceStage):
             """
             tmp = tempfile.mktemp()
             with open(tmp, "wb") as fout:
-                fout.write(safe_open(data_uri))
+                fout.write(safe_open(data_uri, 'rb').read())
             return tmp
 
         def fetch(self):

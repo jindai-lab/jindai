@@ -1,4 +1,4 @@
-"""Jindai 核心包"""
+"""Jindai core package"""
 from .pipeline import Pipeline, PipelineStage
 from .plugin import Plugin, PluginManager
 from .task import Task

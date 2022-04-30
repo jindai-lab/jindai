@@ -1,4 +1,4 @@
-"""辅助函数"""
+"""Helper functions"""
 import datetime
 import glob
 import importlib
@@ -90,6 +90,7 @@ def rest(login=True, cache=False, role='', mapping=None):
                 if request.json:
                     for key, val in request.json.items():
                         kwargs[mapping.get(key, key)] = val
+                request.lang = request.headers.get('X-Preferred-Language', '')
                 result = func(*args, **kwargs)
                 if isinstance(result, (tuple, Response, werkzeug.wrappers.response.Response)):
                     return result

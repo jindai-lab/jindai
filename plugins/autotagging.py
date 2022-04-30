@@ -1,4 +1,8 @@
-"""自动标签"""
+"""
+Auto tagging
+@chs 自动标签
+"""
+
 import re
 
 from PyMongoWrapper import F, ObjectId
@@ -16,7 +20,9 @@ class AutoTag(db.DbObject):
 
 
 class ApplyAutoTags(PipelineStage):
-    """应用自动标签设置
+    """
+    Apply auto tagging settings
+    @chs 应用自动标签设置
     """
 
     def __init__(self) -> None:
@@ -37,7 +43,7 @@ class ApplyAutoTags(PipelineStage):
 
 
 class AutoTaggingPlugin(Plugin):
-    """自动标签"""
+    """Auto tagging plugin"""
 
     def __init__(self, pmanager, **_) -> None:
         super().__init__(pmanager)
