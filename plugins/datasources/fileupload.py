@@ -1,8 +1,8 @@
 """处理用户通过网页上传的文档"""
 
-from urllib import request
 import tempfile
 
+from jindai.storage import safe_open
 from jindai.models import Paragraph
 from jindai.pipeline import DataSourceStage
 
@@ -30,11 +30,9 @@ class FileUploadDataSource(DataSourceStage):
             Returns:
                 str: temp file path
             """
-            with request.urlopen(data_uri) as response:
-                data = response.read()
             tmp = tempfile.mktemp()
             with open(tmp, "wb") as fout:
-                fout.write(data)
+                fout.write(safe_open(data_uri))
             return tmp
 
         def fetch(self):

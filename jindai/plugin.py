@@ -1,6 +1,7 @@
 """Plugin platform for jindai"""
 import glob
 from distutils.dir_util import copy_tree
+import shutil
 import os
 import tempfile
 import zipfile
@@ -98,6 +99,17 @@ class PluginManager:
                 for spec in self.filters.values()
             ]
 
+        @app.route('/api/plugins')
+        @rest(role='admin')
+        def plugin_list():
+            return [type(pl).__name__ for pl in self.plugins]
+
+        @app.route('/api/plugins', methods=['POST'])
+        @rest(role='admin')
+        def plugin_install(url):
+            self.install(url)
+            return True
+
         # load plugins
 
         pls = []
@@ -149,6 +161,7 @@ class PluginManager:
         maindir = [adir for adir in glob.glob(os.path.join(
             tmpdir, '*')) if os.path.isdir(adir) and not adir.startswith('.') and not adir.startswith('__')]
         if not maindir:
+            shutil.rmtree(tmpdir)
             raise ValueError(
                 f'No main directory found while attempting to install from {file_or_url}')
         maindir = maindir[0]
@@ -159,8 +172,10 @@ class PluginManager:
                 continue
 
             if dirname == 'sources':
-                target = expand_path('/')
+                target = expand_path('/').rstrip('/')
             else:
                 target = os.path.join(config.rootpath, dirname)
 
             copy_tree(source, target)
+
+        shutil.rmtree(tmpdir)

@@ -2,7 +2,7 @@
 
 a platform for customizable multilingual text analysis
 
-- Multilingual full-text search (currently supports: Chinese Simplified & Traditional, English, German, French, Japanese, Russian)
+- Multilingual full-text search (currently supports: Chinese Simplified & Traditional, English, German, French, Japanese, Korean, Slavic languages, and more)
 - PDF/EPUB/HTML text extraction
 - Data storing & exporting
 - Data cleaning
@@ -14,14 +14,13 @@ Detailed description coming soon...
 
 For codes relating to query expression, please refer to [PyMongoWrapper](https://github.com/zhuth/PyMongoWrapper).
 
-For codes relating to the frontend, please refer to [jindai-ui](https://github.com/zhuth/jindai-ui).
+For codes relating to the frontend, please refer to [jindai-ui](https://github.com/jindai-lab/jindai-ui).
 
-## Disclaimer 免责声明
+For plugins to make full use of the platform, please follow [this link](https://pan.baidu.com/s/11_QT5mG1gw7mNjz23EQGGA?pwd=s8gq).
 
-因您不当的使用行为（包括但不限于将本平台用于非法用途等）而对任何第三方造成损失的，您应当自行承担全部责任。
-您应知晓，对使用本平台生成的结果，我们（开发者）将不承担任何责任。
+## Disclaimer
 
-You should be fully responsible for any damage caused to any third party due to your improper use (including but not limited to using the platform for illegal purposes, etc.).
+You are fully responsible for any damage caused to any third party due to your improper use (including but not limited to using the platform for illegal purposes, etc.).
 You should be aware that we (the Developers) will not be liable for the results generated using the Platform.
 
 ## Acknowledgment
@@ -29,14 +28,13 @@ You should be aware that we (the Developers) will not be liable for the results 
 This project was made possible through outstanding works from:
 
 - [jiayan](https://github.com/jiaeyan/Jiayan)
-- [transliterate](https://pypi.org/project/transliterate/)
 - [hanlp](https://github.com/hankcs/HanLP)
 - [snownlp](https://github.com/isnowfy/snownlp)
-- [Chinese-Word-Vectors](https://github.com/Embedding/Chinese-Word-Vectors)
-- [NLPL word embeddings repository](http://vectors.nlpl.eu/repository/)
 - [OpenCC-Python](https://github.com/yichen0831/opencc-python)
 - [many-stop-words](https://pypi.org/project/many-stop-words/)
 - and more.
+
+Further information will be provided when prepared well.
 
 License: MIT
 

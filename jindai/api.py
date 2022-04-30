@@ -852,14 +852,14 @@ def index(path='index.html'):
     return serve_file('ui/dist/index.html')
 
 
-if os.path.exists('restarting'):
-    os.unlink('restarting')
+def run_service(host='0.0.0.0', port=None):
+    if os.path.exists('restarting'):
+        os.unlink('restarting')
 
-plugin_ctx = get_context('plugins', Plugin)
-app.plugins = PluginManager(plugin_ctx, app)
+    plugin_ctx = get_context('plugins', Plugin)
+    app.plugins = PluginManager(plugin_ctx, app)
 
-
-if __name__ == "__main__":
     os.environ['FLASK_ENV'] = 'development'
-    port = os.environ.get('PORT', 8370)
-    app.run(debug=True, host='0.0.0.0', port=int(port), threaded=True)
+    if port is None:
+        port = os.environ.get('PORT', 8370)
+    app.run(debug=True, host=host, port=int(port), threaded=True)
