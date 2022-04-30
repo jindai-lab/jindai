@@ -306,7 +306,12 @@ def install_plugin(url: str):
 
 @cli.command('web-service')
 @click.option('--port', default=8370, type=int)
-def web_service(port):
+def web_service(port: int):
+    """Run web service on port
+
+    :param port: port number
+    :type port: int
+    """
     run_service(port=port)
 
 

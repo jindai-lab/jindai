@@ -1,4 +1,5 @@
-"""Task processing module for jindai"""
+"""Task processing module"""
+
 import threading
 import traceback
 from collections import deque

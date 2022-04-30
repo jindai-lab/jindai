@@ -5,12 +5,13 @@ import yaml
 
 
 class ConfigObject:
-    """访问配置文件"""
+    """Accessing config file"""
 
     def __init__(self, config_file=None):
-        """加载配置文件
+        """Load config file
 
-        :param config_file: 配置文件路径，默认设为 None 时从 CONFIG_FILE 环境变量读取，若不存在则从当前工作文件夹 config.yaml
+        :param config_file: Path for config file,
+            None to load from env variable CONFIG_FILE, and config.yaml in pwd
         :type config_file: str, optional
         """
         self._orig = {

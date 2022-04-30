@@ -1,4 +1,4 @@
-"""定时任务"""
+"""Scheduler module"""
 
 import datetime
 import os
@@ -15,12 +15,12 @@ schedule = safe_import('schedule')
 
 
 class SchedulerJob(db.DbObject):
-    """定时任务的数据库记录"""
+    """DB object for scheduler jobs"""
     cron = str
 
 
 class JobTask:
-    """定时任务执行"""
+    """Scheduled task"""
 
     def __init__(self, pmanager, task_id: str):
         self.task_dbo = TaskDBO.first(F.id == task_id)
@@ -38,7 +38,7 @@ class JobTask:
 
     @property
     def as_dict(self):
-        """返回表示本对象的词典"""
+        """Return a dict representing self"""
         return {
             'key': self.key,
             'name': self.task_dbo.name
@@ -46,14 +46,14 @@ class JobTask:
 
 
 class Scheduler(Plugin):
-    """定时任务调插件"""
+    """Scheduler"""
 
     def cron(self, text):
         """
         Args:
-            text (str): 描述任务计划的短语。格式为：
-                every <weekday>|<number>? <unit> [at <time>] do <task id>，
-                例：every 5 days at 3:00 do 0123456789ab0123456789ab
+            text (str): Description for task, in form of:
+                every <weekday>|<number>? <unit>(s) [at <time>] do <task id>，
+                e.g. every 5 days at 3:00 do 0123456789ab0123456789ab
         """
         text = text.lower()
         executor = schedule.every
@@ -92,7 +92,7 @@ class Scheduler(Plugin):
         return jobs
 
     def list_jobs(self, jobs):
-        """列出任务"""
+        """List out scheduled tasks"""
         return [
             dict(getattr(j.job_func.func, 'as_dict', {}),
                  repr=repr(j).split(' do')[0].lower())
@@ -100,7 +100,7 @@ class Scheduler(Plugin):
         ]
 
     def reload_scheduler(self):
-        """重新加载定时任务"""
+        """Reload jobs"""
         SchedulerJob.query({}).delete()
         if schedule.jobs:
             for j in schedule.jobs:
@@ -111,7 +111,7 @@ class Scheduler(Plugin):
             self.run_background_thread()
 
     def run_background_thread(self):
-        """在后台运行"""
+        """Run in background"""
 
         if self._thread is not None:
             return

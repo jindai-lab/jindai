@@ -1,4 +1,5 @@
-"""来自PDF
+"""Import from PDF
+@chs 来自PDF
 """
 
 import fitz
@@ -10,7 +11,9 @@ from jindai.pipeline import DataSourceStage
 
 
 class PDFDataSource(DataSourceStage):
-    """从PDF中导入语段
+    """
+    Import paragraphs from PDF
+    @chs 从PDF中导入语段
     """
 
     class Implementation(DataSourceStage.Implementation):
@@ -19,11 +22,21 @@ class PDFDataSource(DataSourceStage):
         def __init__(self, dataset_name, lang, content, mongocollection='', skip_existed=True):
             """
             Args:
-                dataset_name (DATASET): 数据集名称
-                lang (LANG): 语言标识
-                content (str): PDF文件列表
-                mongocollection (str): 数据库集合名
-                skip_existed (bool): 直接跳过已存在于数据集中的文件
+                dataset_name (DATASET):
+                    Dataset name
+                    @chs 数据集名称
+                lang (LANG):
+                    Language
+                    @chs 语言标识
+                content (str):
+                    Paths
+                    @chs PDF文件列表
+                mongocollection (str):
+                    MongoDB collection name
+                    @chs 数据库集合名
+                skip_existed (bool):
+                    Skip existed pages and files
+                    @chs 直接跳过已存在于数据集中的文件
             """
             super().__init__()
             self.name = dataset_name

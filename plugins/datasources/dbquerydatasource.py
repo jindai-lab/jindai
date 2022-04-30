@@ -15,10 +15,12 @@ from PyMongoWrapper import F
 from jindai import safe_open, parser, DBQuery
 from jindai.models import ImageItem, Paragraph
 from jindai.pipeline import DataSourceStage
+from jindai.storage import expand_patterns
 
 
 class DBQueryDataSource(DataSourceStage):
-    """从数据库查询
+    """Query from Database
+    @chs 从数据库查询
     """
     class Implementation(DataSourceStage.Implementation):
         """Implementing datasource"""
@@ -26,13 +28,27 @@ class DBQueryDataSource(DataSourceStage):
         def __init__(self, query, mongocollections='', limit=0, skip=0, sort='', raw=False, groups='none'):
             """
             Args:
-                query (QUERY): 查询字符串，或以 ? 开头的查询表达式，或以 ?? 开头的聚合查询表达式
-                sort (str): 排序表达式
-                limit (int): 查询最多返回的结果数量，默认为0即无限制
-                skip (int): 返回从第%1个开始的结果
-                mongocollections (str): 数据库中其他数据集的名称，一行一个
-                raw (bool): 若为 False（默认值）则返回 Paragraph 对象，否则返回原始数据，仅对于聚合查询有效
-                groups (无:none|按组:group|按来源:source|分组和来源:both): 分组
+                query (QUERY):
+                    Query expression, or keywords
+                    @chs 查询字符串，或以 ? 开头的查询表达式，或以 ?? 开头的聚合查询表达式
+                sort (str):
+                    Sorting expression
+                    @chs 排序表达式
+                limit (int):
+                    Limitation for maximal results, 0 for none
+                    @chs 查询最多返回的结果数量，默认为0即无限制
+                skip (int):
+                    Skip %1 results
+                    @chs 返回从第%1个开始的结果
+                mongocollections (str):
+                    Name for collection name in MongoDB, one item per line
+                    @chs 数据库中其他数据集的名称，一行一个
+                raw (bool):
+                    Return dicts instead of Paragraph objects
+                    @chs 若为 False（默认值）则返回 Paragraph 对象，否则返回原始数据，仅对于聚合查询有效
+                groups (str):
+                    @choose(none|group|source|both) Groups
+                    @chs @choose(无:none|按组:group|按来源:source|分组和来源:both) 分组
             """
             super().__init__()
             self.dbquery = DBQuery(
@@ -50,11 +66,21 @@ class ImageItemDataSource(DataSourceStage):
         def __init__(self, cond='', limit=20, offset=0, raw=False, sort_keys='-_id'):
             """
             Args:
-                cond (QUERY): 查询表达式
-                limit (int): 数量限制
-                offset (int): 跳过的结果数量
-                raw (bool): 返回字典而非 ImageItem
-                sort_keys (str): 排序表达式
+                cond (QUERY):
+                    Query expression
+                    @chs 查询表达式
+                limit (int):
+                    Limit
+                    @chs 数量限制
+                offset (int):
+                    Skipped results
+                    @chs 跳过的结果数量
+                raw (bool):
+                    Return dicts instead of ImageItem objects
+                    @chs 返回字典而非 ImageItem
+                sort_keys (str):
+                    Sorting expression
+                    @chs 排序表达式
             """
             super().__init__()
             self.cond = cond
@@ -74,7 +100,9 @@ class ImageItemDataSource(DataSourceStage):
 
 
 class ImageImportDataSource(DataSourceStage):
-    """从本地文件或网址导入图像到图集
+    """
+    Import images from datasource
+    @chs 从本地文件或网址导入图像到图集
     """
 
     class Implementation(DataSourceStage.Implementation):
@@ -83,11 +111,21 @@ class ImageImportDataSource(DataSourceStage):
         def __init__(self, locs, dataset='默认图集', tags='', proxy='', excluding_patterns=''):
             """
             Args:
-                locs (str): 网址或文件通配符，一行一个
-                excluding_patterns (str): 排除的图片网址正则表达式，一行一个
-                tags (str): 标签，一行一个
-                dataset (DATASET): 数据集名称
-                proxy (str): 代理服务器
+                locs (str):
+                    Import images from locations, one per line
+                    @chs 网址或文件通配符，一行一个
+                excluding_patterns (str):
+                    Excluding patterns
+                    @chs 排除的图片网址正则表达式，一行一个
+                tags (str):
+                    Tags, one tag per line
+                    @chs 标签，一行一个
+                dataset (DATASET):
+                    Dataset name
+                    @chs 数据集名称
+                proxy (str):
+                    Proxy settings
+                    @chs 代理服务器
             """
             super().__init__()
             self.keywords = tags.split('\n')
@@ -112,6 +150,16 @@ class ImageImportDataSource(DataSourceStage):
                     yield from self.import_page(loc)
 
         def import_local(self, locs) -> List[Paragraph]:
+            """Import local files from locations
+
+            :param locs: locations
+            :type locs: List[str]
+            :return: Paragraphs
+            :rtype: List[Paragraph]
+            :yield: Paragraph
+            :rtype: Iterator[List[Paragraph]]
+            """
+
             zips = []
 
             def _expand_zip(src):
@@ -154,25 +202,25 @@ class ImageImportDataSource(DataSourceStage):
             for loc, _f in sorted(_list_all(locs)):
                 if _f.split('.')[-1] in ['txt', 'log', 'xlsx', 'xls', 'zip', 'csv'] or _f.endswith('.mp4.thumb.jpg'):
                     continue
-                pu = loc.split('/')[-1]
+                post_url = loc.split('/')[-1]
                 ftime = __get_mtime(_f)
 
-                p = albums[pu]
-                if not p.source:
-                    p.source = {'url': pu}
-                    p.keywords += self.keywords
-                    p.pdate = datetime.datetime.utcfromtimestamp(ftime)
-                    p.dataset = self.dataset
+                album = albums[post_url]
+                if not album.source:
+                    album.source = {'url': post_url}
+                    album.keywords += self.keywords
+                    album.pdate = datetime.datetime.utcfromtimestamp(ftime)
+                    album.dataset = self.dataset
 
                 i = ImageItem(source={'url': _f})
-                fn = _expand_zip(_f)
+                filename = _expand_zip(_f)
                 i.save()
-                with safe_open(f'hdf5://{i.id}', 'wb') as fo:
-                    fo.write(open(fn).read())
+                with safe_open(f'hdf5://{i.id}', 'wb') as fout:
+                    fout.write(open(filename).read())
 
                 i.source = dict(i.source, file='blocks.h5')
                 i.save()
-                p.images.append(i)
+                album.images.append(i)
 
             albums = albums.values()
 
@@ -183,26 +231,18 @@ class ImageImportDataSource(DataSourceStage):
 
             yield from albums
 
-        def import_page(self, path, rng_start=0, rng_end=0):
+        def import_page(self, paths):
             """Import images from web-page urls
 
             Args:
-                path (str): url path
+                paths (str): url path(s), one path per line
                 rng_start (int, optional): [description]
                 rng_end (int, optional): [description]
             """
             albums = []
-
-            rng = ['']
-            rngmatch = re.match(r'(.+##.*)\s(\d+)-(\d+)$', path)
-            if rngmatch:
-                path, rng_start, rng_end = rngmatch.groups()
-                rng = range(int(rng_start), int(rng_end)+1)
-
             imgset = set()
 
-            for i in rng:
-                url = path.replace('##', str(i))
+            for url in expand_patterns(paths):
                 p = Paragraph.first(F.source == {'url': url}) or Paragraph(
                     dataset=self.dataset,
                     source={'url': url}, images=[], pdate=datetime.datetime.utcnow())

@@ -14,7 +14,7 @@ from jindai.pipeline import DataSourceStage
 
 class WordDataSource(DataSourceStage):
     """
-    Import for Word documents
+    Import from Word documents
     @chs 从Word文档中导入语段
     """
 
@@ -62,19 +62,27 @@ class WordDataSource(DataSourceStage):
 
 
 class ExcelDataSource(DataSourceStage):
-    """从Excel文档中导入语段数据
+    """
+    Import from Excel documents
+    @chs 从Word文档中导入语段
     """
 
     class Implementation(DataSourceStage.Implementation):
-        """从 Excel 导入数据"""
+        """Impl"""
 
         def __init__(self, content, dataset, lang) -> None:
-            '''
+            """
             Args:
-                content (str): 文件名或通配符，每行一个
-                dataset (DATASET): 集合名称
-                lang (LANG): 语言标识
-            '''
+                dataset_name (DATASET): 
+                    Data name
+                    @chs 数据集名称
+                lang (LANG):
+                    Language code
+                    @chs 语言标识
+                content (str):
+                    Paths
+                    @chs 文件列表
+            """
             super().__init__()
             self.files = expand_patterns(content)
             self.dataset = dataset
