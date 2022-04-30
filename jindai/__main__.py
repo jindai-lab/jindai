@@ -19,6 +19,7 @@ from tqdm import tqdm
 from PyMongoWrapper import ObjectId
 from PyMongoWrapper.dbo import create_dbo_json_encoder
 from . import Plugin, PluginManager, Task, safe_open
+from .api import run_service
 from .helpers import get_context
 from .models import F, ImageItem, Meta, TaskDBO, User
 
@@ -222,13 +223,6 @@ def _save_db(coll: str, records: Iterable[Dict], force):
         print(ex.__class__.__name__)
 
 
-@cli.command('install-plugin')
-@click.argument('url')
-def install_plugin(url):
-    pmanager = _init_plugins()
-    pmanager.install(url)
-
-
 @cli.command('restore')
 @click.option('--infile', default='')
 @click.option('--force', type=bool, default=False)
@@ -296,6 +290,24 @@ def restore(infile, colls, force):
 
             if records:
                 _save_db(coll, records, force)
+
+
+@cli.command('install-plugin')
+@click.argument('url')
+def install_plugin(url: str):
+    """Install plugin
+
+    :param url: install from
+    :type url: str
+    """
+    pmanager = _init_plugins()
+    pmanager.install(url)
+
+
+@cli.command('web-service')
+@click.option('--port', default=8370, type=int)
+def web_service(port):
+    run_service(port=port)
 
 
 if __name__ == '__main__':

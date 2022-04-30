@@ -1,4 +1,5 @@
 """辅助函数"""
+import datetime
 import glob
 import importlib
 import json
@@ -7,24 +8,23 @@ import pickle
 import re
 import subprocess
 import sys
-import datetime
-from PIL import Image
 import time
 import traceback
 from functools import wraps
 from typing import IO, Dict, Type, Union
 
+import iso639
 import numpy as np
 import requests
-import iso639
 import werkzeug.wrappers.response
 from bson import ObjectId
 from flask import Response, jsonify, request, send_file, stream_with_context
+from PIL import Image
 from PyMongoWrapper.dbo import create_dbo_json_decoder, create_dbo_json_encoder
 
 from .config import instance as config
-from .models import Token
 from .dbquery import parser
+from .models import Token
 from .storage import safe_open
 
 

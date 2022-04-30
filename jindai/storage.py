@@ -12,6 +12,7 @@ import zipfile
 import h5py
 import numpy as np
 import requests
+from urllib import request
 from pdf2image import convert_from_path as _pdf_convert
 
 from .config import instance as config
@@ -349,8 +350,10 @@ def safe_open(path: str, mode='rb', **params):
             Paths are matched in the following priority:
                 - URLs starting with http:// or https:// 
                   may use `proxies`, `referer`, and `headers` in `params`
+                - Data URLs, i.e. data:...
+                  readonly, `mode` should be 'rb'
                 - hdf5://<item id>
-                  mode muse be 'rb' or 'wb'
+                  `mode` should be 'rb' or 'wb'
                 - <file path>#zip/<zip path>
                   read a zipped file inside a tar specified by <file path>
                 - <file path>#pdf/png:<page>
@@ -370,6 +373,12 @@ def safe_open(path: str, mode='rb', **params):
             return BytesIO(_try_download(path, **params))
 
         return _RequestBuffer(path, **params)
+
+    if path.startswith('data:'):
+        assert mode == 'rb'
+        with request.urlopen(path) as response:
+            data = response.read()
+        return BytesIO(data)
 
     if path.startswith('hdf5://'):
         assert mode in ('rb', 'wb')
