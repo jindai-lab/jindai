@@ -39,12 +39,14 @@ class PipelineStage:
 
             if 'Args:' in docstring:
                 for line in docstring.strip().split('\n'):
+                    line = line.lstrip()
                     arg_name, arg_type, arg_doc = '', '', ''
-                    match = re.search(r'(\w+)\s+\((.+?)\):\s+(.*)', line)
+                    match = re.search(r'(\w+)\s+\((.+?)\):(.*)', line)
                     if match:
                         arg_name, arg_type, arg_doc = match.groups()
+                        arg_doc = arg_doc.strip()
                     else:
-                        arg_doc += line
+                        arg_doc += '\n' + line
 
                     if arg_name:
                         args_docs[arg_name] = {
@@ -53,20 +55,26 @@ class PipelineStage:
                         }
             elif ':param ' in docstring:
                 doc_directive, arg_type, arg_name, arg_doc = '', '', '', ''
-                for line in docstring.strip().split('\n'):
+                for line in docstring.split('\n'):
+                    line = line.lstrip()
                     match = re.search(
-                        r':(param|type)(\s+\w+)?\s+(\w+):\s(.*)$', line)
+                        r':(param|type)(\s+\w+)?\s+(\w+):(.*)$', line)
                     if match:
                         doc_directive, arg_type, arg_name, arg_doc = match.groups()
+                        arg_doc = arg_doc.lstrip()
                     else:
-                        arg_doc += line.lstrip()
+                        if line.startswith(':'):
+                            arg_name = ''
+                            continue
+
+                        arg_doc += '\n' + line
 
                     if arg_name:
                         if doc_directive == 'type':
                             args_docs[arg_name]['type'] = arg_doc
                         else:
                             args_docs[arg_name]['description'] = arg_doc
-                            if arg_type and arg_type.strip():
+                            if arg_type:
                                 args_docs[arg_name]['type'] = arg_type.strip()
             return args_docs
 

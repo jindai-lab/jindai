@@ -58,7 +58,8 @@ def _hashing(msg):
 
 def _lang(inp):
     """Apply language settings of current client"""
-    assert isinstance(inp, (str, dict)), "Input value must be string or dict"
+    assert isinstance(inp, (str, list, dict)
+                      ), "Input value must be string or dict"
     if isinstance(inp, str):
         result = ''
         default_result = ''
@@ -72,13 +73,19 @@ def _lang(inp):
             result = default_result
         result = result.strip()
 
-    else:  # dictionary
+    elif isinstance(inp, dict):
         result = {}
         for key in inp:
-            if isinstance(inp[key], (dict, str)):
+            if isinstance(inp[key], (dict, list, str)):
                 result[key] = _lang(inp[key])
             else:
                 result[key] = inp[key]
+
+    else:  # list
+        result = [
+            _lang(inpk) if isinstance(inpk, (dict, list, str)) else inpk
+            for inpk in inp
+        ]
 
     return result
 
