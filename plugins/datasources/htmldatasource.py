@@ -141,7 +141,7 @@ class LinesDataSource(DataSourceStage):
         def __init__(self, dataset_name, lang="auto", content=""):
             """
             Args:
-                dataset_name (DATASET): 
+                dataset_name (DATASET):
                     Data name
                     @chs 数据集名称
                 lang (LANG):
