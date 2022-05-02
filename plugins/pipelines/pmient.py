@@ -1,4 +1,5 @@
-"""基于信息熵的词汇抽取词汇抽取"""
+"""Word extraction based on PMILR
+@chs 基于信息熵的词汇抽取词汇抽取"""
 import re
 
 import numpy as np
@@ -8,17 +9,22 @@ from .basics import NgramCounter
 
 
 class PMILREntropyWordFetcher(NgramCounter):
-    """基于信息熵的词汇抽取
+    """Word extraction based on PMILR
+    @chs 基于信息熵的词汇抽取
     """
     re_stopwords = re.compile(r'[a-zA-Z0-9一二三四五六七八九十]')
 
     def __init__(self, word_length=4, min_pmi=2, min_lr_ent=1, min_freq=1e-5, **_):
         """
         Args:
-            word_length (int, optional): 抽取的最大词长度。
-            min_pmi (float, optional): 最小互信息熵阈值。
-            min_lr_ent (float, optional): 最小左右信息熵阈值，若为0则将跳过。
-            min_freq (float, optional): 最小词频。
+            word_length (int, optional): Max word length
+                @chs 抽取的最大词长度。
+            min_pmi (float, optional): Min PMI thresholdd
+                @chs 最小互信息熵阈值。
+            min_lr_ent (float, optional): Min L-R Entropy, 0 to skip
+                @chs 最小左右信息熵阈值，若为0则将跳过。
+            min_freq (float, optional): Min frequency
+                @chs 最小词频。
         """
         self.min_pmi = min_pmi
         self.min_lr_ent = min_lr_ent

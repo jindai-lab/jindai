@@ -16,7 +16,9 @@ from jindai.models import Dataset, Paragraph, db
 
 
 class Passthrough(PipelineStage):
-    """直接通过
+    """
+    Passthrough
+    @chs 直接通过
     """
 
     def resolve(self, paragraph: Paragraph) -> Paragraph:
@@ -24,7 +26,10 @@ class Passthrough(PipelineStage):
 
 
 class TradToSimpChinese(PipelineStage):
-    """繁体中文转为简体中文
+    """
+    Convert Traditional Chinese to Simplified Chinese
+    @chs 繁体中文转为简体中文
+    @cht 繁體中文轉爲簡體中文
     """
 
     t2s = safe_import('opencc', 'opencc-python-reimplementation').OpenCC('t2s')
@@ -37,8 +42,8 @@ class TradToSimpChinese(PipelineStage):
 
 
 class LanguageDetect(PipelineStage):
-    """简易语言检测
-    使用正则表达式和 hanzidentifier 弥补 langdetect 在检测中日韩文字时准确率低的问题，返回 ISO 两字母代码或 chs 或 cht。
+    """Simple language detection
+    @chs 简易语言检测
     """
 
     def resolve(self, paragraph: Paragraph) -> Paragraph:
@@ -56,7 +61,7 @@ class LanguageDetect(PipelineStage):
             return paragraph
 
     def detect(self, sentence):
-        """检测语言"""
+        """Detect language"""
 
         hanzidentifier = safe_import('hanzidentifier')
         langdetect = safe_import('langdetect')
@@ -79,7 +84,9 @@ class LanguageDetect(PipelineStage):
 
 
 class WordStemmer(PipelineStage):
-    """附加词干到 tokens 中（需要先进行切词）
+    """
+    Stemming words in tokens field
+    @chs 附加词干到 tokens 中（需要先进行切词）
     """
 
     _language_stemmers = {}
@@ -100,7 +107,9 @@ class WordStemmer(PipelineStage):
     def __init__(self, append=True):
         """
         Args:
-            append (bool): 将词干添加到结尾，否则直接覆盖
+            append (bool):
+                Append to/overwrite tokens field
+                @chs 是添加到结尾还是覆盖
         """
         super().__init__()
         self.append = append
@@ -116,13 +125,17 @@ class WordStemmer(PipelineStage):
 
 
 class LatinTransliterate(PipelineStage):
-    """转写为拉丁字母的单词（需要先进行切词）
+    """
+    Transliterate tokens
+    @chs 转写为拉丁字母的单词（需要先进行切词）
     """
 
     def __init__(self, append=True):
         """
         Args:
-            append (bool): 是添加到结尾还是覆盖
+            append (bool):
+                Append to/overwrite tokens field
+                @chs 是添加到结尾还是覆盖
         """
         super().__init__()
         self.append = append
@@ -142,7 +155,9 @@ class LatinTransliterate(PipelineStage):
 
 
 class WordCut(PipelineStage):
-    """多语种分词
+    """
+    Multilingual word cutting
+    @chs 多语种分词
     """
 
     t2s = safe_import('opencc', 'opencc-python-reimplementation').OpenCC('t2s')
@@ -154,7 +169,9 @@ class WordCut(PipelineStage):
     def __init__(self, for_search=False, **_):
         """
         Args:
-            for_search (bool): 是否用于搜索（添加冗余分词结果或词干/转写）
+            for_search (bool): 
+                Append redundant word-cutting results or stemming/transliteration
+                @chs 是否用于搜索（添加冗余分词结果或词干/转写）
         """
         super().__init__()
         self.for_search = for_search
@@ -187,7 +204,9 @@ class WordCut(PipelineStage):
 
 
 class KeywordsFromTokens(PipelineStage):
-    """将检索词设为分词结果并删除词串字段
+    """
+    Set tokens as keywords and unset tokens field
+    @chs 将检索词设为分词结果并删除词串字段
     """
 
     def resolve(self, paragraph: Paragraph) -> Paragraph:
@@ -198,7 +217,9 @@ class KeywordsFromTokens(PipelineStage):
 
 
 class FilterPunctuations(PipelineStage):
-    """过滤标点符号
+    """
+    Filter punctuations
+    @chs 过滤标点符号
     """
 
     re_punctuations = re.compile(
@@ -211,7 +232,9 @@ class FilterPunctuations(PipelineStage):
 
 
 class Reparagraph(PipelineStage):
-    """重新分段"""
+    """
+    Reparagraphize
+    @chs 重新分段"""
 
     def resolve(self, paragraph: Paragraph) -> Paragraph:
         lang = paragraph.lang
@@ -256,13 +279,17 @@ class Reparagraph(PipelineStage):
 
 
 class SplitParagraph(PipelineStage):
-    """拆分语段
+    """
+    Split paragraphs
+    @chs 拆分语段
     """
 
     def __init__(self, delimeter='\n'):
         """
         Args:
-            delimeter (str): 拆分的分隔符
+            delimeter (str):
+                Delimeter
+                @chs 拆分的分隔符
         """
         super().__init__()
         self.delimeter = delimeter
@@ -276,7 +303,9 @@ class SplitParagraph(PipelineStage):
 
 
 class AccumulateParagraphs(PipelineStage):
-    """将遍历的段落保存起来以备下一步骤使用（通常用于导出）
+    """
+    Accumulate all paragraphs iterated
+    @chs 聚集段落遍历结果
     """
 
     def __init__(self):
@@ -291,7 +320,9 @@ class AccumulateParagraphs(PipelineStage):
 
 
 class Export(PipelineStage):
-    """结果导出为文件
+    """
+    Export accumulative result to file
+    @chs 结果导出为文件
     """
 
     def __init__(self, output_format='xlsx', limit=0) -> None:
@@ -342,13 +373,17 @@ class Export(PipelineStage):
 
 
 class AutoSummary(PipelineStage):
-    """中文自动摘要
+    """
+    Auto summary for Chinese texts
+    @chs 中文自动摘要
     """
 
     def __init__(self, count) -> None:
         """
         Args:
-            count (int): 摘要中的句子数量
+            count (int):
+                Sentences count
+                @chs 摘要中的句子数量
         """
         super().__init__()
         self.count = count
@@ -364,14 +399,21 @@ class AutoSummary(PipelineStage):
 
 
 class ArrayField(PipelineStage):
-    """操作数组字段"""
+    """
+    Manipulate array field
+    @chs 操作数组字段
+    """
 
     def __init__(self, field, push=True, elements='') -> None:
         """
         Args:
-            field (str): 字段名
-            push (bool): 添加（true）或删除（false）
-            elements (str): 添加或删除的元素，每行一个 $ 开头的字段名或常量
+            field (str): Field name
+                @chs 字段名
+            push (bool): push or delete
+                @chs 添加或删除
+            elements (str):
+                Element to push or delete, use $<field> or constants
+                @chs 添加或删除的元素，每行一个 $ 开头的字段名或常量
         """
         super().__init__()
         self.field = field
@@ -405,13 +447,17 @@ class ArrayField(PipelineStage):
 
 
 class ArrayAggregation(PipelineStage):
-    """减少一层数组嵌套层级"""
+    """
+    Concat arrays in an array field
+    @chs 减少一层数组嵌套层级"""
 
     def __init__(self, field, new_field='') -> None:
         """
         Args:
-            field (str): 数组字段名
-            new_field (str): 新的字段名，留空表示替换原数组字段
+            field (str): Field name
+                @chs 字段名
+            new_field (str): New field name, blank for replacement
+                @chs 新的字段名，留空表示替换原数组字段
         """
         super().__init__()
         self.field = field
@@ -423,7 +469,7 @@ class ArrayAggregation(PipelineStage):
 
 
 class Counter:
-    """线程安全的计数器"""
+    """Thread-safe counter"""
 
     class _CounterNum:
 
@@ -457,15 +503,17 @@ class Counter:
 
 
 class NgramCounter(PipelineStage):
-    """N-Gram 计数
+    """N-Gram
     """
 
     def __init__(self, n: int, lr=False):
         """ N-Gram
 
         Args:
-            n (int): 最大字串长度
-            lr (bool): 是否同时记录左右字符计数
+            n (int): Max string lenght
+                @chs 最大字串长度
+            lr (bool): Count left/right characters
+                @chs 是否同时记录左右字符计数
         """
         super().__init__()
         if lr:
@@ -498,13 +546,17 @@ class NgramCounter(PipelineStage):
 
 
 class Limit(PipelineStage):
-    """限制返回的结果数量
+    """
+    Limit results count
+    @chs 限制返回的结果数量
     """
 
     def __init__(self, limit):
         """
         Args:
-            limit (int): 要返回的最大结果数量，0则不返回
+            limit (int):
+                Max results count
+                @chs 要返回的最大结果数量，0则不返回
         """
         super().__init__()
         self.limit = limit
@@ -517,14 +569,18 @@ class Limit(PipelineStage):
 
 
 class FilterDuplication(PipelineStage):
-    """过滤已经存储在指定数据库中的段落
+    """
+    Filter duplications in specified database collection
+    @chs 过滤已经存储在指定数据库中的段落
     """
 
     def __init__(self, field, mongocollection='paragraph') -> None:
         """
         Args:
-            mongocollection (str): 数据库集合名
-            field (str): 要去重的字段值
+            mongocollection (str): Database collection name
+                @chs 数据库集合名
+            field (str): Field that mark an duplication
+                @chs 要去重的字段值
         """
         super().__init__()
         self.mongocollection = mongocollection or 'paragraph'
@@ -537,14 +593,18 @@ class FilterDuplication(PipelineStage):
 
 
 class RegexReplace(PipelineStage):
-    """正则表达式匹配并替换
+    """
+    Replace with regular expression
+    @chs 正则表达式匹配并替换
     """
 
     def __init__(self, pattern, replacement='', plain=False):
         """
         Args:
-            pattern (str): 正则表达式
-            replacement (str): 要替换成的字符串
+            pattern (str): Regular expression
+                @chs 正则表达式
+            replacement (str): Replacement string
+                @chs 要替换成的字符串
         """
         super().__init__()
         if plain:
@@ -559,19 +619,28 @@ class RegexReplace(PipelineStage):
 
 
 class RegexFilter(PipelineStage):
-    """正则表达式匹配并提取到字段中
+    """
+    Match regular expression and extract result to field
+    @chs 正则表达式匹配并提取到字段中
     """
 
     def __init__(self, pattern, target, source='content', match='{0}',
                  continuous=False, filter_out=False):
         """
         Args:
-            pattern (str): 正则表达式
-            source (str): 匹配的字段，默认为内容
-            target (str): 要提取入的字段名称
-            match (str): 填入的值，如 '{1}{2}' 等形式，默认为全部匹配到的文本
-            filter_out (bool): 过滤未匹配到的语段
-            continuous (bool): 未匹配到的语段自动使用上次的值
+            pattern (str): Regular expression
+                @chs 正则表达式
+            source (str): String to match, default to content
+                @chs 匹配的字段，默认为内容
+            target (str): Field name to fill in
+                @chs 要提取入的字段名称
+            match (str): Fill the target with, in forms like '{1}{2}', default to
+                all matched text
+                @chs 填入的值，如 '{1}{2}' 等形式，默认为全部匹配到的文本
+            filter_out (bool): Filter out unmatched paragraphs
+                @chs 过滤未匹配到的语段
+            continuous (bool): Use previous matched value for unmatched paragraph
+                @chs 未匹配到的语段自动使用上次的值
         """
         super().__init__()
         self.regexp = re.compile(pattern)
@@ -597,14 +666,19 @@ class RegexFilter(PipelineStage):
 
 
 class FieldAssignment(PipelineStage):
-    """将某一个字段的值或输入值保存到另一个字段
+    """
+    Assign value/field to another field
+    @chs 将某一个字段的值或输入值保存到另一个字段
     """
 
     def __init__(self, field, value):
         """
         Args:
-            field (str): 新的字段名
-            value (str): 以 $ 开头的字段名，或常数值（类型将自动匹配），或 $$oid 表示一个新的 ObjectId
+            field (str): Field name
+                @chs 新的字段名
+            value (str): 
+                $<field> or contants, or $$oid for a new ObjectId
+                @chs 以 $ 开头的字段名，或常数值（类型将自动匹配），或 $$oid 表示一个新的 ObjectId
         """
         super().__init__()
         self.field = field
@@ -636,14 +710,18 @@ class FieldAssignment(PipelineStage):
 
 
 class FilterArrayField(PipelineStage):
-    """过滤列表字段的值
+    """Filter array field
+    @chs 过滤列表字段的值
     """
 
     def __init__(self, field, cond) -> None:
         """
         Args:
-            field (str): 字段名称
-            cond (QUERY): 条件式，用 iter 表示被判断的项目，或用省略形式
+            field (str): Field name
+                @chs 字段名称
+            cond (QUERY): Conditional expression, use `iter` for the iterated item,
+                or use abbreviated form like '>0' to mean 'iter>0'
+                @chs 条件式，用 iter 表示被判断的项目，或用省略形式
         """
         super().__init__()
         self.field = field
@@ -668,13 +746,15 @@ class FilterArrayField(PipelineStage):
 
 
 class SaveParagraph(PipelineStage):
-    """保存
+    """Save
+    @chs 保存
     """
 
     def __init__(self, mongocollection='paragraph'):
         '''
         Args:
-            mongocollection (str): 数据库集合名
+            mongocollection (str): Database collection name
+                @chs 数据库集合名
         '''
         super().__init__()
         self.mongocollection = mongocollection
@@ -699,14 +779,18 @@ class SaveParagraph(PipelineStage):
 
 
 class FieldIncresement(PipelineStage):
-    """对字段进行自增操作
+    """
+    Increment on field
+    @chs 对字段进行自增操作
     """
 
     def __init__(self, field, inc_value):
         '''
         Args:
-            field (str): 字段名称
-            inc_value (str): 自增的值，或以 $ 开头的另一字段名
+            field (str): Field name
+                @chs 字段名称
+            inc_value (str): Increment by, or $<field>
+                @chs 自增的值，或以 $ 开头的另一字段名
         '''
         super().__init__()
         self.field = field
@@ -726,7 +810,9 @@ class FieldIncresement(PipelineStage):
 
 
 class OutlineFilter(PipelineStage):
-    """中英文大纲序号识别
+    """
+    Identify Chinese/Roman ordinal numbers for outline
+    @chs 中英文大纲序号识别
     """
 
     chnum = '[一二三四五六七八九十首甲乙丙丁戊己庚辛壬癸]'
@@ -820,13 +906,18 @@ class OutlineFilter(PipelineStage):
 
 
 class ConditionalAssignment(PipelineStage):
-    """按条件赋值字段"""
+    """
+    Conditional assignment
+    @chs 按条件赋值字段"""
 
     def __init__(self, cond, field):
         """
         Args:
-            cond (QUERY): 一行一个检查的条件，与最终要赋予的值之间用=>连缀
-            field (str): 要赋值的字段
+            cond (QUERY): Conditions and assignment values, in forms like:
+                <condition> => <constant>, one pair per line.
+                @chs 一行一个检查的条件，与最终要赋予的值之间用=>连缀
+            field (str): Target field name
+                @chs 要赋值的字段
         """
         super().__init__()
         self.cond = [parser.eval(_) for _ in cond.split('\n')]
@@ -842,14 +933,18 @@ class ConditionalAssignment(PipelineStage):
 
 
 class KeywordsReplacement(PipelineStage):
-    """替换关键词（标签）"""
+    """Replace keywords/tags
+    @chs 替换关键词（标签）"""
 
     def __init__(self, from_tag, to_tag, arr='keywords'):
         """
         Args:
-            from_tag (str): 原标签
-            to_tag (str): 目标标签
-            arr (str): 替换的数组字段（默认为标签）
+            from_tag (str): Original keyword
+                @chs 原标签
+            to_tag (str): Target keyword
+                @chs 目标标签
+            arr (str): Target field, default to keywords
+                @chs 替换的数组字段（默认为标签）
         """
         super().__init__()
         self.from_tag = from_tag
@@ -867,14 +962,18 @@ class KeywordsReplacement(PipelineStage):
 
 
 class MongoCollectionBatchOper(PipelineStage):
-    """数据库批处理"""
+    """Batch operation on database collection
+    @chs 数据库批处理"""
 
     def __init__(self, mongocollection='', updates='[]'):
         """
         Args:
-            mongocollection (str): 要处理的数据库
-            updates (QUERY): 要执行的更新，应表示为一个列表，其中的每个元素为 (query; update)，
-                如 (keywords=test; pull(keywords=key)) 。update 可为 set, pull, unset 等，也可使用聚合
+            mongocollection (str): Database collection
+                @chs 要处理的数据库
+            updates (QUERY): Updates to perform, in the form of a list like [(<query>; <update>); ...]
+                where <update> can be function calls to set, pull, unset, etc.
+                @chs 要执行的更新，应表示为一个列表，其中的每个元素为 (query; update)，
+                @chs 如 (keywords=test; pull(keywords=key)) 。update 可为 set, pull, unset 等，也可使用聚合
         """
         super().__init__()
         self.collection = Paragraph.get_coll(mongocollection)
@@ -882,20 +981,20 @@ class MongoCollectionBatchOper(PipelineStage):
         self.updates = []
 
         def _assert(cond, info=''):
-            assert cond, '更新格式不正确：' + repr(info)
+            assert cond, 'Wrong format for update' + repr(info)
 
         _assert(isinstance(updates, list))
         for tup in updates:
             _assert(len(tup) == 2, updates)
             query, update = tup
             if isinstance(update, dict):
-                assert len(update) == 1, '更新格式不正确'
+                assert len(update) == 1, 'Wrong format for update'
                 for k in update:
-                    assert k.startswith('$'), '更新格式不正确'
+                    assert k.startswith('$'), 'Wrong format for update'
             elif isinstance(update, list):
                 pass
             else:
-                assert False, '更新格式不正确'
+                assert False, 'Wrong format for update'
             self.updates.append((query, update))
 
     def summarize(self, _):

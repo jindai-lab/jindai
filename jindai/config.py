@@ -1,4 +1,4 @@
-"""配置文件"""
+"""Config file"""
 import os
 from pathlib import Path
 import yaml

@@ -125,7 +125,7 @@ class Task:
         return thr
 
     def stop(self):
-        """停止任务"""
+        """Stop task"""
         self.alive = False
 
     @staticmethod

@@ -1,4 +1,4 @@
-"""注册处理过程"""
+"""Register pipeline stages"""
 
 import os
 from jindai import Plugin
@@ -7,7 +7,7 @@ from jindai.pipeline import PipelineStage
 
 
 class PipelinesPlugin(Plugin):
-    """注册处理过程的插件"""
+    """Plugin for registering pipeline stages"""
 
     def __init__(self, pmanager, **config) -> None:
         super().__init__(pmanager, **config)

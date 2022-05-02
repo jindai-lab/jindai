@@ -1,4 +1,5 @@
-"""工作流程控制
+"""Workflow control
+@chs 工作流程控制
 """
 
 from PyMongoWrapper import F
@@ -41,14 +42,18 @@ class FlowControlStage(PipelineStage):
 
 
 class RepeatWhile(FlowControlStage):
-    """重复"""
+    """Repeat loops
+    @chs 重复"""
 
     def __init__(self, pipeline, times=1, cond=''):
         """
         Args:
-            pipeline (pipeline): 要重复执行的流程
-            times (int): 重复的次数
-            cond (QUERY): 重复的条件
+            pipeline (pipeline): Loop pipeline
+                @chs 要重复执行的流程
+            times (int): Max repeat times
+                @chs 重复的次数
+            cond (QUERY): Condition for repeat
+                @chs 重复的条件
         """
         self.times = times
         self.times_key = f'REPEATWHILE_{id(self)}_TIMES_COUNTER'
@@ -73,14 +78,18 @@ class RepeatWhile(FlowControlStage):
 
 
 class Condition(FlowControlStage):
-    """条件判断"""
+    """Conditional execution
+    @chs 条件判断"""
 
     def __init__(self, cond, iftrue, iffalse):
         """
         Args:
-            cond (QUERY): 检查的条件
-            iftrue (pipeline): 条件成立时执行的流程
-            iffalse (pipeline): 条件不成立时执行的流程
+            cond (QUERY): Condition to check
+                @chs 检查的条件
+            iftrue (pipeline): Pipeline when condition is satisfied
+                @chs 条件成立时执行的流程
+            iffalse (pipeline): Pipeline when condition is not satisfied
+                @chs 条件不成立时执行的流程
         """
         self.cond = parser.eval(cond)
         self.iftrue = Pipeline(iftrue, self.logger)
@@ -98,17 +107,21 @@ class Condition(FlowControlStage):
 
 
 class CallTask(FlowControlStage):
-    """调用其他任务（流程）"""
+    """Call to other task
+    @chs 调用其他任务"""
 
     def __init__(self, task, pipeline_only=False, params=''):
         """
         Args:
-            task (TASK): 任务ID
-            pipeline_only (bool): 仅调用任务中的处理流程，若为 false，则于 summarize 阶段完整调用该任务
-            params (QUERY): 设置任务中各数据源和流程参数
+            task (TASK): Task ID
+                @chs 任务ID
+            pipeline_only (bool): Join the pipeline in the current pipeline 
+                @chs 仅调用任务中的处理流程，若为 false，则于 summarize 阶段完整调用该任务
+            params (QUERY): Override parameters in the task
+                @chs 设置任务中各处理流程参数
         """
         task = TaskDBO.first(F.id == task)
-        assert task, '指定的任务不存在'
+        assert task, f'No specified task: {task}'
         self.pipeline_only = pipeline_only
         if params:
             params = parser.eval(params)
@@ -118,10 +131,10 @@ class CallTask(FlowControlStage):
                 for sec in secs[1:-1]:
                     if sec.isnumeric():
                         assert isinstance(target, list) and len(
-                            target) > int(sec), '请指定正确的下标，从0开始'
+                            target) > int(sec), f'Index error: {sec}'
                         target = target[int(sec)][1]
                     else:
-                        assert sec in target, '不存在该参数'
+                        assert sec in target, f'No such parameter: {sec}'
                         target = target[sec]
                         if isinstance(target, list) and len(target) == 2 and \
                            isinstance(target[0], str) and isinstance(target[1], dict):
