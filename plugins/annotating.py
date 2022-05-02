@@ -1,6 +1,6 @@
 """
 Annotations
-bchs 标注
+@chs 标注
 """
 import re
 import fitz

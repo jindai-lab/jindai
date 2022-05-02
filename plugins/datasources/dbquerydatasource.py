@@ -159,85 +159,41 @@ class ImageImportDataSource(DataSourceStage):
             :yield: Paragraph
             :rtype: Iterator[List[Paragraph]]
             """
-
-            zips = []
-
-            def _expand_zip(src):
-                if '.zip#' in src:
-                    src = os.path.join('__zip{}'.format(
-                        hash(src[:src.find('#')])), src[src.find('#')+1:])
-                return src
-
-            def _list_all(locs):
-                locs = list(locs)
-                l = []
-                for loc in locs:
-                    if '*' in loc:
-                        locs += glob.glob(loc)
-                    elif loc.endswith('.zip'):
-                        zips.append(loc)
-                        self.logger(loc)
-                        with zipfile.ZipFile(loc, 'r') as z:
-                            l += [(loc, loc + '#zip/' + _)
-                                  for _ in z.namelist()]
-                            z.extractall('__zip{}'.format(hash(loc)))
-                    elif os.path.isdir(loc):
-                        self.logger(loc)
-                        l += [(loc, os.path.join(loc, _))
-                              for _ in os.listdir(loc)]
-                    elif os.path.isfile(loc):
-                        l.append((loc, loc))
-                return l
-
-            def __get_mtime(src):
-                if '.zip#' in src:
-                    src = src[:src.find('#')]
-                return int(os.stat(src).st_mtime)
-
-            for _ in glob.glob('._*'):
-                os.unlink(_)
-
             albums = defaultdict(Paragraph)
 
-            for loc, _f in sorted(_list_all(locs)):
-                if _f.split('.')[-1] in ['txt', 'log', 'xlsx', 'xls', 'zip', 'csv'] or _f.endswith('.mp4.thumb.jpg'):
-                    continue
-                post_url = loc.split('/')[-1]
-                ftime = __get_mtime(_f)
+            for loc in expand_patterns(locs):
+                extname = loc.rsplit('.', 1)[-1].lower()
+                filename = loc.split('#')[0]
+                if extname in ['jpg', 'jpeg', 'png', 'mp4'] or loc.endswith('.mp4.thumb.jpg'):
+                    ftime = int(os.stat(filename).st_mtime)
 
-                album = albums[post_url]
-                if not album.source:
-                    album.source = {'url': post_url}
-                    album.keywords += self.keywords
-                    album.pdate = datetime.datetime.utcfromtimestamp(ftime)
-                    album.dataset = self.dataset
+                    album = albums[filename]
+                    if not album.source:
+                        album.source = {'file': filename}
+                        album.keywords += self.keywords
+                        album.pdate = datetime.datetime.utcfromtimestamp(ftime)
+                        album.dataset = self.dataset
 
-                i = ImageItem(source={'url': _f})
-                filename = _expand_zip(_f)
-                i.save()
-                with safe_open(f'hdf5://{i.id}', 'wb') as fout:
-                    fout.write(open(filename).read())
+                    i = ImageItem(source={'file': loc})
+                    i.save()
+                    with safe_open(f'hdf5://{i.id}', 'wb') as fout:
+                        fout.write(safe_open(loc, 'rb').read())
 
-                i.source = dict(i.source, file='blocks.h5')
-                i.save()
-                album.images.append(i)
+                    i.source = dict(i.source, file='blocks.h5')
+                    i.save()
+                    album.images.append(i)
 
             albums = albums.values()
-
-            for _ in glob.glob('__zip*'):
-                shutil.rmtree(_)
-            for _ in zips:
-                os.unlink(_)
 
             yield from albums
 
         def import_page(self, paths):
             """Import images from web-page urls
 
-            Args:
-                paths (str): url path(s), one path per line
-                rng_start (int, optional): [description]
-                rng_end (int, optional): [description]
+            :param paths: url path(s), one path per line
+            :type paths: str
+            :yield: Paragraphs
+            :rtype: Paragraph
             """
             albums = []
             imgset = set()
