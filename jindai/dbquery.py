@@ -174,7 +174,7 @@ class DBQuery:
             self.query += groupping
 
         self.limit = limit
-        self.sort = sort.split(',') if sort else []
+        self.sort = parser.eval_sort(sort or 'id')
         self.skips = {}
         self.skip = skip
 

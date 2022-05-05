@@ -97,9 +97,6 @@ class Task:
 
             if self.alive:
                 return self.pipeline.summarize()
-            else:
-                raise InterruptedError()
-
         except KeyboardInterrupt:
             self.alive = False
         except Exception as ex:

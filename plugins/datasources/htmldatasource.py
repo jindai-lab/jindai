@@ -5,6 +5,7 @@ Import from web or file
 
 import codecs
 import re
+import json
 from concurrent.futures import ThreadPoolExecutor
 from urllib.parse import urljoin
 from bs4 import BeautifulSoup as B
@@ -26,7 +27,7 @@ class HTMLDataSource(DataSourceStage):
                      fields='content="//text"', paragraph_selector=''):
             """
             Args:
-                dataset_name (DATASET): 
+                dataset_name (DATASET):
                     Data name
                     @chs 数据集名称
                 lang (LANG):
@@ -106,7 +107,7 @@ class TextDataSource(DataSourceStage):
         def __init__(self, dataset_name, lang, content):
             """
             Args:
-                dataset_name (DATASET): 
+                dataset_name (DATASET):
                     Data name
                     @chs 数据集名称
                 lang (LANG):
@@ -179,7 +180,7 @@ class WebPageListingDataSource(DataSourceStage):
                      img_pattern=DEFAULT_IMG_PATTERNS) -> None:
             """
             Args:
-                dataset (DATASET): 
+                dataset (DATASET):
                     Data name
                     @chs 数据集名称
                 lang (LANG):
@@ -191,7 +192,7 @@ class WebPageListingDataSource(DataSourceStage):
                 list_depth (int):
                     List depth
                     @chs 列表深度
-                proxy (str): 
+                proxy (str):
                     Proxy settings
                     @chs 代理服务器
                 tags (str):
@@ -316,6 +317,28 @@ class WebPageListingDataSource(DataSourceStage):
                         else:
                             queue.append((res, level))
                 queue = queue[5:]
+
+
+class JSONDataSource(DataSourceStage):
+    """Parse JSON data to Paragraphs, used to interact with web interface
+    @chs 从 JSON 数据解析出语段，用于与网页客户端交互
+    """
+    class Implementation(DataSourceStage.Implementation):
+        """Implementing datasource"""
+
+        def __init__(self, content, **kwargs) -> None:
+            """
+            :param content: JSON data
+            :type content: str
+            :yield: Paragraphs
+            :rtype: Paragraph
+            """
+            super().__init__()
+            self.content = json.loads(content)
+
+        def fetch(self):
+            for paragraph in self.content:
+                yield Paragraph().fill_dict(paragraph)
 
 
 class BiblioDataSource(DataSourceStage):
