@@ -174,7 +174,7 @@ class DBQuery:
             self.query += groupping
 
         self.limit = limit
-        self.sort = parser.eval_sort(sort or 'id')
+        self.sort = sort or 'id'
         self.skips = {}
         self.skip = skip
 
@@ -198,7 +198,7 @@ class DBQuery:
                 skip = 0
             else:
                 agg.append(
-                    {'$sort': SON(parser.eval_sort(','.join(sort)))})
+                    {'$sort': SON(parser.eval_sort(sort))})
         if skip > 0:
             agg.append({'$skip': skip})
         if limit > 0:

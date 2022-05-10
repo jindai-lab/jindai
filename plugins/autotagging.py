@@ -2,21 +2,35 @@
 Auto tagging
 @chs 自动标签
 """
-
-import re
-
-from PyMongoWrapper import F, ObjectId
-from jindai import PipelineStage, Plugin
-from jindai.helpers import rest
+from PyMongoWrapper import F, ObjectId, EvaluationError
+from jindai import PipelineStage, Plugin, parser
+from jindai.helpers import rest, execute_query_expr
 from jindai.models import db
 
 
 class AutoTag(db.DbObject):
     """Auto Tagging Object"""
 
-    from_tag = str
-    pattern = str
+    cond = str
     tag = str
+    parsed = dict
+
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+
+    def get_parsed(self):
+        """Get parsed condition
+
+        :return: parsed condition
+        :rtype: dict
+        """
+        if self.parsed == {}:
+            try:
+                self.parsed = parser.eval(self.cond)
+                self.save()
+            except EvaluationError:
+                self.parsed = 'False'
+        return self.parsed
 
 
 class ApplyAutoTags(PipelineStage):
@@ -31,9 +45,8 @@ class ApplyAutoTags(PipelineStage):
 
     def resolve(self, paragraph):
         for i in self.ats:
-            pattern, from_tag, tag = i.pattern, i.from_tag, i.tag
-            if (from_tag and from_tag in paragraph.keywords) or \
-                    (pattern and re.search(pattern, paragraph.source['url'])):
+            parsed, tag = i.get_parsed(), i.tag
+            if execute_query_expr(parsed, paragraph):
                 if tag not in paragraph.keywords:
                     paragraph.keywords.append(tag)
                 if tag.startswith('@'):
@@ -53,11 +66,11 @@ class AutoTaggingPlugin(Plugin):
 
         @app.route('/api/plugins/autotags', methods=['POST', 'PUT', 'GET'])
         @rest()
-        def autotags_list(tag='', from_tag='', pattern='', delete=False, ids=None):
+        def autotags_list(tag='', cond='', delete=False, ids=None):
             if ids is None:
                 ids = []
             if tag:
-                AutoTag(tag=tag, from_tag=from_tag, pattern=pattern).save()
+                AutoTag(tag=tag, cond=cond).save()
             elif delete:
                 AutoTag.query(F.id.in_([ObjectId(i) for i in ids])).delete()
             else:
