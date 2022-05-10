@@ -215,13 +215,13 @@ def serve_proxy(server, path):
 RE_DIGITS = re.compile(r'[\+\-]?\d+')
 
 
-def execute_query_expr(parsed, inputs):
+def execute_query_expr(parsed, test_val):
     """Check according to parsed query expression
 
     :param parsed: parsed QueryExpr
     :type parsed: dict
-    :param inputs: input object
-    :type inputs: Union[Dict, List]
+    :param test_val: input object
+    :type test_val: Union[Dict, List]
     """
 
     def _opr(k):
@@ -232,36 +232,25 @@ def execute_query_expr(parsed, inputs):
         }.get(k, k)
         return '__' + oprname + '__'
 
-    def _getattr(obj, k, default=None):
-        if '.' in k:
-            for key_seg in k.split('.'):
+    def _getattr(obj, key, default=None):
+        if obj is None:
+            return obj
+
+        if '.' in key:
+            for key_seg in key.split('.'):
                 obj = _getattr(obj, key_seg, default)
             return obj
 
         if isinstance(obj, dict):
-            return obj.get(k, default)
+            return obj.get(key, default)
 
-        if isinstance(obj, list) and RE_DIGITS.match(k):
-            return obj[int(k)] if 0 <= int(k) < len(obj) else default
+        if isinstance(obj, list) and RE_DIGITS.match(key):
+            return obj[int(key)] if 0 <= int(key) < len(obj) else default
 
-        return getattr(obj, k, default)
+        return getattr(obj, key, default)
 
-    def _hasattr(obj, k):
-        if '.' in k:
-            for key_seg in k.split('.')[:-1]:
-                obj = _getattr(obj, key_seg)
-            k = k.split('.')[-1]
-
-        if isinstance(obj, dict):
-            return k in obj
-
-        if isinstance(obj, list) and RE_DIGITS.match(k):
-            return 0 <= int(k) < len(obj)
-
-        return hasattr(obj, k)
-
-    def _test_inputs(inputs, val, k='eq'):
-        oprname = _opr(k)
+    def _test_inputs(inputs, val, relation='eq'):
+        oprname = _opr(relation)
 
         if oprname == '__in__':
             return inputs in val
@@ -269,18 +258,36 @@ def execute_query_expr(parsed, inputs):
         if oprname == '__size__':
             return len(inputs) == val
 
+        if oprname == '__first__':
+            for i in inputs:
+                return i
+            return None
+
+        if oprname == '__last__':
+            i = None
+            for i in inputs:
+                pass
+            return i
+
         if isinstance(inputs, list):
             arr_result = False
             for input_val in inputs:
-                arr_result = arr_result or _getattr(input_val, oprname)(val)
+                arr_result = arr_result or _getfunc(input_val, oprname)(val)
                 if arr_result:
                     break
         else:
-            arr_result = _getattr(inputs, oprname)(val)
+            arr_result = _getfunc(inputs, oprname)(val)
 
-        return arr_result is True
+        return arr_result
 
-    result = True
+    def _getfunc(obj, func_name):
+        func = _getattr(obj, func_name)
+        if func:
+            return func
+        else:
+            return lambda: None
+
+    result = None
     assert isinstance(
         parsed, dict), 'QueryExpr should be parsed first and well-formed.'
 
@@ -290,31 +297,30 @@ def execute_query_expr(parsed, inputs):
                 arr_result = True
                 for element in val:
                     arr_result = arr_result and execute_query_expr(
-                        element, inputs)
+                        element, test_val)
             elif key == '$or':
                 arr_result = False
                 for element in val:
                     arr_result = arr_result or execute_query_expr(
-                        element, inputs)
+                        element, test_val)
                     if arr_result:
                         break
             elif key == '$not':
-                arr_result = not execute_query_expr(val, inputs)
+                arr_result = not execute_query_expr(val, test_val)
             elif key == '$regex':
-                arr_result = re.search(val, inputs) is not None
+                arr_result = re.search(val, test_val) is not None
             elif key == '$options':
                 continue
             else:
-                arr_result = _test_inputs(inputs, val, key[1:])
+                arr_result = _test_inputs(test_val, val, key[1:])
 
             result = result and arr_result
 
         elif not isinstance(val, dict) or not [1 for v_ in val if v_.startswith('$')]:
-
-            result = result and _test_inputs(_getattr(inputs, key), val)
+            result = result and _test_inputs(_getattr(test_val, key), val)
         else:
             result = result and execute_query_expr(val, _getattr(
-                inputs, key) if _hasattr(inputs, key) else None)
+                test_val, key))
 
     return result
 

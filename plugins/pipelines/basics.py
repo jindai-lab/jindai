@@ -329,15 +329,19 @@ class Export(PipelineStage):
         """导出结果
 
         Args:
-            format (xlsx|json|csv): 输出格式。
-            limit (int, optional): 最多导出的记录数量，0表示无限制。
+            format (xlsx|json|csv):
+                Export file foramt
+                @chs 输出格式
+            limit (int, optional):
+                Max export records count, 0 for no limit
+                @chs 最多导出的记录数量，0表示无限制。
         """
         super().__init__()
         self.format = output_format
         self.limit = limit
 
     def summarize(self, result):
-        safe_import('xlsxwriter')
+        safe_import('xlsxwriter')  # as required for pandas to export xlsx file
         pandas = safe_import('pandas')
 
         def json_dump(val):
@@ -350,26 +354,12 @@ class Export(PipelineStage):
             _, DbObject) else _ for _ in result]
 
         if self.format == 'json':
-            return {
-                '__file_ext__': 'json',
-                'data': json_dump(result).encode('utf-8')
-            }
+            return PipelineStage.return_file('json', json_dump(result).encode('utf-8'))
 
-        elif self.format == 'csv':
+        elif self.format in ('csv', 'xlsx'):
             buf = BytesIO()
-            pandas.DataFrame(result).to_csv(buf)
-            return {
-                '__file_ext__': 'csv',
-                'data': buf.getvalue()
-            }
-
-        elif self.format == 'xlsx':
-            buf = BytesIO()
-            pandas.DataFrame(result).to_excel(buf, engine='xlsxwriter')
-            return {
-                '__file_ext__': 'xlsx',
-                'data': buf.getvalue()
-            }
+            getattr(pandas.DataFrame(result), f'to_{self.format}')(buf)
+            return PipelineStage.return_file(self.format, buf.getvalue())
 
 
 class AutoSummary(PipelineStage):
@@ -389,6 +379,7 @@ class AutoSummary(PipelineStage):
         self.count = count
 
     def resolve(self, paragraph: Paragraph) -> Paragraph:
+        # textrank4zh is a package for Chinese text ranking
         tr4s = safe_import('textrank4zh').TextRank4Sentence()
         tr4s.analyze(text=paragraph.content, lower=True, source='all_filters')
         paragraph.summary = '\n'.join([
@@ -676,7 +667,7 @@ class FieldAssignment(PipelineStage):
         Args:
             field (str): Field name
                 @chs 新的字段名
-            value (str): 
+            value (str):
                 $<field> or contants, or $$oid for a new ObjectId
                 @chs 以 $ 开头的字段名，或常数值（类型将自动匹配），或 $$oid 表示一个新的 ObjectId
         """
@@ -968,9 +959,11 @@ class MongoCollectionBatchOper(PipelineStage):
     def __init__(self, mongocollection='', updates='[]'):
         """
         Args:
-            mongocollection (str): Database collection
+            mongocollection (str):
+                Database collection
                 @chs 要处理的数据库
-            updates (QUERY): Updates to perform, in the form of a list like [(<query>; <update>); ...]
+            updates (QUERY):
+                Updates to perform, in the form of a list like [(<query>; <update>); ...]
                 where <update> can be function calls to set, pull, unset, etc.
                 @chs 要执行的更新，应表示为一个列表，其中的每个元素为 (query; update)，
                 @chs 如 (keywords=test; pull(keywords=key)) 。update 可为 set, pull, unset 等，也可使用聚合

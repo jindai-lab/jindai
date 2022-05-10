@@ -335,7 +335,7 @@ def expand_patterns(patterns: Union[list, str]):
                 if path.endswith('.zip') or path.endswith('.epub'):
                     with zipfile.ZipFile(path, 'r') as zip_file:
                         for zipped_item in zip_file.filelist:
-                            yield path + '#' + zipped_item.filename
+                            yield path + '#zip/' + zipped_item.filename
                 elif os.path.isdir(path):
                     patterns.append(path + '/*')
                 else:

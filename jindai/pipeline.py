@@ -10,7 +10,8 @@ from .models import Paragraph
 
 class PipelineStage:
     """Stages of the process.
-    Note that processing against paragraphs may take place concurrently and that process processing stages should be stateless as far as possible.
+    Note that processing against paragraphs may take place concurrently and
+    that process processing stages should be stateless as far as possible.
     """
 
     def __init__(self) -> None:
@@ -99,6 +100,34 @@ class PipelineStage:
                 'default': val.get('default')
             } for key, val in args_docs.items() if 'type' in val
         ]
+
+    @staticmethod
+    def return_file(ext: str, data: bytes, **kwargs):
+        """Make a dict to represent file in PipelineStage
+
+        :param ext: extension name
+        :type ext: str
+        :param data: data
+        :type data: bytes
+        :return: dict representing the file
+        :rtype: dict
+        """
+        file_dict = {
+            '__file_ext__': ext,
+            'data': data
+        }
+        file_dict.update(**kwargs)
+        return file_dict
+
+    def return_redirect(dest: str) -> dict:
+        """Make a dict to represent redirection directive
+
+        :param dest: destination url
+        :type dest: str
+        :return: dict representing the redirection
+        :rtype: dict
+        """
+        return {'__redirect__': dest}
 
     @property
     def logger(self):

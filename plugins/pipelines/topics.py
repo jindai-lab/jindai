@@ -9,16 +9,27 @@ import numpy as np
 from jindai import PipelineStage
 from jindai.helpers import safe_import
 from jindai.models import Paragraph
-from matplotlib import pyplot as plt
-from sklearn.cluster import KMeans
-from sklearn.decomposition import PCA
-
 from .basics import AccumulateParagraphs, Counter
+
 
 many_stop_words = safe_import('many_stop_words')
 
 
-plt.rcParams['font.sans-serif'] = ['Microsoft YaHei']
+def import_plt():
+    """safe import matplotlib.pyplot"""
+    plt = safe_import('matplotlib.pyplot', 'matplotlib')
+    plt.rcParams['font.sans-serif'] = ['Microsoft YaHei']
+    return plt
+
+
+def import_sklearn_kmeans_pca():
+    """safe import sklearn kmeans and pca, in respective order
+    """
+    safe_import('sklearn.cluster', 'scikit-learn')
+    safe_import('sklearn.decomposition')
+    from sklearn.cluster import KMeans
+    from sklearn.decomposition import PCA
+    return KMeans, PCA
 
 
 class FilterStopWords(PipelineStage):
@@ -40,7 +51,9 @@ class FilterStopWords(PipelineStage):
 
     def resolve(self, paragraph):
         paragraph.tokens = [
-            _ for _ in paragraph.tokens if _ not in self.stopwords and _ not in FilterStopWords._lang_stopwords.get(paragraph.lang, [])]
+            _ for _ in paragraph.tokens
+            if _ not in self.stopwords and _ not in FilterStopWords._lang_stopwords.get(
+                paragraph.lang, [])]
         return paragraph
 
 
@@ -64,7 +77,7 @@ class LDA(PipelineStage):
     def resolve(self, paragraph: Paragraph) -> Paragraph:
         self.mat[str(paragraph.id)] = paragraph.tokens
 
-    def summarize(self, *args):
+    def summarize(self, *_):
         model = safe_import('gensim.models_ldamodel').LdaModel
 
         for sent_vec in self.mat.values():
@@ -129,13 +142,13 @@ class WordsBagVec(PipelineStage):
 
     def resolve(self, paragraph: Paragraph) -> Paragraph:
         paragraph.vec = np.zeros(self.dims, float)
-        for t in paragraph.tokens:
-            if t not in self.words:
+        for token in paragraph.tokens:
+            if token not in self.words:
                 if len(self.words) < self.dims:
-                    self.words[t] = len(self.words)
-                    paragraph.vec[self.words[t]] = 1
+                    self.words[token] = len(self.words)
+                    paragraph.vec[self.words[token]] = 1
             else:
-                paragraph.vec[self.words[t]] += 1
+                paragraph.vec[self.words[token]] += 1
         return paragraph
 
 
@@ -172,20 +185,21 @@ class CosSimFSClassifier(AccumulateParagraphs):
     def _infer(self, vec):
         vec = np.array(vec)
         vec = vec / np.linalg.norm(vec)
-        r, s = '', 0
-        for l, v in self.vecs.items():
-            ls = np.dot(v, vec)
-            if ls > s:
-                s = ls
-                r = l
-        l = r
+        result, sim = '', 0
+        for label, vec_ in self.vecs.items():
+            label_sim = np.dot(vec_, vec)
+            if label_sim > sim:
+                sim = label_sim
+                result = label
+        label = result
         if self.auto_update:
-            self.vecs[l] = self.vecs[l] * self.vecs_cnt[l] + vec
-            self.vecs[l] = self.vecs[l] / np.linalg.norm(self.vecs[l])
-            self.vecs_cnt[l] += 1
-        return l
+            self.vecs[label] = self.vecs[label] * self.vecs_cnt[label] + vec
+            self.vecs[label] = self.vecs[label] / \
+                np.linalg.norm(self.vecs[label])
+            self.vecs_cnt[label] += 1
+        return label
 
-    def summarize(self, *args):
+    def summarize(self, *_):
         for dim in self.vecs:
             self.vecs[dim] = self.vecs[dim] / np.linalg.norm(self.vecs[dim])
         for para in self.paragraphs:
@@ -220,7 +234,7 @@ class CosSimClustering(AccumulateParagraphs):
         self.vecs.append(paragraph.vec)
         return paragraph
 
-    def summarize(self, *args):
+    def summarize(self, *_):
         util = safe_import('sentence_transformers.util')
         vecs = np.array(self.vecs)
         clusters = util.community_detection(
@@ -244,6 +258,7 @@ class KmeansClustering(PipelineStage):
             vector_field (str): Vector field
                 @chs 向量字段名
         """
+        KMeans, _ = import_sklearn_kmeans_pca()
         self.kmeans = KMeans(n_clusters=k)
         self.vector_field = vector_field
         self.paragraphs = []
@@ -261,7 +276,8 @@ class KmeansClustering(PipelineStage):
         if len(self.paragraphs) == 0:
             return []
         mat = np.zeros((len(self.paragraphs), len(self._get_vec(0))), 'float')
-        pca = PCA(n_components=2)
+        _, PCA_cls = import_sklearn_kmeans_pca()
+        pca = PCA_cls(n_components=2)
         for i in range(len(self.paragraphs)):
             mat[i, :] = self._get_vec(i)
         Xn = pca.fit_transform(mat)
@@ -277,7 +293,9 @@ class DrawClusters(PipelineStage):
     @chs 画出二维点图
     """
 
-    def __init__(self, label_field='label', coordinates_field='coords', notation_field='content', notation_length=5):
+    def __init__(self,
+                 label_field='label', coordinates_field='coords',
+                 notation_field='content', notation_length=5):
         '''
         Args:
             label_field (str): Label field
@@ -291,11 +309,13 @@ class DrawClusters(PipelineStage):
         self.notation_field = notation_field
         self.notation_length = notation_length
         self.coordinates_field = coordinates_field
-        self.fig, self.axis = plt.subplots()
+        self.fig, self.axis = import_plt().subplots()
         super().__init__()
 
     def _get_label_coords_notation(self, paragraph: Paragraph):
-        return getattr(paragraph, self.label_field), getattr(paragraph, self.coordinates_field), getattr(paragraph, self.notation_field, '')[:self.notation_length]
+        return (getattr(paragraph, self.label_field),
+                getattr(paragraph, self.coordinates_field),
+                getattr(paragraph, self.notation_field, '')[:self.notation_length])
 
     def summarize(self, result):
         buf = BytesIO()
@@ -312,10 +332,7 @@ class DrawClusters(PipelineStage):
 
         self.fig.savefig(buf, format='png')
 
-        return {
-            '__file_ext__': 'png',
-            'data': buf.getvalue()
-        }
+        return PipelineStage.return_file('png', buf.getvalue())
 
 
 class GenerateCooccurance(PipelineStage):
@@ -334,10 +351,10 @@ class GenerateCooccurance(PipelineStage):
         self.method = weighted_by
         self.counter = Counter()
 
-    def token(self, p):
+    def token(self, paragraph):
         """Count from tokens"""
-        for i, t in enumerate(p.tokens):
-            for m in p.tokens[i+1:]:
+        for i, t in enumerate(paragraph.tokens):
+            for m in paragraph.tokens[i+1:]:
                 self.counter[f'{t}\n{m}'].inc()
 
     def resolve(self, paragraph: Paragraph) -> Paragraph:
@@ -348,14 +365,14 @@ class GenerateCooccurance(PipelineStage):
     def summarize(self, _):
         if self.method == 'vec_cos':
             from sentence_transformers.util import cos_sim
-            c = {}
-            for i, p in enumerate(self.paragraphs):
-                for q in self.paragraphs[i+1:]:
-                    c[f'{p.content[:10]}\n{q.content[:10]}'] = float(
-                        cos_sim(p.vec, q.vec)[0][0])
+            sim_result = {}
+            for i, para in enumerate(self.paragraphs):
+                for another in self.paragraphs[i+1:]:
+                    sim_result[f'{para.content[:10]}\n{another.content[:10]}'] = float(
+                        cos_sim(para.vec, another.vec)[0][0])
         else:
-            c = self.counter.as_dict()
-        for k, v in c.items():
+            sim_result = self.counter.as_dict()
+        for k, v in sim_result.items():
             if '\n' in k:
                 yield k.split('\n', 1), v
 
@@ -376,26 +393,22 @@ class GraphicClustering(PipelineStage):
 
     def summarize(self, result):
         nx = safe_import('networkx')
-        g = nx.Graph()
-        for (a, b), v in sorted(result, key=lambda x: x[1], reverse=True)[:self.topk]:
-            for i in (a, b):
-                if i not in g.nodes:
-                    g.add_node(i)
-            g.add_edge(a, b, weight=v)
-            self.logger(a, b, v)
+        graph = nx.Graph()
+        for (node_a, node_b), val in sorted(result, key=lambda x: x[1], reverse=True)[:self.topk]:
+            for i in (node_a, node_b):
+                if i not in graph.nodes:
+                    graph.add_node(i)
+            graph.add_edge(node_a, node_b, weight=val)
+            self.logger(node_a, node_b, val)
 
         meta = ''
-        for i, cluster in enumerate(nx.connected_components(g)):
+        for i, cluster in enumerate(nx.connected_components(graph)):
             meta += f'{i+1}\t' + '; '.join(cluster) + '\n'
 
         self.logger(meta)
 
-        nx.draw(g, with_labels=True)
+        nx.draw(graph, with_labels=True)
         buf = BytesIO()
-        plt.savefig(buf, format='png')
+        import_plt().savefig(buf, format='png')
 
-        return {
-            '__file_ext__': 'png',
-            'data': buf.getvalue(),
-            'meta': meta
-        }
+        return PipelineStage.return_file('png', buf.getvalue(), meta=meta)

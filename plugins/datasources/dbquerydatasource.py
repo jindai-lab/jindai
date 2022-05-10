@@ -174,13 +174,14 @@ class ImageImportDataSource(DataSourceStage):
                         album.pdate = datetime.datetime.utcfromtimestamp(ftime)
                         album.dataset = self.dataset
 
-                    i = ImageItem(source={'file': loc})
+                    i = ImageItem(source={'file': loc, 'url': '.' + extname})
                     i.save()
                     with safe_open(f'hdf5://{i.id}', 'wb') as fout:
                         fout.write(safe_open(loc, 'rb').read())
 
                     i.source = dict(i.source, file='blocks.h5')
                     i.save()
+                    self.logger('Writing', i.id)
                     album.images.append(i)
 
             albums = albums.values()
