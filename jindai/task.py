@@ -1,5 +1,7 @@
 """Task processing module"""
 
+import os
+import sys
 import threading
 import traceback
 from collections import deque
@@ -10,6 +12,42 @@ from typing import Callable
 from .helpers import safe_import
 from .models import Paragraph
 from .pipeline import Pipeline
+
+
+class _TqdmProxy:
+    """Proxy for tqdm"""
+
+    def __init__(self):
+        self.pbar = safe_import('tqdm').tqdm()
+        self.lock = threading.Lock()
+
+    def update(self, inc: int):
+        """Update pbar value
+
+        :param inc: inc value
+        :type inc: int
+        """
+        self.pbar.update(inc)
+
+    def inc_total(self, inc: int):
+        """Thread-safe incresement for pbar.total
+
+        :param inc: inc value
+        :type inc: int
+        """
+        with self.lock:
+            if self.pbar.total is None:
+                self.pbar.total = inc
+            else:
+                self.pbar.total += inc
+
+
+class _FakeTqdm:
+    def update(self, _):
+        """Stub update"""
+
+    def inc_total(self, _):
+        """Stub inc_total"""
 
 
 class Task:
@@ -44,26 +82,14 @@ class Task:
         self.pipeline = Pipeline(stages, self.logger)
         self.params = params
 
-        if self.logger == 'pbar':
-            self.pbar = safe_import('tqdm').tqdm()
-        else:
-            class _FakeTqdm:
-                """Stub for tqdm"""
-
-                def update(self, _):
-                    """Stub update"""
-
-            self.pbar = _FakeTqdm()
+        self.pbar = _TqdmProxy() if os.isatty(sys.stdout.fileno()) else _FakeTqdm()
 
     def execute(self):
         """Execute the task
-
-        :raises InterruptedError: when the task is interrupted
         :return: Summarized result, or exception in execution
         :rtype: dict
         """
         tpe = ThreadPoolExecutor(max_workers=self.concurrent)
-        self.pbar.n = 0
         queue = Queue()
         futures = []
 
@@ -74,7 +100,11 @@ class Task:
 
             try:
                 for paragraph in stage.flow(input_paragraph):
+                    if not self.alive:
+                        return
                     queue.put(paragraph)
+                    self.pbar.inc_total(1)
+
             except Exception as ex:
                 self.logger('Error:', ex)
                 self.logger(traceback.format_tb(ex.__traceback__))
@@ -84,6 +114,7 @@ class Task:
         try:
             if self.pipeline.stages:
                 queue.put((Paragraph(**self.params), self.pipeline.stages[0]))
+                self.pbar.inc_total(1)
 
                 while self.alive:
                     if not queue.empty():

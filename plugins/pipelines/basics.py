@@ -11,7 +11,7 @@ from itertools import count as iter_count
 from PyMongoWrapper import F, QueryExprParser, ObjectId
 from PyMongoWrapper.dbo import DbObject, DbObjectCollection
 from jindai import PipelineStage, parser
-from jindai.helpers import execute_query_expr, language_iso639, safe_import
+from jindai.helpers import execute_query_expr, language_iso639, safe_import, WordStemmer as _Stemmer
 from jindai.models import Dataset, Paragraph, db
 
 
@@ -89,21 +89,6 @@ class WordStemmer(PipelineStage):
     @chs 附加词干到 tokens 中（需要先进行切词）
     """
 
-    _language_stemmers = {}
-
-    @staticmethod
-    def get_stemmer(lang):
-        """Get stemmer for language"""
-        safe_import('nltk')
-        stemmer = safe_import('nltk.stem.snowball').SnowballStemmer
-        if lang not in WordStemmer._language_stemmers:
-            lang = language_iso639.get(lang, lang).lower()
-            if lang not in stemmer.languages:
-                return WordStemmer.get_stemmer('en')
-            stemmer = stemmer(lang)
-            WordStemmer._language_stemmers[lang] = stemmer
-        return WordStemmer._language_stemmers[lang]
-
     def __init__(self, append=True):
         """
         Args:
@@ -113,10 +98,10 @@ class WordStemmer(PipelineStage):
         """
         super().__init__()
         self.append = append
+        self.stemmer = _Stemmer()
 
     def resolve(self, paragraph: Paragraph) -> Paragraph:
-        tokens = [WordStemmer.get_stemmer(
-            paragraph.lang).stem(_) for _ in paragraph.tokens]
+        tokens = self.stemmer.stem_tokens(paragraph.lang, paragraph.tokens)
         if self.append:
             paragraph.tokens += tokens
         else:
@@ -592,9 +577,11 @@ class RegexReplace(PipelineStage):
     def __init__(self, pattern, replacement='', plain=False):
         """
         Args:
-            pattern (str): Regular expression
+            pattern (str):
+                Regular expression
                 @chs 正则表达式
-            replacement (str): Replacement string
+            replacement (str):
+                Replacement string
                 @chs 要替换成的字符串
         """
         super().__init__()
