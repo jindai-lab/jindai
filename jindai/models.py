@@ -39,6 +39,7 @@ class StringOrDate(DbObjectInitializer):
 class Term(db.DbObject):
     """Term indexing"""
 
+    MAX_LENGTH = 10
     term = str
     field = str
 
@@ -52,6 +53,7 @@ class Term(db.DbObject):
     @staticmethod
     def write(term, field):
         """"Save term into database"""
+        if len(term) > Term.MAX_LENGTH: return
         tobj = Term.first(F.term == term, F.field == field)
         if term is not None:
             return tobj
