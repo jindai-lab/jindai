@@ -426,5 +426,5 @@ def truncate_path(path, base=None):
     if not base.endswith(os.path.sep):
         base += os.path.sep
     if path.startswith(base):
-        return path[len(base):]
+        return path[len(base):].replace('\\', '/')
     return path

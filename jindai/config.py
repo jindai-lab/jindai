@@ -39,7 +39,7 @@ class ConfigObject:
         if self._orig['rootpath'] == '':
             self._orig['rootpath'] = str(
                 Path(os.path.abspath(__file__)).parent.parent.absolute())
-        if not self._orig['storage'].startswith('/'):
+        if not self._orig['storage'].startswith(('/', r'\\')):
             self._orig['storage'] = os.path.join(
                 self._orig['rootpath'], self._orig['storage'])
 

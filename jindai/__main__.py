@@ -73,20 +73,6 @@ def run_task(id_or_name, concurrent=0):
     print(result)
 
 
-@cli.command('enqueue')
-@click.option('--item-id')
-@click.option('--host')
-@click.option('--ssl')
-def task_enqueue(item_id, host='localhost:8370', ssl=False):
-    """Enqueue task to server"""
-    j = requests.put(f'http{"s" if ssl else ""}://{host}/api/queue/',
-                     json={'id': item_id}, headers={'Accept-ContentType': 'text/plain'})
-    if j.status_code == 200:
-        print(j.json())
-    else:
-        print(j.content)
-
-
 @cli.command('user')
 @click.option('--add', default='')
 @click.option('--setrole', default='')

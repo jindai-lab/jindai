@@ -6,7 +6,6 @@ import threading
 import traceback
 from collections import deque
 from concurrent.futures import ThreadPoolExecutor, wait
-from queue import Queue
 from typing import Callable
 
 from .helpers import safe_import
@@ -29,6 +28,11 @@ class _TqdmProxy:
         """
         self.pbar.update(inc)
 
+    def reset(self):
+        """Reset count and total"""
+        self.pbar.n = 0
+        self.pbar.total = None
+
     def inc_total(self, inc: int):
         """Thread-safe incresement for pbar.total
 
@@ -48,6 +52,9 @@ class _FakeTqdm:
 
     def inc_total(self, _):
         """Stub inc_total"""
+    
+    def reset(self):
+        """Stub reset"""
 
 
 class Task:
@@ -90,8 +97,9 @@ class Task:
         :rtype: dict
         """
         tpe = ThreadPoolExecutor(max_workers=self.concurrent)
-        queue = Queue()
+        queue = deque()
         futures = []
+        self.pbar.reset()
 
         def _execute(input_paragraph, stage):
             self.pbar.update(1)
@@ -99,11 +107,13 @@ class Task:
                 return None
 
             try:
-                for paragraph in stage.flow(input_paragraph):
+                counter = 0
+                for tup in stage.flow(input_paragraph):
                     if not self.alive:
                         return
-                    queue.put(paragraph)
-                    self.pbar.inc_total(1)
+                    queue.insert(counter, tup)
+                    counter += 1
+                self.pbar.inc_total(counter)
 
             except Exception as ex:
                 self.logger('Error:', ex)
@@ -113,12 +123,12 @@ class Task:
 
         try:
             if self.pipeline.stages:
-                queue.put((Paragraph(**self.params), self.pipeline.stages[0]))
+                queue.append((Paragraph(**self.params), self.pipeline.stages[0]))
                 self.pbar.inc_total(1)
 
                 while self.alive:
-                    if not queue.empty():
-                        futures.append(tpe.submit(_execute, *queue.get()))
+                    if queue:
+                        futures.append(tpe.submit(_execute, *queue.popleft()))
                     else:
                         if futures:
                             wait(futures)
