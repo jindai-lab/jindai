@@ -20,6 +20,7 @@ import werkzeug.wrappers.response
 from bson import ObjectId
 from flask import Response, jsonify, request, send_file, stream_with_context
 from PIL import Image
+from PyMongoWrapper import MongoOperand
 from PyMongoWrapper.dbo import create_dbo_json_decoder, create_dbo_json_encoder
 
 from .config import instance as config
@@ -42,7 +43,68 @@ def _me(param=''):
     return param + logined()
 
 
+class WordStemmer:
+    """
+    Stemming words
+    """
+
+    _language_stemmers = {}
+
+    @staticmethod
+    def get_stemmer(lang):
+        """Get stemmer for language"""
+        safe_import('nltk')
+        stemmer = safe_import('nltk.stem.snowball').SnowballStemmer
+        if lang not in WordStemmer._language_stemmers:
+            lang = language_iso639.get(lang, lang).lower()
+            if lang not in stemmer.languages:
+                return WordStemmer.get_stemmer('en')
+            stemmer = stemmer(lang)
+            WordStemmer._language_stemmers[lang] = stemmer
+        return WordStemmer._language_stemmers[lang]
+
+    def stem_tokens(self, lang, tokens):
+        """Stem words
+
+        :param tokens: list of words
+        :type tokens: list
+        :return: stemmed words
+        :rtype: list
+        """
+        tokens = [WordStemmer.get_stemmer(
+            lang).stem(_) for _ in tokens]
+        return tokens
+
+    def stem_from_params(self, param=''):
+        """Add stem() function for query
+
+        :param param: '<word:lang>', or [word, lang], or {'$and': [{'keywords': word}, {'keywords': lang}]}
+        :type param: str, optional
+        :return: stemmed word
+        :rtype: str
+        """
+        if isinstance(param, MongoOperand):
+            param = param()
+        word, lang = str(param), 'en'
+        if isinstance(param, (tuple, list)) and len(param) == 2:
+            word, lang = param
+        elif isinstance(param, dict) and '$and' in param and len(param['$and']) == 2:
+            word, lang = param['$and']
+            if isinstance(word, dict) and isinstance(lang, dict) and len(word) == 1 and len(lang) == 1:
+                (word,), (lang,) = word.values(), lang.values()
+            else:
+                word, lang = '', ''
+        elif isinstance(param, dict) and len(param) == 2 and 'lang' in param and 'keywords' in param:
+            word, lang = param['keywords'], param['lang']
+        assert isinstance(lang, str) and isinstance(
+            word, str), 'Parameter type error for stem function'
+        if len(word) == 2 and len(word) < len(lang):
+            lang, word = word, lang
+        return {'keywords': self.stem_tokens(lang, [word])[0]}
+
+
 parser.functions['me'] = _me
+parser.functions['stem'] = WordStemmer().stem_from_params
 
 
 def safe_import(module_name, package_name=''):
