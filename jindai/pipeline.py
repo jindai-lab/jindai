@@ -39,9 +39,9 @@ class PipelineStage:
             args_docs = defaultdict(dict)
 
             if 'Args:' in docstring:
+                arg_name, arg_type, arg_doc = '', '', ''
                 for line in docstring.strip().split('\n'):
                     line = line.lstrip()
-                    arg_name, arg_type, arg_doc = '', '', ''
                     match = re.search(r'(\w+)\s+\((.+?)\):(.*)', line)
                     if match:
                         arg_name, arg_type, arg_doc = match.groups()
