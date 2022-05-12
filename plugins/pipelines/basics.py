@@ -10,7 +10,7 @@ from itertools import count as iter_count
 
 from PyMongoWrapper import F, QueryExprParser, ObjectId
 from PyMongoWrapper.dbo import DbObject, DbObjectCollection
-from jindai import PipelineStage, parser
+from jindai import PipelineStage, parser, safe_open
 from jindai.helpers import execute_query_expr, language_iso639, safe_import, WordStemmer as _Stemmer
 from jindai.models import Dataset, Paragraph, db
 
@@ -981,3 +981,24 @@ class MongoCollectionBatchOper(PipelineStage):
         for query, update in self.updates:
             self.collection.db.update_many(query, update)
         return True
+
+
+class PDFUnlock(PipelineStage):
+    """Unlock "secured" PDF
+    @chs 解锁读保护的 PDF
+    """
+
+    def __init__(self, file: bytes):
+        """
+        :param file: File binary
+            @chs 文件 data: URL
+        :type file: file:pdf
+        """
+        super().__init__()
+        pike = safe_import('pikepdf')
+        buf = BytesIO()
+        pike.open(safe_open(file, 'rb')).save(buf)
+        self.data = PipelineStage.return_file('pdf', buf.getvalue())
+
+    def summarize(self, _):
+        return self.data
