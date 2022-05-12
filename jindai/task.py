@@ -107,13 +107,9 @@ class Task:
                 return None
 
             try:
-                counter = 0
-                for tup in stage.flow(input_paragraph):
-                    if not self.alive:
-                        return
-                    queue.insert(counter, tup)
-                    counter += 1
-                self.pbar.inc_total(counter)
+                next_paragraphs = list(stage.flow(input_paragraph))
+                queue.extendleft(reversed(next_paragraphs))
+                self.pbar.inc_total(len(next_paragraphs))
 
             except Exception as ex:
                 self.logger('Error:', ex)
