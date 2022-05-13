@@ -270,7 +270,7 @@ def _try_download(url, attempts: int = 3, proxies=None, verify=False, timeout=60
     return buf
 
 
-def expand_path(path: Union[Tuple[str], str]):
+def expand_path(path: Union[Tuple[str], str], allowed_locations=None):
     """Expand path to local storage path
 
     :param path: the path to expand
@@ -289,12 +289,13 @@ def expand_path(path: Union[Tuple[str], str]):
 
     path = path.replace('/', os.path.sep)
 
-    allowed_locations = [
-        os.path.join(tempfile.gettempdir(), tempfile.gettempprefix()),
-        config.storage
-    ]
+    if allowed_locations is None:
+        allowed_locations = [
+            os.path.join(tempfile.gettempdir(), tempfile.gettempprefix()),
+            config.storage
+        ]
 
-    if not path.startswith(tuple(allowed_locations)):
+    if allowed_locations and not path.startswith(tuple(allowed_locations)):
         if path.startswith((os.path.altsep or os.path.sep, os.path.sep)):
             path = path[1:]
         path = os.path.join(config.storage, path)
@@ -302,7 +303,7 @@ def expand_path(path: Union[Tuple[str], str]):
     return path
 
 
-def expand_patterns(patterns: Union[list, str]):
+def expand_patterns(patterns: Union[list, str, tuple], allowed_locations=None):
     """Get expanded paths according to wildcards patterns
 
     :param patterns: patterns for looking up files.
@@ -315,6 +316,9 @@ def expand_patterns(patterns: Union[list, str]):
 
     if isinstance(patterns, str):
         patterns = patterns.split('\n')
+
+    if isinstance(patterns, tuple):
+        patterns = list(patterns)
 
     patterns.reverse()
     while patterns:
@@ -330,7 +334,7 @@ def expand_patterns(patterns: Union[list, str]):
                 urls = [pattern]
             yield from urls
         else:
-            pattern = expand_path(pattern)
+            pattern = expand_path(pattern, allowed_locations)
             for path in glob.glob(pattern):
                 if path.endswith('.zip') or path.endswith('.epub'):
                     with zipfile.ZipFile(path, 'r') as zip_file:

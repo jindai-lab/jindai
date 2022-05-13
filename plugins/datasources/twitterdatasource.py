@@ -268,7 +268,7 @@ class TwitterDataSource(DataSourceStage):
                     if para and para.pdate.timestamp() < after:
                         break
                 except Exception as ex:
-                    self.logger('exception', ex.__class__.__name__, ex)
+                    self.logger('twitl exception', ex.__class__.__name__, ex)
                     break
                 if not albums:
                     break

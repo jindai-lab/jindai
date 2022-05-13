@@ -18,7 +18,7 @@ from tqdm import tqdm
 
 from PyMongoWrapper import ObjectId
 from PyMongoWrapper.dbo import create_dbo_json_encoder
-from . import Plugin, PluginManager, Task, safe_open
+from . import Plugin, PluginManager, Task, safe_open, expand_patterns
 from .api import run_service
 from .helpers import get_context
 from .models import F, ImageItem, Meta, TaskDBO, User
@@ -278,9 +278,9 @@ def restore(infile, colls, force):
                 _save_db(coll, records, force)
 
 
-@cli.command('install-plugin')
+@cli.command('plugin-install')
 @click.argument('url')
-def install_plugin(url: str):
+def plugin_install(url: str):
     """Install plugin
 
     :param url: install from
@@ -288,6 +288,27 @@ def install_plugin(url: str):
     """
     pmanager = _init_plugins()
     pmanager.install(url)
+
+
+@cli.command('plugin-export')
+@click.option('--output', '-o')
+@click.argument('infiles', nargs=-1)
+def plugin_export(output: str, infiles):
+    """Export plugin
+
+    :param output: output file name
+    :type output: str
+    :param infiles: includes path
+    :type infiles: path
+    """
+    if not output.startswith('jindai.plugins.'):
+        output = f'jindai.plugins.{output}'
+    if output.endswith('.zip'):
+        output = output[:-4]
+    with zipfile.ZipFile(output + '.zip', 'w', zipfile.ZIP_DEFLATED) as zout:
+        for filename in expand_patterns(infiles, []):
+            arcname = output + '/' + filename
+            zout.write(filename, arcname)
 
 
 @cli.command('web-service')
