@@ -52,7 +52,7 @@ class _FakeTqdm:
 
     def inc_total(self, _):
         """Stub inc_total"""
-    
+
     def reset(self):
         """Stub reset"""
 
@@ -119,7 +119,8 @@ class Task:
 
         try:
             if self.pipeline.stages:
-                queue.append((Paragraph(**self.params), self.pipeline.stages[0]))
+                queue.append((Paragraph(**self.params),
+                             self.pipeline.stages[0]))
                 self.pbar.inc_total(1)
 
                 while self.alive:
@@ -138,7 +139,7 @@ class Task:
             self.alive = False
         except Exception as ex:
             self.alive = False
-            return {'exception': str(ex), 'tracestack': traceback.format_tb(ex.__traceback__)}
+            return {'__exception__': str(ex), '__tracestack__': traceback.format_tb(ex.__traceback__)}
 
         return None
 

@@ -174,8 +174,8 @@ class TasksQueue(Plugin):
                 'id': k,
                 'name': k.split('@')[0],
                 'viewable': isinstance(v, list)
-                or (isinstance(v, dict) and 'exception' in v)
-                or (isinstance(v, dict) and 'redirect' in v),
+                or (isinstance(v, dict) and '__exception__' in v)
+                or (isinstance(v, dict) and '__redirect__' in v),
                 'isnull': v is None,
                 'last_run': datetime.datetime.strptime(k.split('@')[-1], '%Y%m%d %H%M%S')
                 .strftime('%Y-%m-%d %H:%M:%S'),
@@ -199,7 +199,7 @@ class TasksQueue(Plugin):
                 except Exception as ex:
                     self.results[tkey] = {
                         'run_by': task_dbo.run_by,
-                        'exception': f'初始化任务时出错: {ex.__class__.__name__}: {ex}',
+                        '__exception__': f'初始化任务时出错: {ex.__class__.__name__}: {ex}',
                         'tracestack': traceback.format_tb(ex.__traceback__) + [
                             self.pmanager.app.json_encoder().encode(task_dbo.as_dict())
                         ]}
