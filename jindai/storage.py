@@ -97,7 +97,7 @@ class Hdf5Manager:
             if key in block_file:
                 return BytesIO(block_file[key][:].tobytes())
 
-        raise OSError(f"No matched ID found: {item_id}")
+        raise OSError(f"No matched ID: {item_id}")
 
     def delete(self, item_id: str) -> None:
         """Delete item key

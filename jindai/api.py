@@ -101,7 +101,7 @@ def authenticate(username, password, otp='', **_):
         token = User.encrypt_password(str(time.time()), str(time.time_ns()))
         Token(user=username, token=token, expire=time.time() + 86400).save()
         return token
-    raise Exception("Wrong user name/password.")
+    raise Exception("Unmatched credentials.")
 
 
 @app.route('/api/authenticate')
@@ -110,7 +110,7 @@ def whoami():
     """Returns logined user data, without otp_secret and password"""
     if logined():
         user = (User.first(F.username == logined()) or User(
-            username=logined(), password='', roles=['admin'])).as_dict()
+            username=logined(), password='', roles=[])).as_dict()
         del user['password']
         user['otp_secret'] = True if user.get('otp_secret') else False
         return user
