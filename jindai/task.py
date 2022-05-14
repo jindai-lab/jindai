@@ -139,7 +139,10 @@ class Task:
             self.alive = False
         except Exception as ex:
             self.alive = False
-            return {'__exception__': str(ex), '__tracestack__': traceback.format_tb(ex.__traceback__)}
+            return {
+                '__exception__': str(ex),
+                '__tracestack__': traceback.format_tb(ex.__traceback__)
+                }
 
         return None
 

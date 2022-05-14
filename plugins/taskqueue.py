@@ -168,21 +168,31 @@ class TasksQueue(Plugin):
     def status(self) -> dict:
         """Queue status"""
 
+        def _type(obj):
+            if isinstance(obj, dict):
+                if '__exception__' in obj:
+                    return 'exception'
+                if '__redirect__' in obj:
+                    return 'redirect'
+                if '__file_ext__' in obj:
+                    return 'file'
+                return 'dict'
+            if obj is None:
+                return 'null'
+            return type(obj).__name__
+
         return {
             'running': list(self.task_queue),
             'finished': [{
-                'id': k,
-                'name': k.split('@')[0],
-                'viewable': isinstance(v, list)
-                or (isinstance(v, dict) and '__exception__' in v)
-                or (isinstance(v, dict) and '__redirect__' in v),
-                'isnull': v is None,
-                'last_run': datetime.datetime.strptime(k.split('@')[-1], '%Y%m%d %H%M%S')
+                'id': key,
+                'name': key.split('@')[0],
+                'type': _type(val),
+                'last_run': datetime.datetime.strptime(key.split('@')[-1], '%Y%m%d %H%M%S')
                 .strftime('%Y-%m-%d %H:%M:%S'),
-                'file_ext': 'json' if not isinstance(v, dict) else v.get('__file_ext__', 'json'),
-                'run_by': v.get('run_by', '') if isinstance(v, dict) else ''
-            } for k, v in self.results.items()],
-            'waiting': [k for k, _ in self.queue]
+                'file_ext': val['__file_ext__'] if _type(val) == 'file' else 'json',
+                'run_by': val.get('run_by', '') if isinstance(val, dict) else ''
+            } for key, val in self.results.items()],
+            'waiting': [key for key, _ in self.queue]
         }
 
     def working(self):
@@ -209,16 +219,15 @@ class TasksQueue(Plugin):
             elif not self.queue and not self.task_queue:  # all tasks done
                 self.running = False
 
-            else:
-                done = []
-                for k, val in self.task_queue.items():
-                    if not val.task.alive:
-                        done.append(k)
-                        self.results[k] = val.task.returned
-                for k in done:
-                    self.task_queue.pop(k)
-                if done:
-                    announcer.announce("updated")
+            done = []
+            for k, val in self.task_queue.items():
+                if not val.task.alive:
+                    done.append(k)
+                    self.results[k] = val.task.returned
+            for k in done:
+                self.task_queue.pop(k)
+            if done:
+                announcer.announce("updated")
 
             time.sleep(0.5)
 
