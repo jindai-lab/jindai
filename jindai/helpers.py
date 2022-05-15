@@ -349,6 +349,11 @@ def execute_query_expr(parsed, test_val):
         else:
             return lambda: None
 
+    def _append_result(res):
+        if result is None:
+            return res
+        return result and res
+
     result = None
     assert isinstance(
         parsed, dict), 'QueryExpr should be parsed first and well-formed.'
@@ -376,13 +381,15 @@ def execute_query_expr(parsed, test_val):
             else:
                 arr_result = _test_inputs(test_val, val, key[1:])
 
-            result = result and arr_result
+            result = _append_result(arr_result)
 
         elif not isinstance(val, dict) or not [1 for v_ in val if v_.startswith('$')]:
-            result = result and _test_inputs(_getattr(test_val, key), val)
+            result = _append_result(_test_inputs(_getattr(test_val, key), val))
         else:
-            result = result and execute_query_expr(val, _getattr(
-                test_val, key))
+            result = _append_result(execute_query_expr(val, _getattr(
+                test_val, key)))
+        if result is False:
+            return result
 
     return result
 
