@@ -395,12 +395,12 @@ class ArrayField(PipelineStage):
         self.field = field
         self.elements = []
         try:
-            elements = parser.eval(elements)
+            elements = parser.parse(elements)
             assert isinstance(elements, list)
             self.elements = elements
         except Exception:
             for ele in elements.split('\n'):
-                ele = parser.eval(ele)
+                ele = parser.parse(ele)
                 self.elements.append(ele)
         self.push = push
 
@@ -704,7 +704,7 @@ class FilterArrayField(PipelineStage):
         super().__init__()
         self.field = field
         self.cond = QueryExprParser(allow_spacing=True, abbrev_prefixes={
-                                    None: 'iter='}).eval(cond)
+                                    None: 'iter='}).parse(cond)
 
     def resolve(self, paragraph: Paragraph) -> Paragraph:
         vals = getattr(paragraph, self.field, [])
@@ -898,7 +898,7 @@ class ConditionalAssignment(PipelineStage):
                 @chs 要赋值的字段
         """
         super().__init__()
-        self.cond = [parser.eval(_) for _ in cond.split('\n')]
+        self.cond = [parser.parse(_) for _ in cond.split('\n')]
         self.field = field
 
     def resolve(self, paragraph: Paragraph):
@@ -957,7 +957,7 @@ class MongoCollectionBatchOper(PipelineStage):
         """
         super().__init__()
         self.collection = Paragraph.get_coll(mongocollection)
-        updates = parser.eval('[];' + updates)
+        updates = parser.parse('[];' + updates)
         self.updates = []
 
         def _assert(cond, info=''):

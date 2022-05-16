@@ -84,7 +84,7 @@ class ImageItemDataSource(DataSourceStage):
             """
             super().__init__()
             self.cond = cond
-            self.query = parser.eval(cond)
+            self.query = parser.parse(cond)
             self.raw = raw
             self.sort_keys = sort_keys.split(',')
             self.rs = ImageItem.query(self.query)

@@ -26,7 +26,7 @@ class AutoTag(db.DbObject):
         """
         if self.parsed == {}:
             try:
-                self.parsed = parser.eval(self.cond)
+                self.parsed = parser.parse(self.cond)
                 self.save()
             except EvaluationError:
                 self.parsed = 'False'
