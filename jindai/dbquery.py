@@ -199,7 +199,7 @@ class DBQuery:
                 skip = 0
             else:
                 agg.append(
-                    {'$sort': SON(parser.eval_sort(sort))})
+                    {'$sort': SON(parser.parse_sort(sort))})
         if skip > 0:
             agg.append({'$skip': skip})
         if limit > 0:

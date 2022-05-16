@@ -210,7 +210,7 @@ class TasksQueue(Plugin):
                     self.results[tkey] = {
                         'run_by': task_dbo.run_by,
                         '__exception__': f'初始化任务时出错: {ex.__class__.__name__}: {ex}',
-                        'tracestack': traceback.format_tb(ex.__traceback__) + [
+                        '__tracestack__': traceback.format_tb(ex.__traceback__) + [
                             self.pmanager.app.json_encoder().encode(task_dbo.as_dict())
                         ]}
                     self.task_queue.pop(tkey)
