@@ -57,7 +57,7 @@ class RepeatWhile(FlowControlStage):
         """
         self.times = times
         self.times_key = f'REPEATWHILE_{id(self)}_TIMES_COUNTER'
-        self.cond = parser.eval(
+        self.cond = parser.parse(
             cond if cond else f'{self.times_key} < {times}')
         self.pipeline = Pipeline(pipeline, self.logger)
         super().__init__()
@@ -91,7 +91,7 @@ class Condition(FlowControlStage):
             iffalse (pipeline): Pipeline when condition is not satisfied
                 @chs 条件不成立时执行的流程
         """
-        self.cond = parser.eval(cond)
+        self.cond = parser.parse(cond)
         self.iftrue = Pipeline(iftrue, self.logger)
         self.iffalse = Pipeline(iffalse, self.logger)
         super().__init__()
@@ -124,7 +124,7 @@ class CallTask(FlowControlStage):
         assert task, f'No specified task: {task}'
         self.pipeline_only = pipeline_only
         if params:
-            params = parser.eval(params)
+            params = parser.parse(params)
             for key, val in params.items():
                 secs = key.split('.')
                 target = task.pipeline

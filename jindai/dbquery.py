@@ -79,7 +79,8 @@ class DBQuery:
 
         # parse limitations
         if limitations:
-            limitations = {'$and': [parser.eval(expr) for expr in limitations]}
+            limitations = {
+                '$and': [parser.parse(expr) for expr in limitations]}
 
         if isinstance(query, str):
             # judge type of major query and formulate
@@ -93,7 +94,7 @@ class DBQuery:
                     query = ''
 
             # parse query
-            query = parser.eval(query) or []
+            query = parser.parse(query) or []
 
         if not isinstance(query, list):
             query = [query]
@@ -103,7 +104,7 @@ class DBQuery:
 
         first_query = query[0]
         if isinstance(first_query, str):
-            first_query = {'$match': parser.eval(first_query)}
+            first_query = {'$match': parser.parse(first_query)}
         elif isinstance(first_query, dict) and \
                 not [_ for _ in first_query if _.startswith('$') and _ not in ('$and', '$or')]:
             first_query = {'$match': first_query}
@@ -169,7 +170,7 @@ class DBQuery:
                 =>addFields(group_id=ifNull($group_id;ifNull($source.url;$source.file)))
                 =>groupby(id=$group_id, count=sum(1))=>addFields(keywords=[toString($group_id)])
             '''
-            groupping = parser.eval(groupping)
+            groupping = parser.parse(groupping)
 
             self.query += groupping
 

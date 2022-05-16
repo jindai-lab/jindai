@@ -20,13 +20,16 @@ import werkzeug.wrappers.response
 from bson import ObjectId
 from flask import Response, jsonify, request, send_file, stream_with_context
 from PIL import Image
-from PyMongoWrapper import MongoOperand
+from PyMongoWrapper import MongoOperand, QueryExprEvaluator
 from PyMongoWrapper.dbo import create_dbo_json_decoder, create_dbo_json_encoder
 
 from .config import instance as config
 from .dbquery import parser
 from .models import Token
 from .storage import safe_open
+
+
+ee = QueryExprEvaluator()
 
 
 def _me(param=''):
@@ -277,121 +280,18 @@ def serve_proxy(server, path):
 RE_DIGITS = re.compile(r'[\+\-]?\d+')
 
 
-def execute_query_expr(parsed, test_val):
+def execute_query_expr(expr, obj):
     """Check according to parsed query expression
 
-    :param parsed: parsed QueryExpr
-    :type parsed: dict
-    :param test_val: input object
-    :type test_val: Union[Dict, List]
+    :param parsed: Query Expression
+    :type parsed: Union[Dict, str]
+    :param obj: input object
+    :type obj: Union[Dict, List, object]
     """
+    if isinstance(expr, str):
+        expr = parser.parse(f'expr({expr})')
 
-    def _opr(k):
-        oprname = {
-            'lte': 'le',
-            'gte': 'ge',
-            '': 'eq'
-        }.get(k, k)
-        return '__' + oprname + '__'
-
-    def _getattr(obj, key, default=None):
-        if obj is None:
-            return obj
-
-        if '.' in key:
-            for key_seg in key.split('.'):
-                obj = _getattr(obj, key_seg, default)
-            return obj
-
-        if isinstance(obj, dict):
-            return obj.get(key, default)
-
-        if isinstance(obj, list) and RE_DIGITS.match(key):
-            return obj[int(key)] if 0 <= int(key) < len(obj) else default
-
-        return getattr(obj, key, default)
-
-    def _test_inputs(inputs, val, relation='eq'):
-        oprname = _opr(relation)
-
-        if oprname == '__in__':
-            return inputs in val
-
-        if oprname == '__size__':
-            return len(inputs) == val
-
-        if oprname == '__first__':
-            for i in inputs:
-                return i
-            return None
-
-        if oprname == '__last__':
-            i = None
-            for i in inputs:
-                pass
-            return i
-
-        if isinstance(inputs, list):
-            arr_result = False
-            for input_val in inputs:
-                arr_result = arr_result or _getfunc(input_val, oprname)(val)
-                if arr_result:
-                    break
-        else:
-            arr_result = _getfunc(inputs, oprname)(val)
-
-        return arr_result
-
-    def _getfunc(obj, func_name):
-        func = _getattr(obj, func_name)
-        if func:
-            return func
-        else:
-            return lambda: None
-
-    def _append_result(res):
-        if result is None:
-            return res
-        return result and res
-
-    result = None
-    assert isinstance(
-        parsed, dict), 'QueryExpr should be parsed first and well-formed.'
-
-    for key, val in parsed.items():
-        if key.startswith('$'):
-            if key == '$and':
-                arr_result = True
-                for element in val:
-                    arr_result = arr_result and execute_query_expr(
-                        element, test_val)
-            elif key == '$or':
-                arr_result = False
-                for element in val:
-                    arr_result = arr_result or execute_query_expr(
-                        element, test_val)
-                    if arr_result:
-                        break
-            elif key == '$not':
-                arr_result = not execute_query_expr(val, test_val)
-            elif key == '$regex':
-                arr_result = re.search(val, test_val) is not None
-            elif key == '$options':
-                continue
-            else:
-                arr_result = _test_inputs(test_val, val, key[1:])
-
-            result = _append_result(arr_result)
-
-        elif not isinstance(val, dict) or not [1 for v_ in val if v_.startswith('$')]:
-            result = _append_result(_test_inputs(_getattr(test_val, key), val))
-        else:
-            result = _append_result(execute_query_expr(val, _getattr(
-                test_val, key)))
-        if result is False:
-            return result
-
-    return result
+    return ee.evaluate(expr, obj)
 
 
 def get_context(directory: str, parent_class: Type) -> Dict:
@@ -464,11 +364,10 @@ class JSONEncoder(json.JSONEncoder):
         return JSONEncoderCls.default(self, o)
 
 
-"""JSONDecoder for api use"""
+# JSONDecoder for api use
 JSONDecoder = create_dbo_json_decoder(json.JSONDecoder)
 
-
-"""ISO639 language codes"""
+# ISO639 language codes
 language_iso639 = {
     lang.pt1: lang.name for lang in iso639.iter_langs() if lang.pt1 and lang.pt1 != 'zh'
 }

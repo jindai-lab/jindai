@@ -808,7 +808,7 @@ def quick_task(query='', pipeline='', raw=False, mongocollection=''):
 
     if pipeline:
         if isinstance(pipeline, str):
-            pipeline = parser.eval(pipeline)
+            pipeline = parser.parse(pipeline)
         assert isinstance(pipeline, (list, tuple)
                           ), f"Unknown format for pipeline: {pipeline}"
         args = pipeline[0]
@@ -832,8 +832,8 @@ def dbconsole(mongocollection='', query='', operation='', operation_params='', p
     """Database console for admin"""
 
     mongo = Paragraph.db.database[mongocollection]
-    query = parser.eval(query)
-    operation_params = parser.eval(operation_params)
+    query = parser.parse(query)
+    operation_params = parser.parse(operation_params)
 
     if preview:
         return {

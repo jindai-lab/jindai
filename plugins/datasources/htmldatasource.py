@@ -47,7 +47,7 @@ class HTMLDataSource(DataSourceStage):
             self.name = dataset_name
             self.lang = lang
             self.files = expand_patterns(content)
-            self.fields = parser.eval(fields)
+            self.fields = parser.parse(fields)
             self.paragraph_selector = paragraph_selector
 
         def import_html_src(self, path, html, outline=''):
