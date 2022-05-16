@@ -332,7 +332,7 @@ def grouping(coll, ids, group='', ungroup=False):
     """Grouping selected paragraphs
 
     Returns:
-        Response: 'OK' if succeeded
+        Group ID
     """
     paras = list(Paragraph.get_coll(coll).query(
         F.id.in_([ObjectId(_) if len(_) == 24 else _ for _ in ids])))
