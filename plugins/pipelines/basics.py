@@ -410,10 +410,7 @@ class ArrayField(PipelineStage):
         if not isinstance(paragraph[self.field], (list, DbObjectCollection)):
             return paragraph
         for ele in self.elements:
-            if isinstance(ele, str) and ele.startswith('$'):
-                ele = getattr(paragraph, ele[1:], '')
-                if ele is None:
-                    continue
+            ele = execute_query_expr(ele, paragraph)
             if self.push:
                 paragraph[self.field].append(ele)
             else:
@@ -654,36 +651,16 @@ class FieldAssignment(PipelineStage):
         Args:
             field (str): Field name
                 @chs 新的字段名
-            value (str):
-                $<field> or contants, or $$oid for a new ObjectId
-                @chs 以 $ 开头的字段名，或常数值（类型将自动匹配），或 $$oid 表示一个新的 ObjectId
+            value (QUERY):
+                $<field> or contants
+                @chs 以 $ 开头的字段名，或常数值（类型将自动匹配）
         """
         super().__init__()
         self.field = field
-        self.specials = {
-            '$$oid': ObjectId
-        }
-        if value in self.specials:
-            self.value_literal = self.specials[value]
-            self.value_field = None
-        elif value.startswith('$'):
-            self.value_field = value[1:]
-            self.value_literal = None
-        else:
-            self.value_literal = parser.parse_literal(value)
-            self.value_field = None
-
-    def value(self, paragraph: Paragraph):
-        """Get value from paragraph object"""
-        if self.value_field is None:
-            if hasattr(self.value_literal, '__call__'):
-                return self.value_literal()
-            return self.value_literal
-        else:
-            return getattr(paragraph, self.value_field, '')
+        self.value = value
 
     def resolve(self, paragraph: Paragraph) -> Paragraph:
-        setattr(paragraph, self.field, self.value(paragraph))
+        setattr(paragraph, self.field, execute_query_expr(self.value, paragraph))
         return paragraph
 
 
@@ -721,6 +698,16 @@ class FilterArrayField(PipelineStage):
             delattr(paragraph, 'iter')
         setattr(paragraph, self.field, new_vals)
         return paragraph
+
+
+class DeleteParagraph(PipelineStage):
+    """Delete Paragraph from Database
+    @chs 从数据库删除段落
+    """
+    def resolve(self, paragraph: Paragraph):
+        if paragraph.id:
+            paragraph.delete()
+        return # no yielding paragraph anymore
 
 
 class SaveParagraph(PipelineStage):
@@ -772,17 +759,11 @@ class FieldIncresement(PipelineStage):
         '''
         super().__init__()
         self.field = field
-        if inc_value.startswith('$'):
-            self.inc_field = inc_value[1:]
-            self.inc_value = ''
-        else:
-            self.inc_value = parser.parse_literal(inc_value)
-            self.inc_field = ''
+        self.inc_value = parser.parse(inc_value)
 
     def resolve(self, paragraph: Paragraph):
         val = getattr(paragraph, self.field)
-        val += self.inc_value if self.inc_value else getattr(
-            self, self.inc_field)
+        val += execute_query_expr(self.inc_value, paragraph)
         setattr(paragraph, val)
         return paragraph
 
@@ -892,20 +873,20 @@ class ConditionalAssignment(PipelineStage):
         """
         Args:
             cond (QUERY): Conditions and assignment values, in forms like:
-                <condition> => <constant>, one pair per line.
-                @chs 一行一个检查的条件，与最终要赋予的值之间用=>连缀
+                (<condition> => <constant>);
+                @chs 检查的条件，与最终要赋予的值之间用 => 连缀，条件之间用 ; 连接
             field (str): Target field name
                 @chs 要赋值的字段
         """
         super().__init__()
-        self.cond = [parser.parse(_) for _ in cond.split('\n')]
+        self.cond = parser.parse('[];' + cond)
         self.field = field
 
     def resolve(self, paragraph: Paragraph):
         for cond, val in self.cond:
             if execute_query_expr(cond, paragraph):
-                setattr(paragraph, self.field, val if not isinstance(val, str)
-                        or not val.startswith('$') else getattr(paragraph, val[1:], None))
+                setattr(paragraph, self.field,
+                        execute_query_expr(val, paragraph))
                 break
         return paragraph
 
