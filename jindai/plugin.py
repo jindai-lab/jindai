@@ -33,7 +33,7 @@ class Plugin:
         :param keybind: keybind for ui
         :type keybind: str
         :param format_string: format string,
-            use {imageitem} and {paragraph} for the selected item
+            use {mediaitem} and {paragraph} for the selected items and paragraphs
         :type format_string: str
         :param icon: mdi icon for ui button
         :type icon: str
@@ -119,7 +119,7 @@ class PluginManager:
             elif plugin_name.startswith('~'):
                 if plugin_name[1:] in pls:
                     pls.remove(plugin_name[1:])
-            else:
+            elif plugin_name in plugin_ctx:
                 pls.append(plugin_name)
 
         for plugin_name in pls:

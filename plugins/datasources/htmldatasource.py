@@ -10,7 +10,7 @@ from concurrent.futures import ThreadPoolExecutor
 from urllib.parse import urljoin
 from bs4 import BeautifulSoup as B
 
-from jindai.models import ImageItem, Paragraph
+from jindai.models import MediaItem, Paragraph
 from jindai.pipeline import DataSourceStage
 from jindai import expand_patterns, truncate_path, safe_open, parser
 
@@ -263,9 +263,12 @@ class WebPageListingDataSource(DataSourceStage):
                     else:
                         attr = self.get_text(i)
                     upath = urljoin(url, attr)
-                    if ImageItem.first({'source.url': upath}):
+                    if MediaItem.first({'source.url': upath}):
                         continue
-                    para.images.append(ImageItem(source={'url': upath}))
+                    para.images.append(MediaItem(
+                        source={'url': upath},
+                        item_type=MediaItem.get_type(upath.rsplit('.', 1)[-1]) or 'image')
+                    )
 
             self.logger(f'Found {len(para.images)} images in {url}')
             return para

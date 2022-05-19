@@ -76,6 +76,9 @@ class RepeatWhile(FlowControlStage):
             paragraph[self.times_key] = None
             yield paragraph, self.next
 
+    def summarize(self, result):
+        return self.pipeline.summarize(result)
+
 
 class Condition(FlowControlStage):
     """Conditional execution
@@ -104,6 +107,12 @@ class Condition(FlowControlStage):
             yield paragraph, pipeline.stages[0]
         else:
             yield paragraph, self.next
+    
+    def summarize(self, result):
+        return {
+            'iffalse': self.iftrue.summarize(result),
+            'iftrue': self.iffalse.summarize(result)
+        }
 
 
 class CallTask(FlowControlStage):

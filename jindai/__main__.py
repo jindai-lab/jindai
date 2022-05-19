@@ -21,7 +21,7 @@ from PyMongoWrapper.dbo import create_dbo_json_encoder
 from . import Plugin, PluginManager, Task, safe_open, expand_patterns
 from .api import run_service
 from .helpers import get_context
-from .models import F, ImageItem, Meta, TaskDBO, User
+from .models import F, MediaItem, Meta, TaskDBO, User
 
 MongoJSONEncoder = create_dbo_json_encoder(json.encoder.JSONEncoder)
 
@@ -116,10 +116,10 @@ def meta(key, value):
 def storage_merge(infiles, output):
     """Merge h5df storage files"""
 
-    items = {str(i['_id']) for i in ImageItem.aggregator.match(
+    items = {str(i['_id']) for i in MediaItem.aggregator.match(
         F['source.file'] == 'blocks.h5').project(_id=1).perform(raw=True)}
 
-    items = items.union({i.thumbnail[:24] for i in ImageItem.query(
+    items = items.union({i.thumbnail[:24] for i in MediaItem.query(
         F.thumbnail.exists(1) & (F.thumbnail != '')) if i.thumbnail})
 
     print(len(items), 'items')
@@ -234,12 +234,12 @@ def restore(infile, colls, force):
                 coll, cid = coll.split(':', 1)
                 if len(cid) == 24:
                     cid = ObjectId(cid)
-                if coll == 'imageitem':
+                if coll == 'mediaitem':
                     restore_items.add(cid)
                 else:
                     restore_albums.add(cid)
                 collections.append('paragraph')
-                collections.append('imageitem')
+                collections.append('mediaitem')
 
             if coll not in collections:
                 collections.append(coll)
@@ -253,7 +253,7 @@ def restore(infile, colls, force):
                                     object_hook=_restore_hook)
                 if (not restore_items and not restore_albums) or (
                     restore_items and (
-                        (coll == 'imageitem' and record['_id'] in restore_items) or (
+                        (coll == 'mediaitem' and record['_id'] in restore_items) or (
                             coll == 'paragraph' and restore_items.intersection(
                                 set(record['images'])))
                     )

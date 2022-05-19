@@ -38,7 +38,7 @@ parser = QueryExprParser(
         'object_id': _object_id,
         'expand': lambda *x: [
             Fn.unwind('$images')(),
-            Fn.lookup(from_='imageitem', localField='images',
+            Fn.lookup(from_='mediaitem', localField='images',
                       foreignField='_id', as_='images')()
         ],
         'begin': lambda x: F.keywords.regex('^' + re.escape(x))
