@@ -7,7 +7,7 @@ from collections import defaultdict
 from typing import List, Union
 
 import twitter
-from jindai.models import ImageItem, Paragraph
+from jindai.models import MediaItem, Paragraph
 from jindai.pipeline import DataSourceStage
 from jindai.dbquery import parser, ObjectId, F
 
@@ -23,8 +23,7 @@ def find_post(url: str) -> Union[Paragraph, None]:
     Returns:
         Union[Paragraph, None]: Paragraph
     """
-    return Paragraph.first(F['source.url'].regex(
-        r'https://twitter.com/.*/status/' + url.split('/')[-1]))
+    return Paragraph.first(F.tweet_id == url.split('/')[-1])
 
 
 def twitter_id_from_timestamp(stamp: float) -> int:
@@ -151,11 +150,11 @@ class TwitterDataSource(DataSourceStage):
 
             author = '@' + tweet.user.screen_name
             para = find_post(tweet_url)
-            
+
             self.logger(tweet_url, para is None)
             if not para:
                 para = Paragraph(dataset='twitter', pdate=datetime.datetime.utcfromtimestamp(
-                    tweet.created_at_in_seconds), source={'url': tweet_url})
+                    tweet.created_at_in_seconds), source={'url': tweet_url}, tweet_id=f'{tweet.id}')
                 for media in tweet.media or []:
                     if media.video_info:
                         if not self.allow_video:
@@ -168,8 +167,9 @@ class TwitterDataSource(DataSourceStage):
                     else:
                         url = media.media_url_https
                     if url:
-                        item = ImageItem.first(F['source.url'] == url) or ImageItem(
-                            source={'url': url})
+                        item = MediaItem.first(F['source.url'] == url) or MediaItem(
+                            source={'url': url},
+                            item_type='video' if media.video_info else 'image')
                         para.images.append(
                             item)
                 if tweet.text.startswith('RT '):

@@ -704,10 +704,11 @@ class DeleteParagraph(PipelineStage):
     """Delete Paragraph from Database
     @chs 从数据库删除段落
     """
+
     def resolve(self, paragraph: Paragraph):
         if paragraph.id:
             paragraph.delete()
-        return # no yielding paragraph anymore
+        return  # no yielding paragraph anymore
 
 
 class SaveParagraph(PipelineStage):
@@ -723,16 +724,19 @@ class SaveParagraph(PipelineStage):
         '''
         super().__init__()
         self.mongocollection = mongocollection
-        self.datasets = defaultdict(set)
+        self.datasets = {}
         self.convert = Paragraph.get_converter(mongocollection)
 
     def resolve(self, paragraph: Paragraph):
         self.convert(paragraph).save()
+        if paragraph.dataset and paragraph.dataset not in self.datasets:
+            self.datasets[paragraph.dataset] = set()
         if 'file' in paragraph.source and paragraph.dataset:
             self.datasets[paragraph.dataset].add(paragraph.source['file'])
         return paragraph
 
     def summarize(self, _):
+        self.logger('datasets count:', len(self.datasets))
         for name, sources in self.datasets.items():
             coll = Dataset.first(F.name == name) \
                 or Dataset(name=name, sources=[],

@@ -9,7 +9,7 @@ import pyotp
 from PIL import Image
 from PyMongoWrapper import F, Fn, Var
 from PyMongoWrapper.dbo import (Anything, DbObjectCollection,
-                                DbObjectInitializer, MongoConnection)
+                                DbObjectInitializer, MongoConnection, classproperty)
 
 from .config import instance as config
 from .storage import safe_open
@@ -53,14 +53,15 @@ class Term(db.DbObject):
     @staticmethod
     def write(term, field):
         """"Save term into database"""
-        if len(term) > Term.MAX_LENGTH: return
+        if len(term) > Term.MAX_LENGTH:
+            return
         tobj = Term.first(F.term == term, F.field == field)
         if term is not None:
             return tobj
         return Term(term=term, field=field).save()
 
 
-class ImageItem(db.DbObject):
+class MediaItem(db.DbObject):
     """Image item"""
 
     flag = int
@@ -68,22 +69,62 @@ class ImageItem(db.DbObject):
     width = int
     height = int
     thumbnail = str
+    item_type = str
     source = DbObjectInitializer(dict, dict)
+
+    _IMAGE_EXTS = ['jpg',
+                   'jpeg',
+                   'jp2',
+                   'png',
+                   'gif',
+                   'bmp']
+    _VIDEO_EXTS = [
+        'avi',
+        'mp4',
+        'flv',
+        'm4v',
+        '3gp',
+        'mov'
+    ]
+    _SOUND_EXTS = [
+        'wav',
+        'mp3',
+        'aac',
+        'ape'
+    ]
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self._image = None
         self._image_flag = False
 
+    @classproperty
+    def acceptable_extensions(cls) -> list:
+        """Get acceptable extension names
+        """
+        return MediaItem._IMAGE_EXTS + MediaItem._VIDEO_EXTS + MediaItem._SOUND_EXTS
+
+    @staticmethod
+    def get_type(extname: str) -> str:
+        """Decide media type from extension name
+        """
+        if extname in MediaItem._IMAGE_EXTS:
+            return 'image'
+        if extname in MediaItem._VIDEO_EXTS:
+            return 'video'
+        if extname in MediaItem._SOUND_EXTS:
+            return 'sound'
+        return ''
+
     @property
-    def image(self):
+    def image(self) -> Image.Image:
         """Get the PIL.Image.Image object for the image"""
         if self._image is None:
             self._image = Image.open(self.image_raw)
         return self._image
 
     @image.setter
-    def image(self, value):
+    def image(self, value: Image.Image):
         """Set the associated image"""
         self._image = value
         self._image_flag = True
@@ -108,7 +149,7 @@ class ImageItem(db.DbObject):
     def save(self):
         """Save image items"""
         image = self._image
-        self._image = None
+        del self._image
 
         if self._image_flag:
             self.source['file'] = 'blocks.h5'
@@ -140,7 +181,7 @@ class Paragraph(db.DbObject):
     content = str
     pagenum = Anything
     lang = str
-    images = DbObjectCollection(ImageItem)
+    images = DbObjectCollection(MediaItem)
 
     @classmethod
     def on_initialize(cls):
@@ -186,7 +227,7 @@ class Paragraph(db.DbObject):
                 Term.write(val, field)
 
         for i in list(self.images):
-            if not isinstance(i, ImageItem):
+            if not isinstance(i, MediaItem):
                 self.images.remove(i)
                 continue
             if i.id is None:

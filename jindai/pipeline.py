@@ -295,11 +295,10 @@ class Pipeline:
                 stage.next = None
                 self.stages.append(stage)
 
-    def summarize(self):
+    def summarize(self, result=None):
         """Reduce period
         """
-        returned = None
         for stage in self.stages:
-            returned = stage.summarize(returned)
+            result = stage.summarize(result)
 
-        return returned
+        return result

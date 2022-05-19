@@ -21,8 +21,8 @@ from .plugin import Plugin, PluginManager
 from .task import Task
 from .config import instance as config
 from .helpers import (get_context, logined, rest, serve_file, language_iso639,
-                      serve_proxy, JSONEncoder, JSONDecoder)
-from .models import (Dataset, History, ImageItem, Meta, Paragraph,
+                      serve_proxy, JSONEncoder, JSONDecoder, ee)
+from .models import (Dataset, History, MediaItem, Meta, Paragraph,
                      TaskDBO, Token, User, Term)
 
 app = Flask(__name__)
@@ -414,12 +414,12 @@ def splitting(coll, ids):
     return True
 
 
-@app.route('/api/imageitem/rating', methods=["GET", "POST"])
+@app.route('/api/mediaitem/rating', methods=["GET", "POST"])
 @rest()
 def set_rating(ids, inc=1, val=0, least=0):
     """Increase or decrease the rating of selected items
     """
-    items = list(ImageItem.query(
+    items = list(MediaItem.query(
         F.id.in_([ObjectId(_) if len(_) == 24 else _ for _ in ids])))
     for i in items:
         if i is None:
@@ -438,13 +438,13 @@ def set_rating(ids, inc=1, val=0, least=0):
     }
 
 
-@app.route('/api/imageitem/reset_storage', methods=["GET", "POST"])
+@app.route('/api/mediaitem/reset_storage', methods=["GET", "POST"])
 @rest()
 def reset_storage(ids):
     """Reset storage status of selected items
     """
 
-    items = list(ImageItem.query(
+    items = list(MediaItem.query(
         F.id.in_([ObjectId(_) if len(_) == 24 else _ for _ in ids])))
     for i in items:
         if 'file' in i.source:
@@ -458,14 +458,15 @@ def reset_storage(ids):
     }
 
 
-@app.route('/api/imageitem/merge', methods=["POST"])
+@app.route('/api/mediaitem/merge', methods=["POST"])
 @rest()
 def merge_items(pairs):
-    """Process the two specified ImageItems as two copies of the same image,
-       keeping the first one, deleting the second and merging the Paragraphs where they are located
+    """Process the two specified media items as duplications,
+       keeping the first one, deleting the second and merging
+       the Paragraphs where they locate
     """
     for rese, dele in pairs:
-        dele = ImageItem.first(F.id == dele)
+        dele = MediaItem.first(F.id == dele)
         if not dele:
             continue
 
@@ -491,10 +492,10 @@ def merge_items(pairs):
     return True
 
 
-@app.route('/api/imageitem/delete', methods=["POST"])
+@app.route('/api/mediaitem/delete', methods=["POST"])
 @rest()
 def delete_item(album_items: dict):
-    """Remove ImageItem from paragraph"""
+    """Remove Media Item from paragraph"""
 
     del_items = set()
     for pid, items in album_items.items():
@@ -504,14 +505,14 @@ def delete_item(album_items: dict):
 
         items = list(map(ObjectId, items))
         para.images = [_ for _ in para.images if isinstance(
-            _, ImageItem) and _.id not in items]
+            _, MediaItem) and _.id not in items]
         para.save()
         del_items.update(items)
 
     for i in del_items:
         if Paragraph.first(F.images == i):
             continue
-        image_item = ImageItem.first(F.id == i)
+        image_item = MediaItem.first(F.id == i)
         if image_item:
             image_item.delete()
 
@@ -585,7 +586,7 @@ def help_info():
     for key, val in ctx.items():
         name = (sys.modules[val.__module__].__doc__ or val.__module__.split(
             '.')[-1] if hasattr(val, '__module__') else key).strip()
-        if key == "DataSourceStage":
+        if key in ("DataSourceStage", "MediaItemStage"):
             continue
         name = _lang(name)
         result[name][key] = _lang(val.get_spec())
@@ -597,6 +598,17 @@ def help_info():
 def help_langs():
     """Provide supported language codes"""
     return language_iso639
+
+
+@app.route('/api/help/queryexpr')
+@rest(cache=True)
+def help_queryexpr():
+    """Provide meta data for query expr"""
+    return {
+        'function_names': list(parser.functions.keys()) + list(ee.implemented_functions),
+        'operators': list([str(_) for _ in parser.operators]),
+        'defaults': list(map(str, parser.abbrev_prefixes.values()))
+    }
 
 
 @app.route('/api/history')
@@ -746,12 +758,12 @@ def serve_image(coll=None, storage_id=None, ext=None):
 
     if coll and storage_id and len(storage_id) == 24:
         para = Paragraph.get_coll(coll).first(F.id == storage_id)
-        item = ImageItem(para)
+        item = MediaItem(para)
         buf = None
         if item:
             buf = item.image_raw
     else:
-        item = ImageItem(source=request.args.to_dict())
+        item = MediaItem(source=request.args.to_dict())
         filename = item.source.get('file', '')
         for fkey, fmapped in config.file_serve.items():
             if filename.startswith(fkey):

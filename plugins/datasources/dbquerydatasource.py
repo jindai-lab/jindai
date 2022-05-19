@@ -13,7 +13,7 @@ from PIL import Image
 from PyMongoWrapper import F
 
 from jindai import safe_open, parser, DBQuery
-from jindai.models import ImageItem, Paragraph
+from jindai.models import MediaItem, Paragraph
 from jindai.pipeline import DataSourceStage
 from jindai.storage import expand_patterns
 
@@ -58,7 +58,7 @@ class DBQueryDataSource(DataSourceStage):
             return self.dbquery.fetch()
 
 
-class ImageItemDataSource(DataSourceStage):
+class MediaDataSource(DataSourceStage):
     """图像项目数据源"""
     class Implementation(DataSourceStage.Implementation):
         """Implementing datasource"""
@@ -76,8 +76,8 @@ class ImageItemDataSource(DataSourceStage):
                     Skipped results
                     @chs 跳过的结果数量
                 raw (bool):
-                    Return dicts instead of ImageItem objects
-                    @chs 返回字典而非 ImageItem
+                    Return dicts instead of MediaItem objects
+                    @chs 返回字典而非 MediaItem
                 sort_keys (str):
                     Sorting expression
                     @chs 排序表达式
@@ -87,16 +87,16 @@ class ImageItemDataSource(DataSourceStage):
             self.query = parser.parse(cond)
             self.raw = raw
             self.sort_keys = sort_keys.split(',')
-            self.rs = ImageItem.query(self.query)
+            self.result_set = MediaItem.query(self.query)
             if self.sort_keys:
-                self.rs = self.rs.sort(*self.sort_keys)
+                self.result_set = self.result_set.sort(*self.sort_keys)
             if offset:
-                self.rs = self.rs.skip(offset)
+                self.result_set = self.result_set.skip(offset)
             if limit:
-                self.rs = self.rs.limit(limit)
+                self.result_set = self.result_set.limit(limit)
 
-        def fetch(self) -> Iterable[ImageItem]:
-            yield from self.rs
+        def fetch(self) -> Iterable[MediaItem]:
+            yield from self.result_set
 
 
 class ImageImportDataSource(DataSourceStage):
@@ -164,7 +164,7 @@ class ImageImportDataSource(DataSourceStage):
             for loc in expand_patterns(locs):
                 extname = loc.rsplit('.', 1)[-1].lower()
                 filename = loc.split('#')[0]
-                if extname in ['jpg', 'jpeg', 'png', 'mp4'] or loc.endswith('.mp4.thumb.jpg'):
+                if extname in MediaItem.acceptable_extensions or loc.endswith('.mp4.thumb.jpg'):
                     ftime = int(os.stat(filename).st_mtime)
 
                     album = albums[filename]
@@ -174,7 +174,8 @@ class ImageImportDataSource(DataSourceStage):
                         album.pdate = datetime.datetime.utcfromtimestamp(ftime)
                         album.dataset = self.dataset
 
-                    i = ImageItem(source={'file': loc, 'url': '.' + extname})
+                    i = MediaItem(source={'file': loc, 'url': '.' + extname},
+                                  item_type=MediaItem.get_type(extname))
                     i.save()
                     with safe_open(f'hdf5://{i.id}', 'wb') as fout:
                         fout.write(safe_open(loc, 'rb').read())
@@ -239,8 +240,8 @@ class ImageImportDataSource(DataSourceStage):
                             continue
                     if imgurl not in imgset:
                         self.logger(imgurl)
-                        i = ImageItem.first(F.source == {'url': imgurl}) or ImageItem(
-                            source={'url': imgurl})
+                        i = MediaItem.first(F.source == {'url': imgurl}) or MediaItem(
+                            source={'url': imgurl}, item_type=MediaItem.get_type(imgurl))
                         i.save()
                         p.images.append(i)
                         imgset.add(imgurl)
