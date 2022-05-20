@@ -109,11 +109,9 @@ class Condition(FlowControlStage):
             yield paragraph, self.next
     
     def summarize(self, result):
-        return {
-            'iffalse': self.iftrue.summarize(result),
-            'iftrue': self.iffalse.summarize(result)
-        }
-
+        self.iftrue.summarize(result)
+        self.iffalse.summarize(result)
+        
 
 class CallTask(FlowControlStage):
     """Call to other task

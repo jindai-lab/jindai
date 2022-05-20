@@ -80,7 +80,10 @@ class LanguageDetect(PipelineStage):
             else:
                 return 'cht'
 
-        return langdetect.detect(sentence)
+        try:
+            return langdetect.detect(sentence)
+        except langdetect.LangDetectExceptions:
+            return 'en'
 
 
 class WordStemmer(PipelineStage):
@@ -260,7 +263,7 @@ class Reparagraph(PipelineStage):
         data = paragraph.as_dict()
         del data['content']
         for text in merge_lines():
-            yield Paragraph(content=text, **data)
+            yield type(paragraph)(content=text, **data)
 
 
 class SplitParagraph(PipelineStage):
@@ -282,7 +285,7 @@ class SplitParagraph(PipelineStage):
     def resolve(self, paragraph: Paragraph):
         for content in paragraph.content.split(self.delimeter):
             if content:
-                new_paragraph = Paragraph(paragraph)
+                new_paragraph = type(paragraph)(paragraph)
                 new_paragraph.content = content
                 yield new_paragraph
 
@@ -716,7 +719,7 @@ class SaveParagraph(PipelineStage):
     @chs 保存
     """
 
-    def __init__(self, mongocollection='paragraph'):
+    def __init__(self, mongocollection=''):
         '''
         Args:
             mongocollection (str): Database collection name
@@ -725,23 +728,29 @@ class SaveParagraph(PipelineStage):
         super().__init__()
         self.mongocollection = mongocollection
         self.datasets = {}
-        self.convert = Paragraph.get_converter(mongocollection)
+        self.convert = Paragraph.get_converter(
+            mongocollection) if mongocollection else lambda x: x
 
     def resolve(self, paragraph: Paragraph):
         self.convert(paragraph).save()
         if paragraph.dataset and paragraph.dataset not in self.datasets:
-            self.datasets[paragraph.dataset] = set()
+            self.datasets[paragraph.dataset] = {
+                'mongocollection': getattr(paragraph, '_collection', ''),
+                'sources': set()
+            }
         if 'file' in paragraph.source and paragraph.dataset:
-            self.datasets[paragraph.dataset].add(paragraph.source['file'])
+            self.datasets[paragraph.dataset]['sources'].add(
+                paragraph.source['file'])
         return paragraph
 
     def summarize(self, _):
         self.logger('datasets count:', len(self.datasets))
-        for name, sources in self.datasets.items():
+        for name, data in self.datasets.items():
             coll = Dataset.first(F.name == name) \
                 or Dataset(name=name, sources=[],
-                           mongocollection=self.mongocollection, order_weight=999)
-            for source in sources:
+                           mongocollection=data['mongocollection'],
+                           order_weight=999)
+            for source in data['sources']:
                 if source not in coll.sources:
                     coll.sources.append(source)
             coll.save()

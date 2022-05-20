@@ -119,6 +119,7 @@ class PipelineStage:
         file_dict.update(**kwargs)
         return file_dict
 
+    @staticmethod
     def return_redirect(dest: str) -> dict:
         """Make a dict to represent redirection directive
 
