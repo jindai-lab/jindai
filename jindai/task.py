@@ -98,7 +98,8 @@ class Task:
         """
         tpe = ThreadPoolExecutor(max_workers=self.concurrent)
         queue = deque()
-        futures = []
+        futures = deque()
+        lock = threading.Lock()
         self.pbar.reset()
 
         def _execute(input_paragraph, stage):
@@ -107,9 +108,14 @@ class Task:
                 return None
 
             try:
-                next_paragraphs = list(stage.flow(input_paragraph))
-                queue.extendleft(reversed(next_paragraphs))
-                self.pbar.inc_total(len(next_paragraphs))
+                counter = 0
+                for job in stage.flow(input_paragraph):
+                    with lock:
+                        queue.insert(counter, job)
+                    counter += 1
+                    self.pbar.inc_total(1)
+                    if not self.alive:
+                        break
 
             except Exception as ex:
                 self.logger('Error:', ex)
@@ -127,9 +133,9 @@ class Task:
                     if queue:
                         futures.append(tpe.submit(_execute, *queue.popleft()))
                     else:
-                        if futures:
-                            wait(futures)
-                            futures = []
+                        for future in futures:
+                            if not future.done():
+                                break
                         else:
                             break
 
@@ -142,7 +148,11 @@ class Task:
             return {
                 '__exception__': str(ex),
                 '__tracestack__': traceback.format_tb(ex.__traceback__)
-                }
+            }
+        finally:
+            for future in futures:
+                if not future.done():
+                    future.cancel()
 
         return None
 

@@ -40,6 +40,10 @@ class MessageAnnouncer:
         """Announce log"""
         self.announce(' '.join([str(_) for _ in args]))
 
+    def logger(self, prefix):
+        """Get prefixed logger"""
+        return lambda *args: self.log(prefix, '|', *args)
+
 
 announcer = MessageAnnouncer()
 
@@ -203,8 +207,8 @@ class TasksQueue(Plugin):
                 tkey, task_dbo = self.queue.popleft()
                 self.task_queue[tkey] = task_dbo
                 try:
-                    task_dbo.task = Task.from_dbo(task_dbo, logger=lambda *args:
-                                                  announcer.log(tkey, '|', *args))
+                    task_dbo.task = Task.from_dbo(
+                        task_dbo, logger=announcer.logger(tkey))
                     task_dbo.task.run()
                 except Exception as ex:
                     self.results[tkey] = {
