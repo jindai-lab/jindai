@@ -82,7 +82,7 @@ class LanguageDetect(PipelineStage):
 
         try:
             return langdetect.detect(sentence)
-        except langdetect.LangDetectExceptions:
+        except langdetect.lang_detect_exception.LangDetectException:
             return 'en'
 
 
