@@ -761,7 +761,7 @@ def serve_image(coll=None, storage_id=None, ext=None):
         item = MediaItem(para)
         buf = None
         if item:
-            buf = item.image_raw
+            buf = item.data
     else:
         item = MediaItem(source=request.args.to_dict())
         filename = item.source.get('file', '')
@@ -769,7 +769,7 @@ def serve_image(coll=None, storage_id=None, ext=None):
             if filename.startswith(fkey):
                 return redirect(fmapped + filename[len(fkey):])
 
-        buf = item.image_raw
+        buf = item.data
         ext = item.source.get('url', item.source.get(
             'file', '.')).rsplit('.', 1)[-1]
 

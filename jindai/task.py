@@ -2,10 +2,11 @@
 
 import os
 import sys
+import time
 import threading
 import traceback
-from collections import deque
-from concurrent.futures import ThreadPoolExecutor, wait
+from concurrent.futures import ThreadPoolExecutor
+from queue import PriorityQueue
 from typing import Callable
 
 from .helpers import safe_import
@@ -96,61 +97,71 @@ class Task:
         :return: Summarized result, or exception in execution
         :rtype: dict
         """
+        MAX_PRIORITY = 1<<31 - 1
+        priority = MAX_PRIORITY
         tpe = ThreadPoolExecutor(max_workers=self.concurrent)
-        queue = deque()
-        futures = deque()
-        lock = threading.Lock()
+        queue = PriorityQueue()
+        futures = {}
         self.pbar.reset()
 
-        def _execute(input_paragraph, stage):
+        def _execute(priority, job):
+            input_paragraph, stage = job
             self.pbar.update(1)
             if stage is None:
                 return None
 
             try:
+                priority -= 1
                 counter = 0
                 for job in stage.flow(input_paragraph):
-                    with lock:
-                        queue.insert(counter, job)
+                    queue.put((priority, job))
                     counter += 1
-                    self.pbar.inc_total(1)
                     if not self.alive:
                         break
-
+                self.pbar.inc_total(counter)
             except Exception as ex:
                 self.logger('Error:', ex)
-                self.logger(traceback.format_tb(ex.__traceback__))
+                self.logger('\n'.join(traceback.format_tb(ex.__traceback__)))
                 if not self.resume_next:
                     self.alive = False
 
         try:
             if self.pipeline.stages:
-                queue.append((Paragraph(**self.params),
-                             self.pipeline.stages[0]))
+                queue.put((priority, (Paragraph(**self.params),
+                             self.pipeline.stages[0])))
                 self.pbar.inc_total(1)
 
                 while self.alive:
-                    if queue:
-                        futures.append(tpe.submit(_execute, *queue.popleft()))
-                    else:
-                        for future in futures:
-                            if not future.done():
-                                break
+                    if queue.empty():
+                        # check if there are pending jobs
+                        done = []
+                        for key, future in futures.items():
+                            if future.done():
+                                done.append(key)
+                        for key in done:
+                            del futures[key]
+                        if futures: # there are pending jobs
+                            time.sleep(0.1)
                         else:
-                            break
-
+                            break # exit working loop
+                    else:
+                        priority, job = queue.get()
+                        future = tpe.submit(_execute, priority, job)
+                        futures[id(future)] = future
             if self.alive:
                 return self.pipeline.summarize()
         except KeyboardInterrupt:
             self.alive = False
         except Exception as ex:
             self.alive = False
+            print(type(ex).__name__, ex)
+            print(traceback.format_exc(ex))
             return {
                 '__exception__': str(ex),
                 '__tracestack__': traceback.format_tb(ex.__traceback__)
             }
         finally:
-            for future in futures:
+            for future in futures.values():
                 if not future.done():
                     future.cancel()
 
