@@ -139,7 +139,7 @@ class LinesDataSource(DataSourceStage):
     class Implementation(DataSourceStage.Implementation):
         """Implementing datasource"""
 
-        def __init__(self, dataset_name, lang="auto", content=""):
+        def __init__(self, dataset_name, lang="auto", content="", params=None):
             """
             Args:
                 dataset_name (DATASET):
@@ -151,15 +151,19 @@ class LinesDataSource(DataSourceStage):
                 content (str):
                     Text contents
                     @chs 文本内容
+                params (object):
+                    Other customizable fields
+                    @chs 其他自定义字段
             """
             super().__init__()
             self.name = dataset_name
             self.lang = lang
             self.lines = content.split('\n')
+            self.params = params or {}
 
         def fetch(self):
             return map(lambda x: Paragraph(
-                content=x, lang=self.lang, dataset=self.name), self.lines)
+                content=x, lang=self.lang, dataset=self.name, **self.params), self.lines)
 
 
 DEFAULT_IMG_PATTERNS = 'img[src]|[zoomfile]|[data-original]|[data-src]|[file]|[data-echo]'.replace(
