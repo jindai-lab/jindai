@@ -63,7 +63,7 @@ class MediaDataSource(DataSourceStage):
     class Implementation(DataSourceStage.Implementation):
         """Implementing datasource"""
 
-        def __init__(self, cond='', limit=20, offset=0, raw=False, sort_keys='-_id'):
+        def __init__(self, cond='', limit=20, offset=0, raw=False, sort_keys='-id'):
             """
             Args:
                 cond (QUERY):
