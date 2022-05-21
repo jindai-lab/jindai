@@ -1,12 +1,13 @@
 """Task processing module"""
 
+import heapq
 import os
 import sys
-import time
 import threading
+import time
 import traceback
+from collections import defaultdict, deque
 from concurrent.futures import ThreadPoolExecutor
-from queue import PriorityQueue
 from typing import Callable
 
 from .helpers import safe_import
@@ -58,6 +59,46 @@ class _FakeTqdm:
         """Stub reset"""
 
 
+class PrioritizedQueues:
+
+    def __init__(self) -> None:
+        self._queues = defaultdict(deque)
+        self._heap = []
+        self._lock = threading.Lock()
+
+    def put(self, priority: int, data):
+        """Put prioritized data into queue, lock-free
+
+        Args:
+            priority (int): priority, bigger is higher priority
+            data (Any): data
+        """
+        with self._lock:
+            heapq.heappush(self._heap, -priority)
+        
+        self._queues[priority].append(data)
+
+    def get(self):
+        """Get most prioritized data from queue, with lock
+
+        Returns:
+            Any: data
+        """
+        with self._lock:
+            priority = -heapq.heappop(self._heap)
+        
+        element = self._queues[priority].popleft()
+        return priority, element
+
+    def empty(self) -> bool:
+        """Check if queues are empty
+
+        Returns:
+            bool: True if all queues are empty
+        """
+        return not self._queues
+
+
 class Task:
     """Task object"""
 
@@ -97,10 +138,8 @@ class Task:
         :return: Summarized result, or exception in execution
         :rtype: dict
         """
-        MAX_PRIORITY = 1<<31 - 1
-        priority = MAX_PRIORITY
         tpe = ThreadPoolExecutor(max_workers=self.concurrent)
-        queue = PriorityQueue()
+        queue = PrioritizedQueues()
         futures = {}
         self.pbar.reset()
 
@@ -111,10 +150,10 @@ class Task:
                 return None
 
             try:
-                priority -= 1
+                priority += 1
                 counter = 0
                 for job in stage.flow(input_paragraph):
-                    queue.put((priority, job))
+                    queue.put(priority, job)
                     counter += 1
                     if not self.alive:
                         break
@@ -127,8 +166,8 @@ class Task:
 
         try:
             if self.pipeline.stages:
-                queue.put((priority, (Paragraph(**self.params),
-                             self.pipeline.stages[0])))
+                queue.put(0, (Paragraph(**self.params),
+                                 self.pipeline.stages[0]))
                 self.pbar.inc_total(1)
 
                 while self.alive:
@@ -140,10 +179,10 @@ class Task:
                                 done.append(key)
                         for key in done:
                             del futures[key]
-                        if futures: # there are pending jobs
+                        if futures:  # there are pending jobs
                             time.sleep(0.1)
                         else:
-                            break # exit working loop
+                            break  # exit working loop
                     else:
                         priority, job = queue.get()
                         future = tpe.submit(_execute, priority, job)
@@ -155,7 +194,7 @@ class Task:
         except Exception as ex:
             self.alive = False
             print(type(ex).__name__, ex)
-            print(traceback.format_exc(ex))
+            traceback.print_exc()
             return {
                 '__exception__': str(ex),
                 '__tracestack__': traceback.format_tb(ex.__traceback__)
