@@ -118,9 +118,16 @@ class MediaItem(db.DbObject):
 
     @property
     def image(self) -> Image.Image:
-        """Get the PIL.Image.Image object for the image"""
+        """Get the PIL.Image.Image object for the image/thumbnail"""
+        if self.item_type == 'video' and self.thumbnail:
+            return Image.open(safe_open(f'hdf5://{self.thumbnail}', 'rb'))
+        
+        if self.item_type == 'sound':
+            return None
+        
+        # if image
         if self._image is None:
-            self._image = Image.open(self.image_raw)
+            self._image = Image.open(self.data)
         return self._image
 
     @image.setter
@@ -130,7 +137,7 @@ class MediaItem(db.DbObject):
         self._image_flag = True
 
     @property
-    def image_raw(self) -> BytesIO:
+    def data(self) -> BytesIO:
         """Get raw BytesIO for image data"""
 
         if self.source.get('file'):
@@ -167,6 +174,9 @@ class MediaItem(db.DbObject):
         cls.ensure_index('flag')
         cls.ensure_index('rating')
         cls.ensure_index('source')
+        
+    def __lt__(self, another):
+        return id(self) < id(another)
 
 
 class Paragraph(db.DbObject):
@@ -267,6 +277,9 @@ class Paragraph(db.DbObject):
 
         return lambda x: temp(**x.as_dict())
 
+    def __lt__(self, another):
+        return id(self) < id(another)
+    
 
 class History(db.DbObject):
     """History record"""
