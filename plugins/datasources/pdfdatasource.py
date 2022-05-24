@@ -10,6 +10,26 @@ from jindai.models import Paragraph
 from jindai.pipeline import DataSourceStage
 
 
+def resolve_range(page_range: str):
+    """Resolve page range string
+
+    :param page_range: page range, e.g. 1-3; 1,3,5-6,23
+    :type page_range: str
+    :return: range
+    :rtype: Iterable, or None when error
+    """
+    ranges = (page_range or '').split(',')
+    for rng in ranges:
+        if '-' in rng:
+            try:
+                start, end = map(int, rng.split('-', 1))
+                yield from range(start, end+1)
+            except ValueError:
+                pass
+        else:
+            yield int(rng)
+
+
 class PDFDataSource(DataSourceStage):
     """
     Import paragraphs from PDF
@@ -19,7 +39,7 @@ class PDFDataSource(DataSourceStage):
     class Implementation(DataSourceStage.Implementation):
         """datasource implementation"""
 
-        def __init__(self, dataset_name, lang, content, mongocollection='', skip_existed=True):
+        def __init__(self, dataset_name, lang, content, mongocollection='', skip_existed=True, page_range=''):
             """
             Args:
                 dataset_name (DATASET):
@@ -37,6 +57,9 @@ class PDFDataSource(DataSourceStage):
                 skip_existed (bool):
                     Skip existed pages and files
                     @chs 直接跳过已存在于数据集中的文件
+                page_range (str):
+                    Page range, e.g. 1-3
+                    @chs 页码范围，例如 1-3
             """
             super().__init__()
             self.name = dataset_name
@@ -44,6 +67,7 @@ class PDFDataSource(DataSourceStage):
             self.files = expand_patterns(content)
             self.mongocollection = mongocollection
             self.skip_existed = skip_existed
+            self.page_range = sorted(resolve_range(page_range))
 
         def fetch(self):
             para_coll = Paragraph.get_coll(self.mongocollection)
@@ -62,17 +86,21 @@ class PDFDataSource(DataSourceStage):
 
             for pdf in self.files:
                 path = truncate_path(pdf)
-                min_page = existent.get(path)
-                min_page = 0 if min_page is None else (min_page + 1)
-
                 doc = fitz.open(pdf)
-                pages = doc.pageCount
-                self.logger('importing', pdf, 'as',
-                            path, 'from page', min_page)
+                self.logger('importing', pdf, 'as', path)
+                page_range = self.page_range
+                if not page_range:
+                    min_page = existent.get(path)
+                    min_page = 0 if min_page is None else (min_page + 1)
+                    self.logger('... from page', min_page)
+                    page_range = range(min_page, doc.pageCount)
 
                 lang = self.lang
 
-                for page in range(min_page, pages):
+                for page in page_range:
+                    if page >= doc.pageCount:
+                        break
+
                     label = doc[page].get_label()
                     lines = doc[page].getText()
                     try:

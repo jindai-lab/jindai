@@ -317,7 +317,7 @@ class Export(PipelineStage):
         """导出结果
 
         Args:
-            format (xlsx|json|csv):
+            output_format (xlsx|json|csv):
                 Export file foramt
                 @chs 输出格式
             limit (int, optional):
