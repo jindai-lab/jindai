@@ -98,7 +98,7 @@ class Task:
         :rtype: dict
         """
         tpe = ThreadPoolExecutor(max_workers=self.concurrent)
-        queue = PriorityQueue()
+        queue = PriorityQueue(self.concurrent * 10)
         futures = {}
         self.pbar.reset()
 
@@ -126,7 +126,7 @@ class Task:
         try:
             if self.pipeline.stages:
                 queue.put((0, (Paragraph(**self.params),
-                                 self.pipeline.stages[0])))
+                               self.pipeline.stages[0])))
                 self.pbar.inc_total(1)
 
                 while self.alive:
