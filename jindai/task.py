@@ -112,7 +112,7 @@ class Task:
                 priority -= 1
                 counter = 0
                 for job in stage.flow(input_paragraph):
-                    queue.put((priority, job))
+                    queue.put((priority, id(job[0]), job))
                     counter += 1
                     if not self.alive:
                         break
@@ -125,8 +125,8 @@ class Task:
 
         try:
             if self.pipeline.stages:
-                queue.put((0, (Paragraph(**self.params),
-                               self.pipeline.stages[0])))
+                queue.put((0, 0, (Paragraph(**self.params),
+                                  self.pipeline.stages[0])))
                 self.pbar.inc_total(1)
 
                 while self.alive:
@@ -143,7 +143,7 @@ class Task:
                         else:
                             break  # exit working loop
                     else:
-                        priority, job = queue.get()
+                        priority, _, job = queue.get()
                         future = tpe.submit(_execute, priority, job)
                         futures[id(future)] = future
             if self.alive:
