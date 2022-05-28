@@ -1,7 +1,8 @@
 """Import from PDF
-@chs 来自PDF
+@chs 从 PDF 导入
 """
 
+import re
 import fitz
 from PyMongoWrapper import F, Fn, Var
 
@@ -26,7 +27,7 @@ def resolve_range(page_range: str):
                 yield from range(start, end+1)
             except ValueError:
                 pass
-        else:
+        elif rng and re.match(r'\d+', rng):
             yield int(rng)
 
 

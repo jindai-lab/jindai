@@ -3,6 +3,7 @@
 import datetime
 import hashlib
 import os
+import re
 import sys
 import time
 from collections import defaultdict
@@ -24,6 +25,7 @@ from .helpers import (get_context, logined, rest, serve_file, language_iso639,
                       serve_proxy, JSONEncoder, JSONDecoder, ee)
 from .models import (Dataset, History, MediaItem, Meta, Paragraph,
                      TaskDBO, Token, User, Term)
+from .storage import expand_path
 
 app = Flask(__name__)
 app.config['SECRET_KEY'] = config.secret_key
@@ -209,20 +211,41 @@ def _file_detail(path):
     }
 
 
-@app.route('/api/storage/<path:path>', methods=['GET'])
-@app.route('/api/storage/', methods=['GET'])
+def _file_find(root_path, pattern):
+    root_path = expand_path(root_path)
+    conds = re.compile('.*'.join([re.escape(cond)
+                       for cond in pattern.split() if cond]), flags=re.I)
+
+    for pwd, _, files in os.walk(root_path):
+        for f in files:
+            if conds.search(f):
+                yield os.path.join(pwd, f)
+
+
+@app.route('/api/storage/<path:path>', methods=['GET', 'POST'])
+@app.route('/api/storage/', methods=['GET', 'POST'])
 @rest()
-def list_storage(path=''):
+def list_storage(path='', search=''):
     """List out files in directory"""
 
-    path = os.path.join(
-        config.storage, path) if path and '..' not in path else config.storage
-    if os.path.isdir(path):
-        return sorted(map(
-            _file_detail, [os.path.join(path, x) for x in os.listdir(path)]),
-            key=lambda x: x['ctime'], reverse=True)
+    results = None
+    if search:
+        # path is a query
+        results = list(_file_find(path, search))
     else:
-        return send_file(path)
+        path = os.path.join(
+            config.storage, path) if path and '..' not in path else config.storage
+        if os.path.isdir(path):
+            results = [os.path.join(path, x) for x in os.listdir(
+                path) if not x.startswith(('@', '.'))]
+        else:
+            results = path
+
+    if isinstance(results, list):
+        return sorted(map(_file_detail, results),
+                      key=lambda x: x['ctime'], reverse=True)
+    else:
+        return send_file(results)
 
 
 @app.route('/api/storage/<path:path>', methods=['PUT'])
