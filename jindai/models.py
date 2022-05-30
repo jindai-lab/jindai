@@ -121,10 +121,10 @@ class MediaItem(db.DbObject):
         """Get the PIL.Image.Image object for the image/thumbnail"""
         if self.item_type == 'video' and self.thumbnail:
             return Image.open(safe_open(f'hdf5://{self.thumbnail}', 'rb'))
-        
+
         if self.item_type == 'sound':
             return None
-        
+
         # if image
         if self._image is None:
             self._image = Image.open(self.data)
@@ -174,7 +174,7 @@ class MediaItem(db.DbObject):
         cls.ensure_index('flag')
         cls.ensure_index('rating')
         cls.ensure_index('source')
-        
+
     def __lt__(self, another):
         return id(self) < id(another)
 
@@ -279,7 +279,7 @@ class Paragraph(db.DbObject):
 
     def __lt__(self, another):
         return id(self) < id(another)
-    
+
 
 class History(db.DbObject):
     """History record"""
@@ -303,6 +303,33 @@ class Dataset(db.DbObject):
     mongocollection = str
     name = str
     sources = list
+
+    def update_sources(self):
+        """Update sources to include all files in the dataset
+        """
+        results = Paragraph.get_coll(self.mongocollection).aggregator.match(
+            F.dataset == self.name
+        ).group(
+            _id='$dataset', sources=Fn.addToSet('$source.file')
+        )
+        self.sources = []
+        for result in results.perform(raw=True):
+            self.sources += result['sources']
+        self.save()
+
+    def rename(self, new_name):
+        """Rename the dataset
+        """
+        Paragraph.get_coll(self.mongocollection).query(
+            F.dataset == self.name
+        ).update(Fn.set(F.dataset == new_name))
+        new_ds = Dataset.first(F.name == new_name)
+        if new_ds:
+            new_ds.sources = sorted(set(self.sources + new_ds.sources))
+            self.delete()
+        else:
+            self.name = new_name
+            self.save()
 
 
 class TaskDBO(db.DbObject):

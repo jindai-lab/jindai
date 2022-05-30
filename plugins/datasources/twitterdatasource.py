@@ -98,7 +98,11 @@ class TwitterDataSource(DataSourceStage):
     class Implementation(DataSourceStage.Implementation):
         """implementing datasource"""
 
-        def __init__(self, allow_video=False, allow_retweet=True, consumer_key='', consumer_secret='', access_token_key='', access_token_secret='',
+        def __init__(self,
+                     allow_video=False,
+                     allow_retweet=True,
+                     media_only=True,
+                     consumer_key='', consumer_secret='', access_token_key='', access_token_secret='',
                      import_username='',
                      time_after='', time_before='',
                      proxy=''
@@ -108,10 +112,13 @@ class TwitterDataSource(DataSourceStage):
             Args:
                 allow_video (bool, optional):
                     Allow video
-                    @chs 导入视频
+                    @chs 允许导入视频
                 allow_retweet (bool, optional):
                     Allow retweet
-                    @chs 导入转发
+                    @chs 允许导入转发
+                media_only (bool, optional):
+                    Media only
+                    @chs 只导入包含媒体内容的 Tweets
                 consumer_key (str, optional): API CONSUMER KEY
                 consumer_secret (str, optional): API CONSUMER SECRET
                 access_token_key (str, optional): API ACCESS TOKEN KEY
@@ -132,6 +139,7 @@ class TwitterDataSource(DataSourceStage):
             super().__init__()
             self.allow_video = allow_video
             self.allow_retweet = allow_retweet
+            self.media_only = media_only
             self.import_username = import_username
             self.time_after = _stamp(time_after) or 0
             self.time_before = _stamp(time_before) or time.time()
@@ -167,11 +175,13 @@ class TwitterDataSource(DataSourceStage):
                     else:
                         url = media.media_url_https
                     if url:
-                        item = MediaItem.first(F['source.url'] == url) or MediaItem(
+                        item = MediaItem.first(F['source.url'] == url)
+                        if item:
+                            continue
+                        item = MediaItem(
                             source={'url': url},
                             item_type='video' if media.video_info else 'image')
-                        para.images.append(
-                            item)
+                        para.images.append(item)
                 if tweet.text.startswith('RT '):
                     author = re.match(r'^RT (@.*?):', tweet.text)
                     if author:
@@ -206,18 +216,20 @@ class TwitterDataSource(DataSourceStage):
                     continue
 
                 para = self.parse_tweet(tweet)
-                if para.images and not para.id:
+                if (not self.media_only or para.images) and not para.id:
                     yield para
 
         def import_timeline(self, user=''):
             """Import posts of a twitter user, or timeline if blank"""
 
             if user:
-                def source(max_id): return self.api.GetUserTimeline(
-                    screen_name=user, count=100, max_id=max_id-1)
+                def source(max_id):
+                    return self.api.GetUserTimeline(
+                        screen_name=user, count=100, max_id=max_id-1)
             else:
-                def source(max_id): return self.api.GetHomeTimeline(
-                    count=100, max_id=max_id-1, exclude_replies=True)
+                def source(max_id):
+                    return self.api.GetHomeTimeline(
+                        count=100, max_id=max_id-1, exclude_replies=True)
 
             self.logger('twiuser', self.time_before, self.time_after)
 
@@ -243,8 +255,9 @@ class TwitterDataSource(DataSourceStage):
                             continue
                         if para.author != '@' + status.user.screen_name and not self.allow_retweet:
                             continue
-                        if para.images and status.created_at_in_seconds > self.time_after:
-                            yield para
+                        if status.created_at_in_seconds > self.time_after:
+                            if (not self.media_only or para.images) and not para.id:
+                                yield para
                             yielded = True
 
                     if not yielded:

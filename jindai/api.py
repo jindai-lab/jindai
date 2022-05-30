@@ -5,6 +5,7 @@ import hashlib
 import os
 import re
 import sys
+import shutil
 import time
 from collections import defaultdict
 from io import BytesIO
@@ -25,7 +26,7 @@ from .helpers import (get_context, logined, rest, serve_file, language_iso639,
                       serve_proxy, JSONEncoder, JSONDecoder, ee)
 from .models import (Dataset, History, MediaItem, Meta, Paragraph,
                      TaskDBO, Token, User, Term)
-from .storage import expand_path
+from .storage import expand_path, truncate_path
 
 app = Flask(__name__)
 app.config['SECRET_KEY'] = config.secret_key
@@ -45,9 +46,17 @@ def _task_authorized():
 def _expand_results(results):
     """Expand results to serializable dicts"""
 
+    def _patch_mongocollection(r):
+        if isinstance(r, Paragraph):
+            res = r.as_dict(True)
+            if 'mongocollection' not in res:
+                res['mongocollection'] = type(r).db.name
+        else:
+            res = r
+        return res
+
     if not isinstance(results, (str, dict, bytes)) and hasattr(results, '__iter__'):
-        return [dict(r.as_dict(True), mongocollection=type(r).db.name)
-                if isinstance(r, Paragraph) else r for r in results]
+        return [_patch_mongocollection(r) for r in results]
 
     return results
 
@@ -262,6 +271,21 @@ def write_storage(path=''):
         uploaded.save(save_path)
         sfs.append(_file_detail(save_path))
     return sfs
+
+
+@app.route('/api/storage/move', methods=['POST'])
+@rest()
+def move_storage(source, destination, keep_folder=True):
+    """Move/Rename file from source to destination"""
+    if keep_folder:
+        destination = os.path.basename(destination)
+        destination = os.path.join(os.path.dirname(source), destination)
+    paragraphs = Paragraph.query(F['source.file'] == source)
+    source = expand_path(source)
+    destination = expand_path(destination)
+    shutil.move(source, destination)
+    paragraphs.update(Fn.set({'source.file': truncate_path(destination)}))
+    return True
 
 
 @app.route('/api/collections/<coll>/<pid>', methods=['POST'])
@@ -733,29 +757,14 @@ def set_datasets(dataset=None, datasets=None, rename=None, sources=None, **j):
         if not coll:
             return False
 
-        results = Paragraph.get_coll(coll.mongocollection)
-        results.query(F.dataset == coll.name).update(
-            Fn.set(dataset=rename['to']))
-        coll.delete()
-
-        new_coll = Dataset.first(F.name == rename['to']) or Dataset(
-            name=rename['to'], sources=[], order_weight=coll.order_weight)
-        new_coll.sources = sorted(set(new_coll.sources + coll.sources))
-        new_coll.save()
+        coll.rename(rename['to'])
 
     elif sources is not None:
         j = sources
         coll = Dataset.first(F.name == j['name'])
         if not coll:
             return False
-
-        results = Paragraph.get_coll(coll.mongocollection)
-        results = results.aggregator.match(F.dataset == coll.name).group(
-            _id='$dataset', sources=Fn.addToSet('$source.file'))
-        coll.sources = []
-        for result in results.perform(raw=True):
-            coll.sources += result['sources']
-        coll.save()
+        coll.update_sources()
 
     return True
 
