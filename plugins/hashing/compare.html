@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <title>compare</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <style>
+        body {
+            background: #000;
+            color: #fff;
+            overflow-x: hidden;
+        }
+
+        a {
+            color: #fff;
+        }
+
+        .items {
+            width: 100%;
+            max-width: 600px;
+            overflow-x: hidden;
+        }
+
+        .items .post {
+            position: relative;
+            border: 1px dashed #777
+        }
+
+        .post.selected {
+            background: green;
+        }
+
+        div.item img {
+            width: 100%;
+            height: auto;
+        }
+
+        div.item.video {
+            background: purple;
+        }
+
+        .items span {
+            display: block;
+            width: 100%;
+            word-break: break-all;
+            color: #fff;
+        }
+
+        .keys {
+            position: fixed;
+            bottom: 25px;
+            right: 25px;
+            z-index: 20;
+        }
+
+        .keys>a {
+            margin-left: 20px;
+            border-radius: 5px;
+            min-width: 25px;
+            display: inline-block;
+            background: forestgreen;
+            text-align: center;
+            text-decoration: none
+        }
+
+        .post.item {
+            display: inline-block;
+        }
+
+        .pair {
+            clear: both;
+        }
+
+        .pair>div {
+            width: 45%;
+            padding: 2%;
+            max-width: 300px;
+            overflow-x: hidden;
+            font-size: 12px;
+        }
+    </style>
+    <script src="hashing-jquery.min.js"></script>
+</head>
+
+<body>
+    <div class="items"></div>
+    <div style="clear: both"></div>
+    <div class="keys">
+        <a href="javascript:void(0);" ondblclick="call_merge()">merge</a>
+    </div>
+    <script>
+        String.prototype.format = function(o) {
+            console.log(o)
+            return this.replace(/\{(\w+?)\}/g, x => (o[x.substr(1, x.length - 2)]));
+        }
+
+        var offset = location.hash.substr(1) | 0;
+        var url = 'compare.tsv?key=' + location.search.substr(1);
+        var data = [];
+        const count = 200;
+
+        $.get(url, function(resp) {
+            data = resp.split('\n');
+            offset = render(offset);
+        })
+
+        function render(offset) {
+            var disp = $('.items');
+            disp.html('');
+            offset = Math.min(Math.max(offset, 0), data.length - 1);
+            for (var line of data.slice(offset, offset + count)) {
+                line = line.split(/\s/);
+                if (line.length < 3) continue;
+                var o = {
+                    id1: line[0],
+                    id2: line[1],
+                    diff: +line[2]
+                };
+                disp[0].innerHTML += ('<div class="pair"></div>'.format(o));
+                var pair = disp.children()[disp.children().length - 1]
+                pair.innerHTML += ('<div class="post item ' + (o.diff <= 1 ? "selected" : "") + '" data-id="{id1}">{diff} {id1}<img src="/api/image/mediaitem/{id1}.jpg?w=400" /></div>'.format(o));
+                pair.innerHTML += ('<div class="post item" data-id="{id2}">{id2}<img src="/api/image/mediaitem/{id2}.jpg?w=400" /></div><br>'.format(o));
+            }
+            location.hash = '#' + (offset);
+            window.scrollTo(0, 0);
+            return offset;
+        }
+
+        var last_selected = 0;
+
+        $(document).on('click', '.item', function(e) {
+            var thisp = $(this).parent().index();
+            var oe = $(this).index() % 2 == 0 ? 'even' : 'odd'
+            if (e.shiftKey) {
+                var arr = $('.pair').slice(Math.min(last_selected, thisp), Math.max(last_selected, thisp) + 1).find('.item:' + oe);
+                arr.addClass('selected');
+            } else {
+                $(this).toggleClass('selected');
+            }
+            last_selected = thisp;
+        })
+        $(document).on('dblclick', '.item', function() {
+            $(this).append('<a target="_blank" href="/?q=images%3DObjectId(' + $(this).data('id') + ')"> </a>').find('a')[0].click();
+        })
+        var lastkey = '';
+
+        $(document).bind('keyup', function(e) {
+            switch (e.key) {
+                case "ArrowLeft":
+                    offset = render(offset - count);
+                    break;
+                case "ArrowRight":
+                    offset = render(offset + count);
+                    break;
+                case "ArrowDown":
+                case "ArrowUp":
+                case "w":
+                case "s":
+                    $('.selected').removeClass('selected');
+                    last_selected = (0 | last_selected) + (e.key === 'ArrowDown' || e.key === 's' ? 1 : -1);
+                    $($('.item')[last_selected]).addClass('selected');
+                    window.scrollTo(0, $('.selected').position().top)
+                    break;
+                case "q":
+                    $('.selected').removeClass('selected');
+                    break;
+                case "d":
+                    if (lastkey == e.key)
+                        call_merge();
+                    break;
+            }
+            lastkey = e.key;
+        });
+
+        function call_merge() {
+            var ids = $('.selected').toArray().map(x => [$(x).siblings().data('id'), $(x).data('id')]);
+            $.post({
+                url: '/api/mediaitem/merge',
+                data: JSON.stringify({
+                    'pairs': ids
+                }),
+                success: function() {
+                    $('.selected').remove();
+                },
+                contentType: 'application/json'
+            });
+        }
+    </script>
+</body>
+
+</html>
