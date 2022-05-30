@@ -46,11 +46,14 @@ class ApplyAutoTags(PipelineStage):
     def resolve(self, paragraph):
         for i in self.ats:
             parsed, tag = i.get_parsed(), i.tag
-            if execute_query_expr(parsed, paragraph):
-                if tag not in paragraph.keywords:
-                    paragraph.keywords.append(tag)
-                if tag.startswith('@'):
-                    paragraph.author = tag
+            try:
+                if execute_query_expr(parsed, paragraph):
+                    if tag not in paragraph.keywords:
+                        paragraph.keywords.append(tag)
+                    if tag.startswith('@'):
+                        paragraph.author = tag
+            except TypeError:
+                pass
         paragraph.save()
         return paragraph
 

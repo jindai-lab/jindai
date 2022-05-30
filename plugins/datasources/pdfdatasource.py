@@ -24,11 +24,11 @@ def resolve_range(page_range: str):
         if '-' in rng:
             try:
                 start, end = map(int, rng.split('-', 1))
-                yield from range(start, end+1)
+                yield from range(start-1, end)
             except ValueError:
                 pass
         elif rng and re.match(r'\d+', rng):
-            yield int(rng)
+            yield int(rng)-1
 
 
 class PDFDataSource(DataSourceStage):
@@ -88,7 +88,7 @@ class PDFDataSource(DataSourceStage):
             for pdf in self.files:
                 path = truncate_path(pdf)
                 doc = fitz.open(pdf)
-                self.logger('importing', pdf, 'as', path)
+                self.logger('importing', path)
                 page_range = self.page_range
                 if not page_range:
                     min_page = existent.get(path)
@@ -102,9 +102,12 @@ class PDFDataSource(DataSourceStage):
                     if page >= doc.pageCount:
                         break
 
-                    label = doc[page].get_label()
-                    lines = doc[page].getText()
                     try:
+                        label = doc[page].get_label()
+                    except RuntimeError:
+                        label = ''
+                    try:
+                        lines = doc[page].getText()
                         yield para_coll(
                             lang=lang, content=lines.encode(
                                 'utf-8', errors='ignore').decode('utf-8'),

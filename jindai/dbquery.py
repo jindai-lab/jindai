@@ -31,7 +31,7 @@ def _object_id(params):
 
 
 parser = QueryExprParser(
-    abbrev_prefixes={None: 'keywords=', '_': 'images.', '?': 'source.url%'},
+    abbrev_prefixes={None: 'keywords=', '?': 'source.url%'},
     allow_spacing=True,
     functions={
         'groupby': _expr_groupby,
