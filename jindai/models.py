@@ -74,6 +74,7 @@ class MediaItem(db.DbObject):
 
     _IMAGE_EXTS = ['jpg',
                    'jpeg',
+                   'jfif',
                    'jp2',
                    'png',
                    'gif',
