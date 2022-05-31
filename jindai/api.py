@@ -730,21 +730,24 @@ def get_datasets():
     return datasets
 
 
-@app.route('/api/datasets', methods=['POST'])
+@app.route('/api/datasets/<action>', methods=['POST'])
 @rest(role='admin')
-def set_datasets(dataset=None, datasets=None, rename=None, sources=None, **j):
+def set_datasets(action, **j):
     """Update dataset info"""
 
-    if dataset is not None:
-        if dataset.get('_id'):
-            dataset = Dataset.query(F.id == dataset['_id'])
-            del j['_id']
-            dataset.update(Fn.set(**dataset))
-        else:
-            Dataset(**dataset).save()
+    ds = None
+    if '_id' in j:
+        ds = Dataset.first(F.id == j['_id'])
+        del j['_id']
 
-    elif datasets is not None:
-        for dataset in datasets:
+    if action == 'edit':
+        if ds:
+            ds.update(Fn.set(**j))
+        else:
+            Dataset(**j).save()
+
+    elif action == 'batch':
+        for dataset in j:
             jset = {k: v for k, v in dataset.items() if k !=
                     '_id' and v is not None}
             if '_id' in dataset:
@@ -752,19 +755,13 @@ def set_datasets(dataset=None, datasets=None, rename=None, sources=None, **j):
             else:
                 Dataset(**jset).save()
 
-    elif rename is not None:
-        coll = Dataset.first(F.name == rename['from'])
-        if not coll:
-            return False
+    elif action == 'rename':
+        assert ds and 'to' in j, 'must specify valid dataset id and new name'
+        ds.rename(j['to'])
 
-        coll.rename(rename['to'])
-
-    elif sources is not None:
-        j = sources
-        coll = Dataset.first(F.name == j['name'])
-        if not coll:
-            return False
-        coll.update_sources()
+    elif action == 'sources':
+        assert ds, 'dataset not found'
+        ds.update_sources()
 
     return True
 
@@ -775,9 +772,9 @@ def query_terms(field, pattern, regex=False):
     """Query terms"""
 
     if regex:
-        pattern = F.term.regex(pattern)
+        pattern = F.term.regex(pattern) | F.aliases.regex(pattern)
     else:
-        pattern = F.term == pattern
+        pattern = (F.term == pattern) | (F.aliases == pattern)
 
     return list(Term.query(F.field == field, pattern).limit(100))
 
