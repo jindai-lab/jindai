@@ -6,6 +6,7 @@ Import from web or file
 import codecs
 import re
 import json
+import datetime
 from concurrent.futures import ThreadPoolExecutor
 from urllib.parse import urljoin
 from bs4 import BeautifulSoup as B
@@ -247,17 +248,19 @@ class WebPageListingDataSource(DataSourceStage):
                 return re.sub(r'\s+', ' ', element.text)
             return ''
 
-        def parse_detail(self, url):
+        def parse_detail(self, url, b):
             """Parse url as a detail page"""
-            b = self.read_html(url)
+
             if not b:
                 return None
 
-            para = Paragraph(source={'url': url},
+            para = Paragraph(source={'url': url}, pdate=datetime.datetime.utcnow(),
                              dataset=self.dataset, lang=self.lang)
             para.content = self.get_text(b)
             para.keywords = self.tags
             para.title = self.get_text(b.find('title'))
+
+            items = set()
 
             for imgp in self.image_patterns:
                 for i in b.select(imgp):
@@ -267,20 +270,21 @@ class WebPageListingDataSource(DataSourceStage):
                     else:
                         attr = self.get_text(i)
                     upath = urljoin(url, attr)
-                    if MediaItem.first({'source.url': upath}):
+                    if upath in items or MediaItem.first({'source.url': upath}):
                         continue
+                    items.add(upath)
+
                     para.images.append(MediaItem(
                         source={'url': upath},
                         item_type=MediaItem.get_type(upath.rsplit('.', 1)[-1]) or 'image')
                     )
 
             self.logger(f'Found {len(para.images)} images in {url}')
-            return para
+            return self.convert(para)
 
-        def parse_list(self, url):
+        def parse_list(self, url, b):
             """Parse url as a list page"""
 
-            b = self.read_html(url)
             if not b:
                 self.logger(f'Cannot read list from {url}')
                 return []
@@ -303,14 +307,14 @@ class WebPageListingDataSource(DataSourceStage):
                         {'source.url': url}):
                     return
 
-                visited.add(url)
+                b = self.read_html(url)
 
                 if level <= self.list_depth:
-                    for upath in self.parse_list(url):
+                    for upath in self.parse_list(url, b):
                         yield upath, level
 
                 if level == self.list_depth or self.detail_link.search(url):
-                    para = self.parse_detail(url)
+                    para = self.parse_detail(url, b)
                     if para:
                         yield para, level
 
@@ -320,9 +324,12 @@ class WebPageListingDataSource(DataSourceStage):
                 for riter in tpe.map(_do_parse, queue[:5]):
                     for res, level in riter:
                         if isinstance(res, Paragraph):
-                            yield self.convert(res)
-                        else:
-                            queue.append((res, level))
+                            yield res
+                        elif isinstance(res, str):
+                            if res not in visited:
+                                visited.add(res)
+                                self.logger('add', res, 'to queue')
+                                queue.append((res, level))
                 queue = queue[5:]
 
 
