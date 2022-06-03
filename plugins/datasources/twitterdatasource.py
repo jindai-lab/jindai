@@ -14,18 +14,6 @@ from jindai.dbquery import parser, ObjectId, F
 from .dbquerydatasource import ImageImportDataSource
 
 
-def find_post(url: str) -> Union[Paragraph, None]:
-    """Find post with twitter id in the url
-
-    Args:
-        url (str): twitter url
-
-    Returns:
-        Union[Paragraph, None]: Paragraph
-    """
-    return Paragraph.first(F.tweet_id == url.split('/')[-1])
-
-
 def twitter_id_from_timestamp(stamp: float) -> int:
     """Get twitter id from timestamp
 
@@ -157,7 +145,7 @@ class TwitterDataSource(DataSourceStage):
             tweet_url = f'https://twitter.com/{tweet.user.screen_name}/status/{tweet.id}'
 
             author = '@' + tweet.user.screen_name
-            para = find_post(tweet_url)
+            para = Paragraph.first(F.tweet_id == f'{tweet.id}')
 
             self.logger(tweet_url, para is None)
             if not para:
@@ -258,7 +246,7 @@ class TwitterDataSource(DataSourceStage):
                         if status.created_at_in_seconds > self.time_after:
                             if (not self.media_only or para.images) and not para.id:
                                 yield para
-                            yielded = True
+                                yielded = True
 
                     if not yielded:
                         break
