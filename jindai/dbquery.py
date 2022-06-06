@@ -78,7 +78,7 @@ class DBQuery:
             limitations = []
 
         # parse limitations
-        if limitations:
+        if limitations and limitations[0]:
             limitations = {
                 '$and': [parser.parse(expr) for expr in limitations]}
 
