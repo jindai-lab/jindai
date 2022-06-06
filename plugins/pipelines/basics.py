@@ -325,7 +325,10 @@ class Export(PipelineStage):
                 @chs 最多导出的记录数量，0表示无限制。
         """
         super().__init__()
+        self.extension = output_format
         self.format = output_format
+        if output_format:
+            self.format = 'excel'
         self.limit = limit
 
     def summarize(self, result):
@@ -344,10 +347,10 @@ class Export(PipelineStage):
         if self.format == 'json':
             return PipelineStage.return_file('json', json_dump(result).encode('utf-8'))
 
-        elif self.format in ('csv', 'xlsx'):
+        elif self.format in ('csv', 'excel'):
             buf = BytesIO()
             getattr(pandas.DataFrame(result), f'to_{self.format}')(buf)
-            return PipelineStage.return_file(self.format, buf.getvalue())
+            return PipelineStage.return_file(self.extension, buf.getvalue())
 
 
 class AutoSummary(PipelineStage):

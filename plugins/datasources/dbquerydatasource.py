@@ -25,12 +25,15 @@ class DBQueryDataSource(DataSourceStage):
     class Implementation(DataSourceStage.Implementation):
         """Implementing datasource"""
 
-        def __init__(self, query, mongocollections='', limit=0, skip=0, sort='', raw=False, groups='none'):
+        def __init__(self, query, req='', mongocollections='', limit=0, skip=0, sort='', raw=False, groups='none'):
             """
             Args:
                 query (QUERY):
                     Query expression, or keywords
                     @chs 查询字符串，或以 ? 开头的查询表达式，或以 ?? 开头的聚合查询表达式
+                req (QUERY):
+                    Additional query expression
+                    @chs 附加的条件
                 sort (str):
                     Sorting expression
                     @chs 排序表达式
@@ -52,7 +55,7 @@ class DBQueryDataSource(DataSourceStage):
             """
             super().__init__()
             self.dbquery = DBQuery(
-                query, mongocollections, limit, skip, sort, raw, groups)
+                query if not req else (query, req), mongocollections, limit, skip, sort, raw, groups)
 
         def fetch(self):
             return self.dbquery.fetch()
