@@ -18,7 +18,7 @@ from tqdm import tqdm
 
 from PyMongoWrapper import ObjectId
 from PyMongoWrapper.dbo import create_dbo_json_encoder
-from . import Plugin, PluginManager, Task, safe_open, expand_patterns
+from . import Plugin, PluginManager, Task, safe_open, expand_patterns, config
 from .api import run_service
 from .helpers import get_context
 from .models import F, MediaItem, Meta, TaskDBO, User
@@ -206,7 +206,7 @@ def _save_db(coll: str, records: Iterable[Dict], force):
         _mongodb(coll).insert_many(records, ordered=False,
                                    bypass_document_validation=True)
     except Exception as ex:
-        print(ex.__class__.__name__)
+        print(str(ex)[:100])
 
 
 @cli.command('restore')
@@ -323,4 +323,5 @@ def web_service(port: int):
 
 
 if __name__ == '__main__':
+    print('using', config.mongo, config.mongoDbName)
     cli()
