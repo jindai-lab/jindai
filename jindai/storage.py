@@ -9,6 +9,7 @@ from io import BytesIO
 from threading import Lock
 from typing import Tuple, Union
 import zipfile
+from unrar import rarfile
 import h5py
 import numpy as np
 import requests
@@ -337,9 +338,13 @@ def expand_patterns(patterns: Union[list, str, tuple], allowed_locations=None):
             pattern = expand_path(pattern, allowed_locations)
             for path in glob.glob(pattern):
                 if path.endswith('.zip') or path.endswith('.epub'):
-                    with zipfile.ZipFile(path, 'r') as zip_file:
-                        for zipped_item in zip_file.filelist:
-                            yield path + '#zip/' + zipped_item.filename
+                    with zipfile.ZipFile(path, 'r') as rar_file:
+                        for rar_item in rar_file.filelist:
+                            yield path + '#zip/' + rar_item.filename
+                elif path.endswith('.rar'):
+                    with rarfile.RarFile(path, 'r') as rar_file:
+                        for rar_item in rar_file.filelist:
+                            yield path + '#rar/' + rar_item.filename
                 elif os.path.isdir(path):
                     patterns.append(path + '/*')
                 else:
@@ -388,6 +393,8 @@ def safe_open(path: str, mode='rb', **params):
         assert mode in ('rb', 'wb')
         item_id = path.split('://', 1)[1]
         if mode == 'rb':
+            if config.hdf5_proxy:
+                return BytesIO(_try_download(config.hdf5_proxy + item_id))
             return Hdf5Manager.read(item_id)
 
         return _Hdf5WriteBuffer(item_id)
@@ -402,7 +409,13 @@ def safe_open(path: str, mode='rb', **params):
                 return zip_file.open(zpath)
         else:
             return _ZipWriteBuffer(path, zpath)
-
+        
+    elif '#rar/' in path:
+        assert mode == 'rb'
+        _, zpath = path.split('#rar/', 1)
+        with rarfile.RarFile(fpath) as rar_file:
+            return rar_file.open(zpath)
+        
     elif '#pdf/png:' in path:
         assert mode == 'rb'
         _, page = path.split('#pdf/png:', 1)

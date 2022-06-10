@@ -1,5 +1,6 @@
 """Config file"""
 import os
+import sys
 from pathlib import Path
 import yaml
 
@@ -27,12 +28,18 @@ class ConfigObject:
             'ui_proxy': ''
         }
         if config_file is None:
-            for config_file in [
-                os.environ.get('CONFIG_FILE', ''),
-                'config.yaml'
-            ]:
-                if os.path.exists(config_file) and os.path.isfile(config_file):
-                    break
+            if '-c' in sys.argv:
+                config_arg = sys.argv.index('-c')
+                config_file = sys.argv[config_arg + 1]
+                sys.argv.pop(config_arg + 1)
+                sys.argv.pop(config_arg)
+            else:
+                for config_file in [
+                    os.environ.get('CONFIG_FILE', ''),
+                    'config.yaml'
+                ]:
+                    if os.path.exists(config_file) and os.path.isfile(config_file):
+                        break
 
         with open(config_file, 'r', encoding='utf-8') as fin:
             self._orig.update(**yaml.safe_load(fin))
