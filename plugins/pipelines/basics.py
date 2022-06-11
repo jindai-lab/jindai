@@ -163,7 +163,7 @@ class WordCut(PipelineStage):
         """
         super().__init__()
         self.for_search = for_search
-
+        
     def resolve(self, paragraph: Paragraph) -> Paragraph:
         paragraph.tokens = []
 
@@ -187,7 +187,7 @@ class WordCut(PipelineStage):
 
         if self.for_search:
             WordCut.trlit.resolve(paragraph)
-
+            
         return paragraph
 
 
@@ -197,10 +197,19 @@ class KeywordsFromTokens(PipelineStage):
     @chs 将检索词设为分词结果并删除词串字段
     """
 
-    def resolve(self, paragraph: Paragraph) -> Paragraph:
-        paragraph.keywords = list(set(paragraph.tokens))
+    @staticmethod
+    def remove_accents(input_str):
+        unicodedata = safe_import('unicodedata')
+        nfkd_form = unicodedata.normalize('NFKD', input_str)
+        return u"".join([c for c in nfkd_form if not unicodedata.combining(c)])
+    
+    def resolve(self, paragraph: Paragraph) -> Paragraph:        
+        words = [str(word).strip()
+                         for word in set(paragraph.tokens) if word and str(word).strip()]
+        words += [KeywordsFromTokens.remove_accents(word) for word in words]
+        paragraph.keywords = list(set(words))
+        
         del paragraph.tokens
-        paragraph.save()
         return paragraph
 
 
@@ -309,7 +318,7 @@ class AccumulateParagraphs(PipelineStage):
 
 class Export(PipelineStage):
     """
-    Export accumulative result to file
+    Export accumulated result to file
     @chs 结果导出为文件
     """
 
