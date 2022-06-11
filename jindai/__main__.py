@@ -62,11 +62,11 @@ def export(query, output_file):
 @cli.command('task')
 @click.argument('task_id')
 @click.option('--concurrent', type=int, default=10)
-def run_task(id_or_name, concurrent=0):
+def run_task(task_id, concurrent=0):
     """Run task according to id or name"""
     _init_plugins()
-    task = Task.from_dbo(TaskDBO.first((F.id == id_or_name) if re.match(
-        r'[0-9a-f]{24}', id_or_name) else (F.name == id_or_name)), logger=print, verbose=True)
+    task = Task.from_dbo(TaskDBO.first((F.id == task_id) if re.match(
+        r'[0-9a-f]{24}', task_id) else (F.name == task_id)), logger=print, verbose=True)
     if concurrent > 0:
         task.pipeline.concurrent = concurrent
     result = task.execute()
@@ -323,5 +323,6 @@ def web_service(port: int):
 
 
 if __name__ == '__main__':
-    print('using', config.mongo, config.mongoDbName)
+    print('* loaded config from', config._filename)
+    print('* using', config.mongo, config.mongoDbName)
     cli()

@@ -1,5 +1,6 @@
 """DB Objects"""
 import datetime
+import unicodedata
 import dateutil
 import time
 from hashlib import sha1
@@ -223,12 +224,9 @@ class Paragraph(db.DbObject):
     def save(self):
         """Save the paragraph
         """
-
+        
         if 'mongocollection' in self.__dict__:
             del self.mongocollection
-
-        self.keywords = [str(_).strip()
-                         for _ in set(self.keywords) if _ and str(_).strip()]
 
         for field in ['keywords', 'author']:
             vals = self[field]
@@ -243,6 +241,7 @@ class Paragraph(db.DbObject):
                 continue
             if i.id is None:
                 i.save()
+        
         super().save()
 
     @staticmethod
