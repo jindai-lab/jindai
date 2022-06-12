@@ -3,7 +3,6 @@ import os
 import sys
 from pathlib import Path
 from typing import Any
-from attr import has
 import yaml
 
 
@@ -45,9 +44,9 @@ class ConfigObject:
 
         with open(config_file, 'r', encoding='utf-8') as fin:
             self._orig.update(**yaml.safe_load(fin))
-            
+
         self._filename = config_file
-        
+
         if self._orig['rootpath'] == '':
             self._orig['rootpath'] = str(
                 Path(os.path.abspath(__file__)).parent.parent.absolute())
@@ -55,18 +54,18 @@ class ConfigObject:
             self._orig['storage'] = os.path.join(
                 self._orig['rootpath'], self._orig['storage'])
 
-    def __getattr__(self, __name : str):
+    def __getattr__(self, __name: str):
         if __name in self.__dict__:
             return object.__getattribute__(self, __name)
         return self._orig.get(__name)
-    
+
     def __setattr__(self, __name: str, __value: Any) -> None:
         if __name.startswith('_') or __name in self.__dict__:
             object.__setattr__(self, __name, __value)
         else:
             self._orig[__name] = __value
-            
-    def save(self, filename : str = '') -> None:
+
+    def save(self, filename: str = '') -> None:
         """Save config file"""
         filename = filename or self._filename
         with open(filename, 'w', encoding='utf-8') as fout:

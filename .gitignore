@@ -37,7 +37,8 @@ docs/_build/
 # Jupyter Notebook
 .ipynb_checkpoints
 
-sources
+sources*
+mp4/
 
 # all plugins except embedded ones should be excepted from main git repo
 # they should be installed and updated with plugin manager
