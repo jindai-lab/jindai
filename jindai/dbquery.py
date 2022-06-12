@@ -1,5 +1,6 @@
 """Database access functionality"""
 import re
+import jieba
 import datetime
 from bson import SON
 from PyMongoWrapper import MongoOperand, F, Fn, ObjectId, QueryExprParser
@@ -67,7 +68,7 @@ class DBQuery:
         """Parse query (keywords or expression) and convert it to aggregation query"""
 
         if wordcutter is None:
-            def wordcutter(x): return list(set(x))
+            wordcutter = jieba.cut
 
         if not query:
             return []
@@ -131,11 +132,21 @@ class DBQuery:
         return [{'$match': req}] + qparsed
 
     def __init__(self, query, mongocollections='', limit=0, skip=0, sort='',
-                 raw=False, groups='none', wordcutter=None):
+                 raw=False, groups='none', pmanager=None, wordcutter=None):
 
         self.query = DBQuery._parse(query, wordcutter)
         self.raw = raw
-
+                
+        # test plugin pages
+        if pmanager and len(self.query) > 0 and '$plugin' in self.query[-1]:
+            self.query, plugin_args = self.query[:-1], self.query[-1]['$plugin'].split('/')
+        else:
+            plugin_args = []
+        
+        self.handler = None
+        if plugin_args:
+            self.handler = pmanager.filters.get(plugin_args[0]), plugin_args[1:]
+            
         if not mongocollections:
             mongocollections = ''
         self.mongocollections = mongocollections.split('\n') if isinstance(
@@ -205,7 +216,7 @@ class DBQuery:
         if limit > 0:
             agg.append({'$limit': limit})
         rs = rs.aggregate(agg, raw=self.raw, allowDiskUse=True)
-
+        
         return rs
 
     def fetch_all_rs(self):
@@ -217,6 +228,10 @@ class DBQuery:
 
     def fetch(self):
         """Fetch results"""
+
+        if self.handler:
+            handler, args = self.handler
+            return handler['handler'](self, *args)
 
         if self.skip is not None and self.skip > 0:
             skip = self.skip
@@ -236,6 +251,8 @@ class DBQuery:
 
     def count(self):
         """Count documents, -1 if err"""
+        if self.handler:
+            return self.limit or 1
         try:
             return sum([self.fetch_rs(r, sort=[], limit=0, skip=0).count() for r in self.mongocollections])
         except Exception:
