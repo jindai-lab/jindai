@@ -681,33 +681,17 @@ def search(q='', req='', sort='', limit=100, offset=0,
         else:
             return {'results': [], 'query': ''}
 
-    qparsed = DBQuery(q).query
+    datasource = DBQuery((q, req), mongocollections,
+                         limit, offset, sort or '_id', False, groups, app.plugins)
 
-    # test plugin pages
-    if len(qparsed) > 0 and '$plugin' in qparsed[-1]:
-        qparsed, page_args = qparsed[:-1], qparsed[-1]['$plugin'].split('/')
-    else:
-        qparsed, page_args = q, []
-
-    datasource = DBQuery([qparsed, req], mongocollections,
-                         limit, offset, sort or '_id', False, groups, jieba.cut)
-    results = None
-
-    if page_args:
-        handler = app.plugins.filters.get(page_args[0])
-        if handler:
-            if count:
-                return limit
-            results = _expand_results(
-                handler['handler'](datasource, *page_args[1:]))
-
-    if results is None:
-        if count:
-            return datasource.count()
-        results = _expand_results(datasource.fetch())
+    if count:
+        return datasource.count()
+    
+    results = _expand_results(datasource.fetch())
 
     History(user=logined(), queries=[q, req],
             created_at=datetime.datetime.utcnow()).save()
+    
     return {'results': results, 'query': datasource.query}
 
 
