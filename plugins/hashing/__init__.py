@@ -230,7 +230,8 @@ class Hashing(Plugin):
         MediaItem.set_field('whash', bytes)
         self.register_pipelines([ImageHashDuplications, ImageHash])
         self.register_filter(
-            'sim', keybind='s', format_string='sim/{mediaitem._id}', icon='mdi-image', handler=self.handle_page)
+            'sim', keybind='s', format_string='sim/{mediaitem._id}', icon='mdi-image', 
+            handler=self.handle_filter)
 
         @app.route('/api/plugins/compare.tsv')
         def _compare_tsv():
@@ -251,15 +252,15 @@ class Hashing(Plugin):
         def _jquery_js():
             return serve_file(os.path.join(os.path.dirname(__file__), 'jquery.min.js'))
 
-    def handle_page(self, datasource_impl, iid):
+    def handle_filter(self, dbq, iid):
         """Handle page"""
-        limit = datasource_impl.limit
-        offset = datasource_impl.skip
-        datasource_impl.limit = 0
-        datasource_impl.raw = False
+        limit = dbq.limit
+        offset = dbq.skip
+        dbq.limit = 0
+        dbq.raw = False
 
-        groups = datasource_impl.groups in ('both', 'group')
-        archive = datasource_impl.groups in ('both', 'source')
+        groups = dbq.groups in ('both', 'group')
+        archive = dbq.groups in ('both', 'source')
 
         if groups:
             return single_item('', iid)
@@ -276,7 +277,7 @@ class Hashing(Plugin):
             results = []
             groupped = {}
 
-            for paragraph in datasource_impl.fetch():
+            for paragraph in dbq.fetch_all_rs():
                 for i in paragraph.images:
                     if i.id == image_item.id:
                         continue
