@@ -62,7 +62,11 @@ class DBQueryDataSource(DataSourceStage):
 
 
 class MediaDataSource(DataSourceStage):
-    """图像项目数据源"""
+    """
+    Data Source for Media Items
+    @chs 多媒体项目数据源
+    """
+
     class Implementation(DataSourceStage.Implementation):
         """Implementing datasource"""
 
