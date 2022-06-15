@@ -316,17 +316,18 @@ def modify_paragraph(coll, pid, **kws):
 
 @app.route('/api/collections/<coll>/<pid>/pagenum', methods=['POST'])
 @rest()
-def modify_pagenum(coll, pid, sequential, new_pagenum, **_):
+def modify_pagenum(coll, pid, sequential, new_pagenum, folio=False, **_):
     """Modify page numbers of the same source"""
 
     pid = ObjectId(pid)
     para = Paragraph.get_coll(coll).first(F.id == pid)
-    delta = new_pagenum - para.source['page']
     if para:
         if sequential == 'solo':
             para.pagenum = new_pagenum
             para.save()
         else:
+            folio = 2 if folio else 1
+            delta = new_pagenum - para.source['page'] * folio
             source = dict(para.source)
             assert 'page' in source
             if sequential == 'all':
@@ -335,7 +336,7 @@ def modify_pagenum(coll, pid, sequential, new_pagenum, **_):
                 source['page'] = {'$gt': source['page']}
             source = {'source.' + k: w for k, w in source.items()}
             Paragraph.get_coll(coll).query((F.dataset == para.dataset) & MongoOperand(
-                source)).update([Fn.set(pagenum=Fn.add('$source.page', delta))])
+                source)).update([Fn.set(pagenum=Fn.add(Fn.multiply('$source.page', folio), delta))])
             Paragraph.get_coll(coll).query((F.dataset == para.dataset) & (F.pagenum <= 0)).update([
                 Fn.set(pagenum=Fn.concat(
                     "A", Fn.toString(Fn.add(1, "$source.page"))))
