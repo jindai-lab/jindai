@@ -230,7 +230,8 @@ class Hashing(Plugin):
         MediaItem.set_field('whash', bytes)
         self.register_pipelines([ImageHashDuplications, ImageHash])
         self.register_filter(
-            'sim', keybind='s', format_string='sim/{mediaitem._id}', icon='mdi-image', handler=self.handle_page)
+            'sim', keybind='s', format_string='sim/{mediaitem._id}', icon='mdi-image', 
+            handler=self.handle_filter)
 
         @app.route('/api/plugins/compare.tsv')
         def _compare_tsv():
@@ -251,7 +252,7 @@ class Hashing(Plugin):
         def _jquery_js():
             return serve_file(os.path.join(os.path.dirname(__file__), 'jquery.min.js'))
 
-    def handle_page(self, dbq, iid):
+    def handle_filter(self, dbq, iid):
         """Handle page"""
         limit = dbq.limit
         offset = dbq.skip
