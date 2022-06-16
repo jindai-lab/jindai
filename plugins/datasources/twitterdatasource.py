@@ -134,6 +134,7 @@ class TwitterDataSource(DataSourceStage):
             self.proxies = {'http': proxy, 'https': proxy} if proxy else {}
             self.api = twitter.Api(consumer_key=consumer_key, consumer_secret=consumer_secret,
                                    access_token_key=access_token_key, access_token_secret=access_token_secret, proxies=self.proxies)
+            self.imported = set()
 
         def parse_tweet(self, tweet) -> Paragraph:
             """Parse twitter status
@@ -145,6 +146,9 @@ class TwitterDataSource(DataSourceStage):
             tweet_url = f'https://twitter.com/{tweet.user.screen_name}/status/{tweet.id}'
 
             author = '@' + tweet.user.screen_name
+            if tweet.id in self.imported:
+                return
+            self.imported.add(tweet.id)
             para = Paragraph.first(F.tweet_id == f'{tweet.id}')
 
             self.logger(tweet_url, para is None)
@@ -204,7 +208,7 @@ class TwitterDataSource(DataSourceStage):
                     continue
 
                 para = self.parse_tweet(tweet)
-                if (not self.media_only or para.images) and not para.id:
+                if para and (not self.media_only or para.images) and not para.id:
                     yield para
 
         def import_timeline(self, user=''):
@@ -236,10 +240,10 @@ class TwitterDataSource(DataSourceStage):
 
                     timeline = source(max_id)
                     for status in timeline:
-                        para = self.parse_tweet(status)
                         before = min(before, status.created_at_in_seconds)
                         max_id = min(max_id, status.id)
-                        if para.id:
+                        para = self.parse_tweet(status)
+                        if not para or para.id:
                             continue
                         if para.author != '@' + status.user.screen_name and not self.allow_retweet:
                             continue
