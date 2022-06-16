@@ -136,17 +136,19 @@ class DBQuery:
 
         self.query = DBQuery._parse(query, wordcutter)
         self.raw = raw
-                
+
         # test plugin pages
         if pmanager and len(self.query) > 0 and '$plugin' in self.query[-1]:
-            self.query, plugin_args = self.query[:-1], self.query[-1]['$plugin'].split('/')
+            self.query, plugin_args = self.query[:-1], \
+                self.query[-1]['$plugin'].split('/')
         else:
             plugin_args = []
-        
+
         self.handler = None
         if plugin_args:
-            self.handler = pmanager.filters.get(plugin_args[0]), plugin_args[1:]
-            
+            self.handler = pmanager.filters.get(
+                plugin_args[0]), plugin_args[1:]
+
         if not mongocollections:
             mongocollections = ''
         self.mongocollections = mongocollections.split('\n') if isinstance(
@@ -216,11 +218,22 @@ class DBQuery:
         if limit > 0:
             agg.append({'$limit': limit})
         rs = rs.aggregate(agg, raw=self.raw, allowDiskUse=True)
-        
+
         return rs
 
     def fetch_all_rs(self):
         """Fetch all result sets"""
+
+        if self.skip is not None and self.skip > 0:
+            skip = self.skip
+            for coll in self.mongocollections:
+                count = self.fetch_rs(coll, sort=[], limit=0, skip=0).count()
+                if count <= skip:
+                    skip -= count
+                    self.skips[coll] = -1
+                else:
+                    self.skips[coll] = skip
+                    break
 
         for coll in self.mongocollections:
             if self.skips.get(coll, 0) >= 0:
@@ -233,21 +246,7 @@ class DBQuery:
             handler, args = self.handler
             return handler['handler'](self, *args)
 
-        if self.skip is not None and self.skip > 0:
-            skip = self.skip
-            for c in self.mongocollections:
-                count = self.fetch_rs(c, sort=[], limit=0, skip=0).count()
-                if count <= skip:
-                    skip -= count
-                    self.skips[c] = -1
-                else:
-                    self.skips[c] = skip
-                    break
-
-        if len(self.mongocollections) == 1:
-            return self.fetch_rs(self.mongocollections[0])
-        else:
-            return self.fetch_all_rs()
+        yield from self.fetch_all_rs()
 
     def count(self):
         """Count documents, -1 if err"""

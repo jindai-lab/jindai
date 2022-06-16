@@ -224,9 +224,11 @@ class Paragraph(db.DbObject):
     def save(self):
         """Save the paragraph
         """
-        
+
         if 'mongocollection' in self.__dict__:
             del self.mongocollection
+
+        self.keywords = list(set(self.keywords))
 
         for field in ['keywords', 'author']:
             vals = self[field]
@@ -241,7 +243,7 @@ class Paragraph(db.DbObject):
                 continue
             if i.id is None:
                 i.save()
-        
+
         super().save()
 
     @staticmethod
