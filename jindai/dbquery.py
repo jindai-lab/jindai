@@ -205,14 +205,17 @@ class DBQuery:
             limit = self.limit
 
         agg = self.query
-        if sort and sort != ['_id']:
-            if sort == ['random']:
+
+        sort = parser.parse_sort(sort)
+
+        if sort and sort != [('_id', 1)]:
+            if sort == [('random', 1)]:
                 agg.append({'$sample': {'size': limit}})
                 limit = 0
                 skip = 0
             else:
                 agg.append(
-                    {'$sort': SON(parser.parse_sort(sort))})
+                    {'$sort': SON(sort)})
         if skip > 0:
             agg.append({'$skip': skip})
         if limit > 0:
@@ -227,7 +230,7 @@ class DBQuery:
         if self.skip is not None and self.skip > 0:
             skip = self.skip
             for coll in self.mongocollections:
-                count = self.fetch_rs(coll, sort=[], limit=0, skip=0).count()
+                count = self.fetch_rs(coll, sort='id', limit=0, skip=0).count()
                 if count <= skip:
                     skip -= count
                     self.skips[coll] = -1
@@ -244,15 +247,15 @@ class DBQuery:
 
         if self.handler:
             handler, args = self.handler
-            return handler['handler'](self, *args)
-
-        yield from self.fetch_all_rs()
+            yield from handler['handler'](self, *args)
+        else:
+            yield from self.fetch_all_rs()
 
     def count(self):
         """Count documents, -1 if err"""
         if self.handler:
             return self.limit or 1
         try:
-            return sum([self.fetch_rs(r, sort=[], limit=0, skip=0).count() for r in self.mongocollections])
+            return sum([self.fetch_rs(r, sort='id', limit=0, skip=0).count() for r in self.mongocollections])
         except Exception:
             return -1

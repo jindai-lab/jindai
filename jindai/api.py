@@ -683,7 +683,7 @@ def search(q='', req='', sort='', limit=100, offset=0,
             return {'results': [], 'query': ''}
 
     datasource = DBQuery((q, req), mongocollections,
-                         limit, offset, sort or '_id', False, groups, app.plugins)
+                         limit, offset, sort or 'id', False, groups, app.plugins)
 
     if count:
         return datasource.count()
