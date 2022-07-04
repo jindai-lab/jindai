@@ -168,6 +168,7 @@ class PipelineStage:
         :return: Summarized reuslt, None for default.
         :rtype: dict | None
         """
+        return result
 
     def flow(self, paragraph: Union[Paragraph, IterableClass]) -> Tuple:
         """Flow control
