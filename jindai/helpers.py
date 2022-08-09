@@ -152,7 +152,7 @@ def rest(login=True, cache=False, role='', mapping=None):
                 if login and not logined(role):
                     raise Exception(
                         f'Forbidden. Client: {request.remote_addr}')
-                if request.json:
+                if request.content_type == 'application/json' and request.json:
                     for key, val in request.json.items():
                         kwargs[mapping.get(key, key)] = val
                 request.lang = request.headers.get('X-Preferred-Language', '')

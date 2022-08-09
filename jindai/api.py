@@ -905,6 +905,11 @@ def set_meta(**vals):
     return True
 
 
+@app.route('/api/plugins', methods=['GET'])
+def get_plugins():
+    return [type(pl).__name__ for pl in app.plugins]
+
+
 @app.route('/<path:path>', methods=['GET'])
 @app.route('/', methods=['GET'])
 def index(path='index.html'):
