@@ -1,12 +1,14 @@
+jieba
 bs4
 flask
-pymongo
+pymongo==3.11.3
 https://github.com/zhuth/PyMongoWrapper/archive/master.zip
 fitz
 iso639-lang
 click
 tqdm
 pdf2image
+pymupdf==1.18.7
 pyyaml
 inotify
 requests
@@ -27,3 +29,4 @@ numpy
 PyWavelets
 pyotp
 unrar
+opencc-python-reimplemented
