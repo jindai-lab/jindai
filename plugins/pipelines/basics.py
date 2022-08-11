@@ -691,7 +691,7 @@ class FilterArrayField(PipelineStage):
                 @chs 字段名称
             cond (QUERY): Conditional expression, use `iter` for the iterated item,
                 or use abbreviated form like '>0' to mean 'iter>0'
-                @chs 条件式，用 iter 表示被判断的项目，或用省略形式
+                @chs 条件式，用 iter 表示被判断的项目，或用省略形式。将仅保留满足条件式的项目。
         """
         super().__init__()
         self.field = field

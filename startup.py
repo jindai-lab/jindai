@@ -6,3 +6,4 @@ from PyMongoWrapper import F, Fn, Var
 from bson import SON, Binary, ObjectId
 import sys
 import glob
+from tqdm import tqdm

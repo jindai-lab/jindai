@@ -276,8 +276,7 @@ def serve_proxy(server, path):
     :return: response from remote server
     :rtype: Response
     """
-    resp = requests.get(f'http://{server}/{path}',
-                        headers={'Host': 'localhost:8080'})
+    resp = requests.get(f'http://{server}/{path}')
     return Response(resp.content, headers=dict(resp.headers))
 
 
