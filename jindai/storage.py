@@ -24,13 +24,10 @@ class Hdf5Manager:
     
     files = []
     for storage_parent in [config.storage] + (config.external_storage or []):
-        files += [h5py.File(g, 'r') for g in glob.glob(os.path.join(storage_parent, '*.h5'))]
+        files += [h5py.File(g, 'r') for g in glob.glob(os.path.join(storage_parent, '*.h5')) if not g.endswith(os.path.sep + 'blocks.h5')]
     base = os.path.join(config.storage, 'blocks.h5')
-    if base in files:
-        files.remove(base)
 
     writable_file = None
-    write_counter = 0
     _lock = Lock()
 
     def __enter__(self, *_):
@@ -40,11 +37,13 @@ class Hdf5Manager:
         :rtype: Hdf5Manager
         """
         Hdf5Manager._lock.acquire()
-        if not Hdf5Manager.writable_file or Hdf5Manager.writable_file.mode != 'r+':
-            if Hdf5Manager.writable_file:
-                Hdf5Manager.writable_file.close()
+        if Hdf5Manager.writable_file and Hdf5Manager.writable_file.mode != 'r+':
+            Hdf5Manager.writable_file.close()
+            Hdf5Manager.writable_file = None
+        
+        if not Hdf5Manager.writable_file:
             Hdf5Manager.writable_file = h5py.File(Hdf5Manager.base, 'r+')
-        Hdf5Manager.write_counter = 0
+        
         return self
 
     def __exit__(self, *_):
@@ -94,7 +93,11 @@ class Hdf5Manager:
             Hdf5Manager.writable_file.close()
             Hdf5Manager.writable_file = None
 
-        if not Hdf5Manager.writable_file:
+        if Hdf5Manager.writable_file and Hdf5Manager.writable_file.mode != 'r':
+            Hdf5Manager.writable_file.close()
+            Hdf5Manager.writable_file = None
+            
+        elif not Hdf5Manager.writable_file:
             Hdf5Manager.writable_file = h5py.File(Hdf5Manager.base, 'r')
 
         key = f'data/{item_id}'
