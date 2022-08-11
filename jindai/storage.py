@@ -21,10 +21,14 @@ from .config import instance as config
 
 class Hdf5Manager:
     """HDF5 Manager"""
-
-    files = [h5py.File(g, 'r') for g in glob.glob(os.path.join(
-        config.storage, '*.h5')) if not g.endswith('blocks.h5')]
+    
+    files = []
+    for storage_parent in [config.storage] + (config.external_storage or []):
+        files += [h5py.File(g, 'r') for g in glob.glob(os.path.join(storage_parent, '*.h5'))]
     base = os.path.join(config.storage, 'blocks.h5')
+    if base in files:
+        files.remove(base)
+
     writable_file = None
     write_counter = 0
     _lock = Lock()
