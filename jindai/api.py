@@ -11,10 +11,9 @@ from collections import defaultdict
 from io import BytesIO
 from typing import IO, Union
 
-import jieba
 import pyotp
 from flask import Flask, Response, redirect, request, send_file
-from PIL import Image, ImageOps
+from PIL import Image, ImageOps, ImageFile
 from PyMongoWrapper import F, Fn, MongoOperand, ObjectId
 
 from .dbquery import DBQuery, parser
@@ -28,6 +27,8 @@ from .models import (Dataset, History, MediaItem, Meta, Paragraph,
                      TaskDBO, Token, User, Term)
 from .storage import expand_path, truncate_path
 
+
+ImageFile.LOAD_TRUNCATED_IMAGES = True
 app = Flask(__name__)
 app.config['SECRET_KEY'] = config.secret_key
 app.json_encoder = JSONEncoder

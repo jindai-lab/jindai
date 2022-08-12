@@ -8,13 +8,14 @@ from typing import Union
 import imagehash
 from bson import binary
 from flask import Response, request
-from PIL import Image
+from PIL import Image, ImageFile
 from PyMongoWrapper import F, ObjectId
 from jindai import *
 from jindai.helpers import serve_file
 from jindai.models import MediaItem, Paragraph
 from plugins.imageproc import MediaItemStage
 
+ImageFile.LOAD_TRUNCATED_IMAGES = True
 
 # HELPER FUNCS
 def single_item(pid: str, iid: str):
@@ -39,18 +40,12 @@ def single_item(pid: str, iid: str):
     return []
 
 
-def image_or_buf(image):
+def _hash_image(image, method):
     if isinstance(image, BytesIO):
         image.seek(0)
-        try:
-            Image.open(image).thumbnail((128, 128))
-        except OSError:
-            image.seek(0, 2)
-            image.write(b'\xff\xd9')
-            image.seek(0)
         image = Image.open(image)
-    
-    return image
+    hash_val = getattr(imagehash, method)(image)
+    return bytes.fromhex(str(hash_val))
 
 
 def dhash(image: Union[Image.Image, BytesIO]) -> bytes:
@@ -62,9 +57,7 @@ def dhash(image: Union[Image.Image, BytesIO]) -> bytes:
     Returns:
         bytes: hash
     """
-    hash_val = imagehash.dhash(image_or_buf(image))
-    hash_val = bytes.fromhex(str(hash_val))
-    return hash_val
+    return _hash_image(image, 'dhash')
 
 
 def whash(image: Union[Image.Image, BytesIO]) -> bytes:
@@ -76,9 +69,7 @@ def whash(image: Union[Image.Image, BytesIO]) -> bytes:
     Returns:
         bytes: hash
     """
-    hash_val = imagehash.whash(image_or_buf(image))
-    hash_val = bytes.fromhex(str(hash_val))
-    return hash_val
+    return _hash_image(image, 'whash')
 
 
 def bitcount(val):
