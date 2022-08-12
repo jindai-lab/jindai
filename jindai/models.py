@@ -7,7 +7,7 @@ from hashlib import sha1
 from io import BytesIO
 import pyotp
 
-from PIL import Image
+from PIL import Image, ImageFile
 from PyMongoWrapper import F, Fn, Var
 from PyMongoWrapper.dbo import (Anything, DbObjectCollection,
                                 DbObjectInitializer, MongoConnection, classproperty)
@@ -16,6 +16,7 @@ from .config import instance as config
 from .storage import safe_open
 
 db = MongoConnection('mongodb://' + config.mongo + '/' + config.mongoDbName)
+ImageFile.LOAD_TRUNCATED_IMAGES = True
 
 
 class StringOrDate(DbObjectInitializer):
