@@ -19,7 +19,7 @@ import requests
 import werkzeug.wrappers.response
 from bson import ObjectId
 from flask import Response, jsonify, request, send_file, stream_with_context
-from PIL import Image
+from PIL.Image import Image
 from PyMongoWrapper import MongoOperand, QueryExprEvaluator
 from PyMongoWrapper.dbo import create_dbo_json_decoder, create_dbo_json_encoder
 
@@ -359,7 +359,7 @@ class JSONEncoder(json.JSONEncoder):
             return o.tolist()
         if isinstance(o, np.int32):
             return o.tolist()
-        if isinstance(o, Image.Image):
+        if isinstance(o, Image):
             return str(o)
         if isinstance(o, datetime.datetime):
             return o.isoformat() + "Z"
