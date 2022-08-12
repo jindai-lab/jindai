@@ -92,12 +92,8 @@ class Hdf5Manager:
             Hdf5Manager.writable_file = h5py.File(Hdf5Manager.base, 'w')
             Hdf5Manager.writable_file.close()
             Hdf5Manager.writable_file = None
-
-        if Hdf5Manager.writable_file and Hdf5Manager.writable_file.mode != 'r':
-            Hdf5Manager.writable_file.close()
-            Hdf5Manager.writable_file = None
-            
-        elif not Hdf5Manager.writable_file:
+        
+        if not Hdf5Manager.writable_file:
             Hdf5Manager.writable_file = h5py.File(Hdf5Manager.base, 'r')
 
         key = f'data/{item_id}'
