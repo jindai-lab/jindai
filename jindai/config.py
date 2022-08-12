@@ -26,7 +26,8 @@ class ConfigObject:
             'concurrent': 3,
             'plugins': ['*'],
             'allowed_ips': {},
-            'ui_proxy': ''
+            'ui_proxy': '',
+            'port': 8370,
         }
         if config_file is None:
             if '-c' in sys.argv:
