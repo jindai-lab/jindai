@@ -39,6 +39,20 @@ def single_item(pid: str, iid: str):
     return []
 
 
+def image_or_buf(image):
+    if isinstance(image, BytesIO):
+        image.seek(0)
+        try:
+            Image.open(image).thumbnail((128, 128))
+        except OSError:
+            image.seek(0, 2)
+            image.write(b'\xff\xd9')
+            image.seek(0)
+        image = Image.open(image)
+    
+    return image
+
+
 def dhash(image: Union[Image.Image, BytesIO]) -> bytes:
     """Generate d-hash for image
 
@@ -48,10 +62,7 @@ def dhash(image: Union[Image.Image, BytesIO]) -> bytes:
     Returns:
         bytes: hash
     """
-    if isinstance(image, BytesIO):
-        image.seek(0)
-        image = Image.open(image)
-    hash_val = imagehash.dhash(image)
+    hash_val = imagehash.dhash(image_or_buf(image))
     hash_val = bytes.fromhex(str(hash_val))
     return hash_val
 
@@ -65,10 +76,7 @@ def whash(image: Union[Image.Image, BytesIO]) -> bytes:
     Returns:
         bytes: hash
     """
-    if isinstance(image, BytesIO):
-        image.seek(0)
-        image = Image.open(image)
-    hash_val = imagehash.whash(image)
+    hash_val = imagehash.whash(image_or_buf(image))
     hash_val = bytes.fromhex(str(hash_val))
     return hash_val
 
@@ -158,7 +166,7 @@ class ImageHash(MediaItemStage):
             data = i.data
             if not data:
                 return None
-
+            
             if not i_dhash:
                 i_dhash = dhash(data) or ''
             if not i_whash:
