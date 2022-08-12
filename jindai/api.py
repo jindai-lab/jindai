@@ -524,8 +524,8 @@ def merge_items(pairs):
                 images=[ObjectId(rese)], pdate=None)
             for para in Paragraph.query(F.images == dele.id):
                 result.keywords += para.keywords
-                if (not result.source.get('url') or 'restored' in result.source['url'])\
-                        and para.source.get('url'):
+                if not result.source.get('url', '').startswith('http')\
+                    and para.source.get('url'):
                     result.source = para.source
                 if not result.pdate:
                     result.pdate = para.pdate
