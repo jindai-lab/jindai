@@ -946,7 +946,7 @@ def run_service(host='0.0.0.0', port=None):
     plugin_ctx = get_context('plugins', Plugin)
     app.plugins = PluginManager(plugin_ctx, app)
 
-    os.environ['FLASK_ENV'] = 'development'
+    # os.environ['FLASK_ENV'] = 'development'
     if port is None:
-        port = os.environ.get('PORT', 8370)
+        port = config.port
     app.run(debug=True, host=host, port=int(port), threaded=True)
