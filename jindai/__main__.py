@@ -309,6 +309,23 @@ def plugin_export(output: str, infiles):
         for filename in expand_patterns(infiles, []):
             arcname = output + '/' + filename
             zout.write(filename, arcname)
+            
+            
+@cli.command('clear-duplicates')
+@click.option('--limit', '-l', type=int, default=0)
+def clear_duplicates(limit: int):
+    """Clear duplicate media items
+    
+    :param limit: limit number of items to check
+    :type limit: int
+    """
+    from .models import Paragraph, MediaItem
+    rs = MediaItem.query(~F.dhash.empty(), ~F.whash.empty()).sort(-F.id)
+    if limit: rs = rs.limit(limit)
+    for m in tqdm(rs):
+        dups = list(MediaItem.query(F.dhash == m.dhash, F.whash == m.whash))
+        if dups:
+            Paragraph.merge_by_mediaitems(m, dups)
 
 
 @cli.command('web-service')

@@ -279,6 +279,37 @@ class Paragraph(db.DbObject):
             return lambda x: x
 
         return lambda x: temp(**x.as_dict())
+    
+    @staticmethod
+    def merge_by_mediaitems(reserved, duplicates):
+        result = Paragraph.first(F.images == reserved.id) or Paragraph(images=[reserved])
+        references = list(Paragraph.query(F.images.in_([dele.id for dele in duplicates])))
+        to_delete = {x.id for x in duplicates}
+        
+        for para in references:
+            result.keywords += para.keywords
+            if not result.pdate and para.pdate:
+                result.pdate = para.pdate
+            
+            if isinstance(para.pdate, datetime.datetime):
+                if isinstance(result.pdate, datetime.datetime):
+                    result.pdate = min(para.pdate, result.pdate)
+                else:
+                    result.pdate = para.pdate
+            
+            if not result.source:
+                result.source = para.source
+            
+            if not result.source.get('url', '').startswith('http'):
+                result.source = para.source
+            
+            para.images = [i for i in para.images if i.id not in to_delete]
+            if para.images:
+                para.save()
+            else:
+                para.delete()
+
+        result.save()
 
     def __lt__(self, another):
         return id(self) < id(another)

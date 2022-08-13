@@ -2,10 +2,10 @@
 Auto tagging
 @chs 自动标签
 """
-from PyMongoWrapper import F, ObjectId, QueryExpressionError
+from PyMongoWrapper import F, Fn, ObjectId, QueryExpressionError, MongoOperand
 from jindai import PipelineStage, Plugin, parser
 from jindai.helpers import rest, execute_query_expr
-from jindai.models import db
+from jindai.models import db, Paragraph
 
 
 class AutoTag(db.DbObject):
@@ -13,24 +13,23 @@ class AutoTag(db.DbObject):
 
     cond = str
     tag = str
-    parsed = dict
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
+        self._parsed = {}
 
-    def get_parsed(self):
+    def parse(self):
         """Get parsed condition
 
         :return: parsed condition
         :rtype: dict
         """
-        if self.parsed == {}:
+        if not self._parsed:
             try:
-                self.parsed = parser.parse(self.cond)
-                self.save()
+                self._parsed = parser.parse(self.cond)
             except QueryExpressionError:
-                self.parsed = 'False'
-        return self.parsed
+                self._parsed = 'False'
+        return self._parsed
 
 
 class ApplyAutoTags(PipelineStage):
@@ -45,7 +44,7 @@ class ApplyAutoTags(PipelineStage):
 
     def resolve(self, paragraph):
         for i in self.ats:
-            parsed, tag = i.get_parsed(), i.tag
+            parsed, tag = i.parse(), i.tag
             try:
                 if execute_query_expr(parsed, paragraph):
                     if tag not in paragraph.keywords:
@@ -69,13 +68,21 @@ class AutoTaggingPlugin(Plugin):
 
         @app.route('/api/plugins/autotags', methods=['POST', 'PUT', 'GET'])
         @rest()
-        def autotags_list(tag='', cond='', delete=False, ids=None):
+        def autotags_list(tag='', cond='', delete=False, ids=None, apply=None):
             if ids is None:
                 ids = []
             if tag:
                 AutoTag(tag=tag, cond=cond).save()
             elif delete:
                 AutoTag.query(F.id.in_([ObjectId(i) for i in ids])).delete()
+            elif apply:
+                a = AutoTag.first(F.id == apply)
+                if not a:
+                    return '', 404
+                cond = a.parse()
+                if a.tag.startswith('*'):
+                    cond = MongoOperand(cond) & (~F.keywords.regex(r'^\*'))
+                Paragraph.query(cond).update(Fn.addToSet(keywords=a.tag))
             else:
                 return list(AutoTag.query({}).sort('-_id'))
             return True

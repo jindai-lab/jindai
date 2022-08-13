@@ -171,7 +171,7 @@ class DBQuery:
             groupping = '''
                 addFields(group_id=filter(input=$keywords,as=t,cond=eq(substrCP($$t;0;1);"*")));
                 unwind(path=$group_id,preserveNullAndEmptyArrays=true);
-                addFields(group_id=ifNull($group_id;ifNull($source.url;$source.file)))
+                addFields(group_id=ifNull($group_id;ifNull(concat('id=';toString($_id));$source.file)))
             '''
         elif groups == 'source':
             groupping = 'addFields(group_id=ifNull($source.url;$source.file))'
@@ -180,8 +180,12 @@ class DBQuery:
 
         if groupping:
             groupping += '''
-                =>addFields(group_id=ifNull($group_id;ifNull($source.url;$source.file)))
-                =>groupby(id=$group_id, count=sum(1))=>addFields(keywords=[toString($group_id)])
+                =>addFields(group_id=ifNull($group_id;ifNull(concat('id=';toString($_id));$source.file)))
+                =>groupby(id=$group_id,count=sum(size($images)),images=push($images))
+                =>addFields(
+                    images=reduce(input=$images,initialValue=[],in=setUnion($$value;$$this)),
+                    keywords=cond(regexMatch(regex=`^\*`,input=$group_id);[toString($group_id)];$keywords)
+                )
             '''
             groupping = parser.parse(groupping)
 
@@ -208,14 +212,18 @@ class DBQuery:
 
         sort = parser.parse_sort(sort)
 
-        if sort and sort != [('_id', 1)]:
-            if sort == [('random', 1)]:
-                agg.append({'$sample': {'size': limit}})
-                limit = 0
-                skip = 0
-            else:
-                agg.append(
-                    {'$sort': SON(sort)})
+        if not sort or sort == [('_id', 1)]:
+            if not [stage for stage in agg if '$sort' in stage]:
+                agg.append({
+                    '$sort': SON([('pdate', -1), ('_id', 1)])
+                })
+        elif sort == [('random', 1)]:
+            agg.append({'$sample': {'size': limit}})
+            limit = 0
+            skip = 0
+        else:
+            agg.append(
+                {'$sort': SON(sort)})
         if skip > 0:
             agg.append({'$skip': skip})
         if limit > 0:
