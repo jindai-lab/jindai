@@ -515,26 +515,9 @@ def merge_items(pairs):
        the Paragraphs where they locate
     """
     for rese, dele in pairs:
-        dele = MediaItem.first(F.id == dele)
-        if not dele:
-            continue
-
-        if rese:
-            result = Paragraph.first(F.images == ObjectId(rese)) or Paragraph(
-                images=[ObjectId(rese)], pdate=None)
-            for para in Paragraph.query(F.images == dele.id):
-                result.keywords += para.keywords
-                if not result.source.get('url', '').startswith('http')\
-                    and para.source.get('url'):
-                    result.source = para.source
-                if not result.pdate:
-                    result.pdate = para.pdate
-            if not result.pdate:
-                result.pdate = datetime.datetime.utcnow()
-            result.save()
-
-        Paragraph.query(F.images == dele.id).update(Fn.pull(images=dele.id))
-        dele.delete()
+        rese, dele = MediaItem.first(F.id == rese), MediaItem.first(F.id == dele)
+        if rese and dele:
+            Paragraph.merge_by_mediaitems(rese, [dele])
 
     Paragraph.query(F.images == []).delete()
 
@@ -932,6 +915,14 @@ def index(path='index.html'):
     return serve_file('ui/dist/index.html')
 
 
+def prepare_plugins():
+    if os.path.exists('restarting'):
+        os.unlink('restarting')
+
+    plugin_ctx = get_context('plugins', Plugin)
+    app.plugins = PluginManager(plugin_ctx, app)
+
+
 def run_service(host='0.0.0.0', port=None):
     """Run API web service
 
@@ -940,13 +931,7 @@ def run_service(host='0.0.0.0', port=None):
     :param port: Port, defaults to None
     :type port: int, optional
     """
-    if os.path.exists('restarting'):
-        os.unlink('restarting')
-
-    plugin_ctx = get_context('plugins', Plugin)
-    app.plugins = PluginManager(plugin_ctx, app)
-
-    # os.environ['FLASK_ENV'] = 'development'
+    prepare_plugins()
     if port is None:
         port = config.port
     app.run(debug=True, host=host, port=int(port), threaded=True)

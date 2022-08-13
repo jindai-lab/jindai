@@ -971,17 +971,18 @@ class MongoCollectionBatchOper(PipelineStage):
 
         _assert(isinstance(updates, list))
         for tup in updates:
-            _assert(len(tup) == 2, updates)
-            query, update = tup
-            if isinstance(update, dict):
-                assert len(update) == 1, 'Wrong format for update'
-                for k in update:
-                    assert k.startswith('$'), 'Wrong format for update'
-            elif isinstance(update, list):
-                pass
-            else:
-                assert False, 'Wrong format for update'
-            self.updates.append((query, update))
+            _assert(len(tup) > 2, updates)
+            query, *updates = tup
+            for update in updates:
+                if isinstance(update, dict):
+                    assert len(update) == 1, 'Wrong format for update'
+                    for k in update:
+                        assert k.startswith('$'), 'Wrong format for update'
+                elif isinstance(update, list):
+                    pass
+                else:
+                    assert False, 'Wrong format for update'
+                self.updates.append((query, update))
 
     def summarize(self, _):
         for query, update in self.updates:
