@@ -42,6 +42,7 @@ parser = QueryExprParser(
             Fn.lookup(from_='mediaitem', localField='images',
                       foreignField='_id', as_='images')()
         ],
+        'bytes': bytes.fromhex,
         'begin': lambda x: F.keywords.regex('^' + re.escape(x))
     },
     force_timestamp=False,

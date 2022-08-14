@@ -1,10 +1,14 @@
 """CLI for jindai"""
 
 import base64
+from ctypes import Union
+from curses.ascii import isdigit
 import datetime
 import json
+from multiprocessing.connection import wait
 import os
 import re
+from threading import Thread
 import zipfile
 from io import BytesIO
 from typing import Dict, Iterable
@@ -19,8 +23,8 @@ from tqdm import tqdm
 from PyMongoWrapper import ObjectId
 from PyMongoWrapper.dbo import create_dbo_json_encoder
 from . import Plugin, PluginManager, Task, safe_open, expand_patterns, config
-from .api import run_service
-from .helpers import get_context
+from .api import run_service, prepare_plugins
+from .helpers import get_context, safe_import
 from .models import F, MediaItem, Meta, TaskDBO, User
 
 MongoJSONEncoder = create_dbo_json_encoder(json.encoder.JSONEncoder)
@@ -313,48 +317,87 @@ def plugin_export(output: str, infiles):
 
 @cli.command('clear-duplicates')
 @click.option('--limit', '-l', type=int, default=0)
-@click.option('--offset', '-s', type=int, default=0)
-def clear_duplicates(limit: int, offset: int):
+@click.option('--offset', '-s', type=str, default='')
+@click.option('--maxdups', '-m', type=int, default=10)
+def clear_duplicates(limit: int, offset: str, maxdups: int):
     """Clear duplicate media items
 
     :param limit: limit number of items to check
     :type limit: int
     """
+    
+    if len(offset) == 24:
+        offset = F.id < ObjectId(offset)
+    else:
+        offset = {}
+    
     from .models import Paragraph, MediaItem
     
-    rs = MediaItem.query(~F.dhash.empty(), ~F.whash.empty()).sort(-F.id)
+    rs = MediaItem.query(~F.dhash.empty(), ~F.whash.empty(), offset).sort(-F.id)
     if limit: rs = rs.limit(limit)
-    for m in tqdm(rs, total=min(limit, rs.count()) if limit else rs.count()):
-        dups = list(MediaItem.query(F.dhash == m.dhash, F.whash == m.whash, F.id != m.id))
-        if len(dups) > 10:
-            print(m.id, m.dhash, len(dups))
-            continue
-            
-        if dups:
-            Paragraph.merge_by_mediaitems(m, dups)
+    
+    def _around(m, ratio=0.1):
+        return (F.width <= m.width * (1+ratio)) & (F.width >= m.width * (1-ratio)) & \
+                (F.height <= m.height * (1+ratio)) & (F.height >= m.height * (1-ratio)) 
+                
+    cleared = 0
+    
+    m = MediaItem()
+    
+    try:
+        for m in tqdm(rs, total=min(limit, rs.count()) if limit else rs.count()):
+            dups = list(MediaItem.query(F.dhash == m.dhash, F.whash == m.whash, F.id != m.id, _around(m)))
+            if  len(dups) > maxdups:
+                print(m.id, m.dhash.hex(), len(dups))
+                continue
+                
+            if dups:
+                Paragraph.merge_by_mediaitems(m, dups)
+                cleared += len(dups)
+    except KeyboardInterrupt:
+        pass
+    except Exception as ex:
+        print(ex)
+
+    print(cleared, 'duplicates merged.')
+    if m: print('You may continue with offset', m.id)
 
 
 @cli.command('web-service')
 @click.option('--port', default=8370, type=int)
-def web_service(port: int):
+@click.option('--deployment', '-d', default=False, flag_value=True)
+def web_service(port: int, deployment: bool):
     """Run web service on port
 
     :param port: port number
     :type port: int
     """
-    run_service(port=port)
+    from .api import app
+    prepare_plugins()
+    if deployment:
+        safe_import('waitress')
+        from waitress import serve
+        #th = Thread(target=lambda: \
+        serve(app, host='0.0.0.0', port=port, threads=8)
+        #)
+        #th.start()
+        #th.join()
+    else:
+        run_service(port=port)
 
 
 @cli.command('ipython')
 def call_ipython():
     from IPython import embed
-    os.chdir(os.path.dirname(os.path.abspath(__file__)))
+    os.chdir(os.path.join(os.path.dirname(os.path.abspath(__file__)), '..'))
     import jindai
     from PyMongoWrapper import F, Fn, Var
     from bson import SON, Binary, ObjectId
     import sys
     import glob
     from tqdm import tqdm
+    from concurrent.futures import ThreadPoolExecutor
+    tpe = ThreadPoolExecutor(os.cpu_count())
     init = _init_plugins
     locals().update(**jindai.__dict__)
 

@@ -18,6 +18,11 @@ from pdf2image import convert_from_path as _pdf_convert
 
 from .config import instance as config
 
+from flask import Flask, Response, request
+storage_app = Flask(__name__)    
+storage_app.secret_key = config.secret_key
+
+
 
 class Hdf5Manager:
     """HDF5 Manager"""
@@ -399,8 +404,10 @@ def safe_open(path: str, mode='rb', **params):
             if config.hdf5_proxy:
                 return BytesIO(_try_download(config.hdf5_proxy + item_id))
             return Hdf5Manager.read(item_id)
-
-        return _Hdf5WriteBuffer(item_id)
+        else:
+            if config.hdf5_proxy:
+                return _RequestBuffer(config.hdf5_proxy + item_id)
+            return _Hdf5WriteBuffer(item_id)
 
     fpath = expand_path(path)
 
@@ -448,3 +455,25 @@ def truncate_path(path, base=None):
     if path.startswith(base):
         return path[len(base):].replace('\\', '/')
     return path
+
+    
+@storage_app.route('/<iid>', methods=['GET'])
+def get_item(iid):
+    return Response(Hdf5Manager.read(iid), content_type='application/octstream')
+
+@storage_app.route('/<iid>', methods=['PUT', 'POST'])
+def put_item(iid):
+    with Hdf5Manager() as mgr:
+        mgr.write(request.data, iid)
+    return 'OK'
+
+storage_app.debug = config.debug    
+
+
+def serve_storage(port, host='0.0.0.0'):
+    from waitress import serve
+    serve(storage_app, host='0.0.0.0', port=port, threads=8)
+    
+
+if __name__ == '__main__':
+    serve_storage(config.port)

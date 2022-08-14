@@ -258,49 +258,54 @@ class Hashing(Plugin):
         dbq.limit = 0
         dbq.raw = False
 
-        groups = dbq.groups in ('both', 'group')
-        archive = dbq.groups in ('both', 'source')
+        groupby = dbq.groups
+        dbq.groups = 'none'
 
-        if groups:
-            return single_item('', iid)
-        else:
-            image_item = MediaItem.first(F.id == iid)
-            if image_item.dhash is None:
-                return
-            pgroups = [g
-                       for g in (Paragraph.first(F.images == ObjectId(iid)) or Paragraph()).keywords
-                       if g.startswith('*')
-                       ] or [(Paragraph.first(F.images == ObjectId(iid))
-                              or Paragraph()).source.get('url', '')]
-            dha, dhb = to_int(image_item.dhash), to_int(image_item.whash)
-            results = []
-            groupped = {}
+        image_item = MediaItem.first(F.id == iid)
+        if image_item.dhash is None:
+            ImageHash().resolve_image(image_item, None)
+            
+        if image_item.dhash is None:
+            return []
+            
+        pgroups = [g
+                    for g in (Paragraph.first(F.images == ObjectId(iid)) or Paragraph()).keywords
+                    if g.startswith('*')
+                    ] or [(Paragraph.first(F.images == ObjectId(iid))
+                            or Paragraph()).source.get('url', '')]
+        dha, dhb = to_int(image_item.dhash), to_int(image_item.whash)
+        results = []
+        groupped = {}
 
-            for paragraph in dbq.fetch_all_rs():
-                for i in paragraph.images:
-                    if i.id == image_item.id:
-                        continue
-                    if i.flag != 0 or i.dhash is None or i.dhash == b'':
-                        continue
-                    dha1, dhb1 = to_int(i.dhash), to_int(i.whash)
-                    i.score = bitcount(dha ^ dha1) + bitcount(dhb ^ dhb1)
-                    new_paragraph = Paragraph(**paragraph.as_dict())
-                    new_paragraph.images = [i]
-                    new_paragraph.score = i.score
-                    if archive:
+        for paragraph in dbq.fetch_all_rs():
+            for i in paragraph.images:
+                if i.id == image_item.id:
+                    continue
+                if i.flag != 0 or i.dhash is None or i.dhash == b'':
+                    continue
+                dha1, dhb1 = to_int(i.dhash), to_int(i.whash)
+                i.score = bitcount(dha ^ dha1) + bitcount(dhb ^ dhb1)
+                new_paragraph = Paragraph(**paragraph.as_dict())
+                new_paragraph.images = [i]
+                new_paragraph.score = i.score
+                if groupby != 'none':
+                    if groupby == 'group':
                         groups = [
-                            g for g in paragraph.keywords if g.startswith('*')]
-                        for group in groups or [new_paragraph.source['url']]:
-                            if group not in pgroups and \
-                                (group not in groupped or groupped[group].score >
-                                    new_paragraph.score):
-                                groupped[group] = new_paragraph
+                            g for g in paragraph.keywords if g.startswith('*')] or [new_paragraph.source['url']]
                     else:
-                        results.append(new_paragraph)
+                        groups = [paragraph[groupby] or str(paragraph.id)]
 
-            if archive:
-                results = list(groupped.values())
+                    for group in groups:
+                        if group not in pgroups and \
+                            (group not in groupped or groupped[group].score >
+                                new_paragraph.score):
+                            groupped[group] = new_paragraph
+                else:
+                    results.append(new_paragraph)
 
-            results = sorted(results, key=lambda x: x.score)[
-                offset:offset + limit]
-            return single_item('', iid) + [{'spacer': 'spacer'}] + results
+        if groupped:
+            results = list(groupped.values())
+
+        results = sorted(results, key=lambda x: x.score)[
+            offset:offset + limit]
+        return single_item('', iid) + [{'spacer': 'spacer'}] + results
