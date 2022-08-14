@@ -515,7 +515,8 @@ def merge_items(pairs):
        the Paragraphs where they locate
     """
     for rese, dele in pairs:
-        rese, dele = MediaItem.first(F.id == rese), MediaItem.first(F.id == dele)
+        rese, dele = MediaItem.first(
+            F.id == rese), MediaItem.first(F.id == dele)
         if rese and dele:
             Paragraph.merge_by_mediaitems(rese, [dele])
 
@@ -671,12 +672,12 @@ def search(q='', req='', sort='', limit=100, offset=0,
 
     if count:
         return datasource.count()
-    
+
     results = _expand_results(datasource.fetch())
 
     History(user=logined(), queries=[q, req],
             created_at=datetime.datetime.utcnow()).save()
-    
+
     return {'results': results, 'query': datasource.query}
 
 
@@ -737,15 +738,21 @@ def set_datasets(action, **j):
 
 @app.route("/api/term/<field>", methods=['POST'])
 @rest()
-def query_terms(field, pattern, regex=False):
+def query_terms(field, pattern='', regex=False, scope=''):
     """Query terms"""
 
-    if regex:
-        pattern = F.term.regex(pattern) | F.aliases.regex(pattern)
-    else:
-        pattern = (F.term == pattern) | (F.aliases == pattern)
-
-    return list(Term.query(F.field == field, pattern).limit(100))
+    if pattern:
+        if regex:
+            pattern = F.term.regex(pattern) | F.aliases.regex(pattern)
+        else:
+            pattern = (F.term == pattern) | (F.aliases == pattern)
+        return list(Term.query(F.field == field, pattern).limit(100))
+    elif scope:
+        return [i['_id'] for i in Paragraph.aggregator.match(
+                parser.parse(scope)
+                ).sort(_id=-1).limit(1000).unwind('$' + field).group(
+                _id='$' + field, count=Fn.sum(1)
+                ).sort(count=-1).limit(100).perform(raw=True)]
 
 
 @app.route("/api/image/<coll>/<storage_id>.<ext>")

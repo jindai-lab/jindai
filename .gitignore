@@ -1,7 +1,7 @@
 .vscode/
 .DS_*
 config*.yaml
-*.zip
+dump*
 temp_*.py
 
 # Byte-compiled / optimized / DLL files

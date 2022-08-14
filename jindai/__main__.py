@@ -309,19 +309,20 @@ def plugin_export(output: str, infiles):
         for filename in expand_patterns(infiles, []):
             arcname = output + '/' + filename
             zout.write(filename, arcname)
-            
-            
+
+
 @cli.command('clear-duplicates')
 @click.option('--limit', '-l', type=int, default=0)
 def clear_duplicates(limit: int):
     """Clear duplicate media items
-    
+
     :param limit: limit number of items to check
     :type limit: int
     """
     from .models import Paragraph, MediaItem
     rs = MediaItem.query(~F.dhash.empty(), ~F.whash.empty()).sort(-F.id)
-    if limit: rs = rs.limit(limit)
+    if limit:
+        rs = rs.limit(limit)
     for m in tqdm(rs):
         dups = list(MediaItem.query(F.dhash == m.dhash, F.whash == m.whash))
         if dups:
@@ -337,6 +338,22 @@ def web_service(port: int):
     :type port: int
     """
     run_service(port=port)
+
+
+@cli.command('ipython')
+def call_ipython():
+    from IPython import embed
+    os.chdir(os.path.dirname(os.path.abspath(__file__)))
+    import jindai
+    from PyMongoWrapper import F, Fn, Var
+    from bson import SON, Binary, ObjectId
+    import sys
+    import glob
+    from tqdm import tqdm
+    init = _init_plugins
+    locals().update(**jindai.__dict__)
+
+    embed(colors="neutral")
 
 
 if __name__ == '__main__':
