@@ -324,7 +324,7 @@ def clear_duplicates(limit: int, offset: int):
     
     rs = MediaItem.query(~F.dhash.empty(), ~F.whash.empty()).sort(-F.id)
     if limit: rs = rs.limit(limit)
-    for m in tqdm(rs):
+    for m in tqdm(rs, total=min(limit, rs.count()) if limit else rs.count()):
         dups = list(MediaItem.query(F.dhash == m.dhash, F.whash == m.whash, F.id != m.id))
         if len(dups) > 10:
             print(m.id, m.dhash, len(dups))
