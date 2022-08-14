@@ -890,6 +890,7 @@ def set_meta(**vals):
 
 
 @app.route('/api/plugins', methods=['GET'])
+@rest()
 def get_plugins():
     return [type(pl).__name__ for pl in app.plugins]
 

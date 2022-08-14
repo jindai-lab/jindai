@@ -313,17 +313,25 @@ def plugin_export(output: str, infiles):
             
 @cli.command('clear-duplicates')
 @click.option('--limit', '-l', type=int, default=0)
-def clear_duplicates(limit: int):
+@click.option('--offset', '-s', type=int, default=0)
+def clear_duplicates(limit: int, offset: int):
     """Clear duplicate media items
     
     :param limit: limit number of items to check
     :type limit: int
     """
     from .models import Paragraph, MediaItem
+    
     rs = MediaItem.query(~F.dhash.empty(), ~F.whash.empty()).sort(-F.id)
+
+    if offset: rs = rs.skip(offset)
     if limit: rs = rs.limit(limit)
     for m in tqdm(rs):
-        dups = list(MediaItem.query(F.dhash == m.dhash, F.whash == m.whash))
+        dups = list(MediaItem.query(F.dhash == m.dhash, F.whash == m.whash, F.id != m.id))
+        if len(dups) > 10:
+            print(m.id, m.dhash, len(dups))
+            continue
+            
         if dups:
             Paragraph.merge_by_mediaitems(m, dups)
 

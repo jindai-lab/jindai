@@ -188,9 +188,7 @@ def logined(role=''):
     if token and (not role or role in token.roles):
         return token.user
 
-    inet_addr = request.headers.get("X-Real-IP")
-    if not inet_addr:
-        inet_addr = request.remote_addr
+    inet_addr = request.headers.get("X-Real-IP") or request.remote_addr
 
     if inet_addr in config.allowed_ips:
         return config.allowed_ips[inet_addr]
