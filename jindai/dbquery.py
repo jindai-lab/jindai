@@ -32,7 +32,7 @@ def _object_id(params):
 
 
 parser = QueryExprParser(
-    abbrev_prefixes={None: 'keywords=', '?': 'source.url%'},
+    abbrev_prefixes={None: 'keywords=', '?': 'source.url%', '??': 'content%'},
     allow_spacing=True,
     functions={
         'groupby': _expr_groupby,
@@ -154,6 +154,8 @@ class DBQuery:
         self.mongocollections = mongocollections.split('\n') if isinstance(
             mongocollections, str) else mongocollections
 
+        if sort == 'id': sort = ''
+
         if len(self.query) > 1 and isinstance(self.query[0], str) and self.query[0].startswith('from'):
             self.mongocollections = [self.query[0][4:]]
             self.query = self.query[1:]
@@ -173,18 +175,23 @@ class DBQuery:
                 unwind(path=$group_id,preserveNullAndEmptyArrays=true);
                 addFields(group_id=ifNull($group_id;ifNull(concat('id=';toString($_id));$source.file)))
             '''
+            if not sort: sort = 'group_id,-pdate'
         elif groups == 'source':
             groupping = 'addFields(group_id=ifNull($source.url;$source.file))'
+            if not sort: sort = 'source'
         else:
             groupping = f'addFields(group_id=${groups})'
+            if not sort: sort = '-group_id'
 
         if groupping:
             groupping += '''
-                =>addFields(group_id=ifNull($group_id;ifNull(concat('id=';toString($_id));$source.file)))
-                =>groupby(id=$group_id,count=sum(size($images)),images=push($images))
+                =>addFields(gid=ifNull($group_id;ifNull(concat('id=';toString($_id));$source.file)))
+                =>groupby(id=$gid,count=sum(size($images)),images=push($images))
+                =>groupby(id=$_id)
                 =>addFields(
                     images=reduce(input=$images,initialValue=[],in=setUnion($$value;$$this)),
-                    keywords=cond(regexMatch(regex=`^\*`,input=$group_id);[toString($group_id)];$keywords)
+                    keywords=cond(regexMatch(regex=`^\*`,input=toString($group_id));[toString($group_id)];$keywords),
+                    group_id=$gid
                 )
             '''
             groupping = parser.parse(groupping)
