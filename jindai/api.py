@@ -34,7 +34,6 @@ app.config['SECRET_KEY'] = config.secret_key
 app.json_encoder = JSONEncoder
 app.json_decoder = JSONDecoder
 
-
 def _task_authorized():
     """Test if task is authorized to current user"""
 
@@ -851,6 +850,8 @@ def dbconsole(mongocollection='', query='', operation='', operation_params='', p
     mongo = Paragraph.db.database[mongocollection]
     query = parser.parse(query)
     operation_params = parser.parse(operation_params)
+    if isinstance(operation_params, dict) and list(operation_params) == ['keywords']:
+        operation_params = {'$addToSet': operation_params}
 
     if preview:
         return {
@@ -926,20 +927,18 @@ def index(path='index.html'):
 def prepare_plugins():
     if os.path.exists('restarting'):
         os.unlink('restarting')
-
     plugin_ctx = get_context('plugins', Plugin)
     app.plugins = PluginManager(plugin_ctx, app)
 
 
 def run_service(host='0.0.0.0', port=None):
-    """Run API web service
+    """Run API web service. Must run `prepare_plugins` first.
 
     :param host: Host, defaults to '0.0.0.0'
     :type host: str, optional
     :param port: Port, defaults to None
     :type port: int, optional
     """
-    prepare_plugins()
     if port is None:
         port = config.port
     app.run(debug=True, host=host, port=int(port), threaded=True)

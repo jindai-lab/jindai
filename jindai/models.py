@@ -229,7 +229,7 @@ class Paragraph(db.DbObject):
         if 'mongocollection' in self.__dict__:
             del self.mongocollection
 
-        self.keywords = list(set(self.keywords))
+        self.keywords = [k for k in set(self.keywords) if k.strip()]
 
         for field in ['keywords', 'author']:
             vals = self[field]
