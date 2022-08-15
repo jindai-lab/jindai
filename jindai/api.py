@@ -756,39 +756,15 @@ def query_terms(field, pattern='', regex=False, scope=''):
                 ).sort(count=-1).limit(100).perform(raw=True)]
 
 
-@app.route("/api/image/<coll>/<storage_id>.<ext>")
-@app.route("/api/image")
-@rest(cache=True)
-def resolve_media_item(coll=None, storage_id=None, ext=None):
-    """Serve media item"""
-
-    if coll and storage_id and len(storage_id) == 24:
-        para = Paragraph.get_coll(coll).first(F.id == storage_id)
-        item = MediaItem(para)
-        if item is None:
-            return Response('', 404)
-        source = item.source
-        source['block_id'] = str(item.id)
-    else:
-        source = request.args.to_dict()
-        
-    def _build_image_string(source):
-        if source.get('file') == 'blocks.h5':
-            assert 'block_id' in source
-            return f'hdf5/{source["block_id"]}'
-    
-        return f'object/{base64.urlsafe_b64encode(json.dumps(source, ensure_ascii=False).encode("utf-8"))}'
-        
-    return redirect('/images/' + _build_image_string(source))
-
-
 @app.route("/images/<path:image_path>")
 @rest(cache=True)
 def serve_image(image_path):
     
     def _parse_image_string(path):
         if path.startswith('hdf5/'):
-            source =  {'file': 'blocks.h5', 'block_id': path[5:]}
+            source = {'file': 'blocks.h5', 'block_id': path[5:]}
+        elif path.startswith('file/'):
+            source = {'file': path[5:]}
         else:
             source = json.loads(base64.urlsafe_b64decode(path[7:]).decode("utf-8"))
         return source

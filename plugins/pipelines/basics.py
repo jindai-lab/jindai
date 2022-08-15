@@ -196,6 +196,14 @@ class KeywordsFromTokens(PipelineStage):
     Set tokens as keywords and unset tokens field
     @chs 将检索词设为分词结果并删除词串字段
     """
+    
+    def __init__(self, append=False) -> None:
+        """
+        Args:
+            append (bool, optional): 添加到已有的关键词列表之后
+        """        
+        super().__init__()
+        self.append = append
 
     @staticmethod
     def remove_accents(input_str):
@@ -207,7 +215,7 @@ class KeywordsFromTokens(PipelineStage):
         words = [str(word).strip()
                          for word in set(paragraph.tokens) if word and str(word).strip()]
         words += [KeywordsFromTokens.remove_accents(word) for word in words]
-        paragraph.keywords = list(set(words))
+        paragraph.keywords = list(set((paragraph.keywords if self.append else []) + words))
         
         del paragraph.tokens
         return paragraph

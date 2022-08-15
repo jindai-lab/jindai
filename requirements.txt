@@ -28,5 +28,7 @@ ipython
 numpy
 PyWavelets
 pyotp
+rarfile
 unrar
 opencc-python-reimplemented
+waitress
