@@ -361,6 +361,8 @@ class JSONEncoder(json.JSONEncoder):
             return str(o)
         if isinstance(o, datetime.datetime):
             return o.isoformat() + "Z"
+        if isinstance(o, ObjectId):
+            return str(o)
 
         return JSONEncoderCls.default(self, o)
 

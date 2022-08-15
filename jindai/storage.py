@@ -15,10 +15,13 @@ import numpy as np
 import requests
 from urllib import request
 from pdf2image import convert_from_path as _pdf_convert
+from flask import Flask, Response, request
 
 from .config import instance as config
 
-from flask import Flask, Response, request
+import urllib3
+urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+
 storage_app = Flask(__name__)    
 storage_app.secret_key = config.secret_key
 
@@ -28,7 +31,7 @@ class Hdf5Manager:
     """HDF5 Manager"""
     
     files = []
-    for storage_parent in [config.storage] + (config.external_storage or []):
+    for storage_parent in [config.storage] + (config.external_storage.get('.', [])):
         files += [h5py.File(g, 'r') for g in glob.glob(os.path.join(storage_parent, '*.h5')) if not g.endswith(os.path.sep + 'blocks.h5')]
     base = os.path.join(config.storage, 'blocks.h5')
 
@@ -181,8 +184,8 @@ class _RequestBuffer(BytesIO):
         super().__init__()
 
     def close(self):
-        super().close()
         self.req.data = self.getvalue()
+        super().close()
         requests.Session().send(self.req.prepare())
 
 
@@ -297,19 +300,26 @@ def expand_path(path: Union[Tuple[str], str], allowed_locations=None):
         path, _ = path.split('#', 1)
 
     path = path.replace('/', os.path.sep)
-
+    
     if allowed_locations is None:
         allowed_locations = [
-            os.path.join(tempfile.gettempdir(), tempfile.gettempprefix()),
-            config.storage
+            tempfile.gettempdir(),
         ]
+    
+    folder = path.split(os.path.sep)[0]
+    if folder in config.external_storage:
+        allowed_locations = config.external_storage.get(folder, [])
+        path = path[len(folder)+1:]
 
     if allowed_locations and not path.startswith(tuple(allowed_locations)):
         if path.startswith((os.path.altsep or os.path.sep, os.path.sep)):
             path = path[1:]
-        path = os.path.join(config.storage, path)
+        for parent in allowed_locations:
+            tmpath = os.path.join(parent, path)
+            if os.path.exists(tmpath):
+                return tmpath
 
-    return path
+    return os.path.join(config.storage, path)
 
 
 def expand_patterns(patterns: Union[list, str, tuple], allowed_locations=None):

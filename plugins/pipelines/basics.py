@@ -11,7 +11,7 @@ from itertools import count as iter_count
 from PyMongoWrapper import F, QueryExprParser, ObjectId
 from PyMongoWrapper.dbo import DbObject, DbObjectCollection
 from jindai import PipelineStage, parser, safe_open
-from jindai.helpers import execute_query_expr, language_iso639, safe_import, WordStemmer as _Stemmer
+from jindai.helpers import JSONEncoder, execute_query_expr, safe_import, WordStemmer as _Stemmer
 from jindai.models import Dataset, Paragraph, db
 
 
@@ -335,9 +335,7 @@ class Export(PipelineStage):
         """
         super().__init__()
         self.extension = output_format
-        self.format = output_format
-        if output_format:
-            self.format = 'excel'
+        self.format = {'xlsx': 'excel'}.get(output_format, output_format)
         self.limit = limit
 
     def summarize(self, result):
@@ -345,11 +343,8 @@ class Export(PipelineStage):
         pandas = safe_import('pandas')
 
         def json_dump(val):
-            try:
-                return json.dumps(val)
-            except Exception:
-                return str(val)
-
+            return JSONEncoder().encode(val)
+            
         result = [_.as_dict() if isinstance(
             _, DbObject) else _ for _ in result]
 
