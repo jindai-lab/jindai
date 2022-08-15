@@ -377,11 +377,7 @@ def web_service(port: int, deployment: bool):
     if deployment:
         safe_import('waitress')
         from waitress import serve
-        #th = Thread(target=lambda: \
         serve(app, host='0.0.0.0', port=port, threads=8)
-        #)
-        #th.start()
-        #th.join()
     else:
         run_service(port=port)
 

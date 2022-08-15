@@ -1,7 +1,9 @@
 """API Web Service"""
 
+import base64
 import datetime
 import hashlib
+import json
 import os
 import re
 import sys
@@ -25,7 +27,7 @@ from .helpers import (get_context, logined, rest, serve_file, language_iso639,
                       serve_proxy, JSONEncoder, JSONDecoder, ee)
 from .models import (Dataset, History, MediaItem, Meta, Paragraph,
                      TaskDBO, Token, User, Term)
-from .storage import expand_path, truncate_path
+from .storage import expand_path, safe_open, truncate_path
 
 
 ImageFile.LOAD_TRUNCATED_IMAGES = True
@@ -757,25 +759,42 @@ def query_terms(field, pattern='', regex=False, scope=''):
 @app.route("/api/image/<coll>/<storage_id>.<ext>")
 @app.route("/api/image")
 @rest(cache=True)
-def serve_image(coll=None, storage_id=None, ext=None):
-    """Serve images"""
+def resolve_media_item(coll=None, storage_id=None, ext=None):
+    """Serve media item"""
 
     if coll and storage_id and len(storage_id) == 24:
         para = Paragraph.get_coll(coll).first(F.id == storage_id)
         item = MediaItem(para)
-        buf = None
-        if item:
-            buf = item.data
+        if item is None:
+            return Response('', 404)
+        source = item.source
+        source['block_id'] = str(item.id)
     else:
-        item = MediaItem(source=request.args.to_dict())
-        filename = item.source.get('file', '')
-        for fkey, fmapped in config.file_serve.items():
-            if filename.startswith(fkey):
-                return redirect(fmapped + filename[len(fkey):])
+        source = request.args.to_dict()
+        
+    def _build_image_string(source):
+        if source.get('file') == 'blocks.h5':
+            assert 'block_id' in source
+            return f'hdf5/{source["block_id"]}'
+    
+        return f'object/{base64.urlsafe_b64encode(json.dumps(source, ensure_ascii=False).encode("utf-8"))}'
+        
+    return redirect('/images/' + _build_image_string(source))
 
-        buf = item.data
-        ext = item.source.get('url', item.source.get(
-            'file', '.')).rsplit('.', 1)[-1]
+
+@app.route("/images/<path:image_path>")
+@rest(cache=True)
+def serve_image(image_path):
+    
+    def _parse_image_string(path):
+        if path.startswith('hdf5/'):
+            source =  {'file': 'blocks.h5', 'block_id': path[5:]}
+        else:
+            source = json.loads(base64.urlsafe_b64decode(path[7:]).decode("utf-8"))
+        return source
+    
+    buf = MediaItem(source=_parse_image_string(image_path)).data
+    ext = image_path.rsplit('.', 1)[-1]
 
     def _thumb(path_or_io: Union[str, IO], size: int) -> bytes:
         """Thumbnail image

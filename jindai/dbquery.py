@@ -31,6 +31,30 @@ def _object_id(params):
     return ObjectId()
 
 
+def _begins_with(params):
+    if isinstance(params, MongoOperand):
+        params = params()
+    if not isinstance(params, str):
+        params = str(params)
+    return F.keywords.regex(f'^{re.escape(params)}')()
+
+
+def _sort(params):
+    
+    def _rectify(params):
+        if isinstance(params, MongoOperand):
+            params = params()
+        if isinstance(params, dict):
+            return params
+        if isinstance(params, str):
+            params = parser.parse_sort(params)
+        if isinstance(params, list):
+            return SON(params)
+        return params
+
+    return Fn.sort(_rectify(params))()
+
+
 parser = QueryExprParser(
     abbrev_prefixes={None: 'keywords=', '?': 'source.url%', '??': 'content%'},
     allow_spacing=True,
@@ -43,7 +67,8 @@ parser = QueryExprParser(
                       foreignField='_id', as_='images')()
         ],
         'bytes': bytes.fromhex,
-        'begin': lambda x: F.keywords.regex('^' + re.escape(x))
+        'begin': _begins_with,
+        'sort': _sort
     },
     force_timestamp=False,
 )
@@ -104,15 +129,13 @@ class DBQuery:
         if not query:
             return [{'$match': limitations}] if limitations else []
 
-        first_query = query[0]
-        if isinstance(first_query, str):
-            first_query = {'$match': parser.parse(first_query)}
-        elif isinstance(first_query, dict) and \
-                not [_ for _ in first_query if _.startswith('$') and _ not in ('$and', '$or')]:
-            first_query = {'$match': first_query}
-
-        if first_query != query[0]:
-            query[0] = first_query
+        for i in range(len(query)):
+            stage = query[i]
+            if isinstance(stage, str):
+                query[i] = {'$match': parser.parse(stage)}
+            elif isinstance(stage, dict) and \
+                    not [_ for _ in stage if _.startswith('$') and _ not in ('$and', '$or')]:
+                query[i] = {'$match': stage}
 
         query = DBQuery._merge_req(query, limitations)
         return query

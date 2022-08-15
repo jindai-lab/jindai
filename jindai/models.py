@@ -283,8 +283,8 @@ class Paragraph(db.DbObject):
     @staticmethod
     def merge_by_mediaitems(reserved, duplicates):
         result = Paragraph.first(F.images == reserved.id) or Paragraph(images=[reserved])
-        references = list(Paragraph.query(F.images.in_([dele.id for dele in duplicates])))
         to_delete = {x.id for x in duplicates}
+        references = list(Paragraph.query(F.images.in_(list(to_delete))))
         
         for para in references:
             result.keywords += para.keywords
@@ -297,17 +297,20 @@ class Paragraph(db.DbObject):
                 else:
                     result.pdate = para.pdate
             
-            if not result.source:
+            if not result.source or not result.source.get('url', '').startswith('http'):
                 result.source = para.source
-            
-            if not result.source.get('url', '').startswith('http'):
-                result.source = para.source
+                
+            if not result.author:
+                result.author = para.author
             
             para.images = [i for i in para.images if i.id not in to_delete]
             if para.images:
                 para.save()
             else:
                 para.delete()
+                
+        for i in duplicates:
+            i.delete()
 
         result.save()
 
