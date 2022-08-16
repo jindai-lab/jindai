@@ -29,6 +29,7 @@ class ConfigObject:
             'mongoDbName': 'hamster',
             'rootpath': '',
             'storage': 'storage',
+            'external_storage': {},
             'file_serve': {},
             'secret_key': '!!seckey',
             'concurrent': 3,
@@ -44,7 +45,7 @@ class ConfigObject:
             ]:
                 if os.path.exists(config_file) and os.path.isfile(config_file):
                     break
-        
+
         with open(config_file, 'r', encoding='utf-8') as fin:
             self._orig.update(**yaml.safe_load(fin))
 

@@ -180,6 +180,7 @@ class ImageImportDataSource(DataSourceStage):
                         album.keywords += self.keywords
                         album.pdate = datetime.datetime.utcfromtimestamp(ftime)
                         album.dataset = self.dataset
+                        album.content = filename
 
                     i = MediaItem(source={'file': loc, 'url': '.' + extname},
                                   item_type=MediaItem.get_type(extname))

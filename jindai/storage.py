@@ -15,24 +15,24 @@ import numpy as np
 import requests
 from urllib import request
 from pdf2image import convert_from_path as _pdf_convert
-from flask import Flask, Response, request
+from flask import Flask, Response, request, send_file
 
 from .config import instance as config
 
 import urllib3
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
-storage_app = Flask(__name__)    
+storage_app = Flask(__name__)
 storage_app.secret_key = config.secret_key
-
 
 
 class Hdf5Manager:
     """HDF5 Manager"""
-    
+
     files = []
     for storage_parent in [config.storage] + (config.external_storage.get('.', [])):
-        files += [h5py.File(g, 'r') for g in glob.glob(os.path.join(storage_parent, '*.h5')) if not g.endswith(os.path.sep + 'blocks.h5')]
+        files += [h5py.File(g, 'r') for g in glob.glob(os.path.join(
+            storage_parent, '*.h5')) if not g.endswith(os.path.sep + 'blocks.h5')]
     base = os.path.join(config.storage, 'blocks.h5')
 
     writable_file = None
@@ -48,10 +48,10 @@ class Hdf5Manager:
         if Hdf5Manager.writable_file and Hdf5Manager.writable_file.mode != 'r+':
             Hdf5Manager.writable_file.close()
             Hdf5Manager.writable_file = None
-        
+
         if not Hdf5Manager.writable_file:
             Hdf5Manager.writable_file = h5py.File(Hdf5Manager.base, 'r+')
-        
+
         return self
 
     def __exit__(self, *_):
@@ -100,7 +100,7 @@ class Hdf5Manager:
             Hdf5Manager.writable_file = h5py.File(Hdf5Manager.base, 'w')
             Hdf5Manager.writable_file.close()
             Hdf5Manager.writable_file = None
-        
+
         if not Hdf5Manager.writable_file:
             Hdf5Manager.writable_file = h5py.File(Hdf5Manager.base, 'r')
 
@@ -300,12 +300,13 @@ def expand_path(path: Union[Tuple[str], str], allowed_locations=None):
         path, _ = path.split('#', 1)
 
     path = path.replace('/', os.path.sep)
-    
+
     if allowed_locations is None:
         allowed_locations = [
             tempfile.gettempdir(),
+            config.storage
         ]
-    
+
     folder = path.split(os.path.sep)[0]
     if folder in config.external_storage:
         allowed_locations = config.external_storage.get(folder, [])
@@ -314,6 +315,8 @@ def expand_path(path: Union[Tuple[str], str], allowed_locations=None):
     if allowed_locations and not path.startswith(tuple(allowed_locations)):
         if path.startswith((os.path.altsep or os.path.sep, os.path.sep)):
             path = path[1:]
+        if re.match(r'[A-Za-z]:\\', path):
+            path = path[3:]
         for parent in allowed_locations:
             tmpath = os.path.join(parent, path)
             if os.path.exists(tmpath):
@@ -413,7 +416,8 @@ def safe_open(path: str, mode='rb', **params):
         if mode == 'rb':
             if config.hdf5_proxy:
                 return BytesIO(_try_download(config.hdf5_proxy + item_id))
-            return Hdf5Manager.read(item_id)
+            buf = Hdf5Manager.read(item_id)
+            return BytesIO(buf)
         else:
             if config.hdf5_proxy:
                 return _RequestBuffer(config.hdf5_proxy + item_id)
@@ -429,13 +433,13 @@ def safe_open(path: str, mode='rb', **params):
                 return zip_file.open(zpath)
         else:
             return _ZipWriteBuffer(path, zpath)
-        
+
     elif '#rar/' in path:
         assert mode == 'rb'
         _, zpath = path.split('#rar/', 1)
         with rarfile.RarFile(fpath) as rar_file:
             return rar_file.open(zpath)
-        
+
     elif '#pdf/png:' in path:
         assert mode == 'rb'
         _, page = path.split('#pdf/png:', 1)
@@ -466,10 +470,31 @@ def truncate_path(path, base=None):
         return path[len(base):].replace('\\', '/')
     return path
 
-    
+
+@storage_app.route('/<iid>/<name>.<ext>', methods=['GET'])
 @storage_app.route('/<iid>', methods=['GET'])
-def get_item(iid):
-    return Response(Hdf5Manager.read(iid), content_type='application/octstream')
+def get_item(iid, name='', ext=''):
+    try:
+        buf = Hdf5Manager.read(iid)
+    except OSError:
+        return 'Not Found', 404
+
+    mimetype = {
+        'html': 'text/html',
+                'htm': 'text/html',
+                'png': 'image/png',
+                'jpg': 'image/jpeg',
+                'gif': 'image/gif',
+                'json': 'application/json',
+                'css': 'text/css',
+                'js': 'application/javascript',
+                'mp4': 'video/mp4'
+    }.get(ext, 'application/octet-stream')
+
+    resp = send_file(buf, mimetype)
+    resp.headers.add("Cache-Control", "public,max-age=86400")
+    return resp
+
 
 @storage_app.route('/<iid>', methods=['PUT', 'POST'])
 def put_item(iid):
@@ -477,13 +502,14 @@ def put_item(iid):
         mgr.write(request.data, iid)
     return 'OK'
 
-storage_app.debug = config.debug    
+
+storage_app.debug = config.debug
 
 
 def serve_storage(port, host='0.0.0.0'):
     from waitress import serve
     serve(storage_app, host='0.0.0.0', port=port, threads=8)
-    
+
 
 if __name__ == '__main__':
     serve_storage(config.port)
