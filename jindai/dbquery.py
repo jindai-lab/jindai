@@ -3,7 +3,7 @@ import re
 import jieba
 import datetime
 from bson import SON
-from PyMongoWrapper import MongoOperand, F, Fn, ObjectId, QueryExprParser
+from PyMongoWrapper import MongoOperand, F, Fn, Var, ObjectId, QueryExprParser
 
 from .models import Paragraph
 
@@ -39,8 +39,29 @@ def _begins_with(params):
     return F.keywords.regex(f'^{re.escape(params)}')()
 
 
+def _gid(params):
+    '''
+    => addFields(gid=filter(input=$keywords,as=t,cond=regexMatch(input=$$t,regex=`^\*`)))
+    => unwind(path=$gid,preserveNullAndEmptyArrays=true)
+    => addFields(gid=ifNull($gid;concat('id=';toString($_id))))
+    => groupby(id=$gid,pdate=max($pdate),count=sum(size($images)),images=push($images))
+    '''
+    if isinstance(params, MongoOperand):
+        params = params()
+    if not isinstance(params, dict):
+        params = {}
+    return [
+        Fn.addFields(
+            gid=Fn.filter(input=Var.keywords, as_='t', cond=Fn.regexMatch(
+                input="$$t", regex=r'^\*'))
+        ),
+        Fn.unwind(path=Var.gid, preserveNullAndEmptyArrays=True),
+        Fn.addFields(gid=Fn.ifNull(Var.gid, Fn.concat('id=', Fn.toString('$_id')))),
+    ]
+
+
 def _sort(params):
-    
+
     def _rectify(params):
         if isinstance(params, MongoOperand):
             params = params()
@@ -68,7 +89,8 @@ parser = QueryExprParser(
         ],
         'bytes': bytes.fromhex,
         'begin': _begins_with,
-        'sort': _sort
+        'sort': _sort,
+        'gid': _gid,
     },
     force_timestamp=False,
 )
@@ -178,7 +200,8 @@ class DBQuery:
         self.mongocollections = mongocollections.split('\n') if isinstance(
             mongocollections, str) else mongocollections
 
-        if sort == 'id': sort = ''
+        if sort == 'id':
+            sort = ''
 
         if len(self.query) > 1 and isinstance(self.query[0], str) and self.query[0].startswith('from'):
             self.mongocollections = [self.query[0][4:]]
@@ -199,13 +222,16 @@ class DBQuery:
                 unwind(path=$group_id,preserveNullAndEmptyArrays=true);
                 addFields(group_id=ifNull($group_id;ifNull(concat('id=';toString($_id));$source.file)))
             '''
-            if not sort: sort = 'group_id,-pdate'
+            if not sort:
+                sort = 'group_id,-pdate'
         elif groups == 'source':
             groupping = 'addFields(group_id=ifNull($source.url;$source.file))'
-            if not sort: sort = 'source'
+            if not sort:
+                sort = 'source'
         else:
             groupping = f'addFields(group_id=${groups})'
-            if not sort: sort = '-group_id'
+            if not sort:
+                sort = '-group_id'
 
         if groupping:
             groupping += '''

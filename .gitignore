@@ -3,6 +3,7 @@
 config*.yaml
 dump*
 temp_*.py
+*.h5
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
@@ -38,10 +39,9 @@ docs/_build/
 .ipynb_checkpoints
 
 sources*
-mp4
+ui/
 
-# all plugins except embedded ones should be excepted from main git repo
-# they should be installed and updated with plugin manager
+# all plugins should be excepted from main git repo
+# they can be installed and updated with plugin manager
 plugins/
 models_data/
-tl/

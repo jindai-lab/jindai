@@ -136,8 +136,7 @@ class TasksQueue(Plugin):
                 buf.seek(0)
                 return send_file(
                     buf, 'application/octstream',
-                    as_attachment=True,
-                    attachment_filename=os.path.basename(f"{task_id}.{result['__file_ext__']}"))
+                    download_name=os.path.basename(f"{task_id}.{result['__file_ext__']}"))
 
             return jsonify(result)
 
