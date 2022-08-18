@@ -212,9 +212,9 @@ class ImageHashDuplications(MediaItemStage):
 
     def summarize(self, _):
         k = tempfile.mktemp()
-        output_file = safe_open(k + '.tsv', 'w')
+        output_file = safe_open(k + '.tsv', 'wb')
         for line in self.results:
-            output_file.write(line)
+            output_file.write(line.encode('utf-8'))
         output_file.close()
         return PipelineStage.return_redirect(f'/api/plugins/compare?{k}')
 
