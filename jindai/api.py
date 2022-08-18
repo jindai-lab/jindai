@@ -27,7 +27,7 @@ from .helpers import (get_context, logined, rest, serve_file, language_iso639,
                       serve_proxy, JSONEncoder, JSONDecoder, ee)
 from .models import (Dataset, History, MediaItem, Meta, Paragraph,
                      TaskDBO, Token, User, Term)
-from .storage import expand_path, safe_open, truncate_path
+from .storage import expand_path, safe_open, truncate_path, safe_statdir, safe_find
 
 
 ImageFile.LOAD_TRUNCATED_IMAGES = True
@@ -209,31 +209,6 @@ def admin_users_del(username):
     return User.query(F.username == username).delete()
 
 
-def _file_detail(path):
-    """Get detailed status of the file"""
-
-    file_stat = os.stat(path)
-    return {
-        'name': os.path.basename(path),
-        'fullpath': path[len(config.storage):],
-        'ctime': file_stat.st_ctime,
-        'mtime': file_stat.st_mtime,
-        'size': file_stat.st_size,
-        'type': 'folder' if os.path.isdir(path) else 'file'
-    }
-
-
-def _file_find(root_path, pattern):
-    root_path = expand_path(root_path)
-    conds = re.compile('.*'.join([re.escape(cond)
-                       for cond in pattern.split() if cond]), flags=re.I)
-
-    for pwd, _, files in os.walk(root_path):
-        for f in files:
-            if conds.search(f):
-                yield os.path.join(pwd, f)
-
-
 @app.route('/api/storage/<path:path>', methods=['GET', 'POST'])
 @app.route('/api/storage/', methods=['GET', 'POST'])
 @rest()
@@ -243,18 +218,14 @@ def list_storage(path='', search=''):
     results = None
     if search:
         # path is a query
-        results = list(_file_find(path, search))
+        results = list(safe_find(path, search))
     else:
-        path = os.path.join(
-            config.storage, path) if path and '..' not in path else config.storage
-        if os.path.isdir(path):
-            results = [os.path.join(path, x) for x in os.listdir(
-                path) if not x.startswith(('@', '.'))]
-        else:
-            results = path
+        results = safe_statdir(path)
+        if len(results) == 0 and results[0]['type'] == 'file':
+            results = safe_open(path)
 
     if isinstance(results, list):
-        return sorted(map(_file_detail, results),
+        return sorted(results,
                       key=lambda x: x['ctime'], reverse=True)
     else:
         return send_file(results)
@@ -774,11 +745,19 @@ def resolve_media_item(coll=None, storage_id=None, ext=None):
         source = request.args.to_dict()
 
     def _build_image_string(source):
-        if source.get('file') == 'blocks.h5':
-            assert 'block_id' in source
-            return f'hdf5/{source["block_id"]}'
-
-        return f'object/{base64.urlsafe_b64encode(json.dumps(source, ensure_ascii=False).encode("utf-8")).decode("ascii")}'
+        fpath, url = source.get('file'), source.get('url')
+        if fpath:
+            if fpath == 'blocks.h5':
+                assert 'block_id' in source
+                return f'hdf5/{source["block_id"]}'
+            elif fpath.endswith('.pdf') and 'page' in source:
+                return f'file/{fpath}/__hash/pdf/{source["page"]}'
+            else:
+                return f'file/{fpath}'
+        elif url:
+            return url
+        else:
+            return f'object/{base64.urlsafe_b64encode(json.dumps(source, ensure_ascii=False).encode("utf-8")).decode("ascii")}'
 
     return redirect('/images/' + _build_image_string(source))
 

@@ -1,11 +1,9 @@
 """来自数据库
 """
 import datetime
-import glob
 import os
 import re
-import shutil
-import zipfile
+import time
 from collections import defaultdict
 from typing import Iterable, List
 from urllib.parse import urljoin
@@ -172,7 +170,7 @@ class ImageImportDataSource(DataSourceStage):
                 extname = loc.rsplit('.', 1)[-1].lower()
                 filename = loc.split('#')[0]
                 if extname in MediaItem.acceptable_extensions or loc.endswith('.mp4.thumb.jpg'):
-                    ftime = int(os.stat(filename).st_mtime)
+                    ftime = int(os.stat(filename).st_mtime) if os.path.exists(filename) else time.time()
 
                     album = albums[filename]
                     if not album.source:

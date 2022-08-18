@@ -32,3 +32,4 @@ rarfile
 unrar
 opencc-python-reimplemented
 waitress
+pysmb

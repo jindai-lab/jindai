@@ -325,32 +325,32 @@ def clear_duplicates(limit: int, offset: str, maxdups: int):
     :param limit: limit number of items to check
     :type limit: int
     """
-    
+
     if len(offset) == 24:
         offset = F.id < ObjectId(offset)
     else:
         offset = {}
-    
+
     from .models import Paragraph, MediaItem
-    
+
     rs = MediaItem.query(~F.dhash.empty(), ~F.whash.empty(), offset).sort(-F.id)
-    if limit: rs = rs.limit(limit)
-    
+    if limit:
+        rs = rs.limit(limit)
+
     def _around(m, ratio=0.1):
         return (F.width <= m.width * (1+ratio)) & (F.width >= m.width * (1-ratio)) & \
-                (F.height <= m.height * (1+ratio)) & (F.height >= m.height * (1-ratio)) 
-                
+            (F.height <= m.height * (1+ratio)) & (F.height >= m.height * (1-ratio))
+
     cleared = 0
-    
-    m = MediaItem()
-    
+
     try:
         for m in tqdm(rs, total=min(limit, rs.count()) if limit else rs.count()):
-            dups = list(MediaItem.query(F.dhash == m.dhash, F.whash == m.whash, F.id != m.id, _around(m)))
-            if  len(dups) > maxdups:
+            dups = list(MediaItem.query(F.dhash == m.dhash,
+                        F.whash == m.whash, F.id != m.id, _around(m)))
+            if len(dups) > maxdups:
                 print(m.id, m.dhash.hex(), len(dups))
                 continue
-                
+
             if dups:
                 Paragraph.merge_by_mediaitems(m, dups)
                 cleared += len(dups)
@@ -360,7 +360,8 @@ def clear_duplicates(limit: int, offset: str, maxdups: int):
         print(ex)
 
     print(cleared, 'duplicates merged.')
-    if m: print('You may continue with offset', m.id)
+    if m:
+        print('You may continue with offset', m.id)
 
 
 @cli.command('web-service')

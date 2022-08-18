@@ -1,5 +1,8 @@
 """File/Network storage access"""
 
+from cgitb import handler
+import enum
+from fileinput import filename
 import glob
 import os
 import re
@@ -16,7 +19,9 @@ import requests
 from urllib import request
 from pdf2image import convert_from_path as _pdf_convert
 from flask import Flask, Response, request, send_file
-
+import urllib
+from smb.SMBHandler import SMBHandler
+            
 from .config import instance as config
 
 import urllib3
@@ -187,7 +192,139 @@ class _RequestBuffer(BytesIO):
         self.req.data = self.getvalue()
         super().close()
         requests.Session().send(self.req.prepare())
+        
+        
+class _SMBClient:
+    """SMB Client
+    """
+    
+    def __init__(self, smb_string) -> None:
+        self.connection_path = smb_string
+        
+        parsed = urllib.parse.urlparse(smb_string)
+        
+        from smb.SMBConnection import SMBConnection
+        self.conn = SMBConnection(parsed.username, parsed.password, '', '')
+        self.conn.connect(parsed.hostname)
+        
+    def listdir(self, path):
+        return self.conn.listPath(self.connection_path, path)
+        
+    def walk(self, start_path):
+        start_path = start_path.strip('/') + '/'
+        service, path = start_path.split('/', 1)
+        file_dirs = self.conn.listPath(service, path)
+        
+        files = [f.filename for f in file_dirs if not f.isDirectory]
+        dirs = [f.filename for f in file_dirs if f.isDirectory and f.filename != '.' and f.filename != '..']
+        yield start_path, dirs, files
+        
+        for d in dirs:
+            yield from self.walk('/'.join([start_path, d]))
+            
+    def mkdir(self, path):
+        service, path = path.split('/', 1)
+        self.conn.createDirectory(service, path)
 
+    def open(self, path, mode='rb'):
+        service, path = path.split('/', 1)
+        if mode == 'rb':
+            smb_opener = urllib.request.build_opener(SMBHandler)
+            fh = smb_opener.open(self.connection_path + service + path)
+            return fh
+        elif mode == 'wb':
+            return _SMBWriteBuffer(self.conn, service, path)
+        
+        
+class _SMBWriteBuffer(BytesIO):
+    
+    def __init__(self, conn, service, path):
+        super().__init__()
+        self.conn = conn
+        self.service = service
+        self.path = path
+        
+    def close(self):
+        self.conn.storeFile(self.service, self.path, self)
+        
+        
+def safe_statdir(path):
+    assert '/..' not in path and '\\..' not in path, 'Illegal path: found `..`'
+    path = expand_path(path)
+    
+    def _file_detail(path):
+        """Get detailed status of local file"""
+
+        file_stat = os.stat(path)
+        return {
+            'name': os.path.basename(path),
+            'fullpath': path[len(config.storage):],
+            'ctime': file_stat.st_ctime,
+            'mtime': file_stat.st_mtime,
+            'size': file_stat.st_size,
+            'type': 'folder' if os.path.isdir(path) else 'file'
+        }
+
+    def _listsmb(path):
+        return [
+                {
+                    'name': f.filename,
+                    'fullpath': path + '/' + f.filename,
+                    'ctime': f.create_time,
+                    'mtime': f.last_write_time,
+                    'size': f.alloc_size,
+                    'type': 'folder' if f.isDirectory else 'file'
+                }
+                for f in client.listdir(path)
+            ]
+    
+    parsed = urllib.parse.urlparse(path)
+    if parsed.scheme == '':
+        if os.path.isfile(path):
+            return [_file_detail(path)]
+        
+        if os.path.exists(path):
+            return [
+                _file_detail(os.path.join(path, x)) for x in os.listdir(path)
+                if not x.startswith(('@', '.'))
+            ]
+        
+    elif parsed.scheme == 'smb':
+        client = _SMBClient('smb://' + parsed.netloc)
+        path = parsed.path.lstrip('/')
+        if '/' not in path: path += '/'
+        
+        # try to handle the path as a directory
+        try:
+            return _listsmb(path)
+        except:
+            pass
+        
+        # assume it is a file, let's check the parent directory
+        parent, filename = path.rsplit('/', 1)
+        results = [f for f in client.listdir(parent) if f.filename == filename]
+        return results
+ 
+ 
+def safe_find(root_path, pattern):
+    root_path = expand_path(root_path)
+    parsed = urllib.parse.urlparse(root_path)
+    conds = re.compile('.*'.join([re.escape(cond)
+                    for cond in pattern.split() if cond]), flags=re.I)
+
+    if parsed.scheme == '':
+        target = os
+    elif parsed.scheme == 'smb':
+        target = _SMBClient('smb://' + parsed.netloc)
+        root_path = parsed.path
+        
+    for pwd, _, files in target.walk(root_path):
+        for f in files:
+            if conds.search(f):
+                yield os.path.join(pwd, f)
+
+
+        
 
 def _pdf_image(file: str, page: int, **_) -> BytesIO:
     """Get PNG file from PDF
@@ -303,14 +440,9 @@ def expand_path(path: Union[Tuple[str], str], allowed_locations=None):
 
     if allowed_locations is None:
         allowed_locations = [
-            tempfile.gettempdir(),
-            config.storage
+            config.storage,
+            tempfile.gettempdir()
         ]
-
-    folder = path.split(os.path.sep)[0]
-    if folder in config.external_storage:
-        allowed_locations = config.external_storage.get(folder, [])
-        path = path[len(folder)+1:]
 
     if allowed_locations and not path.startswith(tuple(allowed_locations)):
         if path.startswith((os.path.altsep or os.path.sep, os.path.sep)):
@@ -355,6 +487,26 @@ def expand_patterns(patterns: Union[list, str, tuple], allowed_locations=None):
             else:
                 urls = [pattern]
             yield from urls
+        elif pattern.startswith('smb://'):
+            from fnmatch import fnmatch
+            parsed = urllib.parse.urlparse(pattern)
+            segs = parsed.path.split('/')
+            parents, wildcarded = segs, []
+            for i, seg in enumerate(segs):
+                if '*' in seg:
+                    parents, wildcarded = segs[:i], segs[i:]
+                    break
+            parents = '/'.join(parents)
+            if not wildcarded:
+                yield [pattern]
+            else:
+                client =  _SMBClient('smb://' + parsed.netloc)
+                fnpattern = pattern[len('smb://' + parsed.netloc):]
+                for p, _, files in client.walk(parents):
+                    for f in files:
+                        fn = '/' + p + '/' + f
+                        if fnmatch(fn, fnpattern):
+                            yield 'smb://' + parsed.netloc + fn.replace('//', '/')
         else:
             pattern = expand_path(pattern, allowed_locations)
             for path in glob.glob(pattern):
@@ -370,6 +522,91 @@ def expand_patterns(patterns: Union[list, str, tuple], allowed_locations=None):
                     patterns.append(path + '/*')
                 else:
                     yield path
+                    
+                    
+def _open_path(parsed, mode, **params):
+    
+    if parsed.scheme == '':
+        fpath = expand_path(parsed.path)
+        if '://' in fpath:
+            return _open_path(fpath, mode, **params)
+        else:
+            parsed = urllib.parse.urlparse('file:// ' + fpath)
+    
+    # always process http/https/data URLs locally
+
+    if parsed.scheme in ('http', 'https'):
+        assert mode in ('rb', 'wb')
+        if mode == 'rb':
+            return BytesIO(_try_download(parsed.geturl(), **params))
+
+        return _RequestBuffer(parsed.geturl(), **params)
+
+    if parsed.scheme == 'data':
+        assert mode == 'rb'
+        with request.urlopen(parsed.geturl()) as response:
+            data = response.read()
+        return BytesIO(data)
+    
+    # for other schemes, use storage proxy if existent
+    
+    if config.storage_proxy:
+        target = '/'.join([_ for _ in (config.storage_proxy.rstrip('/'), parsed.scheme, parsed.netloc, parsed.path) if _])
+        if mode == 'rb':
+            return BytesIO(_try_download(target))                
+        else:
+            return _RequestBuffer(target)
+        
+    # handling with customized schemes
+    
+    if parsed.scheme == 'hdf5':
+        assert mode in ('rb', 'wb')
+        item_id = parsed.netloc
+        if mode == 'rb':
+            buf = Hdf5Manager.read(item_id)
+            return buf
+        else:
+            return _Hdf5WriteBuffer(item_id)
+                    
+    if parsed.scheme == 'smb':
+        assert mode in ('rb', 'wb')
+        client = _SMBClient('smb://' + parsed.netloc)
+        return client.open(parsed.path, mode)
+    
+    if parsed.scheme == 'file':
+        buf = open(parsed.path, mode)
+        buf.st_size = os.stat(fpath).st_size
+        buf.filename = parsed.path
+        return buf
+
+    raise OSError('Unsupported scheme: ' + parsed.scheme)
+
+
+def _fh_zip(buf, *inner_path):
+    """Handle zip file"""
+    zpath = '/'.join(inner_path)
+    with zipfile.ZipFile(buf, 'r') as zip_file:
+        return zip_file.open(zpath)
+            
+
+def _fh_pdf(buf, page):
+    if hasattr(buf, 'filename'): 
+        filename = buf.filename
+        temp = False
+    else:
+        filename = tempfile.mktemp(suffix='.pdf')
+        temp = True
+        with open('filename', 'wb') as f:
+            f.write(buf.read())
+    buf = _pdf_image(filename, int(page))
+    if temp:
+        os.unlink(filename)
+    return buf
+
+
+_fragment_handlers = {
+    fh[4:]: func for fh, func in globals().items() if fh.startswith('_fh_')
+}
 
 
 def safe_open(path: str, mode='rb', **params):
@@ -386,7 +623,7 @@ def safe_open(path: str, mode='rb', **params):
                   `mode` should be 'rb' or 'wb'
                 - <file path>#zip/<zip path>
                   read a zipped file inside a tar specified by <file path>
-                - <file path>#pdf/png:<page>
+                - <file path>#pdf/<page>
                   read PNG image from a PDF at page <page>
                 - (ordinary file system paths, with '/' replaced with `os.path.sep`
 
@@ -396,60 +633,19 @@ def safe_open(path: str, mode='rb', **params):
     :return: opened file/IO buffer
     :rtype: IO
     """
+    parsed = urllib.parse.urlparse(path)
+    
+    buf = _open_path(parsed, mode, **params)
+    if not buf:
+        raise OSError('Unable to open: ' + path)
 
-    if path.startswith(('http://', 'https://')):
-        assert mode in ('rb', 'wb')
-        if mode == 'rb':
-            return BytesIO(_try_download(path, **params))
-
-        return _RequestBuffer(path, **params)
-
-    if path.startswith('data:'):
-        assert mode == 'rb'
-        with request.urlopen(path) as response:
-            data = response.read()
-        return BytesIO(data)
-
-    if path.startswith('hdf5://'):
-        assert mode in ('rb', 'wb')
-        item_id = path.split('://', 1)[1]
-        if mode == 'rb':
-            if config.hdf5_proxy:
-                return BytesIO(_try_download(config.hdf5_proxy + item_id))
-            buf = Hdf5Manager.read(item_id)
-            return BytesIO(buf)
-        else:
-            if config.hdf5_proxy:
-                return _RequestBuffer(config.hdf5_proxy + item_id)
-            return _Hdf5WriteBuffer(item_id)
-
-    fpath = expand_path(path)
-
-    if '#zip/' in path:
-        assert mode in ('rb', 'wb')
-        _, zpath = path.split('#zip/', 1)
-        if mode == 'rb':
-            with zipfile.ZipFile(fpath) as zip_file:
-                return zip_file.open(zpath)
-        else:
-            return _ZipWriteBuffer(path, zpath)
-
-    elif '#rar/' in path:
-        assert mode == 'rb'
-        _, zpath = path.split('#rar/', 1)
-        with rarfile.RarFile(fpath) as rar_file:
-            return rar_file.open(zpath)
-
-    elif '#pdf/png:' in path:
-        assert mode == 'rb'
-        _, page = path.split('#pdf/png:', 1)
-        return _pdf_image(fpath, int(page), **params)
-
-    else:
-        buf = open(fpath, mode)
-        buf.st_size = os.stat(fpath).st_size
-        return buf
-
+    if parsed.fragment:
+        assert mode == 'rb', 'Fragment handlers can only be applied in read mode'
+        handler_name, *fragments = parsed.fragment.split('/')
+        if handler_name in _fragment_handlers:
+            buf = _fragment_handlers[handler_name](buf, *fragments)
+    
+    return buf
 
 def truncate_path(path, base=None):
     """Truncate path if it belongs to the base directory.
@@ -471,18 +667,11 @@ def truncate_path(path, base=None):
     return path
 
 
-@storage_app.route('/<iid>/<name>.<ext>', methods=['GET'])
-@storage_app.route('/<iid>', methods=['GET'])
-def get_item(iid, name='', ext=''):
-    try:
-        buf = Hdf5Manager.read(iid)
-    except OSError:
-        return 'Not Found', 404
-
-    mimetype = {
+def _get_mimetype(ext):
+    return {
         'html': 'text/html',
                 'htm': 'text/html',
-                'png': 'image/png',
+                'png': 'image/png', 
                 'jpg': 'image/jpeg',
                 'gif': 'image/gif',
                 'json': 'application/json',
@@ -490,16 +679,36 @@ def get_item(iid, name='', ext=''):
                 'js': 'application/javascript',
                 'mp4': 'video/mp4'
     }.get(ext, 'application/octet-stream')
+    
+    
+def _get_schemed_path(scheme, path, ext):
+    if ext: ext = '.' + ext
+    path = f'{scheme}://{path}{ext}'
+    return path
+
+
+@storage_app.route('/<scheme>/<path:path>.<ext>', methods=['GET'])
+@storage_app.route('/<scheme>/<path:path>', methods=['GET'])
+def get_item(scheme, path, ext=''):
+    path = _get_schemed_path(scheme, path, ext)
+    try:
+        buf = safe_open(path, 'rb')
+    except OSError:
+        return 'Not Found: ' + path, 404
+
+    mimetype = _get_mimetype(ext[1:])
 
     resp = send_file(buf, mimetype)
     resp.headers.add("Cache-Control", "public,max-age=86400")
     return resp
 
 
-@storage_app.route('/<iid>', methods=['PUT', 'POST'])
-def put_item(iid):
-    with Hdf5Manager() as mgr:
-        mgr.write(request.data, iid)
+@storage_app.route('/<scheme>/<path:path>.<ext>', methods=['PUT', 'POST'])
+@storage_app.route('/<scheme>/<path:path>', methods=['PUT', 'POST'])
+def put_item(scheme, path, ext=''):
+    path = _get_schemed_path(scheme, path, ext)
+    with safe_open(path, 'wb') as fo:
+        fo.write(request.data)
     return 'OK'
 
 
@@ -507,8 +716,12 @@ storage_app.debug = config.debug
 
 
 def serve_storage(port, host='0.0.0.0'):
-    from waitress import serve
-    serve(storage_app, host='0.0.0.0', port=port, threads=8)
+    import sys
+    if '-d' not in sys.argv:
+        from waitress import serve
+        serve(storage_app, host='0.0.0.0', port=port, threads=8)
+    else:
+        storage_app.run(host='0.0.0.0', port=port, debug=True)
 
 
 if __name__ == '__main__':
