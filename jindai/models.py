@@ -146,7 +146,7 @@ class MediaItem(db.DbObject):
         if self.source.get('file'):
             filename = self.source['file']
             if filename.lower().endswith('.pdf') and self.source.get('page') is not None:
-                return safe_open(f'{self.source["file"]}#pdf/png:{self.source["page"]}', 'rb')
+                return safe_open(f'{self.source["file"]}#pdf/{self.source["page"]}', 'rb')
             if filename == 'blocks.h5':
                 return safe_open(f"hdf5://{self.source.get('block_id', self.id)}", 'rb')
             return safe_open(filename, 'rb')
