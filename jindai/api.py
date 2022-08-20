@@ -756,61 +756,22 @@ def resolve_media_item(coll=None, storage_id=None, ext=None):
                 return f'file/{fpath}'
         elif url:
             return url
-        else:
-            return f'object/{base64.urlsafe_b64encode(json.dumps(source, ensure_ascii=False).encode("utf-8")).decode("ascii")}'
+        
+        return ''
 
     return redirect('/images/' + _build_image_string(source))
 
 
-@app.route("/images/<path:image_path>")
+@app.route("/images/<scheme>/<path:image_path>")
 @rest(cache=True)
-def serve_image(image_path):
-
-    def _parse_image_string(path):
-        if path.startswith('hdf5/'):
-            source = {'file': 'blocks.h5', 'block_id': path[5:]}
-        elif path.startswith('file/'):
-            source = {'file': path[5:]}
-        else:
-            source = json.loads(
-                base64.urlsafe_b64decode(path[7:]).decode("utf-8"))
-        return source
-
-    buf = MediaItem(source=_parse_image_string(image_path)).data
+def serve_image(scheme, image_path):
+    
+    buf = safe_open(f"{scheme}://{image_path.replace('__hash/', '#')}")
     ext = image_path.rsplit('.', 1)[-1]
-
-    def _thumb(path_or_io: Union[str, IO], size: int) -> bytes:
-        """Thumbnail image
-
-        Args:
-            p (Union[str, IO]): image source
-            size (int): max size for thumbnail
-
-        Returns:
-            bytes: thumbnailed image bytes
-        """
-        img = Image.open(path_or_io).convert('RGB')
-        buf = BytesIO()
-        img.thumbnail(size)
-        img.save(buf, 'jpeg')
-        return buf.getvalue()
 
     if buf:
         length = len(buf.getvalue()) if hasattr(
             buf, 'getvalue') else getattr(buf, 'st_size', -1)
-
-        if request.args.get('enhance', ''):
-            img = Image.open(buf)
-            buf = BytesIO()
-            ImageOps.autocontrast(img).save(buf, 'jpeg')
-            buf.seek(0)
-            ext = 'jpg'
-
-        if request.args.get('w', ''):
-            width = int(request.args.get('w'))
-            size = (width, min(width, 1280))
-            buf = BytesIO(_thumb(buf, size))
-            ext = 'jpg'
 
         resp = serve_file(buf, ext, length)
         resp.headers.add("Cache-Control", "public,max-age=86400")

@@ -38,13 +38,11 @@ class ConfigObject:
             'ui_proxy': '',
             'port': 8370,
         }
-        if config_file is None:
-            for config_file in [
-                os.environ.get('CONFIG_FILE', ''),
-                'config.yaml'
-            ]:
-                if os.path.exists(config_file) and os.path.isfile(config_file):
-                    break
+        config_file = os.environ.get('CONFIG_FILE', 'config.yaml')
+        
+        if not os.path.exists(config_file):
+            print('Config file not found:', config_file)
+            exit(255)
 
         with open(config_file, 'r', encoding='utf-8') as fin:
             self._orig.update(**yaml.safe_load(fin))
