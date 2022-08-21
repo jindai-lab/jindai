@@ -6,7 +6,7 @@ import re
 import fitz
 
 from PyMongoWrapper import F, ObjectId
-from jindai import Plugin, expand_patterns, truncate_path
+from jindai import Plugin, storage
 from jindai.pipeline import DataSourceStage
 from jindai.models import Paragraph
 from jindai.helpers import logined, rest
@@ -66,7 +66,7 @@ def parse_annotation_in_page(ann, page):
 def extract_annotation(filename):
     """Extract annotations from PDF"""
     doc = fitz.Document(filename)
-    tpath = truncate_path(filename)
+    tpath = storage.truncate_path(filename)
     for pnum, page in enumerate(doc):
         label = page.get_label() or (pnum+1)
         annots = list(page.annots())
@@ -99,7 +99,7 @@ class AnnotationsFromPDF(DataSourceStage):
                     @chs 对应的语段所在数据库
             """
             super().__init__()
-            self.files = expand_patterns(content)
+            self.files = storage.expand_patterns(content)
             self.mongocollection = mongocollection
 
         def fetch(self):

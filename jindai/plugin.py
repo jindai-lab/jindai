@@ -12,7 +12,7 @@ from flask import Flask, Response
 
 from .config import instance as config
 from .helpers import rest
-from .storage import expand_path, safe_open
+from .storage import instance as storage
 from .pipeline import Pipeline, PipelineStage
 
 
@@ -153,7 +153,7 @@ class PluginManager:
         """Install plugin from local file storage"""
         if file_or_url.startswith('https://github.com/') and not file_or_url.endswith('.zip'):
             file_or_url += '/archive/refs/heads/main.zip'
-        ziptar = safe_open(file_or_url)
+        ziptar = storage.open(file_or_url)
         tmpdir = tempfile.mkdtemp()
         with zipfile.ZipFile(ziptar, 'r') as zipped:
             zipped.extractall(path=tmpdir)
@@ -172,7 +172,7 @@ class PluginManager:
                 continue
 
             if dirname == 'sources':
-                target = expand_path('/').rstrip('/')
+                target = storage.expand_path('/').rstrip('/')
             else:
                 target = os.path.join(config.rootpath, dirname)
 

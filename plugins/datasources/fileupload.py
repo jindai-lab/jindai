@@ -4,7 +4,7 @@
 
 import tempfile
 
-from jindai.storage import safe_open
+from jindai.storage import instance as storage
 from jindai.models import Paragraph
 from jindai.pipeline import DataSourceStage
 
@@ -40,7 +40,7 @@ class FileUploadDataSource(DataSourceStage):
             """
             tmp = tempfile.mktemp()
             with open(tmp, "wb") as fout:
-                fout.write(safe_open(data_uri, 'rb').read())
+                fout.write(storage.open(data_uri, 'rb').read())
             return tmp
 
         def fetch(self):

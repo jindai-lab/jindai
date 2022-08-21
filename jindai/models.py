@@ -13,7 +13,7 @@ from PyMongoWrapper.dbo import (Anything, DbObjectCollection,
                                 DbObjectInitializer, MongoConnection, classproperty)
 
 from .config import instance as config
-from .storage import safe_open
+from .storage import instance as storage
 
 db = MongoConnection('mongodb://' + config.mongo + '/' + config.mongoDbName)
 ImageFile.LOAD_TRUNCATED_IMAGES = True
@@ -123,7 +123,7 @@ class MediaItem(db.DbObject):
     def image(self) -> Image.Image:
         """Get the PIL.Image.Image object for the image/thumbnail"""
         if self.item_type == 'video' and self.thumbnail:
-            return Image.open(safe_open(f'hdf5://{self.thumbnail}', 'rb'))
+            return Image.open(storage.open(f'hdf5://{self.thumbnail}', 'rb'))
 
         if self.item_type == 'sound':
             return None
@@ -146,13 +146,13 @@ class MediaItem(db.DbObject):
         if self.source.get('file'):
             filename = self.source['file']
             if filename.lower().endswith('.pdf') and self.source.get('page') is not None:
-                return safe_open(f'{self.source["file"]}#pdf/{self.source["page"]}', 'rb')
+                return storage.open(f'{self.source["file"]}#pdf/{self.source["page"]}', 'rb')
             if filename == 'blocks.h5':
-                return safe_open(f"hdf5://{self.source.get('block_id', self.id)}", 'rb')
-            return safe_open(filename, 'rb')
+                return storage.open(f"hdf5://{self.source.get('block_id', self.id)}", 'rb')
+            return storage.open(filename, 'rb')
 
         if self.source.get('url'):
-            return safe_open(self.source['url'], 'rb')
+            return storage.open(self.source['url'], 'rb')
 
         return None
 
@@ -163,7 +163,7 @@ class MediaItem(db.DbObject):
 
         if self._image_flag:
             self.source['file'] = 'blocks.h5'
-            with safe_open(f'hdf5://{self.id}', 'wb') as output:
+            with storage.open(f'hdf5://{self.id}', 'wb') as output:
                 buf = image.tobytes('jpeg')
                 output.write(buf)
             self._image_flag = False

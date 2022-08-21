@@ -10,7 +10,7 @@ import numpy as np
 from PIL import Image, ImageOps
 from PyMongoWrapper import ObjectId
 
-from jindai import PipelineStage, expand_path, safe_open, parser
+from jindai import PipelineStage, parser, storage
 from jindai.helpers import safe_import
 from jindai.models import MediaItem, Paragraph
 
@@ -295,13 +295,13 @@ class DownloadImages(MediaItemStage):
             i.save()
 
         try:
-            content = safe_open(i.source['url'], referer=post.source.get(
+            content = storage.open(i.source['url'], referer=post.source.get(
                 'url', ''), proxies=self.proxies).read()
             assert content
         except Exception:
             return
 
-        with safe_open(f'hdf5://{i.id}', 'wb') as output:
+        with storage.open(f'hdf5://{i.id}', 'wb') as output:
             output.write(content)
             self.logger(i.id, len(content))
 
@@ -368,7 +368,7 @@ class VideoFrame(MediaItemStage):
             # read video data
             filename = i.source.get('file')
             if filename == 'blocks.h5':
-                with safe_open(temp_file, 'wb') as output:
+                with storage.open(temp_file, 'wb') as output:
                     blen = output.write(i.data.read())
                 if not blen:
                     self.logger(f'unable to fetch data from blocks.h5: {i.id}')
@@ -376,7 +376,7 @@ class VideoFrame(MediaItemStage):
                     return
                 read_from = temp_file
             else:
-                read_from = expand_path(filename)
+                read_from = storage.expand_path(filename)
 
             if not os.path.exists(read_from):
                 self.logger(f'{read_from} not found')
@@ -395,7 +395,7 @@ class VideoFrame(MediaItemStage):
                     # write to hdf5
                     rval, npa = cv2.imencode('.jpg', frame)
                     pic = npa.tobytes()
-                    with safe_open(f'hdf5://{thumb}', 'wb') as output:
+                    with storage.open(f'hdf5://{thumb}', 'wb') as output:
                         output.write(pic)
 
                     setattr(i, self.field, thumb)

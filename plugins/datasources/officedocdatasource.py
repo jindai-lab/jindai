@@ -7,7 +7,7 @@ import tempfile
 from typing import Iterable
 
 import pandas as pd
-from jindai import expand_patterns, truncate_path
+from jindai import storage
 from jindai.models import Paragraph
 from jindai.pipeline import DataSourceStage
 
@@ -37,7 +37,7 @@ class WordDataSource(DataSourceStage):
             super().__init__()
             self.name = dataset
             self.lang = lang
-            self.files = expand_patterns(content)
+            self.files = storage.expand_patterns(content)
 
         def call_abiword(self, file):
             """Call abiword to extract text from a word document"""
@@ -55,7 +55,7 @@ class WordDataSource(DataSourceStage):
                 if doc:
                     para = Paragraph(
                         lang=self.lang, content=doc,
-                        source={'file': truncate_path(file)}, pagenum=1,
+                        source={'file': storage.truncate_path(file)}, pagenum=1,
                         dataset=self.name, outline=''
                     )
                     yield para
@@ -84,7 +84,7 @@ class ExcelDataSource(DataSourceStage):
                     @chs 文件列表
             """
             super().__init__()
-            self.files = expand_patterns(content)
+            self.files = storage.expand_patterns(content)
             self.dataset = dataset
             self.lang = lang
 

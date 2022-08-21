@@ -27,7 +27,7 @@ from .helpers import (get_context, logined, rest, serve_file, language_iso639,
                       serve_proxy, JSONEncoder, JSONDecoder, ee)
 from .models import (Dataset, History, MediaItem, Meta, Paragraph,
                      TaskDBO, Token, User, Term)
-from .storage import expand_path, safe_open, truncate_path, safe_statdir, safe_find
+from .storage import instance as storage
 
 
 ImageFile.LOAD_TRUNCATED_IMAGES = True
@@ -212,17 +212,20 @@ def admin_users_del(username):
 @app.route('/api/storage/<path:path>', methods=['GET', 'POST'])
 @app.route('/api/storage/', methods=['GET', 'POST'])
 @rest()
-def list_storage(path='', search=''):
+def list_storage(path='', search='', mkdir=''):
     """List out files in directory"""
+    
+    if mkdir:
+        storage.mkdir(path, mkdir)
 
     results = None
     if search:
         # path is a query
-        results = list(safe_find(path, search))
+        results = list(storage.find(path, '**' + search))
     else:
-        results = safe_statdir(path)
-        if len(results) == 0 and results[0]['type'] == 'file':
-            results = safe_open(path)
+        results = storage.statdir(path)
+        if len(results) == 1 and results[0]['type'] == 'file':
+            results = storage.open(path)
 
     if isinstance(results, list):
         return sorted(results,
@@ -243,7 +246,7 @@ def write_storage(path=''):
     for uploaded in request.files.values():
         save_path = os.path.join(path, uploaded.filename)
         uploaded.save(save_path)
-        sfs.append(_file_detail(save_path))
+        sfs.append(storage.stat(save_path))
     return sfs
 
 
@@ -255,10 +258,10 @@ def move_storage(source, destination, keep_folder=True):
         destination = os.path.basename(destination)
         destination = os.path.join(os.path.dirname(source), destination)
     paragraphs = Paragraph.query(F['source.file'] == source)
-    source = expand_path(source)
-    destination = expand_path(destination)
+    source = storage.expand_path(source)
+    destination = storage.expand_path(destination)
     shutil.move(source, destination)
-    paragraphs.update(Fn.set({'source.file': truncate_path(destination)}))
+    paragraphs.update(Fn.set({'source.file': storage.truncate_path(destination)}))
     return True
 
 
@@ -766,7 +769,7 @@ def resolve_media_item(coll=None, storage_id=None, ext=None):
 @rest(cache=True)
 def serve_image(scheme, image_path):
     
-    buf = safe_open(f"{scheme}://{image_path.replace('__hash/', '#')}")
+    buf = storage.open(f"{scheme}://{image_path.replace('__hash/', '#')}")
     ext = image_path.rsplit('.', 1)[-1]
 
     if buf:

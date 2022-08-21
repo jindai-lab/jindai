@@ -115,7 +115,7 @@ def resolve_dups(tmp_file_name, slimit):
     """Resolve duplications from temp file, with scores < slimit"""
 
     def _parse_compare_results():
-        with safe_open(tmp_file_name, 'r') as input_file:
+        with open(tmp_file_name, 'r') as input_file:
             for line in input_file:
                 row = line.strip().split('\t')
                 if len(row) < 3:
@@ -212,7 +212,7 @@ class ImageHashDuplications(MediaItemStage):
 
     def summarize(self, _):
         k = tempfile.mktemp()
-        output_file = safe_open(k + '.tsv', 'wb')
+        output_file = open(k + '.tsv', 'wb')
         for line in self.results:
             output_file.write(line.encode('utf-8'))
         output_file.close()

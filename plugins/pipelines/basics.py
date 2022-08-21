@@ -10,7 +10,7 @@ from itertools import count as iter_count
 
 from PyMongoWrapper import F, QueryExprParser, ObjectId
 from PyMongoWrapper.dbo import DbObject, DbObjectCollection
-from jindai import PipelineStage, parser, safe_open
+from jindai import PipelineStage, parser, storage
 from jindai.helpers import JSONEncoder, execute_query_expr, safe_import, WordStemmer as _Stemmer
 from jindai.models import Dataset, Paragraph, db
 
@@ -1007,7 +1007,7 @@ class PDFUnlock(PipelineStage):
         super().__init__()
         pike = safe_import('pikepdf')
         buf = BytesIO()
-        pike.open(safe_open(file, 'rb')).save(buf)
+        pike.open(storage.open(file, 'rb')).save(buf)
         self.data = PipelineStage.return_file('pdf', buf.getvalue())
 
     def summarize(self, _):

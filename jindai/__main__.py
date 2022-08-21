@@ -22,7 +22,7 @@ from tqdm import tqdm
 
 from PyMongoWrapper import ObjectId
 from PyMongoWrapper.dbo import create_dbo_json_encoder
-from . import Plugin, PluginManager, Task, safe_open, expand_patterns, config
+from . import Plugin, PluginManager, Task, storage, config
 from .api import run_service, prepare_plugins
 from .helpers import get_context, safe_import
 from .models import F, MediaItem, Meta, TaskDBO, User
@@ -59,7 +59,7 @@ def export(query, output_file):
 
     xlsx = task_obj.execute()
 
-    with safe_open(output_file, 'wb') as output_file:
+    with open(output_file, 'wb') as output_file:
         output_file.write(xlsx)
 
 
@@ -310,9 +310,23 @@ def plugin_export(output: str, infiles):
     if output.endswith('.zip'):
         output = output[:-4]
     with zipfile.ZipFile(output + '.zip', 'w', zipfile.ZIP_DEFLATED) as zout:
-        for filename in expand_patterns(infiles, []):
+        for filename in storage.expand_patterns(infiles, []):
             arcname = output + '/' + filename
             zout.write(filename, arcname)
+            
+            
+@cli.command('serve-storage')
+@click.option('--port', '-p', default=8371)
+@click.option('--host', '-h', default='0.0.0.0')
+def serve_storage(port: int, host: str):
+    """Serve storage
+
+    :param port: port
+    :type port: int
+    :param host: host
+    :type host: str
+    """
+    storage.serve(host, port)
 
 
 @cli.command('clear-duplicates')

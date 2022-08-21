@@ -6,7 +6,7 @@ import re
 import fitz
 from PyMongoWrapper import F, Fn, Var
 
-from jindai import expand_patterns, truncate_path
+from jindai import storage
 from jindai.models import Paragraph
 from jindai.pipeline import DataSourceStage
 
@@ -65,7 +65,7 @@ class PDFDataSource(DataSourceStage):
             super().__init__()
             self.name = dataset_name
             self.lang = lang
-            self.files = expand_patterns(content)
+            self.files = storage.expand_patterns(content)
             self.mongocollection = mongocollection
             self.skip_existed = skip_existed
             self.page_range = sorted(resolve_range(page_range))
@@ -86,8 +86,12 @@ class PDFDataSource(DataSourceStage):
                 existent = {}
 
             for pdf in self.files:
-                path = truncate_path(pdf)
-                doc = fitz.open(pdf)
+                path = storage.truncate_path(pdf)
+                stream = storage.open(pdf, 'rb')
+                if hasattr(stream, 'filename'):
+                    doc = fitz.open(stream.filename)
+                else:
+                    doc = fitz.open('pdf', stream)
                 self.logger('importing', path)
                 page_range = self.page_range
                 if not page_range:
