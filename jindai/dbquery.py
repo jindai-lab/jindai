@@ -43,7 +43,7 @@ def _gid(params):
     '''
     => addFields(gid=filter(input=$keywords,as=t,cond=regexMatch(input=$$t,regex=`^\*`)))
     => unwind(path=$gid,preserveNullAndEmptyArrays=true)
-    => addFields(gid=ifNull($gid;concat('id=';toString($_id))))
+    => addFields(gid=ifNull($gid;concat('id=';toString($_id))),images=ifNull($images;[]))
     => groupby(id=$gid,pdate=max($pdate),count=sum(size($images)),images=push($images))
     '''
     if isinstance(params, MongoOperand):
@@ -235,7 +235,7 @@ class DBQuery:
 
         if groupping:
             groupping += '''
-                =>addFields(gid=ifNull($group_id;ifNull(concat('id=';toString($_id));$source.file)))
+                =>addFields(gid=ifNull($group_id;ifNull(concat('id=';toString($_id));$source.file)),images=ifNull($images;[]))
                 =>groupby(id=$gid,count=sum(size($images)),images=push($images))
                 =>groupby(id=$_id)
                 =>addFields(

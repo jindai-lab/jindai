@@ -13,7 +13,7 @@ from bs4 import BeautifulSoup as B
 
 from jindai.models import MediaItem, Paragraph
 from jindai.pipeline import DataSourceStage
-from jindai import expand_patterns, truncate_path, safe_open, parser
+from jindai import storage, parser
 
 
 class HTMLDataSource(DataSourceStage):
@@ -47,7 +47,7 @@ class HTMLDataSource(DataSourceStage):
             super().__init__()
             self.name = dataset_name
             self.lang = lang
-            self.files = expand_patterns(content)
+            self.files = storage.expand_patterns(content)
             self.fields = parser.parse(fields)
             self.paragraph_selector = paragraph_selector
 
@@ -60,7 +60,7 @@ class HTMLDataSource(DataSourceStage):
                 para = Paragraph(
                     lang=self.lang, content='',
                     source={
-                        'url' if '://' in path else 'file': truncate_path(path)},
+                        'url' if '://' in path else 'file': storage.truncate_path(path)},
                     pagenum=1,
                     dataset=self.name, outline=outline,
                     keywords=[]
@@ -93,7 +93,7 @@ class HTMLDataSource(DataSourceStage):
                 outline = ''
                 if '#' in path:
                     fpath, outline = path.split('#', 1)
-                yield from self.import_html_src(fpath, safe_open(path, 'rb'), outline)
+                yield from self.import_html_src(fpath, storage.open(path, 'rb'), outline)
 
 
 class TextDataSource(DataSourceStage):
@@ -124,11 +124,11 @@ class TextDataSource(DataSourceStage):
             self.content = content.split('\n')
 
         def fetch(self):
-            for path in expand_patterns(self.content):
-                for i, line in enumerate(safe_open(path)):
+            for path in storage.expand_patterns(self.content):
+                for i, line in enumerate(storage.open(path)):
                     yield Paragraph(content=codecs.decode(line),
                                     source={
-                                        'url' if '://' in path else 'file': truncate_path(path)},
+                                        'url' if '://' in path else 'file': storage.truncate_path(path)},
                                     dataset=self.name, lang=self.lang, outline=f'{i+1:06d}')
 
 
@@ -234,7 +234,7 @@ class WebPageListingDataSource(DataSourceStage):
 
         def read_html(self, url):
             """Read html from url, return BeautifulSoup object"""
-            html = safe_open(url, proxies=self.proxies).read()
+            html = storage.open(url, proxies=self.proxies).read()
             if not html:
                 self.logger('Cannot read from', url)
                 return
@@ -384,7 +384,7 @@ class BiblioDataSource(DataSourceStage):
                 raise NotImplementedError()
 
             self.method = getattr(self, input_format)
-            self.files = expand_patterns(content)
+            self.files = storage.expand_patterns(content)
             self.dataset = dataset
             self.lang = lang
 

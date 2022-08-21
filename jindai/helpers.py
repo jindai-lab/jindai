@@ -26,7 +26,7 @@ from PyMongoWrapper.dbo import create_dbo_json_decoder, create_dbo_json_encoder
 from .config import instance as config
 from .dbquery import parser
 from .models import Token
-from .storage import safe_open
+from .storage import instance as storage
 
 
 ee = QueryExprEvaluator()

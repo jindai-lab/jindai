@@ -1,37 +1,31 @@
 """File/Network storage access"""
 
-from ast import Bytes
-from cgitb import handler
-from collections import defaultdict
 import enum
-from fileinput import filename
 import glob
 import itertools
 import os
 import re
+import sys
 import tempfile
 import time
+import urllib
+import zipfile
+from fnmatch import fnmatch
 from io import BytesIO
 from threading import Lock
-from typing import Iterable, List, Tuple, Type, Union
-import zipfile
-from unrar import rarfile
+from typing import Iterable, List, Tuple, Union
+
 import h5py
 import numpy as np
 import requests
-import urllib
+import urllib3
+from flask import Flask, request, send_file
 from pdf2image import convert_from_path as _pdf_convert
-from flask import Flask, Response, request, send_file
-from fnmatch import fnmatch
 from smb.SMBHandler import SMBHandler
 
 from .config import instance as config
 
-import urllib3
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
-
-storage_app = Flask(__name__)
-storage_app.secret_key = config.secret_key
 
 
 class StorageManager:
@@ -57,42 +51,134 @@ class StorageManager:
         }
 
     def listdir(self, path: str) -> list:
+        """List files/folders in path
+
+        Args:
+            path (str): Path in full form
+
+        Returns:
+            list: List of names in path
+        """
         return []
 
     def statdir(self, path: str) -> list:
+        """Stat folder and return list of stat results
+
+        Args:
+            path (str): Path in full form
+
+        Returns:
+            list: Stat info for each file/folder in folder
+        """
         return [self.stat(self.join(path, f)) for f in self.listdir(path)]
 
     def exists(self, path: str) -> bool:
+        """Check if path exists
+
+        Args:
+            path (str): Path in full form
+
+        Returns:
+            bool: True if path exists
+        """
         return False
 
     def read(self, path: str, **params) -> BytesIO:
+        """Get read io buffer for path
+
+        Args:
+            path (str): Path in full form
+
+        Returns:
+            BytesIO: Readable buffer
+        """
         return BytesIO()
 
     def writebuf(self, path: str, **params) -> BytesIO:
+        """Get a writable buffer for path
+
+        Args:
+            path (str): Path in full form
+
+        Returns:
+            BytesIO: Writable buffer, will perform writing when closing
+        """
         return BytesIO()
 
     def unlink(self, path: str) -> bool:
+        """Unlink a file/folder
+
+        Args:
+            path (str): Path in full form
+
+        Returns:
+            bool: True if succeeded
+        """
         return False
 
     def join(self, base_path: str, *path_segs: str) -> str:
-        return '/'.join((base_path, *path_segs)).replace('..', '')
+        """Join segements of a path
 
-    def walk(self, base_path: str) -> Iterable[Tuple[str, List, List]]:
+        Args:
+            base_path (str): Base paths
+            path_segs (Tuple[str]): Segments
+
+        Returns:
+            str: Full path
+        """
+        segs = []
+        for s in path_segs:
+            if s == '..' and segs:
+                segs.pop()
+            else:
+                segs.append(s)
+        return '/'.join((base_path, *segs))
+
+    def walk(self, base_path: str, match_pattern: str = '') -> Tuple[str, List, List]:
+        """Walk through a folder and return files and folders
+
+        Args:
+            base_path (str): Base path
+            match_pattern (str, optional): Only continue when matching pattern, used for `search`
+
+        Yields:
+            Tuple[str, List, List]: Path, folders, files
+        """
+        pattern_segs = '/'.join(match_pattern.rstrip('/').split('/')
+                                [:len(base_path.rstrip('/').split('/'))+1])
+
         dirs, files = [], []
         for f in self.listdir(base_path):
-            if self.stat(f)['type'] == 'folder':
-                dirs.append(f)
+            if self.stat(self.join(base_path, f))['type'] == 'folder':
+                if not match_pattern or fnmatch(self.join(base_path, f), pattern_segs):
+                    dirs.append(f)
             else:
-                files.append(f)
+                if not match_pattern or fnmatch(self.join(base_path, f), match_pattern):
+                    files.append(f)
+
         yield base_path, dirs, files
         for d in dirs:
-            yield from self.walk(self.join(base_path, d))
+            yield from self.walk(self.join(base_path, d), match_pattern)
 
-    def search(self, base_path: str, name_pattern: str) -> Iterable[str]:
-        for path, dirs, files in self.walk(base_path):
+    def search(self, base_path: str, name_pattern: str) -> str:
+        """Search for name_pattern in base_path
+
+        Args:
+            base_path (str): Searching start
+            name_pattern (str): Name pattern to search for
+
+        Yields:
+            str: Matched paths
+        """
+        for path, dirs, files in self.walk(base_path, name_pattern):
             for f in dirs + files:
-                if fnmatch(self.join(path, f), name_pattern):
-                    yield self.join(path, f)
+                fpath = self.join(path, f)
+                if fnmatch(fpath, name_pattern):
+                    yield fpath
+
+    def mkdir(self, path: str, new_folder: str) -> bool:
+        """Make a new directory in path"""
+        return False
 
 
 class OSFileSystemManager(StorageManager):
@@ -111,7 +197,7 @@ class OSFileSystemManager(StorageManager):
             ]
         self.allowed_locations = allowed_locations
 
-    def expand_path(self, path: str) -> str:
+    def expand_path(self, path: Union[Tuple[str], str]) -> str:
         """Expand path to local storage path
 
         :param path: the path to expand
@@ -139,11 +225,11 @@ class OSFileSystemManager(StorageManager):
             if re.match(r'[A-Za-z]:\\', path):
                 path = path[3:]
             for parent in self.allowed_locations:
-                tmpath = os.path.join(parent, path)
-                if os.path.exists(tmpath):
+                tmpath = self.join(parent, path)
+                if self.exists(tmpath):
                     return tmpath
 
-        return os.path.join(self.base, path).replace(os.path.sep, '/')
+        return self.join(self.base, path)
 
     def truncate_path(self, path):
         """Truncate path if it belongs to the base directory.
@@ -156,13 +242,13 @@ class OSFileSystemManager(StorageManager):
         :return: truncated path
         :rtype: str
         """
-        path = path.replace(os.path.sep, '/')
+        path = path[7:].replace(os.path.sep, '/')
         if path.startswith(self.base):
             return path[len(self.base):]
         return path
 
     def stat(self, path: str) -> list:
-        path = self.expand_path(path)
+        path = self.expand_path(path)[7:]
         file_stat = os.stat(path)
         return {
             'name': os.path.basename(path),
@@ -174,34 +260,50 @@ class OSFileSystemManager(StorageManager):
         }
 
     def listdir(self, path: str) -> list:
-        path = self.expand_path(path)
+        path = self.expand_path(path)[7:]
         return [f for f in os.listdir(path) if not f.startswith(('.', '@'))]
 
     def exists(self, path: str) -> bool:
-        path = self.expand_path(path)
+        path = self.expand_path(path)[7:]
         return os.path.exists(path)
 
     def read(self, path: str, **params) -> BytesIO:
-        path = self.expand_path(path)
+        path = self.expand_path(path)[7:]
         buf = open(path, 'rb')
         buf.filename = path
         return buf
 
     def writebuf(self, path: str, **params) -> BytesIO:
-        path = self.expand_path(path)
+        path = self.expand_path(path)[7:]
         return open(path, 'wb')
 
     def unlink(self, path: str) -> bool:
-        path = self.expand_path(path)
+        path = self.expand_path(path)[7:]
         try:
             os.unlink(path)
         except OSError:
             return False
         return True
 
+    def walk(self, base_path, name_pattern=''):
+        base_path = self.expand_path(base_path)
+        name_pattern = self.expand_path(name_pattern)
+        yield from super().walk(base_path, name_pattern)
+
+    def search(self, base_path, name_pattern):
+        base_path = self.expand_path(base_path)
+        name_pattern = self.expand_path(name_pattern)
+        yield from super().search(base_path, name_pattern)
+
     def join(self, path: str, *path_segs: str) -> str:
-        path = self.expand_path(path)
-        return 'file:///' + os.path.sep.join((path, *path_segs)).replace('..', '').replace(os.path.sep, '/').lstrip('/')
+        if path.startswith('file://'):
+            path = path[7:]
+        return 'file:///' + os.path.join(path, *path_segs).replace(os.path.sep, '/').lstrip('/')
+
+    def mkdir(self, path: str, new_folder: str) -> bool:
+        path = self.expand_path(path)[7:]
+        os.makedirs(os.path.join(path, new_folder), exist_ok=True)
+        return True
 
 
 class Hdf5Manager(StorageManager):
@@ -409,6 +511,12 @@ class WebManager(StorageManager):
         return requests.Request(url=url, method=method, headers=headers, cookies={}, data=data)
 
     def __init__(self, attempts=3, verify=False, timeout=30):
+        """
+        Args:
+            attempts (int, optional): Maximal retries when fetching data from server. Defaults to 3.
+            verify (bool, optional): Verify SSL Certs. Defaults to False.
+            timeout (int, optional): Timeout in seconds. Defaults to 30.
+        """
         self.attempts = attempts
         self.verify = verify
         self.timeout = timeout
@@ -464,6 +572,7 @@ class SMBManager(StorageManager):
             self.path = path
 
         def close(self):
+            self.seek(0)
             self.conn.storeFile(self.service, self.path, self)
 
     def __init__(self) -> None:
@@ -522,8 +631,8 @@ class SMBManager(StorageManager):
         file_dirs = self.conn.listPath(service, path)
 
         files = [f.filename for f in file_dirs if not f.isDirectory]
-        dirs = [f.filename for f in file_dirs if f.isDirectory and f.filename !=
-                '.' and f.filename != '..']
+        dirs = [f.filename for f in file_dirs if f.isDirectory and not f.filename.startswith(
+            ('.', '@'))]
         yield start_path, dirs, files
 
         for d in dirs:
@@ -535,30 +644,14 @@ class SMBManager(StorageManager):
     def writebuf(self, path: str, **params):
         return SMBManager._SMBWriteBuffer(*self._get_connection(path))
 
-
-def _pdf_image(file: str, page: int, **_) -> BytesIO:
-    """Get PNG file from PDF
-
-    :param file: PDF path
-    :type file: str
-    :param page: page index, starting form 0
-    :type page: int
-    :return: PNG bytes in a BytesIO
-    :rtype: BytesIO
-    """
-    buf = BytesIO()
-    page = int(page)
-
-    img, = _pdf_convert(file, 120, first_page=page+1,
-                        last_page=page+1, fmt='png') or [None]
-    if img:
-        img.save(buf, format='png')
-        buf.seek(0)
-
-    return buf
+    def mkdir(self, path: str, new_folder: str) -> bool:
+        conn, service, path = self._get_connection(path)
+        return conn.createDirectory(service, path.rstrip('/') + '/' + new_folder)
 
 
 class DataSchemeManager(StorageManager):
+    """Handle with data: scheme
+    """
 
     def exists(self, path: str) -> bool:
         return True
@@ -569,271 +662,308 @@ class DataSchemeManager(StorageManager):
         return BytesIO(data)
 
 
-SCHEMES = {
-    'smb': SMBManager(),
-    'http': WebManager(),
-    'https': WebManager(),
-    'data': DataSchemeManager(),
-    'hdf5': Hdf5Manager(config.storage, *(config.external_storage or [])),
-    '': OSFileSystemManager(config.storage)
-}
+class Storage:
 
+    def _get_manager(self, path) -> StorageManager:
+        if path in self._schema:
+            return self._schema[path]
 
-def _get_manager(path) -> StorageManager:
-    if path in SCHEMES:
-        return SCHEMES[path]
+        if '://' in path and not path.startswith('file://'):
+            scheme = path.split('://', 1)[0]
+            return self._schema[scheme]
 
-    if '://' in path and not path.startswith('file://'):
-        scheme = path.split('://', 1)[0]
-        return SCHEMES[scheme]
+        return self._schema['']
 
-    return SCHEMES['']
-
-
-expand_path = SCHEMES[''].expand_path
-truncate_path = SCHEMES[''].truncate_path
-
-
-def expand_patterns(patterns: Union[list, str, tuple], allowed_locations=None):
-    """Get expanded paths according to wildcards patterns
-
-    :param patterns: patterns for looking up files.
-        Wildcards (*/?) supported for file system paths.
-        Brackets ({num1-num2}) supported for URLs.
-    :type patterns: Union[list, str]
-    :yield: full/absolute path
-    :rtype: str
-    """
-
-    if isinstance(patterns, str):
-        patterns = patterns.split('\n')
-
-    if isinstance(patterns, tuple):
-        patterns = list(patterns)
-
-    patterns.reverse()
-    while patterns:
-        pattern = patterns.pop()
-
-        iterate = re.search(r'\{(\d+\-\d+)\}', pattern)
-        if iterate:
-            start, end = map(int, iterate.group(1).split('-'))
-            for i in range(start, end+1):
-                patterns.append(pattern.replace(iterate.group(0), str(i)))
-            continue
-
-        if '*' in pattern:
-            segs = pattern.split('/')
-            for i, seg in enumerate(segs):
-                if '*' in seg:
-                    parents = segs[:i]
-                    break
-            parent = '/'.join(parents)
-            yield from _get_manager(pattern).search(parent, pattern)
-            continue
-
-        path = pattern
-        if path.endswith('.zip') or path.endswith('.epub'):
-            with zipfile.ZipFile(path, 'r') as zfile:
-                for item in zfile.filelist:
-                    yield path + '#zip/' + item.filename
-        else:
-            yield path
-
-
-def _fh_zip(buf, *inner_path):
-    """Handle zip file"""
-
-    class _ZipWriteBuffer(BytesIO):
-        """Buffer object for writing zip files
+    def __init__(self) -> None:
+        """Initialize storage
         """
 
-        def __init__(self, path, zfile):
-            """Initialize a buffer object for writing zip files
+        self._schema = {
+            'smb': SMBManager(),
+            'http': WebManager(),
+            'https': WebManager(),
+            'data': DataSchemeManager(),
+            'hdf5': Hdf5Manager(config.storage, *(config.external_storage or [])),
+            '': OSFileSystemManager(config.storage)
+        }
 
-            :param path: path for zip file
-            :type path: str
-            :param zfile: path inside the zip file
-            :type zfile: str
-            """
-            self.path = path
-            self.zfile = zfile
-            super().__init__()
+        def _fh_zip(buf, *inner_path):
+            """Handle zip file"""
+            zpath = '/'.join(inner_path)
+            with zipfile.ZipFile(buf, 'r') as zip_file:
+                return zip_file.open(zpath)
 
-        def close(self):
-            super().close()
-            with zipfile.ZipFile(self.path, 'a') as zip_file:
-                zip_file.writestr(self.zfile, self.getvalue())
+        def _fh_pdf(buf, page):
+            
+            def _pdf_image(file: str, page: int, **_) -> BytesIO:
+                """Get PNG file from PDF
 
-    zpath = '/'.join(inner_path)
-    with zipfile.ZipFile(buf, 'r') as zip_file:
-        return zip_file.open(zpath)
+                :param file: PDF path
+                :type file: str
+                :param page: page index, starting form 0
+                :type page: int
+                :return: PNG bytes in a BytesIO
+                :rtype: BytesIO
+                """
+                buf = BytesIO()
+                page = int(page)
 
+                img, = _pdf_convert(file, 120, first_page=page+1,
+                                    last_page=page+1, fmt='png') or [None]
+                if img:
+                    img.save(buf, format='png')
+                    buf.seek(0)
 
-def _fh_pdf(buf, page):
-    if hasattr(buf, 'filename'):
-        filename = buf.filename
-        temp = False
-    else:
-        filename = tempfile.mktemp(suffix='.pdf')
-        temp = True
-        with open(filename, 'wb') as f:
-            f.write(buf.read())
-    buf = _pdf_image(filename, int(page))
-    if temp:
-        os.unlink(filename)
-    return buf
+                return buf
 
+            if hasattr(buf, 'filename'):
+                filename = buf.filename
+                temp = False
+            else:
+                filename = tempfile.mktemp(suffix='.pdf')
+                temp = True
+                with open(filename, 'wb') as f:
+                    f.write(buf.read())
+            buf = _pdf_image(filename, int(page))
+            if temp:
+                os.unlink(filename)
+            return buf
 
-def _fh_thumbnail(buf, width, height=''):
-    if not height:
-        height = width
-    width, height = int(width), int(height)
-    from PIL import Image
-    im = Image.open(buf)
-    im.thumbnail((width, height))
-    buf = BytesIO()
-    im.save(buf, 'JPEG')
-    buf.seek(0)
-    return buf
+        def _fh_thumbnail(buf, width, height=''):
+            if not height:
+                height = width
+            width, height = int(width), int(height)
+            from PIL import Image
+            im = Image.open(buf)
+            im.thumbnail((width, height))
+            buf = BytesIO()
+            im.save(buf, 'JPEG')
+            buf.seek(0)
+            return buf
 
+        self._fragment_handlers = {
+            fh[4:]: func for fh, func in locals().items() if fh.startswith('_fh_')
+        }
 
-_fragment_handlers = {
-    fh[4:]: func for fh, func in globals().items() if fh.startswith('_fh_')
-}
+    def register_fragment_handler(self, frag_name, func):
+        """Register fragment handler
 
+        Args:
+            frag_name (str): fragment name
+            func (function): handler function
+        """
+        self._fragment_handlers[frag_name] = func
 
-def safe_open(path: str, mode='rb', **params):
-    """Open the path for read/write
+    def register_scheme(self, scheme: str, mgr: StorageManager):
+        """Register scheme
 
-    :param path: file system path or URLs.
-            Relative and absolute paths are supported.
-            Paths are matched in the following priority:
-                - URLs starting with http:// or https:// 
-                  may use `proxies`, `referer`, and `headers` in `params`
-                - Data URLs, i.e. data:...
-                  readonly, `mode` should be 'rb'
-                - hdf5://<item id>
-                  `mode` should be 'rb' or 'wb'
-                - <file path>#zip/<zip path>
-                  read a zipped file inside a tar specified by <file path>
-                - <file path>#pdf/<page>
-                  read PNG image from a PDF at page <page>
-                - (ordinary file system paths, with '/' replaced with `os.path.sep`
+        Args:
+            scheme (str): scheme name
+            mgr (StorageManager): manager instance
+        """
+        self._schema[scheme.lower()] = mgr
 
-    :type path: str
-    :param mode: mode for read or write, defaults to 'rb'
-    :type mode: str, optional
-    :return: opened file/IO buffer
-    :rtype: IO
-    """
-    parsed = urllib.parse.urlparse(path.replace('__hash/', '#'))
+    def open(self, path: str, mode='rb', **params):
+        """Open the path for read/write
 
-    if parsed.scheme not in ('http', 'https') and config.storage_proxy:
-        target = '/'.join([_ for _ in (config.storage_proxy.rstrip('/'),
-                          parsed.scheme or 'file', parsed.netloc, parsed.path.lstrip('/')) if _])
+        :param path: file system path or URLs.
+                Relative and absolute paths are supported.
+                Paths are matched in the following priority:
+                    - URLs starting with http:// or https:// 
+                    may use `proxies`, `referer`, and `headers` in `params`
+                    - Data URLs, i.e. data:...
+                    readonly, `mode` should be 'rb'
+                    - hdf5://<item id>
+                    `mode` should be 'rb' or 'wb'
+                    - <file path>#zip/<zip path>
+                    read a zipped file inside a tar specified by <file path>
+                    - <file path>#pdf/<page>
+                    read PNG image from a PDF at page <page>
+                    - (ordinary file system paths, with '/' replaced with `os.path.sep`
+
+        :type path: str
+        :param mode: mode for read or write, defaults to 'rb'
+        :type mode: str, optional
+        :return: opened file/IO buffer
+        :rtype: IO
+        """
+        parsed = urllib.parse.urlparse(path.replace('__hash/', '#'))
+
+        if parsed.scheme not in ('http', 'https', 'data') and config.storage_proxy:
+            target = '/'.join([_ for _ in (config.storage_proxy.rstrip('/'),
+                                           parsed.scheme or 'file', parsed.netloc, parsed.path.lstrip('/')) if _])
+            if parsed.fragment:
+                target += '__hash/' + parsed.fragment
+
+            if mode == 'rb':
+                return self.open(target, 'rb')
+            else:
+                return self.open(target, 'wb')
+
+        mgr = self._get_manager(parsed.scheme)
+        buf = getattr(mgr, 'read' if mode ==
+                      'rb' else 'writebuf')(path, **params)
+
+        if not buf:
+            raise OSError('Unable to open: ' + path)
+
         if parsed.fragment:
-            target += '__hash/' + parsed.fragment
+            handler_name, *fragments = parsed.fragment.split('/')
+            if handler_name in self._fragment_handlers:
+                assert mode == 'rb', 'Fragment handlers can only be applied in read mode'
+                buf = self._fragment_handlers[handler_name](buf, *fragments)
 
-        if mode == 'rb':
-            return safe_open(target, 'rb')
+        return buf
+
+    def statdir(self, path: str):
+        """Get stat of a directory
+
+        :param path: file system path or URLs.
+        :type path: str
+        :return: stat of the directory
+        """
+        return self._get_manager(path).statdir(path)
+
+    def stat(self, path: str):
+        """Get stat of a directory
+
+        :param path: file system path or URLs.
+        :type path: str
+        :return: stat of the directory
+        """
+        return self._get_manager(path).stat(path)
+
+    def find(self, path: str, pattern: str):
+        """Find a file
+        """
+        return self._get_manager(path).search(path, pattern)
+
+    def mkdir(self, path: str, new_folder: str):
+        """Make directory in path"""
+        return self._get_manager(path).mkdir(path, new_folder)
+
+    @staticmethod
+    def get_mimetype(ext):
+        return {
+            'html': 'text/html',
+                    'htm': 'text/html',
+                    'png': 'image/png',
+                    'jpg': 'image/jpeg',
+                    'gif': 'image/gif',
+                    'json': 'application/json',
+                    'css': 'text/css',
+                    'js': 'application/javascript',
+                    'mp4': 'video/mp4'
+        }.get(ext, 'application/octet-stream')
+
+    @staticmethod
+    def get_schemed_path(scheme, path):
+        path = path.replace('__hash/', '#')
+        path = f'{scheme}://{path}'
+        if '#' in path:
+            filepath = path.split('#')[0]
         else:
-            return safe_open(target, 'wb')
+            filepath = path
+        ext = filepath.rsplit('.', 1)[-1]
+        return path, ext.lower() if len(ext) <= 4 else ''
 
-    mgr = _get_manager(parsed.scheme)
-    buf = getattr(mgr, 'read' if mode == 'rb' else 'writebuf')(path, **params)
+    def serve(self, host='0.0.0.0', port=8371):
+        """Start storage server
 
-    if not buf:
-        raise OSError('Unable to open: ' + path)
+        Args:
+            host (str, optional): Host name. Defaults to '0.0.0.0'.
+            port (int, optional): Port number. Defaults to 8371.
 
-    if parsed.fragment:
-        handler_name, *fragments = parsed.fragment.split('/')
-        if handler_name in _fragment_handlers:
-            assert mode == 'rb', 'Fragment handlers can only be applied in read mode'
-            buf = _fragment_handlers[handler_name](buf, *fragments)
+        Returns:
+            Flask: Flask app
+        """
+        storage_app = Flask(__name__)
+        storage_app.secret_key = config.secret_key
 
-    return buf
+        @storage_app.route('/<scheme>/<path:path>', methods=['GET'])
+        def get_item(scheme, path):
+            path, ext = Storage.get_schemed_path(scheme, path)
+            try:
+                buf = self.open(path, 'rb')
+            except OSError:
+                return 'Not Found: ' + path, 404
+
+            mimetype = Storage.get_mimetype(ext)
+
+            resp = send_file(buf, mimetype)
+            resp.headers.add("Cache-Control", "public,max-age=86400")
+            return resp
+
+        @storage_app.route('/<scheme>/<path:path>', methods=['PUT', 'POST'])
+        def put_item(scheme, path):
+            path, ext = Storage.get_schemed_path(scheme, path)
+            if not request.data:
+                return 'no data', 501
+            with self.open(path, 'wb') as fo:
+                fo.write(request.data)
+            return f'OK {path}'
+
+        storage_app.debug = config.debug
+
+        if storage_app.debug or '-d' in sys.argv:
+            storage_app.run(host=host, port=port, debug=True)
+        else:
+            from waitress import serve
+            serve(storage_app, host=host, port=port, threads=8)
+
+        return storage_app
+    
+    def expand_path(self, path):
+        return self._schema[''].expand_path(path)
+    
+    def truncate_path(self, path):
+        return self._schema[''].truncate_path(path)
+    
+    def expand_patterns(patterns: Union[list, str, tuple], allowed_locations=None):
+        """Get expanded paths according to wildcards patterns
+
+        :param patterns: patterns for looking up files.
+            Wildcards (*/?) supported for file system paths.
+            Brackets ({num1-num2}) supported for URLs.
+        :type patterns: Union[list, str]
+        :yield: full/absolute path
+        :rtype: str
+        """
+
+        if isinstance(patterns, str):
+            patterns = patterns.split('\n')
+
+        if isinstance(patterns, tuple):
+            patterns = list(patterns)
+
+        patterns.reverse()
+        while patterns:
+            pattern = patterns.pop()
+
+            iterate = re.search(r'\{(\d+\-\d+)\}', pattern)
+            if iterate:
+                start, end = map(int, iterate.group(1).split('-'))
+                for i in range(start, end+1):
+                    patterns.append(pattern.replace(iterate.group(0), str(i)))
+                continue
+
+            if '*' in pattern:
+                segs = pattern.split('/')
+                for i, seg in enumerate(segs):
+                    if '*' in seg:
+                        parents = segs[:i]
+                        break
+                parent = '/'.join(parents)
+                yield from self._get_manager(pattern).search(parent, pattern)
+                continue
+
+            path = pattern
+            if path.endswith('.zip') or path.endswith('.epub'):
+                with zipfile.ZipFile(path, 'r') as zfile:
+                    for item in zfile.filelist:
+                        yield path + '#zip/' + item.filename
+            else:
+                yield path
 
 
-def safe_statdir(path: str):
-    """Get stat of a directory
-
-    :param path: file system path or URLs.
-    :type path: str
-    :return: stat of the directory
-    """
-    parsed = urllib.parse.urlparse(path.replace('__hash/', '#'))
-    return _get_manager(parsed.scheme).statdir(path)
-
-
-def safe_find(path: str, pattern: str):
-    """Find a file
-    """
-    parsed = urllib.parse.urlparse(path.replace('__hash/', '#'))
-    return _get_manager(parsed.scheme).search(path, pattern)
-
-
-def _get_mimetype(ext):
-    return {
-        'html': 'text/html',
-                'htm': 'text/html',
-                'png': 'image/png',
-                'jpg': 'image/jpeg',
-                'gif': 'image/gif',
-                'json': 'application/json',
-                'css': 'text/css',
-                'js': 'application/javascript',
-                'mp4': 'video/mp4'
-    }.get(ext, 'application/octet-stream')
-
-
-def _get_schemed_path(scheme, path):
-    path = path.replace('__hash/', '#')
-    path = f'{scheme}://{path}'
-    if '#' in path:
-        filepath = path.split('#')[0]
-    else:
-        filepath = path
-    ext = filepath.rsplit('.', 1)[-1]
-    return path, ext.lower() if len(ext) <= 4 else ''
-
-
-@storage_app.route('/<scheme>/<path:path>', methods=['GET'])
-def get_item(scheme, path):
-    path, ext = _get_schemed_path(scheme, path)
-    try:
-        buf = safe_open(path, 'rb')
-    except OSError:
-        return 'Not Found: ' + path, 404
-
-    mimetype = _get_mimetype(ext)
-
-    resp = send_file(buf, mimetype)
-    resp.headers.add("Cache-Control", "public,max-age=86400")
-    return resp
-
-
-@storage_app.route('/<scheme>/<path:path>', methods=['PUT', 'POST'])
-def put_item(scheme, path):
-    path, ext = _get_schemed_path(scheme, path)
-    if not request.data:
-        return 'no data', 501
-    with safe_open(path, 'wb') as fo:
-        fo.write(request.data)
-    return f'OK {path}'
-
-
-storage_app.debug = config.debug
-
-
-def serve_storage(port, host='0.0.0.0'):
-    import sys
-    if '-d' not in sys.argv:
-        from waitress import serve
-        serve(storage_app, host='0.0.0.0', port=port, threads=8)
-    else:
-        storage_app.run(host='0.0.0.0', port=port, debug=True)
-
-
-if __name__ == '__main__':
-    serve_storage(config.port)
+instance = Storage()

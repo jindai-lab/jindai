@@ -4,7 +4,7 @@ Data Source from File Patterns
 """
 
 from jindai.models import Paragraph
-from jindai.storage import expand_patterns
+from jindai.storage import instance as storage
 from jindai.pipeline import DataSourceStage
 
 
@@ -28,5 +28,5 @@ class FilePatternDataSource(DataSourceStage):
             super().__init__()
 
         def fetch(self):
-            for path in expand_patterns(self.patterns):
+            for path in storage.expand_patterns(self.patterns):
                 yield Paragraph(content=path)

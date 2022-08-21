@@ -10,10 +10,10 @@ from urllib.parse import urljoin
 from PIL import Image
 from PyMongoWrapper import F
 
-from jindai import safe_open, parser, DBQuery
+from jindai import storage, parser, DBQuery
 from jindai.models import MediaItem, Paragraph
 from jindai.pipeline import DataSourceStage
-from jindai.storage import expand_patterns
+from jindai.storage import instance as storage
 
 
 class DBQueryDataSource(DataSourceStage):
@@ -166,7 +166,7 @@ class ImageImportDataSource(DataSourceStage):
             """
             albums = defaultdict(Paragraph)
 
-            for loc in expand_patterns(locs):
+            for loc in storage.expand_patterns(locs):
                 extname = loc.rsplit('.', 1)[-1].lower()
                 filename = loc.split('#')[0]
                 if extname in MediaItem.acceptable_extensions or loc.endswith('.mp4.thumb.jpg'):
@@ -183,8 +183,8 @@ class ImageImportDataSource(DataSourceStage):
                     i = MediaItem(source={'file': loc, 'url': '.' + extname},
                                   item_type=MediaItem.get_type(extname))
                     i.save()
-                    with safe_open(f'hdf5://{i.id}', 'wb') as fout:
-                        fout.write(safe_open(loc, 'rb').read())
+                    with storage.open(f'hdf5://{i.id}', 'wb') as fout:
+                        fout.write(storage.open(loc, 'rb').read())
 
                     i.source = dict(i.source, file='blocks.h5')
                     i.save()
@@ -206,7 +206,7 @@ class ImageImportDataSource(DataSourceStage):
             albums = []
             imgset = set()
 
-            for url in expand_patterns(paths):
+            for url in storage.expand_patterns(paths):
                 p = Paragraph.first(F.source == {'url': url}) or Paragraph(
                     dataset=self.dataset,
                     source={'url': url}, images=[], pdate=datetime.datetime.utcnow())
@@ -215,7 +215,7 @@ class ImageImportDataSource(DataSourceStage):
                     title = ''
                 else:
                     self.logger(url)
-                    html = safe_open(url, proxies=self.proxies).read()
+                    html = storage.open(url, proxies=self.proxies).read()
                     assert html, 'Download failed.'
                     try:
                         html = html.decode('utf-8')
