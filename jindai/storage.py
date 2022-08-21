@@ -919,7 +919,7 @@ class Storage:
     def truncate_path(self, path):
         return self._schema[''].truncate_path(path)
     
-    def expand_patterns(patterns: Union[list, str, tuple], allowed_locations=None):
+    def expand_patterns(self, patterns: Union[list, str, tuple], allowed_locations=None):
         """Get expanded paths according to wildcards patterns
 
         :param patterns: patterns for looking up files.
