@@ -213,18 +213,8 @@ def serve_file(path_or_io: Union[str, IO], ext: str = '', file_size: int = 0) ->
         file_size = os.stat(path_or_io).st_size
     else:
         input_file = path_or_io
-
-    mimetype = {
-        'html': 'text/html',
-                'htm': 'text/html',
-                'png': 'image/png',
-                'jpg': 'image/jpeg',
-                'gif': 'image/gif',
-                'json': 'application/json',
-                'css': 'text/css',
-                'js': 'application/javascript',
-                'mp4': 'video/mp4'
-    }.get(ext, 'text/plain')
+        
+    mimetype = storage.get_mimetype(ext)
 
     start, length = 0, 1 << 20
     range_header = request.headers.get('Range')
