@@ -132,7 +132,7 @@ class StorageManager:
                 segs.pop()
             else:
                 segs.append(s)
-        return '/'.join((base_path, *segs))
+        return '/'.join((base_path.rstrip('/'), *[seg.strip('/') for seg in segs]))
 
     def walk(self, base_path: str, match_pattern: str = '') -> Tuple[str, List, List]:
         """Walk through a folder and return files and folders
