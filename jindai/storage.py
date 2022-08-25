@@ -242,7 +242,8 @@ class OSFileSystemManager(StorageManager):
         :return: truncated path
         :rtype: str
         """
-        path = path[7:].replace(os.path.sep, '/')
+        path = path.replace(os.path.sep, '/')
+        if path.startswith('file://'): path = path[7:]
         if path.startswith(self.base):
             return path[len(self.base):]
         return path
@@ -954,16 +955,16 @@ class Storage:
                         parents = segs[:i]
                         break
                 parent = '/'.join(parents)
-                yield from self._get_manager(pattern).search(parent, pattern)
+                for pattern in self._get_manager(pattern).search(parent, pattern):
+                    patterns.append(pattern)
                 continue
 
-            path = pattern
-            if path.endswith('.zip') or path.endswith('.epub'):
-                with zipfile.ZipFile(path, 'r') as zfile:
+            if pattern.endswith('.zip') or pattern.endswith('.epub'):
+                with zipfile.ZipFile(self.open(pattern, 'rb')) as zfile:
                     for item in zfile.filelist:
-                        yield path + '#zip/' + item.filename
+                        yield pattern + '#zip/' + item.filename
             else:
-                yield path
+                yield pattern
 
 
 instance = Storage()

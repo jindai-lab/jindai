@@ -50,19 +50,22 @@ class HTMLDataSource(DataSourceStage):
             self.files = storage.expand_patterns(content)
             self.fields = parser.parse(fields)
             self.paragraph_selector = paragraph_selector
+        
 
         def import_html_src(self, path, html, outline=''):
             """Generate paragraph from html datasources"""
 
             b = B(html, 'lxml')
 
-            for para in b.select(self.paragraph_selector) if self.paragraph_selector else [b]:
+            for html_para in b.select(self.paragraph_selector) if self.paragraph_selector else [b]:
                 para = Paragraph(
                     lang=self.lang, content='',
                     source={
-                        'url' if '://' in path else 'file': storage.truncate_path(path)},
+                        'url' if '://' in path and not path.startswith('file://') else 'file': storage.truncate_path(path)
+                    },
                     pagenum=1,
-                    dataset=self.name, outline=outline,
+                    dataset=self.name,
+                    outline=outline,
                     keywords=[]
                 )
 
@@ -71,16 +74,19 @@ class HTMLDataSource(DataSourceStage):
                         field_path, field_attr = field_path.rsplit('//', 1)
                     else:
                         field_attr = 'text'
-                    elements = para.select(
-                        field_path) if field_path else [para]
+                    elements = html_para.select(
+                        field_path) if field_path else [html_para]
                     value = []
                     for element in elements:
+                        print(element.text)
                         if field_attr == 'text':
-                            value.append(element.text)
+                            value.append(str(element.text))
                         elif field_attr == 'html':
                             value.append(str(element))
                         elif field_attr in element.attrs:
-                            value.append(element.attrs[field_attr])
+                            value.append(str(element.attrs[field_attr]))
+                    if field_name == 'content':
+                        value = '\n'.join(value)
                     setattr(para, field_name, value)
 
                 yield para
