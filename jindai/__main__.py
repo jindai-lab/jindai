@@ -315,10 +315,11 @@ def plugin_export(output: str, infiles):
             zout.write(filename, arcname)
             
             
-@cli.command('serve-storage')
+@cli.command('storage-serve')
 @click.option('--port', '-p', default=8371)
 @click.option('--host', '-h', default='0.0.0.0')
-def serve_storage(port: int, host: str):
+@click.option('--debug', '-d', default=False, flag_value=True)
+def serve_storage(port: int, host: str, debug: bool):
     """Serve storage
 
     :param port: port
@@ -326,7 +327,7 @@ def serve_storage(port: int, host: str):
     :param host: host
     :type host: str
     """
-    storage.serve(host, port)
+    storage.serve(host, port, debug=debug)
 
 
 @cli.command('clear-duplicates')
@@ -380,7 +381,7 @@ def clear_duplicates(limit: int, offset: str, maxdups: int):
 
 @cli.command('web-service')
 @click.option('--port', default=8370, type=int)
-@click.option('--deployment', '-d', default=False, flag_value=True)
+@click.option('--deployment', '-D', default=False, flag_value=True)
 def web_service(port: int, deployment: bool):
     """Run web service on port
 
