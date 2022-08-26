@@ -78,7 +78,6 @@ class HTMLDataSource(DataSourceStage):
                         field_path) if field_path else [html_para]
                     value = []
                     for element in elements:
-                        print(element.text)
                         if field_attr == 'text':
                             value.append(str(element.text))
                         elif field_attr == 'html':

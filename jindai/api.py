@@ -221,7 +221,7 @@ def list_storage(path='', search='', mkdir=''):
     results = None
     if search:
         # path is a query
-        results = list(storage.find(path, '**' + search))
+        results = list(storage.search(path, '**' + search))
     else:
         results = storage.statdir(path)
         if len(results) == 1 and results[0]['type'] == 'file':
