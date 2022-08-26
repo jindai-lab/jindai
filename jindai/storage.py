@@ -3,6 +3,7 @@
 import enum
 import glob
 import itertools
+import json
 import os
 import re
 import sys
@@ -19,7 +20,7 @@ import h5py
 import numpy as np
 import requests
 import urllib3
-from flask import Flask, request, send_file
+from flask import Flask, request, send_file, jsonify
 from pdf2image import convert_from_path as _pdf_convert
 from smb.SMBHandler import SMBHandler
 
@@ -187,7 +188,6 @@ class OSFileSystemManager(StorageManager):
     def __init__(self, base: str, allowed_locations=None) -> None:
         if not base.endswith(os.path.sep):
             base += os.path.sep
-        base = base.replace(os.path.sep, '/')
         self.base = base
 
         if allowed_locations is None:
@@ -441,7 +441,7 @@ class Hdf5Manager(StorageManager):
     def listdir(self, path: str) -> list:
         return itertools.chain(*[list(s['data']) for s in self.files + [self._writable_file]])
 
-    def walk(self, base_path: str) -> Iterable[Tuple[str, List, List]]:
+    def walk(self, base_path: str, name_pattern='') -> Iterable[Tuple[str, List, List]]:
         if base_path.rstrip('/') == '':
             yield '/', [], self.listdir('/')
 
@@ -661,20 +661,89 @@ class DataSchemeManager(StorageManager):
         with urllib.request.urlopen(path) as response:
             data = response.read()
         return BytesIO(data)
+    
+    
+class StorageProxyManager(StorageManager):
+    
+    def __init__(self, proxy) -> None:
+        super().__init__()
+        self._webm = WebManager()
+        self._base = proxy.rstrip('/')
+    
+    def _proxied_url(self, path):
+        parsed = urllib.parse.urlparse(path)
+        
+        target = '/'.join([_ for _ in (
+            self._base,
+            parsed.scheme or 'file',
+            parsed.netloc,
+            parsed.path.lstrip('/')) if _])
+        
+        if parsed.fragment:
+            target += '__hash/' + parsed.fragment
+        
+        return target
+            
+    def _get_json(self, path, action, **params):
+        if params is None:
+            params = {}
+        params['action'] = action
+        url = self._proxied_url(path) + '?' + urllib.parse.urlencode(params)
+        try:
+            text = requests.get(url).content
+            return json.loads(text)
+        except:
+            return
 
+    def statdir(self, path):
+        return self._get_json(path, 'statdir')
+    
+    def listdir(self, path: str) -> list:
+        return self._get_json(path, 'listdir')
 
+    def exists(self, path: str) -> list:
+        return self._get_json(path, 'exists')
+    
+    def walk(self, start_path, name_pattern=''):
+        return self._get_json(start_path, 'walk', name_pattern=name_pattern)
+    
+    def stat(self, path):
+        return self._get_json(path, 'stat')
+
+    def read(self, path):
+        return self._webm.read(self._proxied_url(path))
+    
+    def writebuf(self, path: str, **params) -> BytesIO:
+        return self._webm.writebuf(self._proxied_url(path), **params)
+    
+    def mkdir(self, path):
+        return self._get_json(path, 'mkdir')
+
+    def search(self, path, name_pattern):
+        return self._get_json(path, 'search', name_pattern=name_pattern)
+    
+    def walk(self, path, name_pattern=''):
+        return self._get_json(path, 'walk', name_pattern=name_pattern)
+    
+    
 class Storage:
 
     def _get_manager(self, path) -> StorageManager:
+        
+        scheme = ''
+        
         if path in self._schema:
-            return self._schema[path]
-
-        if '://' in path and not path.startswith('file://'):
-            scheme = path.split('://', 1)[0]
-            return self._schema[scheme]
-
-        return self._schema['']
-
+            scheme = path
+        elif '://' in path:
+            tmp = path.split('://', 1)[0]
+            if tmp in self._schema:
+                scheme = tmp
+        
+        if config.storage_proxy and scheme not in ('http', 'https', 'data'):
+            return self._schema['_proxied']
+        
+        return self._schema[scheme]
+    
     def __init__(self) -> None:
         """Initialize storage
         """
@@ -685,7 +754,8 @@ class Storage:
             'https': WebManager(),
             'data': DataSchemeManager(),
             'hdf5': Hdf5Manager(config.storage, *(config.external_storage or [])),
-            '': OSFileSystemManager(config.storage)
+            '': OSFileSystemManager(config.storage),
+            '_proxied': StorageProxyManager(config.storage_proxy or '')
         }
 
         def _fh_zip(buf, *inner_path):
@@ -783,23 +853,12 @@ class Storage:
                     - (ordinary file system paths, with '/' replaced with `os.path.sep`
 
         :type path: str
-        :param mode: mode for read or write, defaults to 'rb'
+        :param mode: mode for read or write (binary only), defaults to 'rb'
         :type mode: str, optional
         :return: opened file/IO buffer
         :rtype: IO
         """
         parsed = urllib.parse.urlparse(path.replace('__hash/', '#'))
-
-        if parsed.scheme not in ('http', 'https', 'data') and config.storage_proxy:
-            target = '/'.join([_ for _ in (config.storage_proxy.rstrip('/'),
-                                           parsed.scheme or 'file', parsed.netloc, parsed.path.lstrip('/')) if _])
-            if parsed.fragment:
-                target += '__hash/' + parsed.fragment
-
-            if mode == 'rb':
-                return self.open(target, 'rb')
-            else:
-                return self.open(target, 'wb')
 
         mgr = self._get_manager(parsed.scheme)
         buf = getattr(mgr, 'read' if mode ==
@@ -815,6 +874,14 @@ class Storage:
                 buf = self._fragment_handlers[handler_name](buf, *fragments)
 
         return buf
+    
+    def exists(self, path):
+        """Check if path exists
+        :param path: file system path or URLs.
+        :type path: str
+        :return: True if existent, otherwise False
+        """
+        return self._get_manager(path).exists(path)
 
     def statdir(self, path: str):
         """Get stat of a directory
@@ -834,10 +901,10 @@ class Storage:
         """
         return self._get_manager(path).stat(path)
 
-    def find(self, path: str, pattern: str):
+    def search(self, path: str, name_pattern: str):
         """Find a file
         """
-        return self._get_manager(path).search(path, pattern)
+        return self._get_manager(path).search(path, name_pattern)
 
     def mkdir(self, path: str, new_folder: str):
         """Make directory in path"""
@@ -868,7 +935,7 @@ class Storage:
         ext = filepath.rsplit('.', 1)[-1]
         return path, ext.lower() if len(ext) <= 4 else ''
 
-    def serve(self, host='0.0.0.0', port=8371):
+    def serve(self, host='0.0.0.0', port=8371, debug=False):
         """Start storage server
 
         Args:
@@ -882,8 +949,23 @@ class Storage:
         storage_app.secret_key = config.secret_key
 
         @storage_app.route('/<scheme>/<path:path>', methods=['GET'])
-        def get_item(scheme, path):
+        @storage_app.route('/<scheme>', methods=['GET'])
+        def get_item(scheme, path=''):
             path, ext = Storage.get_schemed_path(scheme, path)
+            
+            # handle with storage queries
+            params = request.args.to_dict()
+            action = params.pop('action', '')
+            if action:
+                if hasattr(self, action):
+                    result = getattr(self, action)(path, **params)
+                    if action in ('walk', 'search', 'find'):
+                        result = list(result)
+                    return jsonify(result)
+                else:
+                    return jsonify(None)
+            
+            # send file
             try:
                 buf = self.open(path, 'rb')
             except OSError:
@@ -904,7 +986,7 @@ class Storage:
                 fo.write(request.data)
             return f'OK {path}'
 
-        storage_app.debug = config.debug
+        storage_app.debug = debug
 
         if storage_app.debug or '-d' in sys.argv:
             storage_app.run(host=host, port=port, debug=True)
@@ -920,7 +1002,7 @@ class Storage:
     def truncate_path(self, path):
         return self._schema[''].truncate_path(path)
     
-    def expand_patterns(self, patterns: Union[list, str, tuple], allowed_locations=None):
+    def expand_patterns(self, patterns: Union[list, str, tuple]):
         """Get expanded paths according to wildcards patterns
 
         :param patterns: patterns for looking up files.
