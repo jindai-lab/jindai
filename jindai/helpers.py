@@ -196,62 +196,7 @@ def logined(role=''):
     return None
 
 
-def serve_file(path_or_io: Union[str, IO], ext: str = '', file_size: int = 0) -> Response:
-    """Serve static file or buffer
-
-    Args:
-        p (Union[str, IO]): file name or buffer
-        ext (str, optional): extension name
-        file_size (int, optional): file size
-
-    Returns:
-        Response: a flask response object
-    """
-    if isinstance(path_or_io, str):
-        input_file = open(path_or_io, 'rb')
-        ext = path_or_io.rsplit('.', 1)[-1]
-        file_size = os.stat(path_or_io).st_size
-    else:
-        input_file = path_or_io
-        
-    mimetype = storage.get_mimetype(ext)
-
-    start, length = 0, 1 << 20
-    range_header = request.headers.get('Range')
-    if file_size and file_size > 10 << 20:
-        if range_header:
-            # example: 0-1000 or 1250-
-            matched_nums = re.search('([0-9]+)-([0-9]*)', range_header)
-            num_groups = matched_nums.groups()
-            byte1, byte2 = 0, None
-            if num_groups[0]:
-                byte1 = int(num_groups[0])
-            if num_groups[1]:
-                byte2 = int(num_groups[1])
-            if byte1 < file_size:
-                start = byte1
-            if byte2:
-                length = byte2 + 1 - byte1
-            else:
-                length = file_size - start
-        else:
-            length = file_size
-
-        def _generate_chunks():
-            coming_length = length
-            input_file.seek(start)
-            while coming_length > 0:
-                chunk = input_file.read(min(coming_length, 1 << 20))
-                coming_length -= len(chunk)
-                yield chunk
-
-        resp = Response(stream_with_context(_generate_chunks()), 206,
-                        content_type=mimetype, direct_passthrough=True)
-        resp.headers.add(
-            'Content-Range', f'bytes {start}-{start+length-1}/{file_size}')
-        return resp
-
-    return send_file(input_file, mimetype=mimetype, conditional=True)
+serve_file = storage.serve_file
 
 
 def serve_proxy(server, path):
