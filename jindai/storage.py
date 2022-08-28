@@ -212,19 +212,18 @@ class OSFileSystemManager(StorageManager):
         if path.startswith('file://'):
             path = path[7:]
 
-        if '://' in path:
-            return path
         if '#' in path:
             path, _ = path.split('#', 1)
 
         path = path.replace('/', os.path.sep)
 
         if not path.startswith(tuple(self.allowed_locations)):
-            if path.startswith((os.path.altsep or os.path.sep, os.path.sep)):
+            if path.startswith(os.path.sep):
                 path = path[1:]
-            if re.match(r'[A-Za-z]:\\', path):
-                path = path[3:]
             for parent in self.allowed_locations:
+                if path.startswith(parent + os.path.sep):
+                    return path
+                
                 tmpath = self.join(parent, path)
                 if self.exists(tmpath):
                     return tmpath
