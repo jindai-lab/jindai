@@ -145,9 +145,8 @@ class StorageManager:
         Yields:
             Tuple[str, List, List]: Path, folders, files
         """
-        pattern_segs = '/'.join(match_pattern.rstrip('/').split('/')
-                                [:len(base_path.rstrip('/').split('/'))+1])
-
+        base_path = base_path.rstrip('/') + '/'
+        pattern_segs = '/'.join(match_pattern.split('/')[:base_path.count('/')+1])
         dirs, files = [], []
         for f in self.listdir(base_path):
             if self.stat(self.join(base_path, f))['type'] == 'folder':
@@ -198,7 +197,7 @@ class OSFileSystemManager(StorageManager):
         self.allowed_locations = allowed_locations
 
     def expand_path(self, path: Union[Tuple[str], str]) -> str:
-        """Expand path to local storage path
+        """Expand path to local (OS-specific) storage path
 
         :param path: the path to expand
         :type path: Union[Tuple[str], str]
@@ -228,7 +227,7 @@ class OSFileSystemManager(StorageManager):
                 if os.path.exists(tmpath):
                     return tmpath
 
-        return self.join(self.base, path)
+        return os.path.join(self.base, path)
 
     def truncate_path(self, path):
         """Truncate path if it belongs to the base directory.
@@ -285,25 +284,25 @@ class OSFileSystemManager(StorageManager):
             return False
         return True
 
-    def walk(self, base_path, name_pattern=''):
-        base_path = self.expand_path(base_path)
-        name_pattern = self.expand_path(name_pattern)
-        yield from super().walk(base_path, name_pattern)
-
-    def search(self, base_path, name_pattern):
-        base_path = self.expand_path(base_path)
-        name_pattern = self.expand_path(name_pattern)
-        yield from super().search(base_path, name_pattern)
-
     def join(self, path: str, *path_segs: str) -> str:
         if path.startswith('file://'):
             path = path[7:]
-        return 'file:///' + os.path.join(path, *path_segs).replace(os.path.sep, '/').lstrip('/')
+        return 'file://' + os.path.join(path, *path_segs).replace(os.path.sep, '/')
 
     def mkdir(self, path: str, new_folder: str) -> bool:
         path = self.expand_path(path)
         os.makedirs(os.path.join(path, new_folder), exist_ok=True)
         return True
+
+    def walk(self, base_path, name_pattern=''):
+        base_path = self.join(self.expand_path(base_path))
+        name_pattern = self.join(self.expand_path(name_pattern)) if name_pattern else ''
+        return super().walk(base_path, name_pattern)
+
+    def search(self, base_path, name_pattern = ''):
+        base_path = self.join(self.expand_path(base_path))
+        name_pattern = self.join(self.expand_path(name_pattern)) if name_pattern else ''
+        return super().search(base_path, name_pattern)
 
 
 class Hdf5Manager(StorageManager):
@@ -625,7 +624,7 @@ class SMBManager(StorageManager):
     def exists(self, path: str) -> bool:
         return self.stat(path) is not None
 
-    def walk(self, start_path):
+    def walk(self, start_path, name_pattern=''):
         start_path = start_path.strip('/') + '/'
         service, path = start_path.split('/', 1)
         file_dirs = self.conn.listPath(service, path)
