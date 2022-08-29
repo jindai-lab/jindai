@@ -2,9 +2,11 @@
 
 import enum
 import glob
+import io
 import itertools
 import json
 import os
+import ssl
 import re
 import sys
 import tempfile
@@ -19,14 +21,12 @@ from typing import IO, Iterable, List, Tuple, Union
 import h5py
 import numpy as np
 import requests
-import urllib3
-from flask import Flask, request, send_file, jsonify, Response, stream_with_context
+from flask import (Flask, Response, jsonify, request, send_file,
+                   stream_with_context)
 from pdf2image import convert_from_path as _pdf_convert
 from smb.SMBHandler import SMBHandler
 
 from .config import instance as config
-
-urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 
 class StorageManager:
@@ -476,6 +476,86 @@ class WebManager(StorageManager):
             if self.resp.status_code != 200:
                 raise OSError(f'{self.resp.status_code} {self.resp.reason}')
 
+    class _ResponseStream(io.IOBase):
+
+        def __init__(self, req, attempts=3, proxies=None, verify=True, timeout=60):
+            super().__init__()
+            self._pos = 0
+            self._seekable = True
+            self.req = req
+            self.verify = verify
+            self.timeout = timeout
+            self.attempts = attempts
+            self.proxies = proxies or {}
+
+            with self._urlopen() as f:
+                self.content_length = int(f.getheader("Content-Length", -1))
+                if self.content_length < 0:
+                    self._seekable = False
+                if f.getheader("Accept-Ranges", "none").lower() != "bytes":
+                    self._seekable = False
+
+        def seek(self, offset, whence=0):
+            if not self.seekable():
+                raise OSError
+            if whence == 0:
+                self._pos = 0
+            elif whence == 1:
+                pass
+            elif whence == 2:
+                self._pos = self.content_length
+            self._pos += offset
+            return self._pos
+
+        def seekable(self, *args, **kwargs):
+            return self._seekable
+
+        def readable(self, *args, **kwargs):
+            return not self.closed
+
+        def writable(self, *args, **kwargs):
+            return False
+
+        def read(self, amt=-1):
+            if not self.seekable():
+                return self._urlopen().read()
+
+            if self._pos >= self.content_length:
+                return b""
+            if amt < 0:
+                end = self.content_length - 1
+            else:
+                end = min(self._pos + amt - 1, self.content_length - 1)
+            byte_range = (self._pos, end)
+            self._pos = end + 1
+
+            with self._urlopen(byte_range) as f:
+                return f.read()
+
+        def readall(self):
+            return self.read(-1)
+
+        def tell(self):
+            return self._pos
+
+        def _urlopen(self, byte_range=None):
+            if byte_range:
+                self.req.add_header('Range', '{}-{}'.format(*byte_range))
+
+            for type_, host in self.proxies.items():
+                self.req.set_proxy(host, type_)
+
+            ctx = ssl.create_default_context()
+            ctx.check_hostname = self.verify
+            ctx.verify_mode = ssl.CERT_NONE
+
+            for _ in range(self.attempts):
+                try:
+                    return urllib.request.urlopen(self.req, timeout=self.timeout, context=ctx)
+                except urllib.error.HTTPError as e:
+                    time.sleep(1)
+
+
     @staticmethod
     def _build_request(url: str, method='GET', referer: str = '',
                        headers=None, data=None, **_):
@@ -508,7 +588,7 @@ class WebManager(StorageManager):
         if referer is not None:
             headers["referer"] = referer.encode('utf-8')
 
-        return requests.Request(url=url, method=method, headers=headers, cookies={}, data=data)
+        return urllib.request.Request(url=url, method=method, headers=headers, data=data)
 
     def __init__(self, attempts=3, verify=False, timeout=30):
         """
@@ -524,26 +604,10 @@ class WebManager(StorageManager):
     def writebuf(self, path: str, **params) -> BytesIO:
         return WebManager._RequestBuffer(path, **params)
 
-    def read(self, path: str, proxies={}, **params) -> BytesIO:
-        buf = None
-        req = WebManager._build_request(path, **params).prepare()
-        for _ in range(self.attempts):
-            try:
-                code = -1
-                try:
-                    resp = requests.Session().send(req, verify=self.verify,
-                                                   timeout=self.timeout, proxies=proxies)
-                    buf = resp.content
-                    code = resp.status_code
-                except requests.exceptions.ProxyError:
-                    buf = None
-                if code != -1:
-                    break
-            except Exception:
-                time.sleep(1)
-
-        return BytesIO(buf)
-
+    def read(self, path: str, proxies=None, **params) -> BytesIO:
+        req = WebManager._build_request(path, **params)
+        return WebManager._ResponseStream(req, self.attempts, proxies, self.verify, self.timeout)
+        
     def exists(self, path: str) -> bool:
         return True
 
@@ -988,6 +1052,8 @@ class Storage:
                             content_type=mimetype, direct_passthrough=True)
             resp.headers.add(
                 'Content-Range', f'bytes {start}-{start+length-1}/{file_size}')
+            resp.headers.add('Accept-Ranges', 'bytes')
+            resp.headers.add('Content-Length', length)
             return resp
 
         return send_file(input_file, mimetype=mimetype, conditional=True)
