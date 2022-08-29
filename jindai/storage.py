@@ -349,7 +349,8 @@ class Hdf5Manager(StorageManager):
             self._writable_file = None
 
     def stat(self, path: str) -> dict:
-        data = self.get(path)
+        parsed = urllib.parse.urlparse(path)
+        data = self.get(parsed.netloc)
         if data:
             return {
                 'name': path,
