@@ -7,6 +7,7 @@ from jindai.helpers import safe_import
 from jindai.plugin import Plugin
 from jindai.storage import StorageManager
 from dateutil.parser import parse as parse_time
+from collections import defaultdict
 import urllib
 import os
 
@@ -16,12 +17,17 @@ import msal
 from msdrive import OneDrive
 
 
+if not config.onedrive:
+    print('Please specify onedrive section in configuration file')
+    config.onedrive = defaultdict(str)
+
+
 class OneDriveAuthenticator:
     
-    CLIENT_ID = '46acf3bc-ca16-4606-9c9d-e078b5ae383d'
+    CLIENT_ID = config.onedrive['clientId']
     CLIENT_SECRET = config.onedrive['clientSecret']
     GRAPH_USER_SCOPES = ['files.read', 'files.read.all']
-    REDIRECT_TO = 'https://dh.innovors.com/api/plugins/onedrive/auth'
+    REDIRECT_TO = config.onedrive['server'] + '/api/plugins/onedrive/auth'
     AUTHORITY = 'https://login.microsoftonline.com/common'
     CACHE_PATH = os.path.abspath(os.path.join(os.path.dirname(__file__), 'onedrive_token_cache'))
     
