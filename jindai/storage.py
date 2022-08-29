@@ -465,16 +465,97 @@ class WebManager(StorageManager):
             :param method: method for the request, defaults to 'POST'
             :type method: str, optional
             """
-            self.req = WebManager._build_request(url, method, **params)
+            self.url = url
+            self.method = method
             self.resp = None
             super().__init__()
 
         def close(self):
-            self.req.data = self.getvalue()
+            self.req = WebManager._build_request(self.url, self.method, data=self.getvalue())
+            self.resp = urllib.request.urlopen(self.req)
             super().close()
-            self.resp = requests.Session().send(self.req.prepare())
-            if self.resp.status_code != 200:
-                raise OSError(f'{self.resp.status_code} {self.resp.reason}')
+            if self.resp.status != 200:
+                raise OSError(f'HTTP {self.resp.status}')
+
+    class _ResponseStream(io.IOBase):
+
+        def __init__(self, req, attempts=3, proxies=None, verify=True, timeout=60):
+            super().__init__()
+            self._pos = 0
+            self._seekable = True
+            self.req = req
+            self.verify = verify
+            self.timeout = timeout
+            self.attempts = attempts
+            self.proxies = proxies or {}
+
+            with self._urlopen() as f:
+                self.content_length = int(f.getheader("Content-Length", -1))
+                if self.content_length < 0:
+                    self._seekable = False
+                if f.getheader("Accept-Ranges", "none").lower() != "bytes":
+                    self._seekable = False
+
+        def seek(self, offset, whence=0):
+            if not self.seekable():
+                raise OSError
+            if whence == 0:
+                self._pos = 0
+            elif whence == 1:
+                pass
+            elif whence == 2:
+                self._pos = self.content_length
+            self._pos += offset
+            return self._pos
+
+        def seekable(self, *args, **kwargs):
+            return self._seekable
+
+        def readable(self, *args, **kwargs):
+            return not self.closed
+
+        def writable(self, *args, **kwargs):
+            return False
+
+        def read(self, amt=-1):
+            if not self.seekable():
+                return self._urlopen().read()
+
+            if self._pos >= self.content_length:
+                return b""
+            if amt < 0:
+                end = self.content_length - 1
+            else:
+                end = min(self._pos + amt - 1, self.content_length - 1)
+            byte_range = (self._pos, end)
+            self._pos = end + 1
+
+            with self._urlopen(byte_range) as f:
+                return f.read()
+
+        def readall(self):
+            return self.read(-1)
+
+        def tell(self):
+            return self._pos
+
+        def _urlopen(self, byte_range=None):
+            if byte_range:
+                self.req.add_header('Range', '{}-{}'.format(*byte_range))
+
+            for type_, host in self.proxies.items():
+                self.req.set_proxy(host, type_)
+
+            ctx = ssl.create_default_context()
+            ctx.check_hostname = self.verify
+            ctx.verify_mode = ssl.CERT_NONE
+
+            for _ in range(self.attempts):
+                try:
+                    return urllib.request.urlopen(self.req, timeout=self.timeout, context=ctx)
+                except urllib.error.HTTPError as e:
+                    time.sleep(1)
+
 
     class _ResponseStream(io.IOBase):
 
