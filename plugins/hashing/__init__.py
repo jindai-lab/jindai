@@ -41,7 +41,7 @@ def single_item(pid: str, iid: str):
 
 
 def _hash_image(image, method):
-    if isinstance(image, BytesIO):
+    if hasattr(image, 'seek'):
         image.seek(0)
         image = Image.open(image)
     hash_val = getattr(imagehash, method)(image)

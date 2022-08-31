@@ -542,20 +542,31 @@ class WebManager(StorageManager):
         def _urlopen(self, byte_range=None):
             if byte_range:
                 self.req.add_header('Range', '{}-{}'.format(*byte_range))
+            else:
+                if self.req.has_header('Range'):
+                    self.req.remove_header('Range')
 
-            for type_, host in self.proxies.items():
-                self.req.set_proxy(host, type_)
+            url_scheme = self.req.get_full_url().split('://')[0]
+
+            proxy = self.proxies.get(url_scheme, '')
+            if proxy and not self.req.has_proxy():
+                type_, host = proxy.split('://', 1) if '://' in proxy else ('http', proxy)
+                self.req.set_proxy(host.split('://')[-1], type_)
 
             ctx = ssl.create_default_context()
             ctx.check_hostname = self.verify
             ctx.verify_mode = ssl.CERT_NONE
 
+            ex = None
+
             for _ in range(self.attempts):
                 try:
                     return urllib.request.urlopen(self.req, timeout=self.timeout, context=ctx)
                 except urllib.error.HTTPError as e:
+                    ex = e
                     time.sleep(1)
 
+            if ex: print('Read from', self.req.get_full_url(), 'failed with exception', type(ex).__name__, ex)
 
     class _ResponseStream(io.IOBase):
 
@@ -668,6 +679,9 @@ class WebManager(StorageManager):
 
         if referer is not None:
             headers["referer"] = referer.encode('utf-8')
+
+        if data and type(data) == bytes:
+            headers['content-type'] = 'application/octet-stream'
 
         return urllib.request.Request(url=url, method=method, headers=headers, data=data)
 
@@ -1183,7 +1197,7 @@ class Storage:
         def put_item(scheme, path):
             path, ext = Storage.get_schemed_path(scheme, path)
             if not request.data:
-                return 'no data', 501
+                return f'No data, ignored.'
             with self.open(path, 'wb') as fo:
                 fo.write(request.data)
             return f'OK {path}'

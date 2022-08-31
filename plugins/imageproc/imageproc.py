@@ -9,6 +9,7 @@ from typing import Union
 import numpy as np
 from PIL import Image, ImageOps
 from PyMongoWrapper import ObjectId
+import urllib.error
 
 from jindai import PipelineStage, parser, storage
 from jindai.helpers import safe_import
@@ -298,7 +299,9 @@ class DownloadImages(MediaItemStage):
             content = storage.open(i.source['url'], referer=post.source.get(
                 'url', ''), proxies=self.proxies).read()
             assert content
-        except Exception:
+        # except Exception as ex:
+        except urllib.error.HTTPError as ex:
+            self.logger('Error while downloading item', i.source['url'], type(ex).__name__, ex)
             return
 
         with storage.open(f'hdf5://{i.id}', 'wb') as output:
