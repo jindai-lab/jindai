@@ -3,6 +3,7 @@
 config*.yaml
 dump*
 temp_*.py
+_*.sh
 *.h5
 
 # Byte-compiled / optimized / DLL files
