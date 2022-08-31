@@ -66,8 +66,6 @@ class Term(db.DbObject):
 class MediaItem(db.DbObject):
     """Image item"""
 
-    flag = int
-    rating = float
     width = int
     height = int
     thumbnail = str
@@ -166,15 +164,15 @@ class MediaItem(db.DbObject):
             with storage.open(f'hdf5://{self.id}', 'wb') as output:
                 buf = image.tobytes('jpeg')
                 output.write(buf)
-            self._image_flag = False
-
+            
+        del self._image_flag
         super().save()
+        self._image_flag = False
         self._image = image
 
     @classmethod
     def on_initialize(cls):
         """Initialize indicies"""
-        cls.ensure_index('flag')
         cls.ensure_index('rating')
         cls.ensure_index('source')
 
