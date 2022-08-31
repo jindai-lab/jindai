@@ -66,10 +66,10 @@ class RepeatWhile(FlowControlStage):
         if paragraph[self.times_key] is None:
             paragraph[self.times_key] = 0
 
-        flag = execute_query_expr(self.cond, paragraph)
+        condition_satisfied = execute_query_expr(self.cond, paragraph)
         paragraph[self.times_key] += 1
 
-        if flag and self.pipeline.stages:
+        if condition_satisfied and self.pipeline.stages:
             self.pipeline.stages[-1].next = self
             yield paragraph, self.pipeline.stages[0]
         else:

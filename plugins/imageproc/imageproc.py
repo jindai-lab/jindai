@@ -73,11 +73,8 @@ class CheckImage(MediaItemStage):
             image.verify()
             i.save()
             return i
-        except OSError:
-            i.flag = 10
-            i.save()
         except Exception as ex:
-            self.logger(i.id, ex)
+            self.logger(i.id, type(ex).__name__, ex)
         return i
 
 
@@ -309,7 +306,6 @@ class DownloadImages(MediaItemStage):
             self.logger(i.id, len(content))
 
         i.source = {'file': 'blocks.h5', 'url': i.source['url']}
-        i.flag = 0
 
 
 class QRCodeScanner(PipelineStage):
