@@ -605,7 +605,7 @@ class WebManager(StorageManager):
 
         return urllib.request.Request(url=url, method=method, headers=headers, data=data)
 
-    def __init__(self, attempts=3, verify=False, timeout=30):
+    def __init__(self, attempts=3, verify=False, timeout=30, seekable=False):
         """
         Args:
             attempts (int, optional): Maximal retries when fetching data from server. Defaults to 3.
@@ -615,13 +615,21 @@ class WebManager(StorageManager):
         self.attempts = attempts
         self.verify = verify
         self.timeout = timeout
+        self.seekable = seekable
 
     def writebuf(self, path: str, **params) -> BytesIO:
         return WebManager._RequestBuffer(path, **params)
 
     def read(self, path: str, proxies=None, **params) -> BytesIO:
-        req = WebManager._build_request(path, **params)
-        return WebManager._ResponseStream(req, self.attempts, proxies, self.verify, self.timeout)
+        if self.seekable:
+            req = WebManager._build_request(path, **params)
+            return WebManager._ResponseStream(req, self.attempts, proxies, self.verify, self.timeout)
+        else:
+            referer = params.pop('referer', '')
+            if referer:
+                if 'headers' not in params: params['headers'] = {}
+                params['headers']['referer'] = referer
+            return BytesIO(requests.get(path, **params).content)
         
     def exists(self, path: str) -> bool:
         return True
@@ -745,7 +753,7 @@ class StorageProxyManager(StorageManager):
     
     def __init__(self, proxy) -> None:
         super().__init__()
-        self._webm = WebManager()
+        self._webm = WebManager(seekable=True)
         self._base = proxy.rstrip('/')
     
     def _proxied_url(self, path):
