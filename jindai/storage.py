@@ -498,7 +498,7 @@ class WebManager(StorageManager):
 
         def seek(self, offset, whence=0):
             if not self.seekable():
-                raise OSError
+                raise io.UnsupportedOperation
             if whence == 0:
                 self._pos = 0
             elif whence == 1:

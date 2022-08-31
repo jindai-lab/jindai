@@ -131,7 +131,7 @@ def resolve_dups(tmp_file_name, slimit):
             ids.add(id1)
             ids.add(id2)
         items = {}
-        for i in MediaItem.query(F.flag.eq(0) & F.id.in_([ObjectId(_) for _ in ids])):
+        for i in MediaItem.query(F.id.in_([ObjectId(_) for _ in ids])):
             items[str(i.id)] = i
         return items
 
@@ -281,7 +281,7 @@ class Hashing(Plugin):
             for i in paragraph.images:
                 if i.id == image_item.id:
                     continue
-                if i.flag != 0 or i.dhash is None or i.dhash == b'':
+                if i.dhash is None or i.dhash == b'':
                     continue
                 dha1, dhb1 = to_int(i.dhash), to_int(i.whash)
                 i.score = bitcount(dha ^ dha1) + bitcount(dhb ^ dhb1)
