@@ -154,19 +154,20 @@ class ImageHash(MediaItemStage):
             if i_dhash and i_whash:
                 return i
 
-            data = i.data
-            if not data:
+            if not i.data:
                 return None
             
             if not i_dhash:
-                i_dhash = dhash(data) or ''
+                i_dhash = dhash(i.image) or ''
             if not i_whash:
-                i_whash = whash(data) or ''
+                i_whash = whash(i.image) or ''
 
             i.dhash, i.whash = i_dhash, i_whash
-        except (IOError, AssertionError):
-            pass
+        except (IOError, AssertionError) as ex:
+            self.logger(type(ex).__name__, ex)
+        
         i.save()
+        return i
 
 
 class ImageHashDuplications(MediaItemStage):
