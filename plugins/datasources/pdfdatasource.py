@@ -85,25 +85,25 @@ class PDFDataSource(DataSourceStage):
             else:
                 existent = {}
 
-            for pdf in self.files:
-                path = storage.truncate_path(pdf)
-                stream = storage.open(pdf, 'rb')
+            for filepath in self.files:
+                short_path = storage.truncate_path(filepath)
+                stream = storage.open(filepath, 'rb')
                 if hasattr(stream, 'filename'):
                     doc = fitz.open(stream.filename)
                 else:
                     doc = fitz.open('pdf', stream)
-                self.logger('importing', path)
+                self.logger('importing', short_path)
                 page_range = self.page_range
                 if not page_range:
-                    min_page = existent.get(path)
+                    min_page = existent.get(short_path)
                     min_page = 0 if min_page is None else (min_page + 1)
                     self.logger('... from page', min_page)
-                    page_range = range(min_page, doc.pageCount)
+                    page_range = range(min_page, doc.page_count)
 
                 lang = self.lang
 
                 for page in page_range:
-                    if page >= doc.pageCount:
+                    if page >= doc.page_count:
                         break
 
                     try:
@@ -115,9 +115,9 @@ class PDFDataSource(DataSourceStage):
                         yield para_coll(
                             lang=lang, content=lines.encode(
                                 'utf-8', errors='ignore').decode('utf-8'),
-                            source={'file': path, 'page': page},
+                            source={'file': short_path, 'page': page},
                             pagenum=label or (page+1),
                             dataset=self.name
                         )
                     except Exception as ex:
-                        self.logger(pdf, page+1, ex)
+                        self.logger(filepath, page+1, ex)
