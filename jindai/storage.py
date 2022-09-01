@@ -83,9 +83,13 @@ class StorageManager:
             bool: True if path exists
         """
         return False
+    
+    def read(self, path: str, **params) -> bytes:
+        """Get data bytes"""
+        return b''
 
-    def read(self, path: str, **params) -> BytesIO:
-        """Get read io buffer for path
+    def readbuf(self, path: str, **params) -> BytesIO:
+        """Get read buffer for path
 
         Args:
             path (str): Path in full form
@@ -93,18 +97,16 @@ class StorageManager:
         Returns:
             BytesIO: Readable buffer
         """
-        return BytesIO()
-
-    def writebuf(self, path: str, **params) -> BytesIO:
-        """Get a writable buffer for path
-
-        Args:
-            path (str): Path in full form
-
-        Returns:
-            BytesIO: Writable buffer, will perform writing when closing
+        return BytesIO(self.read(path, **params))
+    
+    def writebuf(self, path, **params):
+        """Get write buffer for path
         """
-        return BytesIO()
+        return WriteBuffer(self, path, **params)
+        
+    def write(self, path, data : bytes) -> bool:
+        """Write bytes data"""
+        return True
 
     def unlink(self, path: str) -> bool:
         """Unlink a file/folder
@@ -179,6 +181,23 @@ class StorageManager:
     def mkdir(self, path: str, new_folder: str) -> bool:
         """Make a new directory in path"""
         return False
+    
+    def move(self, path: str, new_path: str) -> bool:
+        """Move path name"""
+        return False
+    
+
+class WriteBuffer(BytesIO):
+    
+    def __init__(self, writer: StorageManager, path : str, **write_params: dict) -> None:
+        super().__init__()
+        self._writer = writer
+        self._params = write_params or {}
+        self._params['path'] = path
+        
+    def close(self):
+        self._writer.write(data=self.getvalue(), **self._params)
+        super().close()
 
 
 class OSFileSystemManager(StorageManager):
@@ -266,15 +285,23 @@ class OSFileSystemManager(StorageManager):
         path = self.expand_path(path)
         return os.path.exists(path)
 
-    def read(self, path: str, **params) -> BytesIO:
+    def readbuf(self, path: str, **params) -> BytesIO:
         path = self.expand_path(path)
         buf = open(path, 'rb')
         buf.filename = path
         return buf
+    
+    def read(self, path, **params) -> bytes:
+        with self.readbuf(path, **params) as fi:
+            return fi.read()
 
     def writebuf(self, path: str, **params) -> BytesIO:
         path = self.expand_path(path)
         return open(path, 'wb')
+    
+    def write(self, path, data: bytes) -> bool:
+        with self.writebuf(path) as fo:
+            fo.write(data)
 
     def unlink(self, path: str) -> bool:
         path = self.expand_path(path)
@@ -309,28 +336,7 @@ class Hdf5Manager(StorageManager):
     """HDF5 Manager"""
 
     _lock = Lock()
-
-    class _Hdf5WriteBuffer(BytesIO):
-        """Buffer object for writing Hdf5
-        """
-
-        def __init__(self, manager, item_id, initial_bytes=b''):
-            """Initialize the buffer object
-
-            :param item_id: item id
-            :type item_id: str
-            :param initial_bytes: bytes for initialization, defaults to b''
-            :type initial_bytes: bytes, optional
-            """
-            self.item_id = item_id
-            self.manager = manager
-            super().__init__(initial_bytes)
-
-        def close(self):
-            with self.manager:
-                self.manager.write(self.getvalue(), self.item_id)
-            super().close()
-
+    
     def __init__(self, storage_base: str, *external_storage: str) -> None:
         self.files = []
         for storage_parent in [storage_base, *external_storage]:
@@ -360,30 +366,13 @@ class Hdf5Manager(StorageManager):
                 'size': len(data),
                 'type': 'file'
             }
+            
+    def _get_item_id(self, path:str) -> str:
+        if '://' in path:
+            path = path.split('://', 1)[1].split('/')[0]
+        return path        
 
-    def __enter__(self, *_):
-        """Enter `with` block
-
-        :return: self
-        :rtype: Hdf5Manager
-        """
-        self._lock.acquire()
-        if self._writable_file and self._writable_file.mode != 'r+':
-            self._writable_file.close()
-            self._writable_file = None
-
-        if not self._writable_file:
-            self._writable_file = h5py.File(self.base, 'r+')
-
-        return self
-
-    def __exit__(self, *_):
-        """Exit `with` block
-        """
-        self._writable_file.flush()
-        self._lock.release()
-
-    def write(self, src, item_id):
+    def write(self, path, data):
         """Write data from src to hdf5 file with specific item id
 
         :param src: bytes or io object to read bytes from
@@ -393,49 +382,51 @@ class Hdf5Manager(StorageManager):
         :return: True if success
         :rtype: bool
         """
+        path = self._get_item_id(path)
+        
+        self._lock.acquire()
+        if self._writable_file and self._writable_file.mode != 'r+':
+            self._writable_file.close()
+            self._writable_file = None
 
-        assert self._writable_file, 'Please use `with` statement.'
+        if not self._writable_file:
+            self._writable_file = h5py.File(self.base, 'r+')
+        
+        if isinstance(data, bytes):
+            data = BytesIO(data)
 
-        if isinstance(src, bytes):
-            src = BytesIO(src)
-
-        k = f'data/{item_id}'
+        k = f'data/{path}'
         if k in self._writable_file:
             del self._writable_file[k]
 
         self._writable_file[k] = np.frombuffer(
-            src.read(), dtype='uint8')
+            data.read(), dtype='uint8')
 
+        self._writable_file.flush()
+        self._lock.release()
+        
         return True
 
-    def writebuf(self, path: str, **params) -> BytesIO:
-        parsed = urllib.parse.urlparse(path)
-        return self._Hdf5WriteBuffer(self, parsed.netloc)
-
-    def get(self, item_id: str) -> bytes:
+    def read(self, path: str) -> bytes:
         """Read data from hdf5 file
 
-        :param item_id: id string
-        :type item_id: str
+        :param path: path string
+        :type path: str
         :raises OSError: Not found
         :return: data
         :rtype: BytesIO
         """
+        path = self._get_item_id(path)
+        
         if not self._writable_file:
             self._writable_file = h5py.File(self.base, 'r')
 
-        key = f'data/{item_id}'
+        key = f'data/{path}'
         for block_file in [self._writable_file, *self.files]:
             if key in block_file:
                 return block_file[key][:].tobytes()
 
-    def read(self, path: str, **params):
-        path = urllib.parse.urlparse(path).netloc
-        buf = self.get(path)
-        if buf:
-            return BytesIO(buf)
-        else:
-            raise OSError(f"No matched ID: {path}")
+        raise OSError(f"No matched ID: {path}")
 
     def listdir(self, path: str) -> list:
         return itertools.chain(*[list(s['data']) for s in self.files + [self._writable_file]])
@@ -452,30 +443,6 @@ class Hdf5Manager(StorageManager):
 
 
 class WebManager(StorageManager):
-
-    class _RequestBuffer(BytesIO):
-        """Buffer object for post url requests
-        """
-
-        def __init__(self, url, method='POST', **params):
-            """Initialize a buffer object for post requests
-
-            :param url: url
-            :type url: str
-            :param method: method for the request, defaults to 'POST'
-            :type method: str, optional
-            """
-            self.url = url
-            self.method = method
-            self.resp = None
-            super().__init__()
-
-        def close(self):
-            self.req = WebManager._build_request(self.url, self.method, data=self.getvalue())
-            self.resp = urllib.request.urlopen(self.req)
-            super().close()
-            if self.resp.status != 200:
-                raise OSError(f'HTTP {self.resp.status}')
 
     class _ResponseStream(io.IOBase):
 
@@ -568,86 +535,6 @@ class WebManager(StorageManager):
 
             if ex: print('Read from', self.req.get_full_url(), 'failed with exception', type(ex).__name__, ex)
 
-    class _ResponseStream(io.IOBase):
-
-        def __init__(self, req, attempts=3, proxies=None, verify=True, timeout=60):
-            super().__init__()
-            self._pos = 0
-            self._seekable = True
-            self.req = req
-            self.verify = verify
-            self.timeout = timeout
-            self.attempts = attempts
-            self.proxies = proxies or {}
-
-            with self._urlopen() as f:
-                self.content_length = int(f.getheader("Content-Length", -1))
-                if self.content_length < 0:
-                    self._seekable = False
-                if f.getheader("Accept-Ranges", "none").lower() != "bytes":
-                    self._seekable = False
-
-        def seek(self, offset, whence=0):
-            if not self.seekable():
-                raise OSError
-            if whence == 0:
-                self._pos = 0
-            elif whence == 1:
-                pass
-            elif whence == 2:
-                self._pos = self.content_length
-            self._pos += offset
-            return self._pos
-
-        def seekable(self, *args, **kwargs):
-            return self._seekable
-
-        def readable(self, *args, **kwargs):
-            return not self.closed
-
-        def writable(self, *args, **kwargs):
-            return False
-
-        def read(self, amt=-1):
-            if not self.seekable():
-                return self._urlopen().read()
-
-            if self._pos >= self.content_length:
-                return b""
-            if amt < 0:
-                end = self.content_length - 1
-            else:
-                end = min(self._pos + amt - 1, self.content_length - 1)
-            byte_range = (self._pos, end)
-            self._pos = end + 1
-
-            with self._urlopen(byte_range) as f:
-                return f.read()
-
-        def readall(self):
-            return self.read(-1)
-
-        def tell(self):
-            return self._pos
-
-        def _urlopen(self, byte_range=None):
-            if byte_range:
-                self.req.add_header('Range', '{}-{}'.format(*byte_range))
-
-            for type_, host in self.proxies.items():
-                self.req.set_proxy(host, type_)
-
-            ctx = ssl.create_default_context()
-            ctx.check_hostname = self.verify
-            ctx.verify_mode = ssl.CERT_NONE
-
-            for _ in range(self.attempts):
-                try:
-                    return urllib.request.urlopen(self.req, timeout=self.timeout, context=ctx)
-                except urllib.error.HTTPError as e:
-                    time.sleep(1)
-
-
     @staticmethod
     def _build_request(url: str, method='GET', referer: str = '',
                        headers=None, data=None, **_):
@@ -697,22 +584,32 @@ class WebManager(StorageManager):
         self.timeout = timeout
         self.seekable = seekable
 
-    def writebuf(self, path: str, **params) -> BytesIO:
-        return WebManager._RequestBuffer(path, **params)
-
-    def read(self, path: str, proxies=None, **params) -> BytesIO:
+    def write(self, path: str, data: bytes, method = 'POST', **params) -> BytesIO:
+        req = WebManager._build_request(path, method, data=data, **params)
+        resp = urllib.request.urlopen(req)
+        if resp.status != 200:
+            raise OSError(f'HTTP {resp.status}')
+        return True
+    
+    def read(self, path: str, proxies=None, **params) -> bytes:
+        referer = params.pop('referer', '')
+        if referer:
+            if 'headers' not in params: params['headers'] = {}
+            params['headers']['referer'] = referer
+        resp = requests.get(path, proxies=proxies, **params)
+        if resp.status_code != 200:
+            raise OSError(f'HTTP Error {resp.status_code}')
+        return resp.content
+        
+    def readbuf(self, path: str, proxies=None, **params) -> BytesIO:
         if self.seekable:
             req = WebManager._build_request(path, **params)
             return WebManager._ResponseStream(req, self.attempts, proxies, self.verify, self.timeout)
         else:
-            referer = params.pop('referer', '')
-            if referer:
-                if 'headers' not in params: params['headers'] = {}
-                params['headers']['referer'] = referer
-            return BytesIO(requests.get(path, **params).content)
+            return BytesIO(self.read(path, proxies, **params))
         
     def exists(self, path: str) -> bool:
-        return True
+        return requests.get(path).status_code == 200
 
     def join(self, base_path: str, *path_segs: str) -> str:
         return urllib.parse.urljoin(base_path, '/'.join(path_segs))
@@ -729,18 +626,6 @@ class WebManager(StorageManager):
 class SMBManager(StorageManager):
     """SMB Client
     """
-
-    class _SMBWriteBuffer(BytesIO):
-
-        def __init__(self, conn, service, path):
-            super().__init__()
-            self.conn = conn
-            self.service = service
-            self.path = path
-
-        def close(self):
-            self.seek(0)
-            self.conn.storeFile(self.service, self.path, self)
 
     def __init__(self) -> None:
         self._connections = {}
@@ -805,12 +690,16 @@ class SMBManager(StorageManager):
         for d in dirs:
             yield from self.walk('/'.join([start_path.rstrip('/'), d]))
 
-    def read(self, path, **params):
+    def readbuf(self, path, **params):
         return self._opener.open(path)
+    
+    def read(self, path, **params):
+        return self.readbuf(path, **params).read()
 
-    def writebuf(self, path: str, **params):
-        return SMBManager._SMBWriteBuffer(*self._get_connection(path))
-
+    def write(self, path, data, **params):
+        conn, service, path = self._get_connection(path)
+        conn.storeFile(service, path, BytesIO(data))
+        
     def mkdir(self, path: str, new_folder: str) -> bool:
         conn, service, path = self._get_connection(path)
         return conn.createDirectory(service, path.rstrip('/') + '/' + new_folder)
@@ -826,10 +715,11 @@ class DataSchemeManager(StorageManager):
     def read(self, path, **params):
         with urllib.request.urlopen(path) as response:
             data = response.read()
-        return BytesIO(data)
+        return data
     
     
 class StorageProxyManager(StorageManager):
+    """Access thorugh storage server"""
     
     def __init__(self, proxy) -> None:
         super().__init__()
@@ -860,55 +750,96 @@ class StorageProxyManager(StorageManager):
             return json.loads(text)
         except:
             return
-
-    def statdir(self, path):
-        return self._get_json(path, 'statdir')
+        
+    def __getattribute__(self, __name: str):
+        if __name in ('statdir', 'listdir', 'exists', 'stat', 'mkdir'):
+            return lambda p: self._get_json(p, __name)
+        return super().__getattribute__(__name)
     
-    def listdir(self, path: str) -> list:
-        return self._get_json(path, 'listdir')
-
-    def exists(self, path: str) -> list:
-        return self._get_json(path, 'exists')
+    def write(self, path, data, **params):
+        return self._webm.write(self._proxied_url(path), data=data, **params)
     
+    def readbuf(self, path, **params):
+        return self._webm.readbuf(self._proxied_url(path), **params)
+    
+    def read(self, path, **params):
+        return self._webm.read(self._proxied_url(path), **params)
+
     def walk(self, start_path, name_pattern=''):
         return self._get_json(start_path, 'walk', name_pattern=name_pattern)
     
-    def stat(self, path):
-        return self._get_json(path, 'stat')
-
-    def read(self, path):
-        return self._webm.read(self._proxied_url(path))
-    
-    def writebuf(self, path: str, **params) -> BytesIO:
-        return self._webm.writebuf(self._proxied_url(path), **params)
-    
-    def mkdir(self, path):
-        return self._get_json(path, 'mkdir')
-
     def search(self, path, name_pattern):
         return self._get_json(path, 'search', name_pattern=name_pattern)
+       
     
-    def walk(self, path, name_pattern=''):
-        return self._get_json(path, 'walk', name_pattern=name_pattern)
-    
-    
-class Storage:
+class FragmentHandlers:
 
-    def _get_manager(self, path) -> StorageManager:
+    @staticmethod
+    def handle_zip(buf, *inner_path):
+        """Handle zip file"""
+        zpath = '/'.join(inner_path)
+        with zipfile.ZipFile(buf, 'r') as zip_file:
+            return zip_file.open(zpath)
+
+    @staticmethod
+    def handle_pdf(buf, page):
+        """Get PNG data from PDF
+
+        :param file: PDF path
+        :type file: str
+        :param page: page index, starting form 0
+        :type page: int
+        :return: PNG bytes in a BytesIO
+        :rtype: BytesIO
+        """
         
-        scheme = ''
+        def _pdf_image(file: str, page: int, **_) -> BytesIO:
+            buf = BytesIO()
+            page = int(page)
+
+            img, = _pdf_convert(file, 120, first_page=page+1,
+                                last_page=page+1, fmt='png') or [None]
+            if img:
+                img.save(buf, format='png')
+                buf.seek(0)
+
+            return buf
+
+        if hasattr(buf, 'filename'):
+            filename = buf.filename
+            temp = False
+        else:
+            filename = tempfile.mktemp(suffix='.pdf')
+            temp = True
+            with open(filename, 'wb') as f:
+                f.write(buf.read())
         
-        if path in self._schema:
-            scheme = path
-        elif '://' in path:
-            tmp = path.split('://', 1)[0]
-            if tmp in self._schema:
-                scheme = tmp
+        buf = _pdf_image(filename, int(page))
         
-        if config.storage_proxy and scheme not in ('http', 'https', 'data'):
-            return self._schema['_proxied']
+        if temp:
+            os.unlink(filename)
         
-        return self._schema[scheme]
+        return buf
+
+    def handle_thumbnail(buf, width, height=''):
+        """Get thumbnail for image"""
+        from PIL import Image
+
+        if not height:
+            height = width
+        width, height = int(width), int(height)
+
+        im = Image.open(buf)
+        im.thumbnail((width, height))
+
+        buf = BytesIO()
+        im.save(buf, 'JPEG')
+        buf.seek(0)
+
+        return buf
+
+
+class Storage:
     
     def __init__(self) -> None:
         """Initialize storage
@@ -921,66 +852,36 @@ class Storage:
             'data': DataSchemeManager(),
             'hdf5': Hdf5Manager(config.storage, *(config.external_storage or [])),
             '': OSFileSystemManager(config.storage),
-            '_proxied': StorageProxyManager(config.storage_proxy or '')
         }
-
-        def _fh_zip(buf, *inner_path):
-            """Handle zip file"""
-            zpath = '/'.join(inner_path)
-            with zipfile.ZipFile(buf, 'r') as zip_file:
-                return zip_file.open(zpath)
-
-        def _fh_pdf(buf, page):
+        
+        self.storage_proxy = config.storage_proxy
+        if not self.storage_proxy:
+            self.storage_proxy = {}
             
-            def _pdf_image(file: str, page: int, **_) -> BytesIO:
-                """Get PNG file from PDF
-
-                :param file: PDF path
-                :type file: str
-                :param page: page index, starting form 0
-                :type page: int
-                :return: PNG bytes in a BytesIO
-                :rtype: BytesIO
-                """
-                buf = BytesIO()
-                page = int(page)
-
-                img, = _pdf_convert(file, 120, first_page=page+1,
-                                    last_page=page+1, fmt='png') or [None]
-                if img:
-                    img.save(buf, format='png')
-                    buf.seek(0)
-
-                return buf
-
-            if hasattr(buf, 'filename'):
-                filename = buf.filename
-                temp = False
-            else:
-                filename = tempfile.mktemp(suffix='.pdf')
-                temp = True
-                with open(filename, 'wb') as f:
-                    f.write(buf.read())
-            buf = _pdf_image(filename, int(page))
-            if temp:
-                os.unlink(filename)
-            return buf
-
-        def _fh_thumbnail(buf, width, height=''):
-            if not height:
-                height = width
-            width, height = int(width), int(height)
-            from PIL import Image
-            im = Image.open(buf)
-            im.thumbnail((width, height))
-            buf = BytesIO()
-            im.save(buf, 'JPEG')
-            buf.seek(0)
-            return buf
+        if isinstance(self.storage_proxy, str):
+            self.storage_proxy = {
+                k: config.storage_proxy for k in ('hdf5', 'smb', 'file')
+            }
 
         self._fragment_handlers = {
-            fh[4:]: func for fh, func in locals().items() if fh.startswith('_fh_')
+            fh[7:]: func for fh, func in FragmentHandlers.__dict__.items() if fh.startswith('handle_')
         }
+
+    def _get_manager(self, path) -> StorageManager:
+        """Get storage manager according to scheme"""
+        
+        scheme = ''        
+        if path in self._schema:
+            scheme = path
+        elif '://' in path:
+            tmp = path.split('://', 1)[0]
+            if tmp in self._schema:
+                scheme = tmp
+            
+        if scheme in self.storage_proxy:
+            return StorageProxyManager(self.storage_proxy[scheme])
+        
+        return self._schema[scheme]
 
     def register_fragment_handler(self, frag_name, func):
         """Register fragment handler
@@ -1027,7 +928,7 @@ class Storage:
         parsed = urllib.parse.urlparse(path.replace('__hash/', '#'))
 
         mgr = self._get_manager(parsed.scheme)
-        buf = getattr(mgr, 'read' if mode ==
+        buf = getattr(mgr, 'readbuf' if mode ==
                       'rb' else 'writebuf')(path, **params)
 
         if not buf:
