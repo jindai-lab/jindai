@@ -111,7 +111,7 @@ class PDFDataSource(DataSourceStage):
                     except RuntimeError:
                         label = ''
                     try:
-                        lines = doc[page].getText()
+                        lines = doc[page].get_text()
                         yield para_coll(
                             lang=lang, content=lines.encode(
                                 'utf-8', errors='ignore').decode('utf-8'),
