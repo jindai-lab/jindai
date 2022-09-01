@@ -70,6 +70,7 @@ class MediaItem(db.DbObject):
     height = int
     thumbnail = str
     item_type = str
+    rating = float
     source = DbObjectInitializer(dict, dict)
 
     _IMAGE_EXTS = ['jpg',
