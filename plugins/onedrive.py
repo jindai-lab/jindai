@@ -115,7 +115,7 @@ class OneDriveManager(StorageManager):
     def listdir(self, path):
         return [info['name'] for info in self.statdir(path)]
     
-    def read(self, path):
+    def readbuf(self, path):
         return storage.open(self.stat(path).get('_url'))
     
     def write_buf(self, path):

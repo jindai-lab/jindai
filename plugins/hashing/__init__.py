@@ -1,7 +1,7 @@
 """图像哈希"""
 import os
 import tempfile
-from io import BytesIO
+from io import BytesIO, IOBase
 from queue import deque
 from typing import Union
 
@@ -41,7 +41,7 @@ def single_item(pid: str, iid: str):
 
 
 def _hash_image(image, method):
-    if hasattr(image, 'seek'):
+    if isinstance(image, IOBase):
         image.seek(0)
         image = Image.open(image)
     hash_val = getattr(imagehash, method)(image)
