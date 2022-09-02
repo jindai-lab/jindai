@@ -356,7 +356,7 @@ class Hdf5Manager(StorageManager):
 
     def stat(self, path: str) -> dict:
         parsed = urllib.parse.urlparse(path)
-        data = self.get(parsed.netloc)
+        data = self.read(parsed.netloc)
         if data:
             return {
                 'name': path,
@@ -436,7 +436,7 @@ class Hdf5Manager(StorageManager):
             yield '/', [], self.listdir('/')
 
     def exists(self, path: str) -> bool:
-        return self.get(path) is not None
+        return self.read(path) is not None
 
     def join(self, base_path: str, *path_segs: str) -> str:
         return path_segs[-1]
@@ -772,16 +772,14 @@ class StorageProxyManager(StorageManager):
         return self._get_json(path, 'search', name_pattern=name_pattern)
        
     
-class FragmentHandlers:
+def fragment_handlers():
 
-    @staticmethod
     def handle_zip(buf, *inner_path):
         """Handle zip file"""
         zpath = '/'.join(inner_path)
         with zipfile.ZipFile(buf, 'r') as zip_file:
             return zip_file.open(zpath)
 
-    @staticmethod
     def handle_pdf(buf, page):
         """Get PNG data from PDF
 
@@ -838,6 +836,8 @@ class FragmentHandlers:
 
         return buf
 
+    return locals().items()
+
 
 class Storage:
     
@@ -864,7 +864,7 @@ class Storage:
             }
 
         self._fragment_handlers = {
-            fh[7:]: func for fh, func in FragmentHandlers.__dict__.items() if fh.startswith('handle_')
+            fh[7:]: func for fh, func in fragment_handlers() if fh.startswith('handle_')
         }
 
     def _get_manager(self, path) -> StorageManager:
