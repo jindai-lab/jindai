@@ -42,7 +42,7 @@ def single_item(pid: str, iid: str):
 
 def _hash_image(image, method):
     if isinstance(image, IOBase):
-        image.seek(0)
+        if image.seekable(): image.seek(0)
         image = Image.open(image)
     hash_val = getattr(imagehash, method)(image)
     return bytes.fromhex(str(hash_val))

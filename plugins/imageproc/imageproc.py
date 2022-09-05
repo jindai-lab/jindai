@@ -43,8 +43,8 @@ class MediaItemStage(PipelineStage):
     def resolve_video(self, i: MediaItem, paragraph: Paragraph):
         """Resolve video item"""
 
-    def resolve_sound(self, i: MediaItem, paragraph: Paragraph):
-        """Resolve sounditem"""
+    def resolve_audio(self, i: MediaItem, paragraph: Paragraph):
+        """Resolve audio item"""
 
 
 class ImagesFromSource(PipelineStage):

@@ -203,16 +203,19 @@ class WriteBuffer(BytesIO):
 class OSFileSystemManager(StorageManager):
     """Storage manager for local file system"""
 
-    def __init__(self, base: str, allowed_locations=None) -> None:
+    def __init__(self, base: str) -> None:
+        allowed_locations = []
+        if isinstance(base, list):
+            base, *allowed_locations = base
+        
         if not base.endswith(os.path.sep):
             base += os.path.sep
         self.base = base
 
-        if allowed_locations is None:
-            allowed_locations = [
-                base,
-                tempfile.gettempdir()
-            ]
+        allowed_locations += [
+            base,
+            tempfile.gettempdir()
+        ]
         self.allowed_locations = allowed_locations
 
     def expand_path(self, path: Union[Tuple[str], str]) -> str:
@@ -337,8 +340,13 @@ class Hdf5Manager(StorageManager):
 
     _lock = Lock()
     
-    def __init__(self, storage_base: str, *external_storage: str) -> None:
+    def __init__(self, storage_base: str) -> None:
         self.files = []
+        if isinstance(storage_base, list):
+            storage_base, *external_storage = storage_base
+        else:
+            external_storage = []
+        
         for storage_parent in [storage_base, *external_storage]:
             self.files += glob.glob(os.path.join(storage_parent, '*.h5'))
         self.base = os.path.join(storage_base, 'blocks.h5')
@@ -850,7 +858,7 @@ class Storage:
             'http': WebManager(),
             'https': WebManager(),
             'data': DataSchemeManager(),
-            'hdf5': Hdf5Manager(config.storage, *(config.external_storage or [])),
+            'hdf5': Hdf5Manager(config.storage),
             '': OSFileSystemManager(config.storage),
         }
         
@@ -860,14 +868,18 @@ class Storage:
             
         if isinstance(self.storage_proxy, str):
             self.storage_proxy = {
-                k: config.storage_proxy for k in ('hdf5', 'smb', 'file')
+                k: [config.storage_proxy] for k in ('hdf5', 'smb', 'file')
             }
+            
+        for k, v in self.storage_proxy.items():
+            if isinstance(v, str):
+                self.storage_proxy[k] = [v]
 
         self._fragment_handlers = {
             fh[7:]: func for fh, func in fragment_handlers() if fh.startswith('handle_')
         }
 
-    def _get_manager(self, path) -> StorageManager:
+    def _get_managers(self, path) -> StorageManager:
         """Get storage manager according to scheme"""
         
         scheme = ''        
@@ -879,9 +891,13 @@ class Storage:
                 scheme = tmp
             
         if scheme in self.storage_proxy:
-            return StorageProxyManager(self.storage_proxy[scheme])
-        
-        return self._schema[scheme]
+            for server in self.storage_proxy[scheme]:
+                if server == 'local':
+                    yield self._schema[scheme]
+                else:
+                    yield StorageProxyManager(server)
+        else:
+            yield self._schema[scheme]
 
     def register_fragment_handler(self, frag_name, func):
         """Register fragment handler
@@ -926,10 +942,14 @@ class Storage:
         :rtype: IO
         """
         parsed = urllib.parse.urlparse(path.replace('__hash/', '#'))
+        buf = None
 
-        mgr = self._get_manager(parsed.scheme)
-        buf = getattr(mgr, 'readbuf' if mode ==
-                      'rb' else 'writebuf')(path, **params)
+        for mgr in self._get_managers(parsed.scheme):
+            try:
+                buf = getattr(mgr, 'readbuf' if mode ==
+                        'rb' else 'writebuf')(path, **params)
+            except OSError:
+                continue
 
         if not buf:
             raise OSError('Unable to open: ' + path)
@@ -942,13 +962,27 @@ class Storage:
 
         return buf
     
+    def _query_until(self, action, path, default, **params):
+        """Query multiple proxies/managers until found a result, or return the default
+
+        Args:
+            action (str): action name
+            path (str): full path
+            default (Any): default value
+        """
+        for mgr in self._get_managers(path):
+            val = getattr(mgr, action, **params)
+            if val:
+                return val
+        return default
+    
     def exists(self, path):
         """Check if path exists
         :param path: file system path or URLs.
         :type path: str
         :return: True if existent, otherwise False
         """
-        return self._get_manager(path).exists(path)
+        return self._query_until('exists', path, False)
 
     def statdir(self, path: str):
         """Get stat of a directory
@@ -957,26 +991,35 @@ class Storage:
         :type path: str
         :return: stat of the directory
         """
-        return self._get_manager(path).statdir(path)
+        return self._query_until('statdir', path, [])
 
-    def stat(self, path: str):
-        """Get stat of a directory
+    def listdir(self, path: str):
+        """Get file list of a directory
 
         :param path: file system path or URLs.
         :type path: str
         :return: stat of the directory
         """
-        return self._get_manager(path).stat(path)
+        return self._query_until('listdir', path, [])
+
+    def stat(self, path: str):
+        """Get stat of a file
+
+        :param path: file system path or URLs.
+        :type path: str
+        :return: stat of the directory
+        """
+        return self._query_until('stat', path, {})
 
     def search(self, path: str, name_pattern: str):
         """Find a file
         """
-        return self._get_manager(path).search(path, name_pattern)
+        return self._query_until('listdir', path, [], name_pattern=name_pattern)
 
     def mkdir(self, path: str, new_folder: str):
         """Make directory in path"""
-        return self._get_manager(path).mkdir(path, new_folder)
-
+        return self._query_until('mkdir', path, False, new_folder=new_folder)
+        
     @staticmethod
     def get_mimetype(ext):
         return {
@@ -1162,9 +1205,10 @@ class Storage:
                         parents = segs[:i]
                         break
                 parent = '/'.join(parents)
-                for pattern in self._get_manager(pattern).search(parent, pattern):
-                    patterns.append(pattern)
-                continue
+                for mgr in self._get_managers(pattern):
+                    for pattern in mgr.search(parent, pattern):
+                        patterns.append(pattern)
+                    continue
 
             if pattern.endswith('.zip') or pattern.endswith('.epub'):
                 with zipfile.ZipFile(self.open(pattern, 'rb')) as zfile:

@@ -52,9 +52,9 @@ class ConfigObject:
         if self._orig['rootpath'] == '':
             self._orig['rootpath'] = str(
                 Path(os.path.abspath(__file__)).parent.parent.absolute())
-        if not self._orig['storage'].startswith(('/', r'\\')):
-            self._orig['storage'] = os.path.join(
-                self._orig['rootpath'], self._orig['storage'])
+        if not isinstance(self._orig['storage'], list):
+            self._orig['storage'] = [self._orig['storage']]
+        self._orig['storage'] = [os.path.join(self._orig['rootpath'], p) for p in self._orig['storage']]
 
     def __getattr__(self, __name: str):
         if __name in self.__dict__:
