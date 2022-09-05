@@ -255,6 +255,7 @@ def get_context(directory: str, parent_class: Type) -> Dict:
     ctx = {}
     for module_name in modules:
         try:
+            print(module_name)
             module = importlib.import_module(module_name)
             for k in module.__dict__:
                 if k != parent_class.__name__ and not k.startswith('_') and \
