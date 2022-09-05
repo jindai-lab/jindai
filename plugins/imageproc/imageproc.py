@@ -5,15 +5,16 @@ Basic processing for multimedia materials
 import os
 import tempfile
 import traceback
-from typing import Union
-import numpy as np
-from PIL import Image, ImageOps
-from PyMongoWrapper import ObjectId
 import urllib.error
+from io import BytesIO
+from typing import Union
 
+import numpy as np
 from jindai import PipelineStage, parser, storage
 from jindai.helpers import safe_import
 from jindai.models import MediaItem, Paragraph
+from PIL import Image, ImageOps
+from PyMongoWrapper import ObjectId
 
 
 class MediaItemStage(PipelineStage):
@@ -298,7 +299,8 @@ class DownloadImages(MediaItemStage):
             assert content
         # except Exception as ex:
         except urllib.error.HTTPError as ex:
-            self.logger('Error while downloading item', i.source['url'], type(ex).__name__, ex)
+            self.logger('Error while downloading item',
+                        i.source['url'], type(ex).__name__, ex)
             return
 
         with storage.open(f'hdf5://{i.id}', 'wb') as output:
@@ -357,34 +359,25 @@ class VideoFrame(MediaItemStage):
         self.field = field
         self.cv2 = safe_import('cv2', 'opencv-python-headless')
 
-    def resolve_video(self, i: MediaItem, _):
+    def get_video_frame(self, buf, frame=0.5):
         cv2 = self.cv2
-        thumb = f'{ObjectId()}.thumb.jpg'
-        temp_file = tempfile.mktemp()
-        read_from = ''
 
         try:
             # read video data
-            filename = i.source.get('file')
-            if filename == 'blocks.h5':
-                with storage.open(temp_file, 'wb') as output:
-                    blen = output.write(i.data.read())
-                if not blen:
-                    self.logger(f'unable to fetch data from blocks.h5: {i.id}')
-                    os.unlink(temp_file)
-                    return
-                read_from = temp_file
+            if isinstance(buf, str):
+                read_from = buf
             else:
-                read_from = storage.expand_path(filename)
+                assert hasattr(buf, 'filename')
+                read_from = buf.filename
 
             if not os.path.exists(read_from):
                 self.logger(f'{read_from} not found')
                 return
 
-            # generate video thumbnail
             cap = cv2.VideoCapture(read_from)
+            frame = float(frame)
             frame_num = int(cap.get(cv2.CAP_PROP_FRAME_COUNT) *
-                            self.frame_num) if self.frame_num < 1 else int(self.frame_num)
+                            frame if frame < 1 else frame)
 
             if cap.isOpened():
                 cap.set(cv2.CAP_PROP_POS_FRAMES, frame_num)
@@ -394,19 +387,45 @@ class VideoFrame(MediaItemStage):
                     # write to hdf5
                     rval, npa = cv2.imencode('.jpg', frame)
                     pic = npa.tobytes()
-                    with storage.open(f'hdf5://{thumb}', 'wb') as output:
-                        output.write(pic)
-
-                    setattr(i, self.field, thumb)
-                    i.save()
-                    self.logger(
-                        f'wrote {temp_file} frame#{frame_num} to {thumb}')
+                    return BytesIO(pic)
 
         except Exception as ex:
             self.logger(ex)
+
+        return BytesIO()
+
+    def resolve_video(self, i: MediaItem, _):
+        temp_file = tempfile.mktemp()
+        read_from = ''
+        thumb = f'{ObjectId()}.thumb.jpg'
+
+        filename = i.source.get('file')
+        if filename == 'blocks.h5':
+            with storage.open(temp_file, 'wb') as output:
+                blen = output.write(i.data.read())
+            if not blen:
+                self.logger(f'unable to fetch data from blocks.h5: {i.id}')
+                os.unlink(temp_file)
+                return
+            read_from = temp_file
+        else:
+            read_from = storage.expand_path(filename)
+
+        # generate video thumbnail
+        pic = self.get_video_frame(read_from, self.frame_num).getvalue()
+        with storage.open(f'hdf5://{thumb}', 'wb') as output:
+            output.write(pic)
+
+        setattr(i, self.field, thumb)
+        i.save()
+        self.logger(
+            f'wrote {temp_file} frame#{self.frame_num} to {thumb}')
 
         # clear up temp file
         if os.path.exists(temp_file):
             os.unlink(temp_file)
 
         return i
+
+
+storage.register_fragment_handler('videoframe', VideoFrame().get_video_frame)

@@ -843,7 +843,7 @@ def fragment_handlers():
         buf.seek(0)
 
         return buf
-
+    
     return locals().items()
 
 
