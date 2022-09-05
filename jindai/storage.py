@@ -971,7 +971,7 @@ class Storage:
             default (Any): default value
         """
         for mgr in self._get_managers(path):
-            val = getattr(mgr, action, **params)
+            val = getattr(mgr, action)(path, **params)
             if val:
                 return val
         return default
