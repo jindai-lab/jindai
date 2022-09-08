@@ -128,10 +128,11 @@ class MediaItem(db.DbObject):
             return None
 
         # if image
-        if self._image is None:
-            self._image = Image.open(self.data)
-        return self._image
-
+        if self._image_flag:
+            return self._image
+        else:
+            return Image.open(self.data)
+        
     @image.setter
     def image(self, value: Image.Image):
         """Set the associated image"""

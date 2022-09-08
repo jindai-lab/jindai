@@ -308,6 +308,7 @@ class DownloadImages(MediaItemStage):
             self.logger(i.id, len(content))
 
         i.source = {'file': 'blocks.h5', 'url': i.source['url']}
+        i.save()
 
 
 class QRCodeScanner(PipelineStage):
@@ -367,8 +368,8 @@ class VideoFrame(MediaItemStage):
             if isinstance(buf, str):
                 read_from = buf
             else:
-                assert hasattr(buf, 'filename')
-                read_from = buf.filename
+                assert hasattr(buf, 'name')
+                read_from = buf.name
 
             if not os.path.exists(read_from):
                 self.logger(f'{read_from} not found')

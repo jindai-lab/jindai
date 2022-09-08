@@ -291,7 +291,6 @@ class OSFileSystemManager(StorageManager):
     def readbuf(self, path: str, **params) -> BytesIO:
         path = self.expand_path(path)
         buf = open(path, 'rb')
-        buf.filename = path
         return buf
     
     def read(self, path, **params) -> bytes:
@@ -454,24 +453,30 @@ class WebManager(StorageManager):
 
     class _ResponseStream(io.IOBase):
 
-        def __init__(self, req, attempts=3, proxies=None, verify=True, timeout=60):
+        def __init__(self, req, attempts=3, proxies=None, verify=False, timeout=60):
             super().__init__()
             self._pos = 0
             self._seekable = True
             self.req = req
+            self.attempts = attempts
             self.verify = verify
             self.timeout = timeout
-            self.attempts = attempts
-            self.proxies = proxies or {}
+            
+            if proxies and not isinstance(proxies, dict):
+                self.proxies = {
+                    'http': proxies,
+                    'https': proxies
+                }
+            else:
+                self.proxies = proxies or {}
 
             with self._urlopen() as f:
-                self.content_length = int(f.getheader("Content-Length", -1))
+                self.content_length = int(f.headers.get('content-length', -1))
                 if self.content_length < 0:
                     self._seekable = False
                 self.st_size = self.content_length
 
         def seek(self, offset, whence=0):
-            print('seek', offset, whence)
             if not self.seekable():
                 raise io.UnsupportedOperation
             if whence == 0:
@@ -503,7 +508,7 @@ class WebManager(StorageManager):
             self._pos = end + 1
 
             with self._urlopen(byte_range) as f:
-                return f.read()
+                return f.content
 
         def readall(self):
             return self.read(-1)
@@ -512,36 +517,26 @@ class WebManager(StorageManager):
             return self._pos
 
         def _urlopen(self, byte_range=None):
+            
             if byte_range:
-                self.req.add_header('Range', '{}-{}'.format(*byte_range))
+                self.req.headers['Range'] = '{}-{}'.format(*byte_range)
             else:
-                if self.req.has_header('Range'):
-                    self.req.remove_header('Range')
-                    
-            url_scheme = self.req.get_full_url().split('://')[0]
-
-            proxy = self.proxies.get(url_scheme, '')
-            if proxy and not self.req.has_proxy():
-                type_, host = proxy.split('://', 1) if '://' in proxy else ('http', proxy)
-                self.req.set_proxy(host.split('://')[-1], type_)
-
-            ctx = ssl.create_default_context()
-            ctx.check_hostname = self.verify
-            ctx.verify_mode = ssl.CERT_NONE
-
+                self.req.headers.pop('Range', '')
+            
             ex = None
 
             for _ in range(self.attempts):
-                try:
-                    return urllib.request.urlopen(self.req, timeout=self.timeout, context=ctx)
-                except urllib.error.HTTPError as e:
-                    ex = e
-                    time.sleep(1)
-
-            if ex: print('Read from', self.req.get_full_url(), 'failed with exception', type(ex).__name__, ex)
-
-    @staticmethod
-    def _build_request(url: str, method='GET', referer: str = '',
+                with requests.session() as s:
+                    # try:
+                    return s.send(self.req, stream=True, proxies=self.proxies, verify=self.verify, timeout=self.timeout)
+                    # except requests.exceptions.ConnectionError as e:
+                        # ex = e
+                        # time.sleep(1)
+                    
+            if ex:
+                print('Read from', self.req.url, 'failed with exception', type(ex).__name__, ex)
+                
+    def _build_request(self, url: str, method='GET', referer: str = '',
                        headers=None, data=None, **_):
         """Build a request
 
@@ -574,8 +569,9 @@ class WebManager(StorageManager):
 
         if data and type(data) == bytes:
             headers['content-type'] = 'application/octet-stream'
-
-        return urllib.request.Request(url=url, method=method, headers=headers, data=data)
+        
+        return requests.Request(url=url, method=method, headers=headers, 
+                                data=data)
 
     def __init__(self, attempts=3, verify=False, timeout=30, seekable=False):
         """
@@ -589,29 +585,17 @@ class WebManager(StorageManager):
         self.timeout = timeout
         self.seekable = seekable
 
-    def write(self, path: str, data: bytes, method = 'POST', **params) -> BytesIO:
-        req = WebManager._build_request(path, method, data=data, **params)
-        resp = urllib.request.urlopen(req)
-        if resp.status != 200:
-            raise OSError(f'HTTP {resp.status}')
+    def write(self, path: str, data: bytes, method = 'POST', proxy = None, **params) -> BytesIO:
+        req = self._build_request(path, method, data=data, **params).prepare()
+        with requests.session() as s:
+            resp = s.send(req, proxies=proxy, verify=self.verify, timeout=self.timeout)
+        if resp.status_code != 200:
+            raise OSError(f'HTTP {resp.status_code}')
         return True
     
-    def read(self, path: str, proxies=None, **params) -> bytes:
-        referer = params.pop('referer', '')
-        if referer:
-            if 'headers' not in params: params['headers'] = {}
-            params['headers']['referer'] = referer
-        resp = requests.get(path, proxies=proxies, **params)
-        if resp.status_code != 200:
-            raise OSError(f'HTTP Error {resp.status_code}')
-        return resp.content
-        
-    def readbuf(self, path: str, proxies=None, **params) -> BytesIO:
-        if self.seekable:
-            req = WebManager._build_request(path, **params)
-            return WebManager._ResponseStream(req, self.attempts, proxies, self.verify, self.timeout)
-        else:
-            return BytesIO(self.read(path, proxies, **params))
+    def readbuf(self, path: str, proxy=None, **params) -> BytesIO:
+        req = self._build_request(path, **params).prepare()
+        return WebManager._ResponseStream(req, self.attempts, proxies=proxy, verify=self.verify, timeout=self.timeout)
         
     def exists(self, path: str) -> bool:
         return requests.get(path).status_code == 200
@@ -808,12 +792,10 @@ def fragment_handlers():
 
             return buf
 
-        if hasattr(buf, 'filename'):
-            filename = buf.filename
-            temp = False
-        else:
+        filename = getattr(buf, 'name', '')
+        temp = not not filename
+        if temp:
             filename = tempfile.mktemp(suffix='.pdf')
-            temp = True
             with open(filename, 'wb') as f:
                 f.write(buf.read())
         
@@ -945,7 +927,7 @@ class Storage:
             try:
                 buf = getattr(mgr, 'readbuf' if mode ==
                         'rb' else 'writebuf')(path, **params)
-            except OSError:
+            except OSError as ex:
                 continue
 
         if not buf:
@@ -1042,7 +1024,6 @@ class Storage:
         ext = filepath.rsplit('.', 1)[-1]
         return path, ext.lower() if len(ext) <= 4 else ''
     
-    
     def serve_file(self, path_or_io: Union[str, IO], ext: str = '', file_size: int = 0) -> Response:
         """Serve static file or buffer
 
@@ -1055,37 +1036,36 @@ class Storage:
             Response: a flask response object
         """
         if isinstance(path_or_io, str):
-            input_file = open(path_or_io, 'rb')
+            input_file = self.open(path_or_io, 'rb')
             ext = path_or_io.rsplit('.', 1)[-1]
-            file_size = os.stat(path_or_io).st_size
+            file_size = self.stat(path_or_io)['size']
         else:
             input_file = path_or_io
+            ext = getattr(input_file, 'name', '').rsplit('.', 1)[-1][:4].lower()
             
         mimetype = self.get_mimetype(ext)
-
-        start, length = 0, 1 << 20
+       
+        if not file_size:
+            file_size = getattr(path_or_io, 'st_size', 0)
+        
         if not file_size:
             input_file = BytesIO(input_file.read())
             file_size = len(input_file.getvalue())
+        
+        start, length = 0, file_size
         range_header = request.headers.get('Range')
         if range_header:
             # example: 0-1000 or 1250-
             matched_nums = re.search('([0-9]+)-([0-9]*)', range_header)
             num_groups = matched_nums.groups()
-            byte1, byte2 = 0, None
             if num_groups[0]:
-                byte1 = int(num_groups[0])
+                start = min(int(num_groups[0]), file_size - 1)
             if num_groups[1]:
-                byte2 = int(num_groups[1])
-            if byte1 < file_size:
-                start = byte1
-            if byte2:
-                length = byte2 + 1 - byte1
-            else:
-                length = file_size - start
-        else:
-            length = file_size
-
+                end = min(int(num_groups[1]), file_size - 1)
+            else: 
+                end = file_size - 1
+            length = end - start + 1
+        
         def _generate_chunks(coming_length):
             input_file.seek(start)
             while coming_length > 0:
@@ -1093,12 +1073,15 @@ class Storage:
                 coming_length -= len(chunk)
                 yield chunk
 
-        resp = Response(stream_with_context(_generate_chunks(length)), 206,
+        if range_header:
+            resp = Response(stream_with_context(_generate_chunks(length)), 206,
                         content_type=mimetype, direct_passthrough=True)
-        resp.headers.add(
-            'Content-Range', f'bytes {start}-{start+length-1}/{file_size}')
+            resp.headers.add(
+                'Content-Range', f'bytes {start}-{start+length-1}/{file_size}')
+            resp.headers.add('Content-Length', length)
+        else:
+            resp = Response(input_file.read(), 200, content_type=mimetype, direct_passthrough=True)
         resp.headers.add('Accept-Ranges', 'bytes')
-        resp.headers.add('Content-Length', length)
         return resp
     
     def serve(self, host='0.0.0.0', port=8371, debug=False):
@@ -1131,13 +1114,7 @@ class Storage:
                 else:
                     return jsonify(None)
             
-            # send file
-            try:
-                buf = self.open(path, 'rb')
-            except OSError:
-                return 'Not Found: ' + path, 404
-
-            resp = self.serve_file(buf, ext, self.stat(path)['size'])
+            resp = self.serve_file(path, ext, self.stat(path)['size'])
             resp.headers.add("Cache-Control", "public,max-age=86400")
             return resp
 

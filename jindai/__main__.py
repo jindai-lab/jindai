@@ -411,6 +411,19 @@ def call_ipython():
     from concurrent.futures import ThreadPoolExecutor
     tpe = ThreadPoolExecutor(os.cpu_count())
     init = _init_plugins
+    
+    def q(query_str, model=''):
+        from jindai import parser, Paragraph
+        
+        if isinstance(model, str):
+            model = Paragraph.get_coll(model)
+        
+        q = parser.parse(query_str)
+        if isinstance(q, list):
+            return model.aggregate(q)
+        
+        return model.query(q)
+    
     locals().update(**jindai.__dict__)
 
     embed(colors="neutral")
