@@ -11,7 +11,6 @@ from flask import Response, request
 from PIL import Image, ImageFile
 from PyMongoWrapper import F, ObjectId
 from jindai import *
-from jindai.helpers import serve_file
 from jindai.models import MediaItem, Paragraph
 from plugins.imageproc import MediaItemStage
 
@@ -246,11 +245,11 @@ class Hashing(Plugin):
 
         @app.route('/api/plugins/compare')
         def _compare_html():
-            return serve_file(os.path.join(os.path.dirname(__file__), 'compare.html'))
+            return storage.serve_file(os.path.join(os.path.dirname(__file__), 'compare.html'))
 
         @app.route('/api/plugins/hashing-jquery.min.js')
         def _jquery_js():
-            return serve_file(os.path.join(os.path.dirname(__file__), 'jquery.min.js'))
+            return storage.serve_file(os.path.join(os.path.dirname(__file__), 'jquery.min.js'))
 
     def handle_filter(self, dbq, iid):
         """Handle page"""
