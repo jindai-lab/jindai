@@ -23,7 +23,7 @@ from .pipeline import Pipeline
 from .plugin import Plugin, PluginManager
 from .task import Task
 from .config import instance as config
-from .helpers import (get_context, logined, rest, serve_file, language_iso639,
+from .helpers import (get_context, logined, rest, language_iso639,
                       serve_proxy, JSONEncoder, JSONDecoder, ee)
 from .models import (Dataset, History, MediaItem, Meta, Paragraph,
                      TaskDBO, Token, User, Term)
@@ -768,18 +768,14 @@ def resolve_media_item(coll=None, storage_id=None, ext=None):
 @app.route("/images/<scheme>/<path:image_path>")
 @rest(cache=True)
 def serve_image(scheme, image_path):
-    
-    buf = storage.open(f"{scheme}://{image_path.replace('__hash/', '#')}")
-    ext = image_path.rsplit('.', 1)[-1]
+    path, ext = storage.get_schemed_path(scheme, image_path)
 
-    if buf:
+    try:
+        buf = storage.open(path)
         length = len(buf.getvalue()) if hasattr(
             buf, 'getvalue') else getattr(buf, 'st_size', -1)
-
-        resp = serve_file(buf, ext, length)
-        resp.headers.add("Cache-Control", "public,max-age=86400")
-        return resp
-    else:
+        return storage.serve_file(buf, ext, length)
+    except OSError:
         return Response('Not found.', 404)
 
 
@@ -885,9 +881,9 @@ def index(path='index.html'):
         if file.startswith('ui/') and config.ui_proxy:
             return serve_proxy(config.ui_proxy, path=path)
         if os.path.exists(file) and os.path.isfile(file):
-            return serve_file(file)
+            return storage.serve_file(file)
 
-    return serve_file('ui/dist/index.html')
+    return storage.serve_file('ui/dist/index.html')
 
 
 def prepare_plugins():

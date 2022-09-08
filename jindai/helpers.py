@@ -196,9 +196,6 @@ def logined(role=''):
     return None
 
 
-serve_file = storage.serve_file
-
-
 def serve_proxy(server, path):
     """Serve from remote server
 
