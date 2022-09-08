@@ -88,8 +88,8 @@ class PDFDataSource(DataSourceStage):
             for filepath in self.files:
                 short_path = storage.truncate_path(filepath)
                 stream = storage.open(filepath, 'rb')
-                if hasattr(stream, 'filename'):
-                    doc = fitz.open(stream.filename)
+                if hasattr(stream, 'name'):
+                    doc = fitz.open(stream.name)
                 else:
                     doc = fitz.open('pdf', stream)
                 self.logger('importing', short_path)

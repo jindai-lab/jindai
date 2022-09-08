@@ -771,10 +771,7 @@ def serve_image(scheme, image_path):
     path, ext = storage.get_schemed_path(scheme, image_path)
 
     try:
-        buf = storage.open(path)
-        length = len(buf.getvalue()) if hasattr(
-            buf, 'getvalue') else getattr(buf, 'st_size', -1)
-        return storage.serve_file(buf, ext, length)
+        return storage.serve_file(path, ext)
     except OSError:
         return Response('Not found.', 404)
 
@@ -881,9 +878,9 @@ def index(path='index.html'):
         if file.startswith('ui/') and config.ui_proxy:
             return serve_proxy(config.ui_proxy, path=path)
         if os.path.exists(file) and os.path.isfile(file):
-            return storage.serve_file(file)
+            return storage.serve_file(open(file, 'rb'))
 
-    return storage.serve_file('ui/dist/index.html')
+    return storage.serve_file(open('ui/dist/index.html', 'rb'))
 
 
 def prepare_plugins():

@@ -163,7 +163,7 @@ def rest(login=True, cache=False, role='', mapping=None):
                 resp = jsonify({'result': result})
             except Exception as ex:
                 resp = jsonify(
-                    {'__exception__': str(ex), '__tracestack__': traceback.format_tb(ex.__traceback__)})
+                    {'__exception__': type(ex).__name__ + ': ' + str(ex), '__tracestack__': traceback.format_tb(ex.__traceback__)})
 
             resp.headers.add("Access-Control-Allow-Origin", "*")
             if cache:
