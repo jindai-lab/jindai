@@ -46,3 +46,8 @@ ui/
 # they can be installed and updated with plugin manager
 plugins/
 models_data/
+
+core
+
+*.swp
+docker-compose.yaml

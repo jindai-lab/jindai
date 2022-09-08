@@ -21,7 +21,7 @@ from typing import IO, Iterable, List, Tuple, Union
 import h5py
 import numpy as np
 import requests
-from flask import (Flask, Response, jsonify, request, send_file,
+from flask import (Flask, Response, jsonify, request, 
                    stream_with_context)
 from pdf2image import convert_from_path as _pdf_convert
 from smb.SMBHandler import SMBHandler
@@ -468,10 +468,10 @@ class WebManager(StorageManager):
                 self.content_length = int(f.getheader("Content-Length", -1))
                 if self.content_length < 0:
                     self._seekable = False
-                if f.getheader("Accept-Ranges", "none").lower() != "bytes":
-                    self._seekable = False
+                self.st_size = self.content_length
 
         def seek(self, offset, whence=0):
+            print('seek', offset, whence)
             if not self.seekable():
                 raise io.UnsupportedOperation
             if whence == 0:
@@ -493,9 +493,6 @@ class WebManager(StorageManager):
             return False
 
         def read(self, amt=-1):
-            if not self.seekable():
-                return self._urlopen().read()
-
             if self._pos >= self.content_length:
                 return b""
             if amt < 0:
@@ -520,7 +517,7 @@ class WebManager(StorageManager):
             else:
                 if self.req.has_header('Range'):
                     self.req.remove_header('Range')
-
+                    
             url_scheme = self.req.get_full_url().split('://')[0]
 
             proxy = self.proxies.get(url_scheme, '')
@@ -1067,44 +1064,43 @@ class Storage:
         mimetype = self.get_mimetype(ext)
 
         start, length = 0, 1 << 20
+        if not file_size:
+            input_file = BytesIO(input_file.read())
+            file_size = len(input_file.getvalue())
         range_header = request.headers.get('Range')
-        if file_size and file_size > 10 << 20:
-            if range_header:
-                # example: 0-1000 or 1250-
-                matched_nums = re.search('([0-9]+)-([0-9]*)', range_header)
-                num_groups = matched_nums.groups()
-                byte1, byte2 = 0, None
-                if num_groups[0]:
-                    byte1 = int(num_groups[0])
-                if num_groups[1]:
-                    byte2 = int(num_groups[1])
-                if byte1 < file_size:
-                    start = byte1
-                if byte2:
-                    length = byte2 + 1 - byte1
-                else:
-                    length = file_size - start
+        if range_header:
+            # example: 0-1000 or 1250-
+            matched_nums = re.search('([0-9]+)-([0-9]*)', range_header)
+            num_groups = matched_nums.groups()
+            byte1, byte2 = 0, None
+            if num_groups[0]:
+                byte1 = int(num_groups[0])
+            if num_groups[1]:
+                byte2 = int(num_groups[1])
+            if byte1 < file_size:
+                start = byte1
+            if byte2:
+                length = byte2 + 1 - byte1
             else:
-                length = file_size
+                length = file_size - start
+        else:
+            length = file_size
 
-            def _generate_chunks():
-                coming_length = length
-                input_file.seek(start)
-                while coming_length > 0:
-                    chunk = input_file.read(min(coming_length, 1 << 20))
-                    coming_length -= len(chunk)
-                    yield chunk
+        def _generate_chunks(coming_length):
+            input_file.seek(start)
+            while coming_length > 0:
+                chunk = input_file.read(min(coming_length, 1 << 20))
+                coming_length -= len(chunk)
+                yield chunk
 
-            resp = Response(stream_with_context(_generate_chunks()), 206,
-                            content_type=mimetype, direct_passthrough=True)
-            resp.headers.add(
-                'Content-Range', f'bytes {start}-{start+length-1}/{file_size}')
-            resp.headers.add('Accept-Ranges', 'bytes')
-            resp.headers.add('Content-Length', length)
-            return resp
-
-        return send_file(input_file, mimetype=mimetype, conditional=True)
-
+        resp = Response(stream_with_context(_generate_chunks(length)), 206,
+                        content_type=mimetype, direct_passthrough=True)
+        resp.headers.add(
+            'Content-Range', f'bytes {start}-{start+length-1}/{file_size}')
+        resp.headers.add('Accept-Ranges', 'bytes')
+        resp.headers.add('Content-Length', length)
+        return resp
+    
     def serve(self, host='0.0.0.0', port=8371, debug=False):
         """Start storage server
 
