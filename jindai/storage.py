@@ -13,6 +13,7 @@ import tempfile
 import time
 import urllib
 import zipfile
+import requests_cache
 from fnmatch import fnmatch
 from io import BytesIO, IOBase
 from threading import Lock
@@ -519,7 +520,7 @@ class WebManager(StorageManager):
             ex = None
 
             for _ in range(self.attempts):
-                with requests.session() as s:
+                with WebManager._session() as s:
                     # try:
                     return s.send(self.req, stream=True, proxies=self.proxies, verify=self.verify, timeout=self.timeout)
                     # except requests.exceptions.ConnectionError as e:
@@ -538,6 +539,10 @@ class WebManager(StorageManager):
             }
         else:
             return proxies or {}
+        
+    @staticmethod
+    def _session():
+        return requests_cache.CachedSession(__name__)
         
     def _build_request(self, url: str, method='GET', referer: str = '',
                        headers=None, data=None, **_):
@@ -590,7 +595,7 @@ class WebManager(StorageManager):
 
     def write(self, path: str, data: bytes, method = 'POST', proxy = None, **params) -> BytesIO:
         req = self._build_request(path, method, data=data, **params).prepare()
-        with requests.session() as s:
+        with self._session() as s:
             resp = s.send(req, proxies=WebManager._build_proxies(proxy), verify=self.verify, timeout=self.timeout)
         if resp.status_code != 200:
             raise OSError(f'HTTP {resp.status_code}')
@@ -602,7 +607,7 @@ class WebManager(StorageManager):
         
     def read(self, path: str, proxy=None, **params) -> BytesIO:
         req = self._build_request(path, **params).prepare()
-        with requests.session() as s:        
+        with self._session() as s:        
             return BytesIO(s.send(
                 req, proxies=WebManager._build_proxies(proxy),
                 verify=self.verify, timeout=self.timeout
