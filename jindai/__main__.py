@@ -8,6 +8,7 @@ import json
 from multiprocessing.connection import wait
 import os
 import re
+from tabnanny import verbose
 from threading import Thread
 import zipfile
 from io import BytesIO
@@ -66,13 +67,19 @@ def export(query, output_file):
 @cli.command('task')
 @click.argument('task_id')
 @click.option('--concurrent', type=int, default=10)
-def run_task(task_id, concurrent=0):
+@click.option('--verbose', type=bool, default=False)
+def run_task(task_id, concurrent, verbose):
     """Run task according to id or name"""
+    dbo = TaskDBO.first((F.id == task_id) if re.match(
+        r'[0-9a-f]{24}', task_id) else (F.name == task_id))
+    if not dbo:
+        print(f'Task {task_id} not found')
+        return
+    
     _init_plugins()
-    task = Task.from_dbo(TaskDBO.first((F.id == task_id) if re.match(
-        r'[0-9a-f]{24}', task_id) else (F.name == task_id)), logger=print, verbose=True)
+    task = Task.from_dbo(dbo, logger=print, verbose=verbose)
     if concurrent > 0:
-        task.pipeline.concurrent = concurrent
+        task.concurrent = concurrent
     result = task.execute()
     print(result)
 

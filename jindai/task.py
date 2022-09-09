@@ -92,13 +92,15 @@ class Task:
         self.pipeline = Pipeline(stages, self.logger)
         self.params = params
 
-        self.pbar = _TqdmProxy() if use_tqdm and os.isatty(sys.stdout.fileno()) else _FakeTqdm()
+        self.pbar = _TqdmProxy() if not verbose and use_tqdm and os.isatty(sys.stdout.fileno()) else _FakeTqdm()
         
         self.queue = None
 
     def _thread_execute(self, priority, job):
         input_paragraph, stage = job
         self.pbar.update(1)
+        if self.verbose:
+            self.logger(type(stage).__name__, '%x' % id(input_paragraph))
         if stage is None:
             return None
 
@@ -141,7 +143,7 @@ class Task:
                             break  # exit working loop
                     else:
                         if len(futures) > self.concurrent:
-                            continue
+                            time.sleep(0.1)
                         else:
                             priority, _, job = self.queue.get()
                             future = tpe.submit(self._thread_execute, priority, job)
@@ -160,7 +162,7 @@ class Task:
                 '__tracestack__': traceback.format_tb(ex.__traceback__)
             }
         finally:
-            for future in futures.values():
+            for future in list(futures.values()):
                 if not future.done():
                     future.cancel()
 
@@ -203,24 +205,3 @@ class Task:
                         **kwargs)
         else:
             return Task({}, [])
-
-
-if __name__ == '__main__':
-    
-    from jindai import PipelineStage
-    
-    class Numbers(PipelineStage):
-        def resolve(self, _):
-            yield from range(10)
-            
-    class PrintNumber(PipelineStage):
-        def __init__(self, n) -> None:
-            super().__init__()
-            self.n = n
-        def resolve(self, p):
-            self.logger(self.n, p)
-            return p
-            
-    stages = [Numbers(), PrintNumber(1), PrintNumber(2), PrintNumber(3)]
-    
-    Task({}, stages, concurrent=3, use_tqdm=False).execute()
