@@ -98,6 +98,8 @@ class Task:
 
     def _thread_execute(self, priority, job):
         input_paragraph, stage = job
+
+        if self.verbose: self.logger(type(stage).__name__, id(input_paragraph))
         self.pbar.update(1)
         if stage is None:
             return None
@@ -140,13 +142,11 @@ class Task:
                         else:
                             break  # exit working loop
                     else:
-                        if len(futures) > self.concurrent:
-                            continue
-                        else:
+                        if len(futures) < self.concurrent:
                             priority, _, job = self.queue.get()
                             future = tpe.submit(self._thread_execute, priority, job)
                             futures[id(future)] = future
-                            future.add_done_callback(lambda h: futures.pop(id(h)))
+                            future.add_done_callback(lambda h: futures.pop(id(h), ''))
             if self.alive:
                 return self.pipeline.summarize()
         except KeyboardInterrupt:
@@ -160,7 +160,7 @@ class Task:
                 '__tracestack__': traceback.format_tb(ex.__traceback__)
             }
         finally:
-            for future in futures.values():
+            for future in list(futures.values()):
                 if not future.done():
                     future.cancel()
 

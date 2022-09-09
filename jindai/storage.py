@@ -542,7 +542,7 @@ class WebManager(StorageManager):
         
     @staticmethod
     def _session():
-        return requests_cache.CachedSession(__name__)
+        return requests.session()#_cache.CachedSession(__name__)
         
     def _build_request(self, url: str, method='GET', referer: str = '',
                        headers=None, data=None, **_):
