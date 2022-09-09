@@ -14,7 +14,7 @@ import time
 import urllib
 import zipfile
 from fnmatch import fnmatch
-from io import BytesIO
+from io import BytesIO, IOBase
 from threading import Lock
 from typing import IO, Iterable, List, Tuple, Union
 
@@ -461,15 +461,8 @@ class WebManager(StorageManager):
             self.attempts = attempts
             self.verify = verify
             self.timeout = timeout
+            self.proxies = proxies
             
-            if proxies and not isinstance(proxies, dict):
-                self.proxies = {
-                    'http': proxies,
-                    'https': proxies
-                }
-            else:
-                self.proxies = proxies or {}
-
             with self._urlopen() as f:
                 self.content_length = int(f.headers.get('content-length', -1))
                 if self.content_length < 0:
@@ -536,6 +529,16 @@ class WebManager(StorageManager):
             if ex:
                 print('Read from', self.req.url, 'failed with exception', type(ex).__name__, ex)
                 
+    @staticmethod
+    def _build_proxies(proxies):
+        if proxies and not isinstance(proxies, dict):
+            return {
+                'http': proxies,
+                'https': proxies
+            }
+        else:
+            return proxies or {}
+        
     def _build_request(self, url: str, method='GET', referer: str = '',
                        headers=None, data=None, **_):
         """Build a request
@@ -588,14 +591,22 @@ class WebManager(StorageManager):
     def write(self, path: str, data: bytes, method = 'POST', proxy = None, **params) -> BytesIO:
         req = self._build_request(path, method, data=data, **params).prepare()
         with requests.session() as s:
-            resp = s.send(req, proxies=proxy, verify=self.verify, timeout=self.timeout)
+            resp = s.send(req, proxies=WebManager._build_proxies(proxy), verify=self.verify, timeout=self.timeout)
         if resp.status_code != 200:
             raise OSError(f'HTTP {resp.status_code}')
         return True
     
-    def readbuf(self, path: str, proxy=None, **params) -> BytesIO:
+    def readbuf(self, path: str, proxy=None, **params) -> IOBase:
         req = self._build_request(path, **params).prepare()
-        return WebManager._ResponseStream(req, self.attempts, proxies=proxy, verify=self.verify, timeout=self.timeout)
+        return WebManager._ResponseStream(req, self.attempts, proxies=WebManager._build_proxies(proxy), verify=self.verify, timeout=self.timeout)
+        
+    def read(self, path: str, proxy=None, **params) -> BytesIO:
+        req = self._build_request(path, **params).prepare()
+        with requests.session() as s:        
+            return BytesIO(s.send(
+                req, proxies=WebManager._build_proxies(proxy),
+                verify=self.verify, timeout=self.timeout
+            ).content)
         
     def exists(self, path: str) -> bool:
         return requests.get(path).status_code == 200
