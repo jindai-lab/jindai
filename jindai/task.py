@@ -62,7 +62,7 @@ class Task:
     """Task object"""
 
     def __init__(self, params: dict, stages, concurrent=3, logger: Callable = print,
-                 resume_next: bool = False, verbose: bool = False) -> None:
+                 resume_next: bool = False, verbose: bool = False, use_tqdm: bool = True) -> None:
         """Initialize the task object
 
         :param params: Parameters, used as the first paragraph/input to the pipeline
@@ -77,6 +77,8 @@ class Task:
         :type resume_next: bool, optional
         :param verbose: logging debug info, defaults to False
         :type verbose: bool, optional
+        :param verbose: use tqdm progress bar if applicable, defaults to True
+        :type verbose: bool, optional
         """
 
         self.alive = True
@@ -90,69 +92,68 @@ class Task:
         self.pipeline = Pipeline(stages, self.logger)
         self.params = params
 
-        self.pbar = _TqdmProxy() if os.isatty(sys.stdout.fileno()) else _FakeTqdm()
+        self.pbar = _TqdmProxy() if use_tqdm and os.isatty(sys.stdout.fileno()) else _FakeTqdm()
+        
+        self.queue = None
+
+    def _thread_execute(self, priority, job):
+        input_paragraph, stage = job
+        self.pbar.update(1)
+        if stage is None:
+            return None
+
+        try:
+            priority -= 1
+            counter = 0
+            for job in stage.flow(input_paragraph):
+                self.queue.put((priority, id(job[0]), job))
+                counter += 1
+                if not self.alive:
+                    break
+            self.pbar.inc_total(counter)
+        except Exception as ex:
+            self.logger('Error:', ex)
+            self.logger('\n'.join(traceback.format_tb(ex.__traceback__)))
+            if not self.resume_next:
+                self.alive = False
 
     def execute(self):
         """Execute the task
         :return: Summarized result, or exception in execution
         :rtype: dict
         """
+        self.queue = PriorityQueue()
         tpe = ThreadPoolExecutor(max_workers=self.concurrent)
-        queue = PriorityQueue(self.concurrent * 10)
         futures = {}
         self.pbar.reset()
-
-        def _execute(priority, job):
-            input_paragraph, stage = job
-            self.pbar.update(1)
-            if stage is None:
-                return None
-
-            try:
-                priority -= 1
-                counter = 0
-                for job in stage.flow(input_paragraph):
-                    queue.put((priority, id(job[0]), job))
-                    counter += 1
-                    if not self.alive:
-                        break
-                self.pbar.inc_total(counter)
-            except Exception as ex:
-                self.logger('Error:', ex)
-                self.logger('\n'.join(traceback.format_tb(ex.__traceback__)))
-                if not self.resume_next:
-                    self.alive = False
-
+        
         try:
             if self.pipeline.stages:
-                queue.put((0, 0, (Paragraph(**self.params),
+                self.queue.put((0, 0, (Paragraph(**self.params),
                                   self.pipeline.stages[0])))
                 self.pbar.inc_total(1)
 
                 while self.alive:
-                    if queue.empty():
-                        # check if there are pending jobs
-                        done = []
-                        for key, future in futures.items():
-                            if future.done():
-                                done.append(key)
-                        for key in done:
-                            del futures[key]
+                    if self.queue.empty():
                         if futures:  # there are pending jobs
                             time.sleep(0.1)
                         else:
                             break  # exit working loop
                     else:
-                        priority, _, job = queue.get()
-                        future = tpe.submit(_execute, priority, job)
-                        futures[id(future)] = future
+                        if len(futures) > self.concurrent:
+                            continue
+                        else:
+                            priority, _, job = self.queue.get()
+                            future = tpe.submit(self._thread_execute, priority, job)
+                            futures[id(future)] = future
+                            future.add_done_callback(lambda h: futures.pop(id(h)))
             if self.alive:
                 return self.pipeline.summarize()
         except KeyboardInterrupt:
             self.alive = False
         except Exception as ex:
             self.alive = False
-            print(type(ex).__name__, ex)
+            self.logger(type(ex).__name__, ex)
             traceback.print_exc()
             return {
                 '__exception__': str(ex),
@@ -202,3 +203,24 @@ class Task:
                         **kwargs)
         else:
             return Task({}, [])
+
+
+if __name__ == '__main__':
+    
+    from jindai import PipelineStage
+    
+    class Numbers(PipelineStage):
+        def resolve(self, _):
+            yield from range(10)
+            
+    class PrintNumber(PipelineStage):
+        def __init__(self, n) -> None:
+            super().__init__()
+            self.n = n
+        def resolve(self, p):
+            self.logger(self.n, p)
+            return p
+            
+    stages = [Numbers(), PrintNumber(1), PrintNumber(2), PrintNumber(3)]
+    
+    Task({}, stages, concurrent=3, use_tqdm=False).execute()
