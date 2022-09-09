@@ -145,10 +145,10 @@ class MediaItem(db.DbObject):
 
         if self.source.get('file'):
             filename = self.source['file']
-            if filename.lower().endswith('.pdf') and self.source.get('page') is not None:
-                return storage.open(f'{self.source["file"]}#pdf/{self.source["page"]}', 'rb')
             if filename == 'blocks.h5':
                 return storage.open(f"hdf5://{self.source.get('block_id', self.id)}", 'rb')
+            if filename.lower().endswith('.pdf') and 'page' in self.source:
+                return storage.open(f'{self.source["file"]}#pdf/{self.source["page"]}', 'rb')
             return storage.open(filename, 'rb')
 
         if self.source.get('url'):

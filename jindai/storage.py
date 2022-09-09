@@ -542,7 +542,7 @@ class WebManager(StorageManager):
         
     @staticmethod
     def _session():
-        return requests.session()#_cache.CachedSession(__name__)
+        return requests.session()
         
     def _build_request(self, url: str, method='GET', referer: str = '',
                        headers=None, data=None, **_):
@@ -1149,7 +1149,7 @@ class Storage:
             storage_app.run(host=host, port=port, debug=True)
         else:
             from waitress import serve
-            serve(storage_app, host=host, port=port, threads=8)
+            serve(storage_app, host=host, port=port, threads=8, backlog=2048)
 
         return storage_app
     
