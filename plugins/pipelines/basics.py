@@ -664,7 +664,7 @@ class FieldAssignment(PipelineStage):
     @chs 将某一个字段的值或输入值保存到另一个字段
     """
 
-    def __init__(self, field, value):
+    def __init__(self, field, value='', delete_field=False):
         """
         Args:
             field (str): Field name
@@ -672,13 +672,20 @@ class FieldAssignment(PipelineStage):
             value (QUERY):
                 $<field> or contants
                 @chs 以 $ 开头的字段名，或常数值（类型将自动匹配）
+            delete_field (bool):
+                Delete the field
+                @chs 删除该字段
         """
         super().__init__()
         self.field = field
         self.value = value
+        self.delete_field = delete_field
 
     def resolve(self, paragraph: Paragraph) -> Paragraph:
-        setattr(paragraph, self.field, execute_query_expr(self.value, paragraph))
+        if self.delete_field:
+            del paragraph[self.field]
+        else:
+            paragraph[self.field] = execute_query_expr(self.value, paragraph)
         return paragraph
 
 
