@@ -8,7 +8,6 @@ import json
 from multiprocessing.connection import wait
 import os
 import re
-from tabnanny import verbose
 from threading import Thread
 import zipfile
 from io import BytesIO
