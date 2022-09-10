@@ -324,15 +324,11 @@ def plugin_export(output: str, infiles):
 @cli.command('storage-serve')
 @click.option('--port', '-p', default=8371)
 @click.option('--host', '-h', default='0.0.0.0')
-@click.option('--debug', '-d', default=False, flag_value=True)
+@click.option('--debug', '-d', default=None, flag_value=True)
 def serve_storage(port: int, host: str, debug: bool):
     """Serve storage
-
-    :param port: port
-    :type port: int
-    :param host: host
-    :type host: str
     """
+    if debug is None: debug = config.debug
     storage.serve(host, port, debug=debug)
 
 
