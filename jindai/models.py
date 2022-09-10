@@ -150,15 +150,15 @@ class MediaItem(db.DbObject):
                 filename = self.source['file']
                 if filename == 'blocks.h5':
                     buf = storage.open(f"hdf5://{self.source.get('block_id', self.id)}", 'rb').read()
-                if filename.lower().endswith('.pdf') and 'page' in self.source:
+                elif filename.lower().endswith('.pdf') and 'page' in self.source:
                     buf = storage.open(f'{self.source["file"]}#pdf/{self.source["page"]}', 'rb').read()
                 else:
                     buf = storage.open(filename, 'rb')
 
             elif self.source.get('url'):
-                buf = storage.open(self.source['url'], 'rb')
+                buf = storage.open(self.source['url'], 'rb').read()
 
-            self._data = BytesIO(buf)
+            self._data = BytesIO(buf) if isinstance(buf, bytes) else buf
         else:
             self._data.seek(0)
             
