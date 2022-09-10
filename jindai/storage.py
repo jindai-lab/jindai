@@ -944,7 +944,7 @@ class Storage:
                 buf = getattr(mgr, 'readbuf' if mode ==
                         'rb' else 'writebuf')(path, **params)
             except OSError as ex:
-                continue
+                print(ex)
 
         if not buf:
             raise OSError('Unable to open: ' + path)
@@ -1149,7 +1149,7 @@ class Storage:
             storage_app.run(host=host, port=port, debug=True)
         else:
             from waitress import serve
-            serve(storage_app, host=host, port=port, threads=8, backlog=2048)
+            serve(storage_app, host=host, port=port, threads=8, connection_limit=512, backlog=2048)
 
         return storage_app
     

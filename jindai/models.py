@@ -99,6 +99,7 @@ class MediaItem(db.DbObject):
         super().__init__(*args, **kwargs)
         self._image = None
         self._image_flag = False
+        self._data = None
 
     @classproperty
     def acceptable_extensions(cls) -> list:
@@ -142,24 +143,33 @@ class MediaItem(db.DbObject):
     @property
     def data(self) -> BytesIO:
         """Get raw BytesIO for image data"""
+        if not self._data:
+            buf = b''
 
-        if self.source.get('file'):
-            filename = self.source['file']
-            if filename == 'blocks.h5':
-                return storage.open(f"hdf5://{self.source.get('block_id', self.id)}", 'rb')
-            if filename.lower().endswith('.pdf') and 'page' in self.source:
-                return storage.open(f'{self.source["file"]}#pdf/{self.source["page"]}', 'rb')
-            return storage.open(filename, 'rb')
+            if self.source.get('file'):
+                filename = self.source['file']
+                if filename == 'blocks.h5':
+                    buf = storage.open(f"hdf5://{self.source.get('block_id', self.id)}", 'rb').read()
+                if filename.lower().endswith('.pdf') and 'page' in self.source:
+                    buf = storage.open(f'{self.source["file"]}#pdf/{self.source["page"]}', 'rb').read()
+                else:
+                    buf = storage.open(filename, 'rb')
 
-        if self.source.get('url'):
-            return storage.open(self.source['url'], 'rb')
+            elif self.source.get('url'):
+                buf = storage.open(self.source['url'], 'rb')
 
-        return None
+            self._data = BytesIO(buf)
+        else:
+            self._data.seek(0)
+            
+        return self._data
 
     def save(self):
         """Save image items"""
         image = self._image
         del self._image
+        data = self._data
+        del self._data
 
         if self._image_flag:
             self.source['file'] = 'blocks.h5'
@@ -171,6 +181,7 @@ class MediaItem(db.DbObject):
         super().save()
         self._image_flag = False
         self._image = image
+        self._data = data
 
     @classmethod
     def on_initialize(cls):
