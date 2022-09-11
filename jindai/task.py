@@ -1,5 +1,7 @@
 """Task processing module"""
 
+from collections import deque
+from multiprocessing import Lock
 import os
 import sys
 import threading
@@ -61,7 +63,7 @@ class _FakeTqdm:
 class Task:
     """Task object"""
 
-    def __init__(self, params: dict, stages, concurrent=3, logger: Callable = print,
+    def __init__(self, params: dict, stages, concurrent=3, logger: Callable = None,
                  resume_next: bool = False, verbose: bool = False, use_tqdm: bool = True) -> None:
         """Initialize the task object
 
@@ -86,23 +88,22 @@ class Task:
         self.resume_next = resume_next
         self.concurrent = concurrent
 
-        self.logger = logger
+        self.logger = logger or self.print
+        self.logs = deque()
         self.verbose = verbose
 
         self.pipeline = Pipeline(stages, self.logger)
         self.params = params
 
-        self.pbar = _TqdmProxy() if not verbose and use_tqdm and os.isatty(sys.stdout.fileno()) else _FakeTqdm()
-        
+        self.pbar = _TqdmProxy() if not verbose and use_tqdm and os.isatty(sys.stdout.fileno()) else _FakeTqdm()   
         self.queue = None
-
+         
     def _thread_execute(self, priority, job):
         input_paragraph, stage = job
 
-        if self.verbose: self.logger(type(stage).__name__, id(input_paragraph))
         self.pbar.update(1)
         if self.verbose:
-            self.logger(type(stage).__name__, '%x' % id(input_paragraph))
+            self.logger(type(stage).__name__, getattr(input_paragraph, 'id', '%x' % id(input_paragraph)))
         if stage is None:
             return None
 
@@ -110,6 +111,8 @@ class Task:
             priority -= 1
             counter = 0
             for job in stage.flow(input_paragraph):
+                if job[1] is None:
+                    continue
                 self.queue.put((priority, id(job[0]), job))
                 counter += 1
                 if not self.alive:
@@ -120,6 +123,9 @@ class Task:
             self.logger('\n'.join(traceback.format_tb(ex.__traceback__)))
             if not self.resume_next:
                 self.alive = False
+                
+    def print(self, *args):
+        self.logs.append(args)
 
     def execute(self):
         """Execute the task
@@ -138,6 +144,11 @@ class Task:
                 self.pbar.inc_total(1)
 
                 while self.alive:
+                    
+                    while self.logs:
+                        log = self.logs.popleft()
+                        print(*log)
+                        
                     if self.queue.empty():
                         if futures:  # there are pending jobs
                             time.sleep(0.1)
@@ -167,6 +178,9 @@ class Task:
             for future in list(futures.values()):
                 if not future.done():
                     future.cancel()
+            for log in self.logs:
+                print(*log)
+            self.logs.clear()
 
         return None
 

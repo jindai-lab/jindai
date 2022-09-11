@@ -65,8 +65,8 @@ def export(query, output_file):
 
 @cli.command('task')
 @click.argument('task_id')
-@click.option('--concurrent', type=int, default=10)
-@click.option('--verbose', type=bool, default=False)
+@click.option('-n', '--concurrent', type=int, default=10)
+@click.option('-v', '--verbose', type=bool, flag_value=True)
 def run_task(task_id, concurrent, verbose):
     """Run task according to id or name"""
     dbo = TaskDBO.first((F.id == task_id) if re.match(
@@ -76,7 +76,7 @@ def run_task(task_id, concurrent, verbose):
         return
     
     _init_plugins()
-    task = Task.from_dbo(dbo, logger=print, verbose=verbose)
+    task = Task.from_dbo(dbo, verbose=verbose)
     if concurrent > 0:
         task.concurrent = concurrent
     result = task.execute()
