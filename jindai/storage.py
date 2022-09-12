@@ -151,6 +151,7 @@ class StorageManager:
         base_path = base_path.rstrip('/') + '/'
         pattern_segs = '/'.join(match_pattern.split('/')[:base_path.count('/')+1])
         dirs, files = [], []
+
         for f in self.listdir(base_path):
             if self.stat(self.join(base_path, f))['type'] == 'folder':
                 if not match_pattern or fnmatch(self.join(base_path, f), pattern_segs):
@@ -173,6 +174,7 @@ class StorageManager:
         Yields:
             str: Matched paths
         """
+
         for path, dirs, files in self.walk(base_path, name_pattern):
             for f in dirs + files:
                 fpath = self.join(path, f)
@@ -208,6 +210,12 @@ class OSFileSystemManager(StorageManager):
         allowed_locations = []
         if isinstance(base, list):
             base, *allowed_locations = base
+
+        allowed_locations = [
+            loc + os.path.sep
+            for loc in allowed_locations
+            if not loc.endswith(os.path.sep)
+        ]
         
         if not base.endswith(os.path.sep):
             base += os.path.sep
@@ -227,6 +235,7 @@ class OSFileSystemManager(StorageManager):
         :return: str
         :rtype: full/absolute path
         """
+        suffix_path = ''
 
         if isinstance(path, tuple):
             path = os.path.sep.join([str(x) for x in path])
@@ -235,7 +244,16 @@ class OSFileSystemManager(StorageManager):
             path = path[7:]
 
         if '#' in path:
-            path, _ = path.split('#', 1)
+            path, suffix_path = path.split('#', 1)
+            suffix_path = '#' + suffix_path
+
+        if '*' in path:
+            segs = path.split('/')
+            for i, seg in  enumerate(segs):
+                if '*' in seg: break
+            parent_path = '/'.join(segs[:i]) + '/'
+            suffix_path = '/'.join(segs[i:])
+            path = parent_path
 
         path = path.replace('/', os.path.sep) # path is now os-specific
 
@@ -244,13 +262,15 @@ class OSFileSystemManager(StorageManager):
                 path = path[1:]
             for parent in self.allowed_locations:
                 if path.startswith(parent + os.path.sep):
-                    return path
+                    return path + suffix_path
                 
                 tmpath = os.path.join(parent, path)
                 if os.path.exists(tmpath):
-                    return tmpath
-
-        return os.path.join(self.base, path)
+                    return tmpath + suffix_path
+            
+            return os.path.join(self.base, path) + suffix_path
+        else:
+            return path + suffix_path
 
     def truncate_path(self, path):
         """Truncate path if it belongs to the base directory.
@@ -265,8 +285,9 @@ class OSFileSystemManager(StorageManager):
         """
         path = path.replace(os.path.sep, '/')
         if path.startswith('file://'): path = path[7:]
-        if path.startswith(self.base):
-            return path[len(self.base):]
+        for base in self.allowed_locations:
+            if path.startswith(base):
+                return path[len(base):]
         return path
 
     def stat(self, path: str) -> list:
@@ -327,12 +348,12 @@ class OSFileSystemManager(StorageManager):
     def walk(self, base_path, name_pattern=''):
         base_path = self.join(self.expand_path(base_path))
         name_pattern = self.join(self.expand_path(name_pattern)) if name_pattern else ''
-        return super().walk(base_path, name_pattern)
+        yield from super().walk(base_path, name_pattern)
 
     def search(self, base_path, name_pattern = ''):
         base_path = self.join(self.expand_path(base_path))
         name_pattern = self.join(self.expand_path(name_pattern)) if name_pattern else ''
-        return super().search(base_path, name_pattern)
+        yield from super().search(base_path, name_pattern)
 
 
 class Hdf5Manager(StorageManager):
@@ -378,7 +399,7 @@ class Hdf5Manager(StorageManager):
     def _get_item_id(self, path:str) -> str:
         if '://' in path:
             path = path.split('://', 1)[1].split('/')[0]
-        return path        
+        return path
 
     def write(self, path, data):
         """Write data from src to hdf5 file with specific item id
@@ -746,8 +767,6 @@ class StorageProxyManager(StorageManager):
         return target
             
     def _get_json(self, path, action, **params):
-        if params is None:
-            params = {}
         params['action'] = action
         url = self._proxied_url(path) + '?' + urllib.parse.urlencode(params)
         try:
@@ -757,7 +776,7 @@ class StorageProxyManager(StorageManager):
             return
         
     def __getattribute__(self, __name: str):
-        if __name in ('statdir', 'listdir', 'exists', 'stat', 'mkdir'):
+        if __name in ('statdir', 'listdir', 'exists', 'stat', 'mkdir', 'expand_path', 'truncate_path'):
             return lambda p: self._get_json(p, __name)
         return super().__getattribute__(__name)
     
@@ -771,10 +790,10 @@ class StorageProxyManager(StorageManager):
         return self._webm.read(self._proxied_url(path), **params)
 
     def walk(self, start_path, name_pattern=''):
-        return self._get_json(start_path, 'walk', name_pattern=name_pattern)
+        yield from self._get_json(start_path, 'walk', name_pattern=name_pattern)
     
     def search(self, path, name_pattern):
-        return self._get_json(path, 'search', name_pattern=name_pattern)
+        yield from self._get_json(path, 'search', name_pattern=name_pattern)
        
     
 def fragment_handlers():
@@ -1009,7 +1028,7 @@ class Storage:
     def search(self, path: str, name_pattern: str):
         """Find a file
         """
-        return self._query_until('listdir', path, [], name_pattern=name_pattern)
+        return self._query_until('search', path, [], name_pattern=name_pattern)
 
     def mkdir(self, path: str, new_folder: str):
         """Make directory in path"""
@@ -1033,11 +1052,7 @@ class Storage:
     def get_schemed_path(scheme, path):
         path = path.replace('__hash/', '#')
         path = f'{scheme}://{path}'
-        if '#' in path:
-            filepath = path.split('#')[0]
-        else:
-            filepath = path
-        ext = filepath.rsplit('.', 1)[-1]
+        ext = path.rsplit('.', 1)[-1]
         return path, ext.lower() if len(ext) <= 4 else ''
     
     def serve_file(self, path_or_io: Union[str, IO], ext: str = '', file_size: int = 0) -> Response:
@@ -1115,20 +1130,19 @@ class Storage:
 
         @storage_app.route('/<scheme>/<path:path>', methods=['GET'])
         @storage_app.route('/<scheme>', methods=['GET'])
-        def get_item(scheme, path=''):
+        def get_item(scheme, path='/'):
+            if scheme == 'file':
+                path = '/' + path.lstrip('/')
             path, ext = Storage.get_schemed_path(scheme, path)
             
             # handle with storage queries
             params = request.args.to_dict()
             action = params.pop('action', '')
             if action:
-                if hasattr(self, action):
-                    result = getattr(self, action)(path, **params)
-                    if action in ('walk', 'search', 'find'):
-                        result = list(result)
-                    return jsonify(result)
-                else:
-                    return jsonify(None)
+                result = getattr(self, action, lambda *x, **kws: None)(path, **params)
+                if action in ('walk', 'search'):
+                    result = list(result or [])
+                return jsonify(result)
             
             resp = self.serve_file(path, ext, self.stat(path)['size'])
             resp.headers.add("Cache-Control", "public,max-age=86400")
@@ -1154,10 +1168,10 @@ class Storage:
         return storage_app
     
     def expand_path(self, path):
-        return self._schema[''].expand_path(path)
+        return self._query_until('expand_path', path, self._schema[''].expand_path(path))
     
     def truncate_path(self, path):
-        return self._schema[''].truncate_path(path)
+        return self._query_until('truncate_path', path, self._schema[''].truncate_path(path))
     
     def expand_patterns(self, patterns: Union[list, str, tuple]):
         """Get expanded paths according to wildcards patterns
@@ -1194,10 +1208,9 @@ class Storage:
                         parents = segs[:i]
                         break
                 parent = '/'.join(parents)
-                for mgr in self._get_managers(pattern):
+                for mgr in self._get_managers(parent):
                     for pattern in mgr.search(parent, pattern):
                         patterns.append(pattern)
-                    continue
 
             if pattern.endswith('.zip') or pattern.endswith('.epub'):
                 with zipfile.ZipFile(self.open(pattern, 'rb')) as zfile:
