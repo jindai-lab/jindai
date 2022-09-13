@@ -48,7 +48,7 @@ class StorageManager:
             'fullpath': path,
             'ctime': time.time(),
             'mtime': time.time(),
-            'size': 0,
+            'size': -1,
             'type': 'folder|file'
         }
 
@@ -292,6 +292,8 @@ class OSFileSystemManager(StorageManager):
 
     def stat(self, path: str) -> list:
         path = self.expand_path(path)
+        if '#' in path:
+            return super().stat(path)
         file_stat = os.stat(path)
         return {
             'name': os.path.basename(path),
@@ -804,7 +806,7 @@ def fragment_handlers():
         with zipfile.ZipFile(buf, 'r') as zip_file:
             return zip_file.open(zpath)
 
-    def handle_pdf(buf, page):
+    def handle_pdf(buf, page, *_):
         """Get PNG data from PDF
 
         :param file: PDF path
@@ -841,7 +843,7 @@ def fragment_handlers():
         
         return buf
 
-    def handle_thumbnail(buf, width, height=''):
+    def handle_thumbnail(buf, width, height='', *_):
         """Get thumbnail for image"""
         from PIL import Image
 
@@ -957,6 +959,7 @@ class Storage:
         """
         parsed = urllib.parse.urlparse(path.replace('__hash/', '#'))
         buf = None
+        if '#' in path: path = path[:path.find('#')]
 
         for mgr in self._get_managers(parsed.scheme):
             try:
