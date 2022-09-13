@@ -139,26 +139,30 @@ class MediaItem(db.DbObject):
         """Set the associated image"""
         self._image = value
         self._image_flag = True
+        
+    @property
+    def data_path(self) -> str:
+        """Get full path for data"""
+        if self.source.get('file'):
+            filename = self.source['file']
+            if filename == 'blocks.h5':
+                return f"hdf5://{self.source.get('block_id', self.id)}"
+            elif filename.lower().endswith('.pdf') and 'page' in self.source:
+                return f'{self.source["file"]}#pdf/{self.source["page"]}'
+            else:
+                return storage.expand_path(filename)
+        elif self.source.get('url'):
+            return self.source['url']
 
     @property
     def data(self) -> BytesIO:
         """Get raw BytesIO for image data"""
         if not self._data:
-            buf = b''
-
-            if self.source.get('file'):
-                filename = self.source['file']
-                if filename == 'blocks.h5':
-                    buf = storage.open(f"hdf5://{self.source.get('block_id', self.id)}", 'rb').read()
-                elif filename.lower().endswith('.pdf') and 'page' in self.source:
-                    buf = storage.open(f'{self.source["file"]}#pdf/{self.source["page"]}', 'rb').read()
-                else:
-                    buf = storage.open(filename, 'rb')
-
-            elif self.source.get('url'):
-                buf = storage.open(self.source['url'], 'rb').read()
-
-            self._data = BytesIO(buf) if isinstance(buf, bytes) else buf
+            try:
+                buf = storage.open(self.data_path, 'rb').read()
+                self._data = BytesIO(buf)
+            except OSError:
+                self._data = BytesIO()
         else:
             self._data.seek(0)
             

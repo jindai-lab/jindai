@@ -790,10 +790,10 @@ class StorageProxyManager(StorageManager):
         return self._webm.read(self._proxied_url(path), **params)
 
     def walk(self, start_path, name_pattern=''):
-        yield from self._get_json(start_path, 'walk', name_pattern=name_pattern)
+        yield from self._get_json(start_path, 'walk', name_pattern=name_pattern) or []
     
     def search(self, path, name_pattern):
-        yield from self._get_json(path, 'search', name_pattern=name_pattern)
+        yield from self._get_json(path, 'search', name_pattern=name_pattern) or []
        
     
 def fragment_handlers():

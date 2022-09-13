@@ -396,35 +396,22 @@ class VideoFrame(MediaItemStage):
         return BytesIO()
 
     def resolve_video(self, i: MediaItem, _):
-        temp_file = tempfile.mktemp()
         read_from = ''
         thumb = f'{ObjectId()}.thumb.jpg'
-
-        filename = i.source.get('file')
-        if filename == 'blocks.h5':
-            with storage.open(temp_file, 'wb') as output:
-                blen = output.write(i.data.read())
-            if not blen:
-                self.logger(f'unable to fetch data from blocks.h5: {i.id}')
-                os.unlink(temp_file)
-                return
-            read_from = temp_file
-        else:
-            read_from = storage.expand_path(filename)
-
+        
         # generate video thumbnail
-        pic = self.get_video_frame(read_from, self.frame_num).getvalue()
-        with storage.open(f'hdf5://{thumb}', 'wb') as output:
-            output.write(pic)
+        read_from = i.data_path + f'#videoframe/{self.frame_num}'
+        pic = storage.open(read_from, 'rb').read()
+        if pic:
+            with storage.open(f'hdf5://{thumb}', 'wb') as output:
+                output.write(pic)
+        else:
+            self.logger('cannot read from', read_from)
 
         setattr(i, self.field, thumb)
         i.save()
         self.logger(
-            f'wrote {temp_file} frame#{self.frame_num} to {thumb}')
-
-        # clear up temp file
-        if os.path.exists(temp_file):
-            os.unlink(temp_file)
+            f'wrote {i.id} frame#{self.frame_num} to {thumb}')
 
         return i
 
