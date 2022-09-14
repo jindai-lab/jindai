@@ -240,12 +240,12 @@ def list_storage(path='', search='', mkdir=''):
 def write_storage(path=''):
     """Write to file storage"""
 
-    path = os.path.join(
-        config.storage, path) if path and '..' not in path else config.storage
+    path = storage.expand_path(path)
     sfs = []
     for uploaded in request.files.values():
         save_path = os.path.join(path, uploaded.filename)
-        uploaded.save(save_path)
+        with storage.open(save_path, 'wb') as fo:
+            uploaded.save(fo)
         sfs.append(storage.stat(save_path))
     return sfs
 
