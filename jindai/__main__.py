@@ -1,14 +1,11 @@
 """CLI for jindai"""
 
 import base64
-from ctypes import Union
-from curses.ascii import isdigit
 import datetime
 import json
-from multiprocessing.connection import wait
+import glob
 import os
 import re
-from threading import Thread
 import zipfile
 from io import BytesIO
 from typing import Dict, Iterable
@@ -16,7 +13,6 @@ from typing import Dict, Iterable
 import click
 import h5py
 import numpy as np
-import requests
 from flask import Flask
 from tqdm import tqdm
 
@@ -65,7 +61,7 @@ def export(query, output_file):
 
 @cli.command('task')
 @click.argument('task_id')
-@click.option('-n', '--concurrent', type=int, default=10)
+@click.option('-n', '--concurrent', type=int, default=0)
 @click.option('-v', '--verbose', type=bool, flag_value=True)
 def run_task(task_id, concurrent, verbose):
     """Run task according to id or name"""
@@ -311,15 +307,44 @@ def plugin_export(output: str, infiles):
     :param infiles: includes path
     :type infiles: path
     """
-    if not output.startswith('jindai.plugins.'):
-        output = f'jindai.plugins.{output}'
-    if output.endswith('.zip'):
-        output = output[:-4]
-    with zipfile.ZipFile(output + '.zip', 'w', zipfile.ZIP_DEFLATED) as zout:
-        for filename in storage.expand_patterns(infiles, []):
-            arcname = output + '/' + filename
-            zout.write(filename, arcname)
+        
+    def _all_files(path):
+        if os.path.isfile(path):
+            yield path
+        else:
+            for base, _, files in os.walk(path):
+                if base == '__pycache__': continue
+                for f in files:
+                    yield os.path.join(base, f)
+                
+    def _export_one(outputzip, filelist):
+        if not outputzip.startswith('jindai.plugins.'):
+            outputzip = f'jindai.plugins.{outputzip}'
+        if outputzip.endswith('.zip'):
+            outputzip = outputzip[:-4]
             
+        print('output to', outputzip)
+        with zipfile.ZipFile(outputzip + '.zip', 'w', zipfile.ZIP_DEFLATED) as zout:
+            for filepath in filelist:
+                for filename in _all_files(filepath):
+                    print(' ...', filename)
+                    zout.write(filename, filename)
+                
+    if len(infiles) > 0:
+        _export_one(output, infiles)
+    else:
+        for p in glob.glob('plugins/*'):
+            pname = os.path.basename(p)
+            if pname.startswith(('_', 'temp_')) \
+                or ('.' in p and not p.endswith('.py')) \
+                or ('.' not in p and os.path.isfile(p)):
+                continue
+            if pname in ('datasources', 'hashing', 'imageproc', 'pipelines', 'shortcuts',
+                     'taskqueue.py', 'onedrive.py', 'scheduler.py', 'autotagging.py'):
+                continue
+            
+            _export_one(os.path.basename(p).split('.')[0], [p])
+
             
 @cli.command('storage-serve')
 @click.option('--port', '-p', default=8371)
