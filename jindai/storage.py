@@ -212,9 +212,8 @@ class OSFileSystemManager(StorageManager):
             base, *allowed_locations = base
 
         allowed_locations = [
-            loc + os.path.sep
+            (loc + os.path.sep) if not loc.endswith(os.path.sep) else loc
             for loc in allowed_locations
-            if not loc.endswith(os.path.sep)
         ]
         
         if not base.endswith(os.path.sep):
