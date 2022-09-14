@@ -364,24 +364,34 @@ class Hdf5Manager(StorageManager):
     _lock = Lock()
     
     def __init__(self, storage_base: str) -> None:
-        self.files = []
+        files = []
         if isinstance(storage_base, list):
             storage_base, *external_storage = storage_base
         else:
             external_storage = []
         
         for storage_parent in [storage_base, *external_storage]:
-            self.files += glob.glob(os.path.join(storage_parent, '*.h5'))
+            files += glob.glob(os.path.join(storage_parent, '*.h5'))
         self.base = os.path.join(storage_base, 'blocks.h5')
-        if self.base in self.files:
-            self.files.remove(self.base)
+        if self.base in files:
+            files.remove(self.base)
 
-        self.files = [h5py.File(g, 'r') for g in self.files]
-
+        self.files = []
+        for g in files:
+            try:
+                self.files.append(h5py.File(g, 'r'))
+            except OSError:
+                print('OSError while loading from', g)
+            
         self._writable_file = None
 
         if not os.path.exists(self.base):
-            self._writable_file = h5py.File(self.base, 'w')
+            try:
+                self._writable_file = h5py.File(self.base, 'w')
+            except:
+                self.base = tempfile.mktemp('.h5')
+                self._writable_file = h5py.File(self.base, 'w')
+                
             self._writable_file.close()
             self._writable_file = None
 
@@ -1118,58 +1128,6 @@ class Storage:
         resp.headers.add('Accept-Ranges', 'bytes')
         return resp
     
-    def serve(self, host='0.0.0.0', port=8371, debug=False):
-        """Start storage server
-
-        Args:
-            host (str, optional): Host name. Defaults to '0.0.0.0'.
-            port (int, optional): Port number. Defaults to 8371.
-
-        Returns:
-            Flask: Flask app
-        """
-        storage_app = Flask(__name__)
-        storage_app.secret_key = config.secret_key
-
-        @storage_app.route('/<scheme>/<path:path>', methods=['GET'])
-        @storage_app.route('/<scheme>', methods=['GET'])
-        def get_item(scheme, path='/'):
-            if scheme == 'file':
-                path = '/' + path.lstrip('/')
-            path, ext = Storage.get_schemed_path(scheme, path)
-            
-            # handle with storage queries
-            params = request.args.to_dict()
-            action = params.pop('action', '')
-            if action:
-                result = getattr(self, action, lambda *x, **kws: None)(path, **params)
-                if action in ('walk', 'search'):
-                    result = list(result or [])
-                return jsonify(result)
-            
-            resp = self.serve_file(path, ext, self.stat(path)['size'])
-            resp.headers.add("Cache-Control", "public,max-age=86400")
-            return resp
-
-        @storage_app.route('/<scheme>/<path:path>', methods=['PUT', 'POST'])
-        def put_item(scheme, path):
-            path, ext = Storage.get_schemed_path(scheme, path)
-            if not request.data:
-                return f'No data, ignored.'
-            with self.open(path, 'wb') as fo:
-                fo.write(request.data)
-            return f'OK {path}'
-
-        storage_app.debug = debug
-
-        if storage_app.debug or '-d' in sys.argv:
-            storage_app.run(host=host, port=port, debug=True)
-        else:
-            from waitress import serve
-            serve(storage_app, host=host, port=port, threads=8, connection_limit=512, backlog=2048)
-
-        return storage_app
-    
     def expand_path(self, path):
         return self._query_until('expand_path', path, self._schema[''].expand_path(path))
     
@@ -1221,6 +1179,61 @@ class Storage:
                         yield pattern + '#zip/' + item.filename
             else:
                 yield pattern
+                
+    def fspath(self, base_file='test', *segs):
+        return os.path.join(os.path.dirname(os.path.abspath(base_file)), *segs)
+  
+    def serve(self, host='0.0.0.0', port=8371, debug=False):
+        """Start storage server
 
+        Args:
+            host (str, optional): Host name. Defaults to '0.0.0.0'.
+            port (int, optional): Port number. Defaults to 8371.
+
+        Returns:
+            Flask: Flask app
+        """
+        storage_app = Flask(__name__)
+        storage_app.secret_key = config.secret_key
+
+        @storage_app.route('/<scheme>/<path:path>', methods=['GET'])
+        @storage_app.route('/<scheme>', methods=['GET'])
+        def get_item(scheme, path='/'):
+            if scheme == 'file':
+                path = '/' + path.lstrip('/')
+            path, ext = Storage.get_schemed_path(scheme, path)
+            
+            # handle with storage queries
+            params = request.args.to_dict()
+            action = params.pop('action', '')
+            if action:
+                result = getattr(self, action, lambda *x, **kws: None)(path, **params)
+                if action in ('walk', 'search'):
+                    result = list(result or [])
+                return jsonify(result)
+            
+            resp = self.serve_file(path, ext, self.stat(path)['size'])
+            resp.headers.add("Cache-Control", "public,max-age=86400")
+            return resp
+
+        @storage_app.route('/<scheme>/<path:path>', methods=['PUT', 'POST'])
+        def put_item(scheme, path):
+            path, ext = Storage.get_schemed_path(scheme, path)
+            if not request.data:
+                return f'No data, ignored.'
+            with self.open(path, 'wb') as fo:
+                fo.write(request.data)
+            return f'OK {path}'
+
+        storage_app.debug = debug
+
+        if storage_app.debug or '-d' in sys.argv:
+            storage_app.run(host=host, port=port, debug=True)
+        else:
+            from waitress import serve
+            serve(storage_app, host=host, port=port, threads=8, connection_limit=512, backlog=2048)
+
+        return storage_app
+  
 
 instance = Storage()
