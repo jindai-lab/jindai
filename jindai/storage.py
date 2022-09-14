@@ -376,6 +376,7 @@ class Hdf5Manager(StorageManager):
         if self.base in files:
             files.remove(self.base)
 
+        self.files = []
         for g in files:
             try:
                 self.files.append(h5py.File(g, 'r'))
