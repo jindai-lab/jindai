@@ -524,6 +524,9 @@ class WebManager(StorageManager):
             return False
 
         def read(self, amt=-1):
+            if not self._seekable:
+                return self._urlopen().content
+
             if self._pos >= self.content_length:
                 return b""
             if amt < 0:
