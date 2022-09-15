@@ -168,25 +168,23 @@ class MediaItem(db.DbObject):
             
         return self._data
 
+    def as_dict(self, expand=False):
+        d = super().as_dict(expand)
+        for k in [_ for _ in d if _.startswith('_') and _ != '_id']:
+            del d[k]
+        return d
+
     def save(self):
         """Save image items"""
-        image = self._image
-        del self._image
-        data = self._data
-        del self._data
-
         if self._image_flag:
             self.source['file'] = 'blocks.h5'
             with storage.open(f'hdf5://{self.id}', 'wb') as output:
                 buf = image.tobytes('jpeg')
                 output.write(buf)
-            
-        del self._image_flag
+            self._image_flag = False
+           
         super().save()
-        self._image_flag = False
-        self._image = image
-        self._data = data
-
+        
     @classmethod
     def on_initialize(cls):
         """Initialize indicies"""

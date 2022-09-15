@@ -14,11 +14,13 @@ class AutoTag(db.DbObject):
     cond = str
     tag = str
 
-    def __init__(self, **kwargs):
+    def __init__(self, cond='', **kwargs):
         super().__init__(**kwargs)
         self._parsed = {}
+        self.cond = cond
 
-    def parse(self):
+    @property
+    def parsed(self):
         """Get parsed condition
 
         :return: parsed condition
@@ -30,6 +32,20 @@ class AutoTag(db.DbObject):
             except QueryExpressionError:
                 self._parsed = 'False'
         return self._parsed
+
+    @property
+    def cond(self):
+        return self._orig.get('cond')
+
+    @cond.setter
+    def cond(self, val):
+        self._orig['cond'] = val
+        self._parsed = {}
+
+    def as_dict(self, expand=False):
+        d = super().as_dict(expand)
+        d = {k: v for k, v in d.items() if k == '_id' or not k.startswith('_')}
+        return d
 
 
 class ApplyAutoTags(PipelineStage):
@@ -44,7 +60,7 @@ class ApplyAutoTags(PipelineStage):
 
     def resolve(self, paragraph):
         for i in self.ats:
-            parsed, tag = i.parse(), i.tag
+            parsed, tag = i.parsed, i.tag
             try:
                 if execute_query_expr(parsed, paragraph):
                     if tag not in paragraph.keywords:
@@ -79,7 +95,7 @@ class AutoTaggingPlugin(Plugin):
                 a = AutoTag.first(F.id == apply)
                 if not a:
                     return '', 404
-                cond = a.parse()
+                cond = a.parsed
                 if a.tag.startswith('*'):
                     cond = MongoOperand(cond) & (~F.keywords.regex(r'^\*'))
                 Paragraph.query(cond).update(Fn.addToSet(keywords=a.tag))
