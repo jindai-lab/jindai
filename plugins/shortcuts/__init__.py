@@ -2,7 +2,7 @@
 import os
 from PyMongoWrapper import F
 
-from jindai import Plugin, parser
+from jindai import Plugin, parser, storage
 from jindai.helpers import rest
 from jindai.models import Meta
 
@@ -35,11 +35,11 @@ class Shortcuts(Plugin):
         @app.route('/api/plugins/shortcuts.html')
         @rest()
         def _shortcuts_html():
-            return storage.serve_file(os.path.join(os.path.dirname(__file__), 'shortcuts.html'))
+            return storage.serve_file(open(os.path.join(os.path.dirname(__file__), 'shortcuts.html'), 'rb'))
 
         @app.route('/api/plugins/shortcuts-jquery.min.js')
         def _shortcuts_jquery_js():
-            return storage.serve_file(os.path.join(os.path.dirname(__file__), 'jquery.min.js'))
+            return storage.serve_file(open(os.path.join(os.path.dirname(__file__), 'jquery.min.js'), 'rb'))
 
     def read_shortcuts(self):
         """Read shortcuts from Meta settings"""
