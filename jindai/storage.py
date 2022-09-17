@@ -1,5 +1,6 @@
 """File/Network storage access"""
 
+from collections import deque
 import enum
 import glob
 import io
@@ -1153,9 +1154,9 @@ class Storage:
         if isinstance(patterns, tuple):
             patterns = list(patterns)
 
-        patterns.reverse()
+        patterns = deque(patterns)
         while patterns:
-            pattern = patterns.pop()
+            pattern = patterns.popleft()
 
             iterate = re.search(r'\{(\d+\-\d+)\}', pattern)
             if iterate:

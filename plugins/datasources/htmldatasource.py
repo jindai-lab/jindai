@@ -303,7 +303,7 @@ class WebPageListingDataSource(DataSourceStage):
 
         def fetch(self):
 
-            queue = [(p, 1) for p in expand_patterns(self.patterns)]
+            queue = [(p, 1) for p in storage.expand_patterns(self.patterns)]
             visited = set()
 
             def _do_parse(q_tup):

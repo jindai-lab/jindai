@@ -292,6 +292,9 @@ class DownloadImages(MediaItemStage):
     def resolve_item(self, i: MediaItem, post):
         if not i.id:
             i.save()
+            
+        if i.no_download:
+            return
 
         try:
             content = storage.open(i.source['url'], referer=post.source.get(

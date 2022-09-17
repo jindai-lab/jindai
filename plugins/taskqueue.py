@@ -269,14 +269,14 @@ class TasksQueue(Plugin):
         """Remove/stop specified task"""
 
         def _remove_queue(key):
-            todel = None
-            for todel, _ in self.queue:
-                if todel == key:
+            ele = None
+            for ele in self.queue:
+                if ele[0] == key:
                     break
             else:
                 return False
 
-            self.queue.remove(todel)
+            self.queue.remove(ele)
             return True
 
         def _remove_running(key):

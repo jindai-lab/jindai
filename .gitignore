@@ -46,7 +46,6 @@ ui/
 # all plugins should be excepted from main git repo
 # they can be installed and updated with plugin manager
 plugins/
-models_data/
 
 core
 

@@ -496,8 +496,6 @@ def merge_items(pairs):
         if rese and dele:
             Paragraph.merge_by_mediaitems(rese, [dele])
 
-    Paragraph.query(F.images == []).delete()
-
     return True
 
 
@@ -525,7 +523,7 @@ def delete_item(album_items: dict):
         if image_item:
             image_item.delete()
 
-    Paragraph.query(F.images == []).delete()
+    # Paragraph.query(F.images == []).delete()
 
     return True
 

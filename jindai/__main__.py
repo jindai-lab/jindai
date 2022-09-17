@@ -80,9 +80,9 @@ def run_task(task_id, concurrent, verbose):
 
 
 @cli.command('user')
-@click.option('--add', default='')
-@click.option('--setrole', default='')
-@click.option('--delete', default='')
+@click.option('--add', '-a', default='')
+@click.option('--setrole', '-g', default='')
+@click.option('--delete', '-d', default='')
 @click.argument('roles', nargs=-1)
 def user_manage(add, delete, setrole, roles):
     """User management"""
@@ -171,6 +171,19 @@ def dump(output, colls):
                 output.write(jsonenc.encode(record).encode('utf-8') + b'\n')
             output.seek(0)
             zip_file.writestr(coll, output.read())
+
+
+@cli.command('replace-tag')
+@click.option('--from', '-f', 'from_')
+@click.option('--to', '-t')
+def replace_tag(from_, to):
+    from plugins.autotagging import AutoTag
+    from .models import Paragraph, Fn
+    qs = Paragraph.query(F.keywords == from_)
+    qs.update(Fn.addToSet(keywords=to))
+    qs.update(Fn.pull(keywords=from_))
+    AutoTag.query(F.tag == from_).update(Fn.set(tag=to))
+    print('OK')
 
 
 def _restore_hook(dic: Dict):
@@ -345,17 +358,6 @@ def plugin_export(output: str, infiles):
             
             _export_one(os.path.basename(p).split('.')[0], [p])
 
-            
-@cli.command('storage-serve')
-@click.option('--port', '-p', default=8371)
-@click.option('--host', '-h', default='0.0.0.0')
-@click.option('--debug', '-d', default=None, flag_value=True)
-def serve_storage(port: int, host: str, debug: bool):
-    """Serve storage
-    """
-    if debug is None: debug = config.debug
-    storage.serve(host, port, debug=debug)
-
 
 @cli.command('clear-duplicates')
 @click.option('--limit', '-l', type=int, default=0)
@@ -423,6 +425,17 @@ def web_service(port: int, deployment: bool):
         serve(app, host='0.0.0.0', port=port, threads=8)
     else:
         run_service(port=port)
+
+            
+@cli.command('storage-serve')
+@click.option('--port', '-p', default=8371)
+@click.option('--host', '-h', default='0.0.0.0')
+@click.option('--debug', '-d', default=None, flag_value=True)
+def serve_storage(port: int, host: str, debug: bool):
+    """Serve storage
+    """
+    if debug is None: debug = config.debug
+    storage.serve(host, port, debug=debug)
 
 
 @cli.command('ipython')
