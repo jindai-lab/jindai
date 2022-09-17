@@ -184,7 +184,7 @@ class Task:
 
         return None
 
-    def run(self):
+    def run(self, callback = None):
         """Create a daemon thread to execute the task
         """
         def _run():
@@ -194,6 +194,8 @@ class Task:
                 self.logger('Error:', ex)
                 self.logger(traceback.format_exc())
             self.alive = False
+            if callback:
+                callback(self)
 
         self.alive = True
         thr = threading.Thread(target=_run)

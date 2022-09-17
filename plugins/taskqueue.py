@@ -6,6 +6,7 @@ import time
 import traceback
 import json
 from io import BytesIO
+import uuid
 from queue import deque, Queue, Full
 
 from flask import Response, jsonify, request, send_file, stream_with_context
@@ -48,6 +49,75 @@ class MessageAnnouncer:
 announcer = MessageAnnouncer()
 
 
+class Job:
+
+    def __init__(self, task_dbo, run_by):
+        self.task_dbo = task_dbo
+        self.run_by = run_by
+        self.queued_at = datetime.datetime.now()
+        self.uuid = str(uuid.uuid4())
+        self.task = None
+        self.status = 'pending'
+        self.exception = {}
+
+    @property
+    def key(self):
+        return f'{self.task_dbo.name}@{self.uuid}'
+
+    @property
+    def result(self):
+        if self.exception:
+            return self.exception
+        if self.task is None:
+            return
+        if self.task.alive:
+            return
+        return self.task.returned
+
+    @property
+    def result_type(self):
+        if self.status != 'stopped':
+            return ''
+        
+        obj = self.result
+        if isinstance(obj, dict):
+            if '__exception__' in obj:
+                return 'exception'
+            if '__redirect__' in obj:
+                return 'redirect'
+            if '__file_ext__' in obj:
+                return 'file'
+            return 'dict'
+        elif obj is None:
+            return 'null'
+        
+        return type(obj).__name__
+
+    def as_dict(self):
+        return {
+            'run_by': self.run_by,
+            'name': self.task_dbo.name,
+            'key': self.key,
+            'status': self.status,
+            'result_type': self.result_type,
+            'queued_at': self.queued_at.strftime('%Y-%m-%d %H:%M:%S')
+        }
+
+    def run_task(self):
+
+        def _callback(t):
+            self.status = 'stopped'
+            announcer.announce("updated")
+
+        self.task = Task.from_dbo(self.task_dbo, logger=announcer.logger(self.key))
+        self.status = 'running'
+        self.task.run(_callback)
+
+    def stop(self):
+        if self.task:
+            self.task.stop()
+
+
 class TasksQueue(Plugin):
     """Handling queue
     """
@@ -61,8 +131,7 @@ class TasksQueue(Plugin):
         app = self.pmanager.app
         self.pmanager.task_queue = self
         self.queue = deque()
-        self.results = {}
-        self.task_queue = {}
+        self.jobs = deque()
         self.running = False
         self.parallel_n = n
         self._working_thread = None
@@ -74,9 +143,13 @@ class TasksQueue(Plugin):
             assert task_dbo, 'No such task, or you do not have permission.'
             task_dbo.last_run = datetime.datetime.utcnow()
             task_dbo.save()
-            task_dbo.task = None
-            key = self.enqueue(task_dbo, run_by=logined())
-            return key
+            
+            job = Job(task_dbo, run_by=logined())
+            self.queue.append(job)
+            self.jobs.append(job)
+            if not self.running:
+                self.start()
+            return job.key
 
         @app.route('/api/queue/events', methods=['GET'])
         @rest()
@@ -100,22 +173,19 @@ class TasksQueue(Plugin):
         @app.route('/api/queue/<path:task_id>', methods=['DELETE'])
         @rest()
         def dequeue_task(task_id):
-            if task_id in self.results:
-                del self.results[task_id]
-                announcer.announce('updated')
-                return True
-
             return self.remove(task_id)
 
         @app.route('/api/queue/<path:task_id>', methods=['GET'])
         @rest(cache=True)
         def fetch_task(task_id):
-            if task_id not in self.results:
-                return Response('No such id: ' + task_id, 404)
+            job = self.get(task_id)
+            if not job or job.status != 'stopped':
+                return 'Not found or not finished', 404
 
-            result = self.results[task_id]
+            result = job[0].result
+            result_type = job[0].result_type
 
-            if isinstance(result, list):
+            if result_type == 'list':
                 offset, limit = int(request.args.get('offset', 0)), int(
                     request.args.get('limit', 0))
                 if limit == 0:
@@ -128,10 +198,8 @@ class TasksQueue(Plugin):
                     'results': result[offset:offset+limit],
                     'total': len(result)
                 }
-            if result is None:
-                return None
 
-            if isinstance(result, dict) and '__file_ext__' in result and 'data' in result:
+            elif result_type == 'file':
                 buf = BytesIO(result['data'])
                 buf.seek(0)
                 return send_file(
@@ -149,145 +217,70 @@ class TasksQueue(Plugin):
         """Generate request-specific status"""
 
         status = self.status
-        status['running'] = [_ for _ in status['running']
-                             if logined('admin') or _.run_by == logined()]
-        status['finished'] = [_ for _ in status['finished']
-                              if logined('admin') or not _.get('run_by')
-                              or _['run_by'] == logined()
-                              ]
-        status['waiting'] = [_ for _ in status['waiting']
-                             if logined('admin') or _.run_by == logined()
-                             ]
+        if not logined('admin'):
+            status = [_ for _ in status if _['run_by'] == logined()]
         return status
 
     def start(self):
         """Start handling tasks"""
 
         self.running = True
-        self._working_thread = threading.Thread(target=self.working)
+        self._working_thread = threading.Thread(target=self._working)
         self._working_thread.start()
 
     @property
     def status(self) -> dict:
         """Queue status"""
-
-        def _type(obj):
-            if isinstance(obj, dict):
-                if '__exception__' in obj:
-                    return 'exception'
-                if '__redirect__' in obj:
-                    return 'redirect'
-                if '__file_ext__' in obj:
-                    return 'file'
-                return 'dict'
-            if obj is None:
-                return 'null'
-            return type(obj).__name__
-
-        return {
-            'running': list(self.task_queue),
-            'finished': [{
-                'id': key,
-                'name': key.split('@')[0],
-                'type': _type(val),
-                'last_run': datetime.datetime.strptime(key.split('@')[-1], '%Y%m%d %H%M%S')
-                .strftime('%Y-%m-%d %H:%M:%S'),
-                'file_ext': val['__file_ext__'] if _type(val) == 'file' else 'json',
-                'run_by': val.get('run_by', '') if isinstance(val, dict) else ''
-            } for key, val in self.results.items()],
-            'waiting': [key for key, _ in self.queue]
-        }
-
-    def working(self):
+        return [_.as_dict() for _ in self.jobs]
+        
+    def _working(self):
         """Handling the queue"""
 
         while self.running:
-            if self.queue and len(self.task_queue) < self.parallel_n:  # can run new task
-                tkey, task_dbo = self.queue.popleft()
-                self.task_queue[tkey] = task_dbo
+            running_num = sum([1 for _ in self.jobs if _.status == 'running'])
+
+            if self.queue and running_num < self.parallel_n:  # can run new task
+                job = self.queue.popleft()
+                
                 try:
-                    task_dbo.task = Task.from_dbo(
-                        task_dbo, logger=announcer.logger(tkey))
-                    task_dbo.task.run()
+                    job.run_task()
                 except Exception as ex:
-                    self.results[tkey] = {
-                        'run_by': task_dbo.run_by,
+                    job.status = 'stopped'
+                    job.exception = {
                         '__exception__': f'Error while initializing task: {ex.__class__.__name__}: {ex}',
                         '__tracestack__': traceback.format_tb(ex.__traceback__) + [
                             self.pmanager.app.json_encoder().encode(task_dbo.as_dict())
-                        ]}
-                    self.task_queue.pop(tkey)
+                        ]
+                    }
+                
                 announcer.announce("updated")
 
-            elif not self.queue and not self.task_queue:  # all tasks done
+            elif not self.queue and running_num == 0:  # all tasks done
                 self.running = False
-
-            done = []
-            for k, val in self.task_queue.items():
-                if not val.task.alive:
-                    done.append(k)
-                    self.results[k] = val.task.returned
-            for k in done:
-                self.task_queue.pop(k)
-            if done:
-                announcer.announce("updated")
 
             time.sleep(0.5)
 
-    def enqueue(self, val, key='', run_by=''):
-        """Enqueue new task"""
-
-        val.run_by = run_by
-        if not key:
-            key = f'{val.name}@{datetime.datetime.utcnow().strftime("%Y%m%d %H%M%S")}'
-
-        self.queue.append((key, val))
-
-        if not self.running:
-            self.start()
-
-        announcer.announce("updated")
-        return key
-
     def stop(self):
         """Stop handling"""
-
         self.running = False
 
-    def find(self, key: str):
-        """Find and return specified task"""
-
-        if key in self.task_queue:
-            return self.task_queue[key]
-
-        for k, val in self.queue:
-            if k == key:
-                return val
-        return None
+    def get(self, key: str):
+        """Get job by key"""
+        for j in self.jobs:
+            if j.key == key:
+                return j
 
     def remove(self, key: str):
         """Remove/stop specified task"""
 
-        def _remove_queue(key):
-            ele = None
-            for ele in self.queue:
-                if ele[0] == key:
-                    break
-            else:
-                return False
+        job = self.get(key)
 
-            self.queue.remove(ele)
-            return True
+        if job:
+            job.stop()
+            if job in self.queue:
+                self.queue.remove(job)
+            self.jobs.remove(job)
 
-        def _remove_running(key):
-            if key in self.task_queue:
-                task_dbo = self.task_queue.pop(key)
-                task_dbo.task.stop()
-                return True
-
-            return False
-
-        flag = _remove_queue(key) or _remove_running(key)
-        announcer.announce("updated")
-
-        return flag
+            announcer.announce("updated")
+    
+        return job is not None
