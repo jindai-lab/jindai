@@ -178,12 +178,12 @@ def dump(output, colls):
 @click.option('--to', '-t')
 def replace_tag(from_, to):
     from plugins.autotagging import AutoTag
-    from .models import Paragraph, Fn
+    from .models import Paragraph, Term, Fn
     qs = Paragraph.query(F.keywords == from_)
     qs.update(Fn.addToSet(keywords=to))
     qs.update(Fn.pull(keywords=from_))
     AutoTag.query(F.tag == from_).update(Fn.set(tag=to))
-    Term.query(F.term == from_, F.field == 'keywords').update(Fn.set(f.word == to))
+    Term.query(F.term == from_, F.field == 'keywords').update(Fn.set(F.term == to))
     print('OK')
 
 
