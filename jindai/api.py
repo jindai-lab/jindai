@@ -341,6 +341,8 @@ def batch(coll, ids, **kws):
                             para[afield].remove(ele)
                         elif field == '$push' and ele not in para[afield]:
                             para[afield].append(ele)
+                            if afield == 'keywords':
+                                Term.write(ele, 'keywords')
             elif not field.startswith('$'):
                 para[field] = val
         para.save()
