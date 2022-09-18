@@ -183,6 +183,7 @@ def replace_tag(from_, to):
     qs.update(Fn.addToSet(keywords=to))
     qs.update(Fn.pull(keywords=from_))
     AutoTag.query(F.tag == from_).update(Fn.set(tag=to))
+    Term.query(F.term == from_, F.field == 'keywords').update(Fn.set(f.word == to))
     print('OK')
 
 
@@ -406,6 +407,32 @@ def clear_duplicates(limit: int, offset: str, maxdups: int):
     print(cleared, 'duplicates merged.')
     if m:
         print('You may continue with offset', m.id)
+
+
+@cli.command('sync-terms')
+@click.option('--field', default='keywords')
+@click.option('--cond', default='')
+def sync_terms(field, cond):
+    from .models import Term, Paragraph
+    from .dbquery import parser
+    Term.query(F.field == field).delete()
+    agg = Paragraph.aggregator.project(**{field: 1})
+    if field == 'keywords': agg = agg.unwind('$' + field)
+    if cond:
+        agg = agg.match(parser.parse(cond))
+    agg = agg.group(_id='$' + field).project(term='$_id', field=field)
+    
+    batch = []
+    for p in tqdm(agg.perform(raw=True)):
+        batch.append(p)
+        if len(batch) == 100:
+            Term.db.insert_many(batch)
+            batch.clear()
+    
+    if batch:
+        Term.db.insert_many(batch)
+    
+    print('OK')
 
 
 @cli.command('web-service')
