@@ -5,7 +5,7 @@ Basic processing for multimedia materials
 import os
 import tempfile
 import traceback
-import urllib.error
+import requests
 from io import BytesIO
 from typing import Union
 
@@ -297,11 +297,13 @@ class DownloadImages(MediaItemStage):
             return
 
         try:
-            content = storage.open(i.source['url'], referer=post.source.get(
-                'url', ''), proxies=self.proxies).read()
+            content = requests.get(i.source['url'],
+                headers={
+                    'Referer': post.source.get('url', '')
+                },
+                proxies=self.proxies).content
             assert content
-        # except Exception as ex:
-        except urllib.error.HTTPError as ex:
+        except Exception as ex:
             self.logger('Error while downloading item',
                         i.source['url'], type(ex).__name__, ex)
             return
