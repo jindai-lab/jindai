@@ -1,63 +1,127 @@
 """Task processing module"""
 
 from collections import deque
-from multiprocessing import Lock
 import os
 import sys
-import threading
+from threading import Thread, Lock
 import time
 import traceback
 from queue import PriorityQueue
-from concurrent.futures import ThreadPoolExecutor
 from typing import Callable
+import uuid
+import ctypes
 
 from .helpers import safe_import
 from .models import Paragraph
 from .pipeline import Pipeline
 
 
-class _TqdmProxy:
-    """Proxy for tqdm"""
-
-    def __init__(self):
-        self.pbar = safe_import('tqdm').tqdm()
-        self._lock = threading.Lock()
-
-    def update(self, inc: int):
-        """Update pbar value
-
-        :param inc: inc value
-        :type inc: int
-        """
-        self.pbar.update(inc)
-
-    def reset(self):
-        """Reset count and total"""
-        self.pbar.n = 0
-        self.pbar.total = None
-
-    def inc_total(self, inc: int):
-        """Thread-safe incresement for pbar.total
-
-        :param inc: inc value
-        :type inc: int
-        """
+class WorkersPool:
+    
+    def __init__(self, workers: int, interval: float = 0.1) -> None:
+        self.workers = workers
+        self._threads = {}
+        self._lock = Lock()
+        self._read_lock = Lock()
+        self._interval = interval
+        
+    def count(self):
+        return len(self._threads)
+        
+    def submit(self, func, *args, **kwargs):
+        tid = uuid.uuid4()
+        
+        def _func():
+            func(*args, **kwargs)
+            self._threads.pop(tid)
+        
+        while self.count() >= self.workers:
+            time.sleep(self._interval)
+            
         with self._lock:
-            if self.pbar.total is None:
-                self.pbar.total = inc
-            else:
-                self.pbar.total += inc
+            thr = Thread(target=_func)
+            self._threads[tid] = thr
+        
+        thr.start()
+            
+    def stop(self):
+        
+        def _terminate_thread(thread, exc_type = SystemExit):
+            if not thread.isAlive():
+                return
 
+            exc = ctypes.py_object(exc_type)
+            res = ctypes.pythonapi.PyThreadState_SetAsyncExc(ctypes.c_long(thread.ident), exc)
 
-class _FakeTqdm:
-    def update(self, _):
-        """Stub update"""
+            if res == 0:
+                raise ValueError("nonexistent thread id")
+            elif res > 1:
+                # """if it returns a number greater than one, you're in trouble,
+                # and you should call it again with exc=NULL to revert the effect"""
+                ctypes.pythonapi.PyThreadState_SetAsyncExc(thread.ident, None)
+                raise SystemError("PyThreadState_SetAsyncExc failed")
+            
+        for thr in list(self._threads.values()):
+            _terminate_thread(thr)
+            
+    def debug_print(self):
+        print('running threads:', self.count())
+        print(' ', '\n  '.join(map(str, self._threads.keys())))
+        
 
-    def inc_total(self, _):
-        """Stub inc_total"""
+class TqdmFactory:
 
-    def reset(self):
-        """Stub reset"""
+    class _TqdmProxy:
+        """Proxy for tqdm"""
+
+        def __init__(self):
+            self.pbar = safe_import('tqdm').tqdm()
+            self._lock = Lock()
+
+        def update(self, inc: int):
+            """Update pbar value
+
+            :param inc: inc value
+            :type inc: int
+            """
+            self.pbar.update(inc)
+
+        def reset(self):
+            """Reset count and total"""
+            self.pbar.n = 0
+            self.pbar.total = None
+
+        def inc_total(self, inc: int):
+            """Thread-safe incresement for pbar.total
+
+            :param inc: inc value
+            :type inc: int
+            """
+            with self._lock:
+                if self.pbar.total is None:
+                    self.pbar.total = inc
+                else:
+                    self.pbar.total += inc
+
+    class _FakeTqdm:
+        def update(self, _):
+            """Stub update"""
+
+        def inc_total(self, _):
+            """Stub inc_total"""
+
+        def reset(self):
+            """Stub reset"""
+            
+    @staticmethod
+    def get_tqdm(fake=False):
+        if not os.isatty(sys.stdout.fileno()):
+            fake = True
+            
+        if fake:
+            return TqdmFactory._FakeTqdm()
+        
+        return TqdmFactory._TqdmProxy()
 
 
 class Task:
@@ -95,13 +159,15 @@ class Task:
         self.pipeline = Pipeline(stages, self.logger)
         self.params = params
 
-        self.pbar = _TqdmProxy() if not verbose and use_tqdm and os.isatty(sys.stdout.fileno()) else _FakeTqdm()   
-        self.queue = None
+        self._pbar = TqdmFactory.get_tqdm(fake=verbose or not use_tqdm)
+        self._queue = None
+        
+        self._workers = WorkersPool(1)
          
-    def _thread_execute(self, priority, job):
-        input_paragraph, stage = job
+    def _thread_execute(self, priority, fc):
+        input_paragraph, stage = fc
 
-        self.pbar.update(1)
+        self._pbar.update(1)
         if self.verbose:
             self.logger(type(stage).__name__, getattr(input_paragraph, 'id', '%x' % id(input_paragraph)))
         if stage is None:
@@ -110,14 +176,14 @@ class Task:
         try:
             priority -= 1
             counter = 0
-            for job in stage.flow(input_paragraph):
-                if job[1] is None:
+            for fc in stage.flow(input_paragraph):
+                if fc[1] is None:
                     continue
-                self.queue.put((priority, id(job[0]), job))
+                self._queue.put((priority, id(fc[0]), fc))
                 counter += 1
                 if not self.alive:
                     break
-            self.pbar.inc_total(counter)
+            self._pbar.inc_total(counter)
         except Exception as ex:
             self.logger('Error:', ex)
             self.logger('\n'.join(traceback.format_tb(ex.__traceback__)))
@@ -132,36 +198,33 @@ class Task:
         :return: Summarized result, or exception in execution
         :rtype: dict
         """
-        self.queue = PriorityQueue()
-        tpe = ThreadPoolExecutor(max_workers=self.concurrent)
-        futures = {}
-        self.pbar.reset()
+        self._queue = PriorityQueue()
+        self._workers = WorkersPool(self.concurrent)
+        self._pbar.reset()
         
         try:
             if self.pipeline.stages:
-                self.queue.put((0, 0, (Paragraph(**self.params),
+                self._queue.put((0, 0, (Paragraph(**self.params),
                                   self.pipeline.stages[0])))
-                self.pbar.inc_total(1)
+                self._pbar.inc_total(1)
 
                 while self.alive:
-                    
                     while self.logs:
                         log = self.logs.popleft()
                         print(*log)
                         
-                    if self.queue.empty():
-                        if futures:  # there are pending jobs
+                    if self._queue.empty():
+                        if self._workers.count() > 0:
                             time.sleep(0.1)
                         else:
-                            break  # exit working loop
+                            break
                     else:
-                        if len(futures) >= self.concurrent:
+                        if self._workers.count() >= self.concurrent:
                             time.sleep(0.1)
                         else:
-                            priority, _, job = self.queue.get()
-                            future = tpe.submit(self._thread_execute, priority, job)
-                            futures[id(future)] = future
-                            future.add_done_callback(lambda h: futures.pop(id(h), ''))
+                            priority, _, job = self._queue.get()
+                            self._workers.submit(self._thread_execute, priority, job)
+            
             if self.alive:
                 return self.pipeline.summarize()
         except KeyboardInterrupt:
@@ -175,9 +238,6 @@ class Task:
                 '__tracestack__': traceback.format_tb(ex.__traceback__)
             }
         finally:
-            for future in list(futures.values()):
-                if not future.done():
-                    future.cancel()
             for log in self.logs:
                 print(*log)
             self.logs.clear()
@@ -198,13 +258,14 @@ class Task:
                 callback(self)
 
         self.alive = True
-        thr = threading.Thread(target=_run)
+        thr = Thread(target=_run)
         thr.start()
         return thr
 
     def stop(self):
         """Stop task"""
         self.alive = False
+        self._workers.stop()
 
     @staticmethod
     def from_dbo(db_object, **kwargs):

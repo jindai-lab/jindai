@@ -25,6 +25,9 @@ from .models import F, MediaItem, Meta, TaskDBO, User
 
 MongoJSONEncoder = create_dbo_json_encoder(json.encoder.JSONEncoder)
 
+import urllib3
+urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+
 
 def _mongodb(coll):
     """Get mongodb cursors"""
@@ -179,12 +182,22 @@ def dump(output, colls):
 def replace_tag(from_, to):
     from plugins.autotagging import AutoTag
     from .models import Paragraph, Term, Fn
+    Paragraph.query(F.keywords == from_, F.author == from_).update(Fn.set(author=to))
     qs = Paragraph.query(F.keywords == from_)
     qs.update(Fn.addToSet(keywords=to))
     qs.update(Fn.pull(keywords=from_))
     AutoTag.query(F.tag == from_).update(Fn.set(tag=to))
     Term.query(F.term == from_, F.field == 'keywords').update(Fn.set(F.term == to))
     print('OK')
+
+
+@cli.command('keywords-fix')
+@click.option('--cond', '-c')
+def replace_tag(cond):
+    from .models import Paragraph, Fn
+    from .dbquery import parser
+    rs = Paragraph.query(parser.parse(cond)).update([Fn.set(keywords=Fn.setIntersection('$keywords', '$keywords'))])
+    print('OK', rs.modified_count)
 
 
 def _restore_hook(dic: Dict):
