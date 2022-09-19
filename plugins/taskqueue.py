@@ -389,7 +389,7 @@ class TaskLocalQueue(TaskQueue):
             job.stop()
             if job in self._queue:
                 self._queue.remove(job)
-            self.jobs.remove(job)
+            self._jobs.remove(job)
 
             announcer.announce("updated")
 
