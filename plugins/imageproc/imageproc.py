@@ -401,7 +401,6 @@ class VideoFrame(MediaItemStage):
         return BytesIO()
 
     def resolve_video(self, i: MediaItem, _):
-        read_from = ''
         thumb = f'{ObjectId()}.thumb.jpg'
         
         # generate video thumbnail
@@ -410,13 +409,12 @@ class VideoFrame(MediaItemStage):
         if pic:
             with storage.open(f'hdf5://{thumb}', 'wb') as output:
                 output.write(pic)
+            setattr(i, self.field, thumb)
+            i.save()
+            self.logger(
+                f'wrote {i.id} frame#{self.frame_num} to {thumb}')
         else:
             self.logger('cannot read from', read_from)
-
-        setattr(i, self.field, thumb)
-        i.save()
-        self.logger(
-            f'wrote {i.id} frame#{self.frame_num} to {thumb}')
 
         return i
 

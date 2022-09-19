@@ -970,14 +970,18 @@ class Storage:
         :return: opened file/IO buffer
         :rtype: IO
         """
-        parsed = urllib.parse.urlparse(path.replace('__hash/', '#'))
+        parsed = urllib.parse.urlparse(path)
         buf = None
-        if '#' in path: path = path[:path.find('#')]
 
         for mgr in self._get_managers(parsed.scheme):
             try:
+                if not isinstance(mgr, StorageProxyManager):
+                    dst = path.split('#')[0]
+                else:
+                    dst = path
+                    parsed = urllib.parse.urlparse(path.replace('#', '__hash/'))
                 buf = getattr(mgr, 'readbuf' if mode ==
-                        'rb' else 'writebuf')(path, **params)
+                        'rb' else 'writebuf')(dst, **params)
             except OSError as ex:
                 print(ex)
 
@@ -1092,12 +1096,14 @@ class Storage:
             
         mimetype = self.get_mimetype(ext)
        
-        if not file_size:
+        if file_size <= 0:
             file_size = getattr(path_or_io, 'st_size', 0)
         
-        if not file_size:
+        if file_size <= 0:
             input_file = BytesIO(input_file.read())
             file_size = len(input_file.getvalue())
+
+        print(file_size)
         
         start, length = 0, file_size
         range_header = request.headers.get('Range')
