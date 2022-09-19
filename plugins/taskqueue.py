@@ -182,8 +182,8 @@ class TasksQueue(Plugin):
             if not job or job.status != 'stopped':
                 return 'Not found or not finished', 404
 
-            result = job[0].result
-            result_type = job[0].result_type
+            result = job.result
+            result_type = job.result_type
 
             if result_type == 'list':
                 offset, limit = int(request.args.get('offset', 0)), int(

@@ -317,10 +317,7 @@ class Paragraph(db.DbObject):
                 result.author = para.author
             
             para.images = [i for i in para.images if i.id not in to_delete]
-            if para.images:
-                para.save()
-            else:
-                para.delete()
+            para.save()
                 
         for i in duplicates:
             i.delete()
