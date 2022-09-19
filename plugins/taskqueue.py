@@ -4,11 +4,11 @@ import itertools
 import os
 import threading
 import time
-from tkinter.tix import ListNoteBook
 import traceback
 import json
 from io import BytesIO
 import uuid
+from wsgiref import headers
 import requests
 from queue import deque, Queue, Full
 from flask import Response, jsonify, request, send_file, stream_with_context
@@ -17,6 +17,7 @@ from PyMongoWrapper import F
 from jindai import Plugin
 from jindai.helpers import logined, rest, safe_import
 from jindai.models import TaskDBO
+from jindai.pipeline import Pipeline
 from jindai.task import Task
 
 
@@ -90,7 +91,7 @@ class Job:
             if '__redirect__' in obj:
                 return 'redirect'
             if '__file_ext__' in obj:
-                return 'file'
+                return 'file:' + obj['__file_ext__']
             return 'dict'
         elif obj is None:
             return 'null'
@@ -137,6 +138,7 @@ class TaskQueue:
             n (int, optional): maximal concurrent tasks
         """
         self._parallel_n = n
+        self._abilities = list(Pipeline.ctx)
 
     @property
     def parallel_n(self) -> int:
@@ -144,8 +146,12 @@ class TaskQueue:
 
         Returns:
             int
-        """        
+        """
         return self._parallel_n
+    
+    @property
+    def abilities(self) -> list:
+        return self._abilities
 
     def register_api(self, app):
         """Register api entrypoint to flask app
@@ -153,10 +159,10 @@ class TaskQueue:
         Args:
             app (Flask): flask app
         """
-        
+
         @app.route('/api/queue/', methods=['PUT'])
         @rest(mapping={'id': 'task_id'})
-        def enqueue_task(task_id='', task=None):
+        def enqueue_task(task_id='', task=None, run_by=''):
             """Enqueue task api
 
             Args:
@@ -165,7 +171,7 @@ class TaskQueue:
 
             Returns:
                 str: Queued job key
-            """            
+            """
             if task is None:
                 task_dbo = TaskDBO.first(F.id == task_id)
             else:
@@ -175,8 +181,10 @@ class TaskQueue:
 
             task_dbo.last_run = datetime.datetime.utcnow()
             task_dbo.save()
-
-            return self.enqueue(task_dbo, run_by=logined())
+            
+            if not run_by or not logined('admin'): run_by = logined()
+            
+            return self.enqueue(task_dbo, run_by=run_by)
 
         @app.route('/api/queue/config', methods=['GET'])
         @rest()
@@ -185,9 +193,10 @@ class TaskQueue:
 
             Returns:
                 dict: a dict representing current config
-            """        
+            """
             return {
                 'parallel_n': self.parallel_n,
+                'abilities': self.abilities,
             }
 
         @app.route('/api/queue/events', methods=['GET'])
@@ -195,7 +204,7 @@ class TaskQueue:
         def listen_events():
             """Provide event stream
             """
-            
+
             def stream():
                 messages = announcer.listen()
                 while True:
@@ -221,7 +230,7 @@ class TaskQueue:
 
             Returns:
                 bool: true if successful
-            """            
+            """
             return self.remove(key)
 
         @app.route('/api/queue/<path:key>', methods=['GET'])
@@ -234,7 +243,7 @@ class TaskQueue:
 
             Returns:
                 Response: JSON data or octstream
-            """            
+            """
             job = self.get(key)
             if not job or job.status != 'stopped':
                 return 'Not found or not finished', 404
@@ -253,12 +262,13 @@ class TaskQueue:
                     'total': len(result)
                 }
 
-            elif result_type == 'file':
+            elif result_type.startswith('file:'):
+                ext = result_type.split(':')[1]
                 buf = BytesIO(result['data'])
                 buf.seek(0)
                 return send_file(
                     buf, 'application/octstream',
-                    download_name=os.path.basename(f"{key}.{result['__file_ext__']}"))
+                    download_name=os.path.basename(f"{key}.{ext}"))
 
             return jsonify(result)
 
@@ -269,7 +279,7 @@ class TaskQueue:
 
             Returns:
                 list: queue job statuses
-            """            
+            """
             return filter_status()
 
         def filter_status():
@@ -290,7 +300,7 @@ class TaskQueue:
 
         Returns:
             int: number of running jobs
-        """        
+        """
         return sum([1 for _ in self.jobs if _.status == 'running'])
 
     def enqueue(self, task_dbo: TaskDBO, run_by: str):
@@ -302,7 +312,7 @@ class TaskQueue:
 
         Raises:
             NotImplemented: if not implemented
-        """        
+        """
         raise NotImplemented()
 
     def get(self, key: str):
@@ -324,7 +334,7 @@ class TaskLocalQueue(TaskQueue):
     @property
     def jobs(self) -> list:
         return list(self._jobs)
-
+    
     def enqueue(self, task_dbo, run_by):
         job = Job(task_dbo, run_by, self)
         self._queue.append(job)
@@ -392,41 +402,75 @@ class TaskRemoteQueue(TaskQueue):
         self._base = entrypoint.rstrip('/') + '/'
         self._config = {}
         self._queue = []
-        self._parallel_n = 0
         self.alive = True
         self.listen_events()
 
     @property
     def jobs(self):
-        class _AttrDict(dict):
+        
+        class _JobProxy(dict):
+            
+            def __init__(self, __dict, remote):
+                super().__init__(__dict)
+                self.remote = remote
+            
             def __getattribute__(self, __name: str):
                 if __name in self:
                     return self[__name]
                 return super().__getattribute__(__name)
 
             def as_dict(self):
-                return self
-
-        return [_AttrDict(_) for _ in self._queue]
+                return dict(self, worker=None, remote=None)
+            
+            @property
+            def result(self):
+                buf = self.remote.call(f'queue/{self.key}', 'get', raw=True)
+                if self.result_type.startswith('file:'):
+                    return {
+                        'data': buf,
+                        '__file_ext__': self.result_type.split(':')[1]
+                    }
+                else:
+                    buf = json.loads(buf)['result']
+                    if self.result_type == 'list':
+                        return buf['results']
+                    else:
+                        return buf
+                
+        return [_JobProxy(_, self) for _ in self._queue]
 
     def update_config(self):
-        self._config = self.call('config') or {}
+        self._config = self.call('queue/config') or {}
         self._parallel_n = self._config.get('parallel_n', 0)
+        
+        ab = self.call('help/pipelines') or {}
+        self._abilities = list(itertools.chain(*[v.keys() for v in ab.values()]))
 
-    def call(self, api_name, method='get', data=None):
+    def call(self, api_name, method='get', data=None, raw=False):
+        from PyMongoWrapper.dbo import create_dbo_json_encoder
+        method = method.upper()
         try:
-            return requests.request(method, self._base + api_name, data=data).json().get('result')
-        except:
-            pass
+            headers = {}
+            if isinstance(data, dict):
+                data = json.dumps(cls=create_dbo_json_encoder(json.JSONEncoder), obj=data)
+                headers['content-type'] = 'application/json'
+            resp = requests.request(method, self._base + api_name, data=data, headers=headers)
+            if not raw:
+                resp = resp.json().get('result')
+            else:
+                resp = resp.content
+            return resp
+        except Exception as ex:
+            print('Error while calling remote queue', self._base, ':', ex)
 
     def stop(self):
         self.alive = False
 
     def remove(self, key):
-        return self.call(key, 'delete')
+        return self.call(f'queue/{key}', 'delete')
 
     def enqueue(self, task_dbo: TaskDBO, run_by: str):
-        return self.call('', 'put', {'task': task_dbo.as_dict(), 'run_by': run_by})
+        return self.call('queue/', 'put', {'task': task_dbo.as_dict(), 'run_by': run_by})
 
     def listen_events(self):
         sse = safe_import('sseclient')
@@ -435,12 +479,12 @@ class TaskRemoteQueue(TaskQueue):
             while self.alive:
                 try:
                     self.update_config()
-                    msgs = sse.SSEClient(self._base + 'events')
-                    msg = msgs.next()
-
-                    if msg:
+                    msgs = sse.SSEClient(self._base + 'queue/events')
+                    
+                    for msg in msgs:
+                        print(msg)
                         self._queue.clear()
-                        for q in msg.data:
+                        for q in json.loads(msg.data):
                             q['worker'] = self
                             self._queue.append(q)
                         announcer.announce('updated')
@@ -448,15 +492,17 @@ class TaskRemoteQueue(TaskQueue):
                     if not self.alive:
                         break
                     time.sleep(0.1)
-                except:
+                except Exception as ex:
+                    print(ex)
                     return
 
         threading.Thread(target=_listen).start()
 
 
 class MultiWorkerTaskQueue(TaskQueue):
- 
+
     def __init__(self, n=3, workers=None) -> None:
+        super().__init__(n)
         if workers:
             self._workers = [TaskRemoteQueue(w) for w in workers]
         else:
@@ -466,16 +512,41 @@ class MultiWorkerTaskQueue(TaskQueue):
     def jobs(self) -> list:
         """Queue status"""
         return list(itertools.chain(*[w.jobs for w in self._workers]))
-    
+
     @property
     def parallel_n(self) -> int:
         return sum([w.running_num for w in self._workers])
+    
+    @property
+    def abilities(self) -> list:
+        ab = set()
+        for w in self._workers:
+            for e in w.abilities:
+                ab.add(e)
+        return list(ab)
 
-    def _select_worker(self):
-        return sorted(self._workers, key=lambda w: w.parallel_n - w.running_num).pop()
+    def _select_worker(self, task_dbo):
+        
+        def _abilities(pipeline):
+            for p in pipeline:
+                if isinstance(p, dict):
+                    p, = p.items()
+                
+                if isinstance(p, tuple):
+                    k, v = p
+                    yield k.strip('$')
+                    for subpip in ('iffalse', 'iftrue', 'pipeline'):
+                        if subpip in v:
+                            yield from _abilities(v[subpip])
+                    
+        def _has_abilities(abilities):
+            abilities = set(abilities)
+            return lambda w: set(w.abilities).issuperset(abilities)
+        
+        return sorted(filter(_has_abilities(_abilities(task_dbo.pipeline)), self._workers), key=lambda w: w.parallel_n - w.running_num).pop()
 
     def enqueue(self, task_dbo, run_by):
-        worker = self._select_worker()
+        worker = self._select_worker(task_dbo)
         return worker.enqueue(task_dbo, run_by)
 
     def remove(self, key: str):
@@ -483,8 +554,7 @@ class MultiWorkerTaskQueue(TaskQueue):
         job = self.get(key)
         if job:
             return job.worker.remove(job.key)
-   
-    
+
 
 class TaskQueuePlugin(Plugin):
 
