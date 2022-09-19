@@ -126,7 +126,7 @@ class PluginManager:
             if isinstance(plugin_name, tuple) and len(plugin_name) == 2:
                 plugin_name, params = plugin_name
             else:
-                params = {}
+                params = getattr(config, plugin_name) or {}
 
             if isinstance(plugin_name, str):
                 plugin_cls = plugin_ctx.get(plugin_name)
