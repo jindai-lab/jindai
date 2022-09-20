@@ -367,19 +367,25 @@ class VideoFrame(MediaItemStage):
 
     def get_video_frame(self, buf, frame=0.5):
         cv2 = self.cv2
+        use_temp = False
+        read_from = tempfile.mktemp('.mp4')
 
         try:
             # read video data
             if isinstance(buf, str):
                 read_from = buf
-            else:
-                assert hasattr(buf, 'name')
+            elif hasattr(buf, 'name'):
                 read_from = buf.name
+            elif hasattr(buf, 'read'):
+                use_temp = True
+                with open(read_from, 'wb') as fo:
+                    fo.write(buf.read())
 
             if not os.path.exists(read_from):
                 self.logger(f'{read_from} not found')
                 return
 
+            self.logger(f'generate thumbnail from {read_from}')
             cap = cv2.VideoCapture(read_from)
             frame = float(frame)
             frame_num = int(cap.get(cv2.CAP_PROP_FRAME_COUNT) *
@@ -397,6 +403,9 @@ class VideoFrame(MediaItemStage):
 
         except Exception as ex:
             self.logger(ex)
+
+        if use_temp and os.path.exists(read_from):
+            os.unlink(read_from)
 
         return BytesIO()
 
