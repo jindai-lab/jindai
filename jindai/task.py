@@ -47,7 +47,7 @@ class WorkersPool:
     def stop(self):
         
         def _terminate_thread(thread, exc_type = SystemExit):
-            if not thread.isAlive():
+            if not thread.is_alive():
                 return
 
             exc = ctypes.py_object(exc_type)
@@ -56,8 +56,6 @@ class WorkersPool:
             if res == 0:
                 raise ValueError("nonexistent thread id")
             elif res > 1:
-                # """if it returns a number greater than one, you're in trouble,
-                # and you should call it again with exc=NULL to revert the effect"""
                 ctypes.pythonapi.PyThreadState_SetAsyncExc(thread.ident, None)
                 raise SystemError("PyThreadState_SetAsyncExc failed")
             

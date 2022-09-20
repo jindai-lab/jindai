@@ -173,6 +173,7 @@ class TwitterDataSource(DataSourceStage):
                         item = MediaItem(
                             source={'url': url},
                             item_type='video' if media.video_info else 'image')
+                        item.save()
                         para.images.append(item)
                 if tweet.text.startswith('RT '):
                     author = re.match(r'^RT (@.*?):', tweet.text)

@@ -475,6 +475,7 @@ def serve_storage(port: int, host: str, debug: bool):
     """Serve storage
     """
     if debug is None: debug = config.debug
+    _init_plugins()
     storage.serve(host, port, debug=debug)
 
 
