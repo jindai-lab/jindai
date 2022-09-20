@@ -1213,7 +1213,6 @@ class Storage:
             if scheme == 'file':
                 path = '/' + path.lstrip('/')
             path, ext = Storage.get_schemed_path(scheme, path)
-            dprint('GET', path, file=sys.stderr)
             
             # handle with storage queries
             params = request.args.to_dict()
