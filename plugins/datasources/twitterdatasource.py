@@ -136,7 +136,7 @@ class TwitterDataSource(DataSourceStage):
                                    access_token_key=access_token_key, access_token_secret=access_token_secret, proxies=self.proxies)
             self.imported = set()
 
-        def parse_tweet(self, tweet) -> Paragraph:
+        def parse_tweet(self, tweet, skip_existent=True) -> Paragraph:
             """Parse twitter status
             Args:
                 st (twitter.status): status
@@ -151,8 +151,8 @@ class TwitterDataSource(DataSourceStage):
             self.imported.add(tweet.id)
             para = Paragraph.first(F.tweet_id == f'{tweet.id}')
 
-            self.logger(tweet_url, para is None)
-            if not para:
+            self.logger(tweet_url, 'skip' if para is not None and skip_existent else '')
+            if not skip_existent or not para:
                 para = Paragraph(dataset='twitter', pdate=datetime.datetime.utcfromtimestamp(
                     tweet.created_at_in_seconds), source={'url': tweet_url}, tweet_id=f'{tweet.id}')
                 for media in tweet.media or []:
@@ -208,7 +208,7 @@ class TwitterDataSource(DataSourceStage):
                 except Exception:
                     continue
 
-                para = self.parse_tweet(tweet)
+                para = self.parse_tweet(tweet, False)
                 if para and (not self.media_only or para.images) and not para.id:
                     yield para
 
