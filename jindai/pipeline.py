@@ -1,6 +1,7 @@
 """Pipeline"""
 import inspect
 import json
+import sys
 import re
 from typing import Dict, List, Tuple, Any, Type, Union, Callable
 from collections.abc import Iterable as IterableClass
@@ -15,7 +16,7 @@ class PipelineStage:
     """
 
     def __init__(self) -> None:
-        self._logger = print
+        self._logger = lambda *x: print(*x, file=sys.stderr)
         self.next = None
 
     @classmethod

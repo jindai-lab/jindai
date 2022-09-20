@@ -31,6 +31,10 @@ from smb.SMBHandler import SMBHandler
 from .config import instance as config
 
 
+def dprint(*args):
+    print(*args, file=sys.stderr)
+
+
 class StorageManager:
     """Storage manager with predefined functions
     """
@@ -381,7 +385,7 @@ class Hdf5Manager(StorageManager):
             try:
                 self.files.append(h5py.File(g, 'r'))
             except OSError:
-                print('OSError while loading from', g)
+                dprint('OSError while loading from', g)
             
         self._writable_file = None
 
@@ -564,7 +568,7 @@ class WebManager(StorageManager):
                         # time.sleep(1)
                     
             if ex:
-                print('Read from', self.req.url, 'failed with exception', type(ex).__name__, ex)
+                dprint('Read from', self.req.url, 'failed with exception', type(ex).__name__, ex)
                 
     @staticmethod
     def _build_proxies(proxies):
@@ -983,7 +987,7 @@ class Storage:
                 buf = getattr(mgr, 'readbuf' if mode ==
                         'rb' else 'writebuf')(dst, **params)
             except OSError as ex:
-                print(ex)
+                dprint('OSError', ex)
 
         if not buf:
             raise OSError('Unable to open: ' + path)
@@ -1103,8 +1107,6 @@ class Storage:
             input_file = BytesIO(input_file.read())
             file_size = len(input_file.getvalue())
 
-        print(file_size)
-        
         start, length = 0, file_size
         range_header = request.headers.get('Range')
         if range_header:
@@ -1211,6 +1213,7 @@ class Storage:
             if scheme == 'file':
                 path = '/' + path.lstrip('/')
             path, ext = Storage.get_schemed_path(scheme, path)
+            dprint('GET', path, file=sys.stderr)
             
             # handle with storage queries
             params = request.args.to_dict()
@@ -1221,7 +1224,7 @@ class Storage:
                     result = list(result or [])
                 return jsonify(result)
             
-            resp = self.serve_file(path, ext, self.stat(path)['size'])
+            resp = self.serve_file(path, ext)
             resp.headers.add("Cache-Control", "public,max-age=86400")
             return resp
 
