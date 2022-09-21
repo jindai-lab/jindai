@@ -7,7 +7,7 @@ import json
 import os
 import re
 import sys
-import shutil
+import itertools
 import time
 from collections import defaultdict
 from io import BytesIO
@@ -260,7 +260,7 @@ def move_storage(source, destination, keep_folder=True):
     paragraphs = Paragraph.query(F['source.file'] == source)
     source = storage.expand_path(source)
     destination = storage.expand_path(destination)
-    shutil.move(source, destination)
+    storage.move(source, destination)
     paragraphs.update(Fn.set({'source.file': storage.truncate_path(destination)}))
     return True
 
@@ -405,14 +405,14 @@ def grouping(coll, ids, group='', ungroup=False):
 @app.route('/api/collections/<coll>/split', methods=["GET", "POST"])
 @app.route('/api/collections/<coll>/merge', methods=["GET", "POST"])
 @rest()
-def splitting(coll, ids):
+def splitting(coll, paragraphs):
     """Split or merge selected items/paragraphs into seperate/single paragraph(s)
 
     Returns:
         bool: True if succeeded
     """
     paras = list(Paragraph.get_coll(coll).query(
-        F.id.in_([ObjectId(_) if len(_) == 24 else _ for _ in ids])))
+        F.id.in_([ObjectId(_) for _ in paragraphs])))
 
     if request.path.endswith('/split'):
         for para in paras:
@@ -427,16 +427,22 @@ def splitting(coll, ids):
         if not paras:
             return False
 
-        para0 = paras[0]
-        para0.keywords = list(para0.keywords)
-        para0.images = list(para0.images)
-        for para in paras[1:]:
-            para0.keywords += list(para.keywords)
-            para0.images += list(para.images)
-        para0.save()
+        selected_ids = list(map(ObjectId, itertools.chain(*paragraphs.values())))
+        selected = MediaItem.query(F.id.in_(selected_ids))
 
-        for para in paras[1:]:
-            para.delete()
+        para0 = Paragraph(paras[0])
+        para0.id = None
+        para0.images = selected
+        
+        for para in paras:
+            para0.keywords += para.keywords
+            para.images = [k for k in para.images if k.id not in selected_ids]
+            if len(para.images) == 0:
+                para.delete()
+            else:
+                para.save()
+                
+        para0.save()
 
     return True
 
