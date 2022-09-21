@@ -8,6 +8,7 @@ from collections import defaultdict
 from typing import Iterable, List
 from urllib.parse import urljoin
 from PIL import Image
+from bson import SON
 from PyMongoWrapper import F
 
 from jindai import storage, parser, DBQuery
@@ -91,10 +92,21 @@ class MediaDataSource(DataSourceStage):
             self.cond = cond
             self.query = parser.parse(cond)
             self.raw = raw
-            self.sort_keys = sort_keys.split(',')
-            self.result_set = MediaItem.query(self.query)
+            
+            if not isinstance(self.query, list):
+                self.query = [{'$match': self.query or {}}]
+            
+            if sort_keys == 'random':
+                self.sort_keys = []
+                self.query.append({'$sample': {'size': limit or 100}})
+                limit = 0
+            else:
+                self.sort_keys = parser.parse_sort(sort_keys)
+            
+            self.result_set = MediaItem.aggregate(self.query, raw=raw)
+            
             if self.sort_keys:
-                self.result_set = self.result_set.sort(*self.sort_keys)
+                self.result_set = self.result_set.sort(SON(self.sort_keys))
             if offset:
                 self.result_set = self.result_set.skip(offset)
             if limit:
