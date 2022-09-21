@@ -10,6 +10,7 @@ import os
 import ssl
 import re
 import sys
+import shutil
 import tempfile
 import time
 import urllib
@@ -315,6 +316,10 @@ class OSFileSystemManager(StorageManager):
     def exists(self, path: str) -> bool:
         path = self.expand_path(path)
         return os.path.exists(path)
+
+    def move(self, src: str, dst: str) -> bool:
+        src, dst = self.expand_path(src), self.expand_path(dst)
+        return shutil.move(src, dst)
 
     def readbuf(self, path: str, **params) -> BytesIO:
         path = self.expand_path(path)
@@ -1144,6 +1149,9 @@ class Storage:
     
     def truncate_path(self, path):
         return self._query_until('truncate_path', path, self._schema[''].truncate_path(path))
+
+    def move(self, src, dst):
+        return self._query_until('move', src, False, dst=dst)
     
     def expand_patterns(self, patterns: Union[list, str, tuple]):
         """Get expanded paths according to wildcards patterns
