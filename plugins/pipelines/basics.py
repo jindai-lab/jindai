@@ -7,6 +7,7 @@ from collections import defaultdict, deque
 from io import BytesIO
 from itertools import chain
 from itertools import count as iter_count
+import string
 
 from PyMongoWrapper import F, QueryExprParser, ObjectId
 from PyMongoWrapper.dbo import DbObject, DbObjectCollection
@@ -212,7 +213,7 @@ class KeywordsFromTokens(PipelineStage):
         return u"".join([c for c in nfkd_form if not unicodedata.combining(c)])
     
     def resolve(self, paragraph: Paragraph) -> Paragraph:        
-        words = [str(word).strip()
+        words = [str(word).strip().strip(string.punctuation)
                          for word in set(paragraph.tokens) if word and str(word).strip()]
         words += [KeywordsFromTokens.remove_accents(word) for word in words]
         paragraph.keywords = list(set((paragraph.keywords if self.append else []) + words))
@@ -232,7 +233,7 @@ class FilterPunctuations(PipelineStage):
 
     def resolve(self, paragraph: Paragraph) -> Paragraph:
         paragraph.content = FilterPunctuations.re_punctuations.sub(
-            '', paragraph.content)
+            '', paragraph.content.strip(string.punctuation))
         return paragraph
 
 

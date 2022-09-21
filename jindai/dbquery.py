@@ -175,7 +175,7 @@ class DBQuery:
                     (MongoOperand(first_query['$match']) & MongoOperand(req))()}
             ] + qparsed[1:]
 
-        return [{'$match': req}] + qparsed
+        return qparsed + [{'$match': req}] 
 
     def __init__(self, query, mongocollections='', limit=0, skip=0, sort='',
                  raw=False, groups='none', pmanager=None, wordcutter=None):
