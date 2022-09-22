@@ -325,11 +325,7 @@ class DownloadMedia(MediaItemStage):
         i.source = {'file': 'blocks.h5', 'url': i.source['url']}
         i.save()
         
-
-# preserve DownloadImages for compatibilitiy
-DownloadImages = DownloadMedia
-
-
+        
 class QRCodeScanner(PipelineStage):
     """Read QR-Code info from image
     @chs 获取图像中的二维码信息
