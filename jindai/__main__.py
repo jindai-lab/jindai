@@ -1,11 +1,16 @@
 """CLI for jindai"""
 
+from email.policy import default
+import subprocess
 import base64
 import datetime
 import json
 import glob
 import os
+import sys
+import yaml
 import re
+from tempfile import mktemp
 import zipfile
 from io import BytesIO
 from typing import Dict, Iterable
@@ -64,9 +69,11 @@ def export(query, output_file):
 
 @cli.command('task')
 @click.argument('task_id')
+@click.option('-l', '--log', type=str, default='')
 @click.option('-n', '--concurrent', type=int, default=0)
 @click.option('-v', '--verbose', type=bool, flag_value=True)
-def run_task(task_id, concurrent, verbose):
+@click.option('-e', '--edit', type=bool, flag_value=True)
+def run_task(task_id, concurrent, verbose, edit, log):
     """Run task according to id or name"""
     dbo = TaskDBO.first((F.id == task_id) if re.match(
         r'[0-9a-f]{24}', task_id) else (F.name == task_id))
@@ -74,12 +81,44 @@ def run_task(task_id, concurrent, verbose):
         print(f'Task {task_id} not found')
         return
     
+    if edit:
+        temp_name = mktemp()
+        with open(temp_name, 'w', encoding='utf-8') as fo:
+            dat = dbo.as_dict()
+            dat.pop('_id', '')
+            yaml.safe_dump(dat, fo, allow_unicode=True)
+        
+        if os.name == 'nt':
+            editor = 'notepad.exe'
+        elif os.system('which nano') == 0:
+            editor = 'nano'
+        else:
+            editor = 'vi'
+            
+        subprocess.Popen([editor, temp_name]).communicate()
+    
+        with open(temp_name, encoding='utf-8') as fi:
+            dbo.fill_dict(yaml.safe_load(fi))
+        
+        os.unlink(temp_name)
+        
     _init_plugins()
-    task = Task.from_dbo(dbo, verbose=verbose)
+    
+    logfile = open(log, 'w', encoding='utf-8') if log else sys.stderr
+        
+    task = Task.from_dbo(dbo, verbose=verbose, logger=lambda *x: print(*x, file=logfile))
+    
     if concurrent > 0:
         task.concurrent = concurrent
+    
     result = task.execute()
+    
+    print()
     print(result)
+    
+    if log:
+        print(result, file = logfile)
+        logfile.close()
 
 
 @cli.command('user')
