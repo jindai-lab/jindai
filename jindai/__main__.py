@@ -505,6 +505,12 @@ def call_ipython():
         
         return model.query(q)
     
+    def task(task_name):
+        dbo = TaskDBO.first((F.id if re.match('^[0-9a-fA-F]{24}$', task_name) else F.name) == task_name)
+        if dbo:
+            task = Task.from_dbo(dbo)
+            return task.execute()
+    
     locals().update(**jindai.__dict__)
 
     embed(colors="neutral")
