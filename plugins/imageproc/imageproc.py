@@ -273,7 +273,7 @@ class DumpImages(MediaItemStage):
         return i
 
 
-class DownloadImages(MediaItemStage):
+class DownloadMedia(MediaItemStage):
     """Download media items
     @chs 下载媒体内容
     """
@@ -297,13 +297,23 @@ class DownloadImages(MediaItemStage):
             return
 
         try:
-            content = requests.get(i.source['url'],
+            resp = requests.get(i.source['url'],
                 headers={
                     'Referer': post.source.get('url', '')
                 },
-                proxies=self.proxies).content
-            assert content
+                verify=False,
+                proxies=self.proxies)
+            
+            if resp.status_code != 200:
+                raise OSError(f'HTTP {resp.status_code}')
+            if not resp.content:
+                raise ValueError(f'Empty response')
+            
+            content = resp.content
         except Exception as ex:
+            if isinstance(ex, OSError):
+                i.no_download = True
+                i.save()
             self.logger('Error while downloading item',
                         i.source['url'], type(ex).__name__, ex)
             return
@@ -314,6 +324,10 @@ class DownloadImages(MediaItemStage):
 
         i.source = {'file': 'blocks.h5', 'url': i.source['url']}
         i.save()
+        
+
+# preserve DownloadImages for compatibilitiy
+DownloadImages = DownloadMedia
 
 
 class QRCodeScanner(PipelineStage):

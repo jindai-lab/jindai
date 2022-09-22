@@ -437,10 +437,7 @@ def splitting(coll, paragraphs):
         for para in paras:
             para0.keywords += para.keywords
             para.images = [k for k in para.images if k.id not in selected_ids]
-            if len(para.images) == 0:
-                para.delete()
-            else:
-                para.save()
+            para.save()
                 
         para0.save()
 
