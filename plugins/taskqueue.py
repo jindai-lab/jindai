@@ -515,7 +515,7 @@ class MultiWorkerTaskQueue(TaskQueue):
 
     @property
     def parallel_n(self) -> int:
-        return sum([w.running_num for w in self._workers])
+        return sum([w.parallel_n for w in self._workers])
     
     @property
     def abilities(self) -> list:
