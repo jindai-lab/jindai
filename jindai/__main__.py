@@ -481,8 +481,9 @@ def serve_storage(port: int, host: str, debug: bool):
 
 @cli.command('ipython')
 def call_ipython():
-    from IPython import embed
+    from IPython import start_ipython
     os.chdir(os.path.join(os.path.dirname(os.path.abspath(__file__)), '..'))
+    
     import jindai
     from PyMongoWrapper import F, Fn, Var
     from bson import SON, Binary, ObjectId
@@ -505,15 +506,16 @@ def call_ipython():
         
         return model.query(q)
     
-    def task(task_name):
+    def run(task_name):
         dbo = TaskDBO.first((F.id if re.match('^[0-9a-fA-F]{24}$', task_name) else F.name) == task_name)
         if dbo:
             task = Task.from_dbo(dbo)
             return task.execute()
     
-    locals().update(**jindai.__dict__)
+    ns = dict(jindai.__dict__)
+    ns.update(**locals())
 
-    embed(colors="neutral")
+    start_ipython(argv=[], user_ns=ns)
 
 
 if __name__ == '__main__':
