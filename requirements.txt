@@ -12,7 +12,6 @@ pyyaml
 inotify
 requests
 requests-oauthlib
-requests-cache
 lxml
 h5py
 python-twitter
