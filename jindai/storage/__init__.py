@@ -103,7 +103,7 @@ class Storage:
                 self.storage_proxy[key] = [val]
 
         self._fragment_handlers = {
-            fh[7:]: func for fh, func in fragment_handlers() if fh.startswith('handle_')
+            fh[7:]: func for fh, func in fragment_handlers if fh.startswith('handle_')
         }
 
     def _get_managers(self, path) -> StorageManager:
