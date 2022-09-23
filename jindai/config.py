@@ -2,8 +2,8 @@
 import os
 import sys
 from pathlib import Path
-from typing import Any
 import yaml
+from .common import DictObject
 
 
 if '-c' in sys.argv:
@@ -14,17 +14,18 @@ if '-c' in sys.argv:
     os.environ['CONFIG_FILE'] = config_file
 
 
-class ConfigObject:
+class ConfigObject(DictObject):
     """Accessing config file"""
 
-    def __init__(self, config_file=None):
+    def __init__(self, filename=None):
         """Load config file
 
         :param config_file: Path for config file,
             None to load from env variable CONFIG_FILE, and config.yaml in pwd
         :type config_file: str, optional
         """
-        self._orig = {
+
+        orig = {
             'mongo': 'localhost:27017',
             'mongoDbName': 'hamster',
             'rootpath': '',
@@ -38,40 +39,32 @@ class ConfigObject:
             'ui_proxy': '',
             'port': 8370,
         }
-        config_file = os.environ.get('CONFIG_FILE', 'config.yaml')
-        
-        if not os.path.exists(config_file):
-            print('Config file not found:', config_file)
-            exit(255)
+        filename = filename or os.environ.get('CONFIG_FILE', 'config.yaml')
 
-        with open(config_file, 'r', encoding='utf-8') as fin:
-            self._orig.update(**yaml.safe_load(fin))
+        if not os.path.exists(filename):
+            print('Config file not found:', filename)
+            sys.exit(255)
 
-        self._filename = config_file
+        with open(filename, 'r', encoding='utf-8') as fin:
+            orig.update(**yaml.safe_load(fin))
 
-        if self._orig['rootpath'] == '':
-            self._orig['rootpath'] = str(
+        self._filename = filename
+
+        if orig['rootpath'] == '':
+            orig['rootpath'] = str(
                 Path(os.path.abspath(__file__)).parent.parent.absolute())
-        if not isinstance(self._orig['storage'], list):
-            self._orig['storage'] = [self._orig['storage']]
-        self._orig['storage'] = [os.path.join(self._orig['rootpath'], p) for p in self._orig['storage']]
+        if not isinstance(orig['storage'], list):
+            orig['storage'] = [orig['storage']]
+        orig['storage'] = [os.path.join(orig['rootpath'], p)
+                           for p in orig['storage']]
 
-    def __getattr__(self, __name: str):
-        if __name in self.__dict__:
-            return object.__getattribute__(self, __name)
-        return self._orig.get(__name)
-
-    def __setattr__(self, __name: str, __value: Any) -> None:
-        if __name.startswith('_') or __name in self.__dict__:
-            object.__setattr__(self, __name, __value)
-        else:
-            self._orig[__name] = __value
+        super().__init__(orig)
 
     def save(self, filename: str = '') -> None:
         """Save config file"""
         filename = filename or self._filename
         with open(filename, 'w', encoding='utf-8') as fout:
-            yaml.dump(self._orig, fout)
+            yaml.dump(self, fout)
 
 
 instance = ConfigObject()
