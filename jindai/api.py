@@ -1,21 +1,15 @@
 """API Web Service"""
 
-import base64
 import datetime
 import hashlib
-import json
 import os
-import re
 import sys
 import itertools
 import time
 from collections import defaultdict
-from io import BytesIO
-from typing import IO, Union
 
 import pyotp
 from flask import Flask, Response, redirect, request, send_file
-from PIL import Image, ImageOps, ImageFile
 from PyMongoWrapper import F, Fn, MongoOperand, ObjectId
 
 from .dbquery import DBQuery, parser
@@ -30,7 +24,6 @@ from .models import (Dataset, History, MediaItem, Meta, Paragraph,
 from .storage import instance as storage
 
 
-ImageFile.LOAD_TRUNCATED_IMAGES = True
 app = Flask(__name__)
 app.config['SECRET_KEY'] = config.secret_key
 app.json_encoder = JSONEncoder
@@ -49,13 +42,13 @@ def _task_authorized():
 def _expand_results(results):
     """Expand results to serializable dicts"""
 
-    def _patch_mongocollection(r):
-        if isinstance(r, Paragraph):
-            res = r.as_dict(True)
+    def _patch_mongocollection(result):
+        if isinstance(result, Paragraph):
+            res = result.as_dict(True)
             if 'mongocollection' not in res:
-                res['mongocollection'] = type(r).db.name
+                res['mongocollection'] = type(result).db.name
         else:
-            res = r
+            res = result
         return res
 
     if not isinstance(results, (str, dict, bytes)) and hasattr(results, '__iter__'):
@@ -214,7 +207,7 @@ def admin_users_del(username):
 @rest()
 def list_storage(path='', search='', mkdir=''):
     """List out files in directory"""
-    
+
     if mkdir:
         storage.mkdir(path, mkdir)
 
@@ -244,8 +237,8 @@ def write_storage(path=''):
     sfs = []
     for uploaded in request.files.values():
         save_path = os.path.join(path, uploaded.filename)
-        with storage.open(save_path, 'wb') as fo:
-            uploaded.save(fo)
+        with storage.open(save_path, 'wb') as fout:
+            uploaded.save(fout)
         sfs.append(storage.stat(save_path))
     return sfs
 
@@ -261,7 +254,8 @@ def move_storage(source, destination, keep_folder=True):
     source = storage.expand_path(source)
     destination = storage.expand_path(destination)
     storage.move(source, destination)
-    paragraphs.update(Fn.set({'source.file': storage.truncate_path(destination)}))
+    paragraphs.update(
+        Fn.set({'source.file': storage.truncate_path(destination)}))
     return True
 
 
@@ -427,18 +421,19 @@ def splitting(coll, paragraphs):
         if not paras:
             return False
 
-        selected_ids = list(map(ObjectId, itertools.chain(*paragraphs.values())))
+        selected_ids = list(
+            map(ObjectId, itertools.chain(*paragraphs.values())))
         selected = MediaItem.query(F.id.in_(selected_ids))
 
         para0 = Paragraph(paras[0])
         para0.id = None
         para0.images = selected
-        
+
         for para in paras:
             para0.keywords += para.keywords
             para.images = [k for k in para.images if k.id not in selected_ids]
             para.save()
-                
+
         para0.save()
 
     return True
@@ -636,8 +631,8 @@ def history():
 
 @app.route('/api/search', methods=['POST'])
 @rest()
-def search(q='', req='', sort='', limit=100, offset=0,
-           mongocollections=None, groups='none', count=False, **_):
+def do_search(q='', req='', sort='', limit=100, offset=0,
+              mongocollections=None, groups='none', count=False, **_):
     """Search"""
 
     if not req:
@@ -684,14 +679,14 @@ def get_datasets():
 def set_datasets(action, **j):
     """Update dataset info"""
 
-    ds = None
+    dataset = None
     if '_id' in j:
-        ds = Dataset.first(F.id == j['_id'])
+        dataset = Dataset.first(F.id == j['_id'])
         del j['_id']
 
     if action == 'edit':
-        if ds:
-            ds.update(Fn.set(**j))
+        if dataset:
+            dataset.update(Fn.set(**j))
         else:
             Dataset(**j).save()
 
@@ -705,12 +700,12 @@ def set_datasets(action, **j):
                 Dataset(**jset).save()
 
     elif action == 'rename':
-        assert ds and 'to' in j, 'must specify valid dataset id and new name'
-        ds.rename(j['to'])
+        assert dataset and 'to' in j, 'must specify valid dataset id and new name'
+        dataset.rename(j['to'])
 
     elif action == 'sources':
-        assert ds, 'dataset not found'
-        ds.update_sources()
+        assert dataset, 'dataset not found'
+        dataset.update_sources()
 
     return True
 
@@ -762,7 +757,7 @@ def resolve_media_item(coll=None, storage_id=None, ext=None):
                 return f'file/{fpath}'
         elif url:
             return url
-        
+
         return ''
 
     return redirect('/images/' + _build_image_string(source))
@@ -771,6 +766,15 @@ def resolve_media_item(coll=None, storage_id=None, ext=None):
 @app.route("/images/<scheme>/<path:image_path>")
 @rest(cache=True)
 def serve_image(scheme, image_path):
+    """Serve images
+
+    Args:
+        scheme (str): scheme
+        image_path (str): path
+
+    Returns:
+        Response: image data
+    """
     path, ext = storage.get_schemed_path(scheme, image_path)
 
     try:
@@ -862,6 +866,8 @@ def set_meta(**vals):
 @app.route('/api/plugins', methods=['GET'])
 @rest()
 def get_plugins():
+    """Get plugin names
+    """
     return [type(pl).__name__ for pl in app.plugins]
 
 
@@ -887,6 +893,8 @@ def index(path='index.html'):
 
 
 def prepare_plugins():
+    """Prepare plugins
+    """
     if os.path.exists('restarting'):
         os.unlink('restarting')
     plugin_ctx = get_context('plugins', Plugin)
