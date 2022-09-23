@@ -1,20 +1,25 @@
 """File/Network storage access"""
-import requests
-import urllib
-import re
+import json
 import os
+import re
 import sys
+import urllib
+import zipfile
 from io import BytesIO
-from flask import (Flask, Response, jsonify, request,
-                   stream_with_context)
-from jindai.config import instance as config
-from typing import Union, IO
+from queue import deque
+from typing import IO, Union
 
+import requests
+from waitress import serve
+from flask import Flask, Response, jsonify, request, stream_with_context
+from jindai.config import instance as config
+
+from .fragment_handlers import fragment_handlers
 from .hdf5manager import Hdf5Manager
 from .osfile import OSFileSystemManager
 from .smbclient import SMBManager
-from .storage import StorageManager, fragment_handlers
-from .webmanager import WebManager, DataSchemeManager
+from .storage import StorageManager
+from .webmanager import DataSchemeManager, WebManager
 
 
 class StorageProxyManager(StorageManager):
@@ -93,9 +98,9 @@ class Storage:
                 k: [config.storage_proxy] for k in ('hdf5', 'smb', 'file')
             }
 
-        for k, v in self.storage_proxy.items():
-            if isinstance(v, str):
-                self.storage_proxy[k] = [v]
+        for key, val in self.storage_proxy.items():
+            if isinstance(val, str):
+                self.storage_proxy[key] = [val]
 
         self._fragment_handlers = {
             fh[7:]: func for fh, func in fragment_handlers() if fh.startswith('handle_')
@@ -250,6 +255,7 @@ class Storage:
 
     @staticmethod
     def get_mimetype(ext):
+        """Get mimetype from extension name"""
         return {
             'html': 'text/html',
                     'htm': 'text/html',
@@ -264,6 +270,15 @@ class Storage:
 
     @staticmethod
     def get_schemed_path(scheme, path):
+        """Get schemed path
+
+        Args:
+            scheme (scheme): scheme name
+            path (path): path without scheme
+
+        Returns:
+            str: full schemed path
+        """
         path = path.replace('__hash/', '#')
         path = f'{scheme}://{path}'
         ext = path.rsplit('.', 1)[-1]
@@ -411,11 +426,11 @@ class Storage:
             else:
                 yield pattern
 
-    def fspath(self, base_file='test', *segs):
+    def fspath(self, base_file, *segs):
         """Get full os file path in relative to base_file
 
         Args:
-            base_file (str, optional): base file. Defaults to 'test', resulting in current path.
+            base_file (str): base file.
 
         Returns:
             str: full os file path
@@ -446,8 +461,7 @@ class Storage:
             params = request.args.to_dict()
             action = params.pop('action', '')
             if action:
-                result = getattr(self, action, lambda *x, **
-                                 kws: None)(path, **params)
+                result = getattr(self, action, lambda *x, **kws: None)(path, **params)
                 if action in ('walk', 'search'):
                     result = list(result or [])
                 return jsonify(result)
@@ -458,19 +472,19 @@ class Storage:
 
         @storage_app.route('/<scheme>/<path:path>', methods=['PUT', 'POST'])
         def put_item(scheme, path):
-            path, ext = Storage.get_schemed_path(scheme, path)
+            path, _ = Storage.get_schemed_path(scheme, path)
             if not request.data:
-                return f'No data, ignored.'
-            with self.open(path, 'wb') as fo:
-                fo.write(request.data)
-            return f'OK {path}'
+                return jsonify({'__exception__': 'No data, ignored.'})
+            with self.open(path, 'wb') as fout:
+                fout.write(request.data)
+            return jsonify({'result': True})
+        
 
         storage_app.debug = debug
 
         if storage_app.debug or '-d' in sys.argv:
             storage_app.run(host=host, port=port, debug=True)
         else:
-            from waitress import serve
             serve(storage_app, host=host, port=port, threads=8,
                   connection_limit=512, backlog=2048)
 
