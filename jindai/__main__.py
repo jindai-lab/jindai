@@ -85,7 +85,7 @@ def run_task(task_id, concurrent, verbose, edit, log):
         temp_name = mktemp()
         with open(temp_name, 'w', encoding='utf-8') as fo:
             dat = dbo.as_dict()
-            dat.pop('_id', '')
+            oid = dat.pop('_id', '')
             yaml.safe_dump(dat, fo, allow_unicode=True)
         
         if os.name == 'nt':
@@ -99,6 +99,8 @@ def run_task(task_id, concurrent, verbose, edit, log):
     
         with open(temp_name, encoding='utf-8') as fi:
             dbo.fill_dict(yaml.safe_load(fi))
+        dbo.id = oid
+        dbo.save()
         
         os.unlink(temp_name)
         
