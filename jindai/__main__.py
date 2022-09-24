@@ -26,7 +26,7 @@ from PyMongoWrapper.dbo import create_dbo_json_encoder
 from . import Plugin, PluginManager, Task, storage, config
 from .api import run_service, prepare_plugins
 from .helpers import get_context, safe_import
-from .models import F, MediaItem, Meta, TaskDBO, User
+from .models import F, MediaItem, Meta, Paragraph, TaskDBO, User
 
 MongoJSONEncoder = create_dbo_json_encoder(json.encoder.JSONEncoder)
 
@@ -550,6 +550,27 @@ def call_ipython():
         if dbo:
             task = Task.from_dbo(dbo)
             return task.execute()
+        
+    def deep_delete(rs):
+        mediaitems = set()
+        for p in rs:
+            if isinstance(p, Paragraph):
+                for m in p.images:
+                    m.delete()
+            elif isinstance(p, MediaItem):
+                mediaitems.add(m.id)
+            p.delete()
+        
+        for m in mediaitems:
+            Paragraph.query(F.images == m.id).update(Fn.pull(images=m.id))
+            
+    def fix_integrity():
+        mediaitems = {m['_id'] for m in MediaItem.aggregator.project(_id=1).perform(raw=True)}
+        print(len(mediaitems), 'items')
+        for p in tqdm(Paragraph.aggregator.project(_id=1, images=1).perform(raw=True)):
+            images = set(p['images']).intersection(mediaitems)
+            if len(images) != len(p['images']):
+                Paragraph.query(F.id == p['_id']).update(Fn.set(images=list(images)))
     
     ns = dict(jindai.__dict__)
     ns.update(**locals())
