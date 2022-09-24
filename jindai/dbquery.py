@@ -318,8 +318,6 @@ class DBQuery:
 
     def count(self):
         """Count documents, -1 if err"""
-        if self.handler:
-            return self.limit or 1
         try:
             return sum([self.fetch_rs(r, sort='id', limit=0, skip=0).count() for r in self.mongocollections])
         except Exception:

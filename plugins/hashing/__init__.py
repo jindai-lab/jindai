@@ -292,6 +292,8 @@ class Hashing(Plugin):
                     if groupby == 'group':
                         groups = [
                             g for g in paragraph.keywords if g.startswith('*')] or [new_paragraph.source.get('url')]
+                    elif groupby == 'source':
+                        groups = [paragraph.source.get('url', paragraph.source.get('file')) or str(paragraph.id)]
                     else:
                         groups = [paragraph[groupby] or str(paragraph.id)]
 
