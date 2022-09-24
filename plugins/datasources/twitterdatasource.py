@@ -4,12 +4,12 @@ import os
 import re
 import time
 from collections import defaultdict
-from typing import List, Union
+from typing import List
 
 import twitter
 from jindai.models import MediaItem, Paragraph
 from jindai.pipeline import DataSourceStage
-from jindai.dbquery import parser, ObjectId, F
+from jindai.dbquery import parser, ObjectId, F, Fn
 
 from .dbquerydatasource import ImageImportDataSource
 
@@ -93,6 +93,7 @@ class TwitterDataSource(DataSourceStage):
                      consumer_key='', consumer_secret='', access_token_key='', access_token_secret='',
                      import_username='',
                      time_after='', time_before='',
+                     skip_existent=True,
                      proxy=''
                      ) -> None:
             """
@@ -120,6 +121,9 @@ class TwitterDataSource(DataSourceStage):
                 time_before (str):
                     Time before
                     @chs 时间下限
+                skip_existent (bool):
+                    Skip existent tweets
+                    @chs 跳过已经导入的 URL
                 proxy (str):
                     Proxy settings
                     @chs 代理服务器
@@ -134,15 +138,18 @@ class TwitterDataSource(DataSourceStage):
             self.proxies = {'http': proxy, 'https': proxy} if proxy else {}
             self.api = twitter.Api(consumer_key=consumer_key, consumer_secret=consumer_secret,
                                    access_token_key=access_token_key, access_token_secret=access_token_secret, proxies=self.proxies)
+            self.skip_existent = skip_existent
             self.imported = set()
 
-        def parse_tweet(self, tweet, skip_existent=True) -> Paragraph:
+        def parse_tweet(self, tweet, skip_existent=None) -> Paragraph:
             """Parse twitter status
             Args:
                 st (twitter.status): status
             Returns:
                 Post: post
             """
+            if skip_existent is None: skip_existent = self.skip_existent
+            
             tweet_url = f'https://twitter.com/{tweet.user.screen_name}/status/{tweet.id}'
 
             author = '@' + tweet.user.screen_name
@@ -169,11 +176,12 @@ class TwitterDataSource(DataSourceStage):
                     if url:
                         item = MediaItem.first(F['source.url'] == url)
                         if item:
-                            continue
-                        item = MediaItem(
-                            source={'url': url},
-                            item_type='video' if media.video_info else 'image')
-                        item.save()
+                            Paragraph.query(F.images == item.id).update(Fn.pull(images=item.id))
+                        else:
+                            item = MediaItem(
+                                source={'url': url},
+                                item_type='video' if media.video_info else 'image')
+                            item.save()
                         para.images.append(item)
                 if tweet.text.startswith('RT '):
                     author = re.match(r'^RT (@.*?):', tweet.text)
@@ -237,7 +245,7 @@ class TwitterDataSource(DataSourceStage):
                 while before > self.time_after and pages < 50:
                     pages += 1
                     yielded = False
-                    self.logger(max_id, before, self.time_after)
+                    self.logger(max_id, datetime.datetime.fromtimestamp(before), self.time_after)
 
                     timeline = source(max_id)
                     for status in timeline:
