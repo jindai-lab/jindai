@@ -76,6 +76,31 @@ def _sort(params):
     return Fn.sort(_rectify(params))()
 
 
+def _auto(param):
+
+    def _judge_type(query):
+        """Judge query mode: keywords or expression"""
+
+        is_expr = False
+        if query.startswith('?'):
+            is_expr = True
+        elif re.search(r'[,.~=&|()><\'"`@_*\-%]', query):
+            is_expr = True
+
+        return is_expr
+
+    is_expr = _judge_type(param)
+    if is_expr:
+        param = param.lstrip('?')
+    else:
+        param = '`' + '`,`'.join([_.strip().lower().replace('`', '\\`')
+                                for _ in jieba.cut(param) if _.strip()]) + '`'
+        if param == '``':
+            param = ''
+    
+    return param
+
+
 parser = QueryExprParser(
     abbrev_prefixes={None: 'keywords=', '?': 'source.url%', '??': 'content%'},
     allow_spacing=True,
@@ -91,6 +116,7 @@ parser = QueryExprParser(
         'begin': _begins_with,
         'sort': _sort,
         'gid': _gid,
+        'auto': _auto,
     },
     force_timestamp=False,
 )
@@ -98,18 +124,6 @@ parser = QueryExprParser(
 
 class DBQuery:
     """Database query class"""
-
-    @staticmethod
-    def _judge_type(query):
-        """Judge query mode: keywords or expression"""
-
-        is_expr = False
-        if query.startswith('?'):
-            is_expr = True
-        elif re.search(r'[,.~=&|()><\'"`@_*\-%]', query):
-            is_expr = True
-
-        return is_expr
 
     @staticmethod
     def _parse(query, wordcutter=None):
@@ -133,15 +147,7 @@ class DBQuery:
 
         if isinstance(query, str):
             # judge type of major query and formulate
-            is_expr = DBQuery._judge_type(query)
-            if is_expr:
-                query = query.lstrip('?')
-            else:
-                query = '`' + '`,`'.join([_.strip().lower().replace('`', '\\`')
-                                          for _ in wordcutter(query) if _.strip()]) + '`'
-                if query == '``':
-                    query = ''
-
+            query = _auto(query)
             # parse query
             query = parser.parse(query) or []
 
