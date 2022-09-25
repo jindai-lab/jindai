@@ -141,8 +141,8 @@ class Task:
         :type resume_next: bool, optional
         :param verbose: logging debug info, defaults to False
         :type verbose: bool, optional
-        :param verbose: use tqdm progress bar if applicable, defaults to True
-        :type verbose: bool, optional
+        :param use_tqdm: use tqdm progress bar if applicable, defaults to True
+        :type use_tqdm: bool, optional
         """
 
         self.alive = True
