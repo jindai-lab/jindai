@@ -240,9 +240,18 @@ class DBQuery:
                 sort = '-group_id'
 
         if groupping:
-            groupping += '''
+            if '.' not in sort and ',' not in sort:
+                if sort.startswith('-'):
+                    sorting = f',sorting_field=max(${sort[1:]})'
+                else:
+                    sorting = f',sorting_field=min(${sort})'
+                sorting = sorting.replace('($id)', '($_id)')
+                sort = ('-' if sort.startswith('-') else '') + 'sorting_field'
+            else:
+                sorting = ''
+            groupping += f'''
                 =>addFields(gid=ifNull($group_id;ifNull(concat('id=';toString($_id));$source.file)),images=ifNull($images;[]))
-                =>groupby(id=$gid,count=sum(size($images)),images=push($images))
+                =>groupby(id=$gid,count=sum(size($images)),images=push($images){sorting})
                 =>groupby(id=$_id)
                 =>addFields(
                     images=reduce(input=$images,initialValue=[],in=setUnion($$value;$$this)),

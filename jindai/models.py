@@ -1,5 +1,6 @@
 """DB Objects"""
 import datetime
+from typing import Iterable, List
 import unicodedata
 import dateutil
 import time
@@ -294,7 +295,9 @@ class Paragraph(db.DbObject):
         return lambda x: temp(**x.as_dict())
     
     @staticmethod
-    def merge_by_mediaitems(reserved, duplicates):
+    def merge_by_mediaitems(reserved: MediaItem, duplicates: Iterable[MediaItem]):
+        assert isinstance(reserved, MediaItem), 'Must specify one MediaItem to preserve'
+        
         result = Paragraph.first(F.images == reserved.id) or Paragraph(images=[reserved])
         to_delete = {x.id for x in duplicates}
         references = list(Paragraph.query(F.images.in_(list(to_delete))))
