@@ -3,6 +3,7 @@ import os
 import tempfile
 from io import BytesIO, IOBase
 from queue import deque
+from threading import Lock
 from typing import Union
 
 import imagehash
@@ -110,11 +111,13 @@ def flips(val, bit_num, least_position=0):
                 yield new_val
 
 
-def resolve_dups(tmp_file_name, slimit):
-    """Resolve duplications from temp file, with scores < slimit"""
+def resolve_dups(input_file, slimit):
+    """Resolve duplications from temp file, with scores <= slimit"""
+
+    input_file = open(input_file, 'r') if isinstance(input_file, str) else input_file
 
     def _parse_compare_results():
-        with open(tmp_file_name, 'r') as input_file:
+        with input_file:
             for line in input_file:
                 row = line.strip().split('\t')
                 if len(row) < 3:
@@ -122,25 +125,11 @@ def resolve_dups(tmp_file_name, slimit):
                 id1, id2, score = row
                 if id1 == id2:
                     continue
-                yield id1, id2, int(score)
+                items = {str(i.id): i for i in MediaItem.query(F.id.in_(ObjectId(id1), ObjectId(id2)))}
+                if len(items) == 2:
+                    yield items[id1], items[id2], int(score)
 
-    def _get_items():
-        ids = set()
-        for id1, id2, _ in _parse_compare_results():
-            ids.add(id1)
-            ids.add(id2)
-        items = {}
-        for i in MediaItem.query(F.id.in_([ObjectId(_) for _ in ids])):
-            items[str(i.id)] = i
-        return items
-
-    items = _get_items()
-    for id1, id2, score in sorted(_parse_compare_results(),
-                                  key=lambda x: x[2]):
-        if score > slimit:
-            continue
-        if id1 in items and id2 in items:
-            yield items[id1], items[id2], score
+    return sorted(filter(lambda x: x[2] <= slimit, _parse_compare_results()), key=lambda x: x[2])
 
 
 class ImageHash(MediaItemStage):
@@ -173,11 +162,21 @@ class ImageHashDuplications(MediaItemStage):
     """进行图像哈希去重
     """
 
-    def __init__(self) -> None:
+    def __init__(self, auto_remove=-1) -> None:
+        """
+        Args:
+            auto_remove (int, optional):
+                Auto remove duplicates with max diff. score
+                @chs 自动删除差异值小于等于该数值的项目，默认为 -1 即不删除
+        """        
         super().__init__()
         self.results = deque()
         self.result_pairs = set()
-
+        self._tmpfile = tempfile.mktemp('.tsv')
+        self._writable_file = open(self._tmpfile, 'w', encoding='utf-8')
+        self._write_lock = Lock()
+        self.auto_remove = auto_remove
+        
     def resolve_image(self, i: MediaItem, _):
         """处理图像哈希
         """
@@ -199,24 +198,32 @@ class ImageHashDuplications(MediaItemStage):
                 continue
 
             self.result_pairs.add(f'{target_id}-{i.id}')
-            id_a, id_b = i.id, target_id
+            if (float(i.width) / i.height > 1) != (float(j.width) / j.height > 1):
+                continue
             if j.width * j.height < image_width * image_height:
-                id_b, id_a = id_a, id_b
+                i, j = j, i
+                
+            score = bitcount(to_int(j.dhash) ^ d_hash) + bitcount(to_int(j.whash) ^ w_hash)
+            if score <= self.auto_remove:
+                Paragraph.merge_by_mediaitems(i, [j])
+                continue
 
-            result_line = f'{id_a}\t{id_b}\t' + \
-                f'{bitcount(to_int(i.dhash) ^ d_hash) + bitcount(to_int(j.whash) ^ w_hash)}'
+            result_line = f'{i.id}\t{j.id}\t{score}'
             self.logger(result_line)
             self.results.append(result_line + '\n')
 
         return i
+    
+    def flush_results(self):
+        with self._write_lock:
+            for line in self.results:
+                self._writable_file.write(line)
+            self.results.clear()
 
     def summarize(self, _):
-        k = tempfile.mktemp()
-        output_file = open(k + '.tsv', 'wb')
-        for line in self.results:
-            output_file.write(line.encode('utf-8'))
-        output_file.close()
-        return PipelineStage.return_redirect(f'/api/plugins/compare?{k}')
+        self.flush_results()
+        self._writable_file.close()
+        return PipelineStage.return_redirect(f'/api/plugins/compare?{self._tmpfile}')
 
 
 class Hashing(Plugin):
