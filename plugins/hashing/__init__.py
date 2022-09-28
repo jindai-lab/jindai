@@ -213,17 +213,17 @@ class ImageHashDuplications(MediaItemStage):
             self.result_pairs.add(f'{target_id}-{i.id}')
             if (float(i.width) / i.height > 1) != (float(j.width) / j.height > 1):
                 continue
-            if j.width * j.height < image_width * image_height or (j.width * j.height == image_width * image_height and i.id < j.id):
+            if j.width * j.height < image_width * image_height or (j.width * j.height == image_width * image_height and i.id > j.id):
                 i, j = j, i
                 
             score = bitcount(to_int(j.dhash) ^ d_hash) + bitcount(to_int(j.whash) ^ w_hash)
             if score <= self.auto_remove:
                 Paragraph.merge_by_mediaitems(j, [i])
-                continue
-
-            result_line = f'{i.id}\t{j.id}\t{score}'
-            self.logger(result_line)
-            self.results.append(result_line + '\n')
+                self.logger(f'delete {i.id}, preserving {j.id}')
+            else:
+                result_line = f'{i.id}\t{j.id}\t{score}'
+                self.logger(result_line)
+                self.results.append(result_line + '\n')
 
         return i
     
