@@ -160,7 +160,7 @@ class TwitterDataSource(DataSourceStage):
 
             self.logger(tweet_url, 'skip' if para is not None and skip_existent else '')
             if not skip_existent or not para:
-                para = Paragraph(dataset='twitter', pdate=datetime.datetime.utcfromtimestamp(
+                para = para or Paragraph(dataset='twitter', pdate=datetime.datetime.utcfromtimestamp(
                     tweet.created_at_in_seconds), source={'url': tweet_url}, tweet_id=f'{tweet.id}')
                 for media in tweet.media or []:
                     if media.video_info:
@@ -176,7 +176,7 @@ class TwitterDataSource(DataSourceStage):
                     if url:
                         item = MediaItem.first(F['source.url'] == url)
                         if item:
-                            Paragraph.query(F.images == item.id).update(Fn.pull(images=item.id))
+                            Paragraph.query(F.images == item.id, F.id != para.id).update(Fn.pull(images=item.id))
                         else:
                             item = MediaItem(
                                 source={'url': url},
@@ -184,13 +184,13 @@ class TwitterDataSource(DataSourceStage):
                             item.save()
                         para.images.append(item)
                 if tweet.text.startswith('RT '):
-                    author = re.match(r'^RT (@.*?):', tweet.text)
+                    author = re.match(r'^RT (@[\w_-]*)', tweet.text)
                     if author:
                         author = author.group(1)
                     else:
                         author = ''
                 text = re.sub(r'https?://[^\s]+', '', tweet.text).strip()
-                para.keywords = [t.strip().strip('#') for t in re.findall(
+                para.keywords += [t.strip().strip('#') for t in re.findall(
                     r'@[a-z_A-Z0-9]+', text) + re.findall(r'[#\s][^\s@]{,10}', text)] + [author]
                 para.keywords = [_ for _ in para.keywords if _]
                 para.content = text
