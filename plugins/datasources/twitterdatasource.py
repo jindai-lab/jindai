@@ -87,6 +87,7 @@ class TwitterDataSource(DataSourceStage):
         """implementing datasource"""
 
         def __init__(self,
+                     dataset_name='',
                      allow_video=False,
                      allow_retweet=True,
                      media_only=True,
@@ -99,6 +100,9 @@ class TwitterDataSource(DataSourceStage):
             """
 
             Args:
+                dataset_name (DATASET):
+                    Dataset name
+                    @chs 数据集名称
                 allow_video (bool, optional):
                     Allow video
                     @chs 允许导入视频
@@ -129,6 +133,7 @@ class TwitterDataSource(DataSourceStage):
                     @chs 代理服务器
             """
             super().__init__()
+            self.dataset_name = dataset_name
             self.allow_video = allow_video
             self.allow_retweet = allow_retweet
             self.media_only = media_only
@@ -160,8 +165,17 @@ class TwitterDataSource(DataSourceStage):
 
             self.logger(tweet_url, 'skip' if para is not None and skip_existent else '')
             if not skip_existent or not para:
-                para = para or Paragraph(dataset='twitter', pdate=datetime.datetime.utcfromtimestamp(
-                    tweet.created_at_in_seconds), source={'url': tweet_url}, tweet_id=f'{tweet.id}')
+                para = para or Paragraph()
+                
+                para.dataset=self.dataset_name
+                para.pdate=datetime.datetime.utcfromtimestamp(tweet.created_at_in_seconds)
+                para.source={'url': tweet_url}
+                para.tweet_id=f'{tweet.id}'
+                para.images = []
+                
+                if para.id:
+                    self.logger('... matched existent paragraph', para.id)
+                
                 for media in tweet.media or []:
                     if media.video_info:
                         if not self.allow_video:
@@ -176,12 +190,14 @@ class TwitterDataSource(DataSourceStage):
                     if url:
                         item = MediaItem.first(F['source.url'] == url)
                         if item:
-                            Paragraph.query(F.images == item.id, F.id != para.id).update(Fn.pull(images=item.id))
+                            modified = Paragraph.query(F.images == item.id, F.id != para.id).update(Fn.pull(images=item.id)).modified_count
+                            self.logger('... add existent item', url, item.id, 'pulled out of', modified, 'paragraphs')
                         else:
                             item = MediaItem(
                                 source={'url': url},
                                 item_type='video' if media.video_info else 'image')
                             item.save()
+                            self.logger('... add new item', url)
                         para.images.append(item)
                 if tweet.text.startswith('RT '):
                     author = re.match(r'^RT (@[\w_-]*)', tweet.text)
@@ -195,6 +211,7 @@ class TwitterDataSource(DataSourceStage):
                 para.keywords = [_ for _ in para.keywords if _]
                 para.content = text
                 para.author = author
+                self.logger(len(para.images), 'media items')
 
             return para
 
@@ -252,12 +269,13 @@ class TwitterDataSource(DataSourceStage):
                         before = min(before, status.created_at_in_seconds)
                         max_id = min(max_id, status.id)
                         para = self.parse_tweet(status)
-                        if not para or para.id:
+                        if not para: continue
+                        if self.skip_existent and para.id:
                             continue
                         if para.author != '@' + status.user.screen_name and not self.allow_retweet:
                             continue
                         if status.created_at_in_seconds > self.time_after:
-                            if (not self.media_only or para.images) and not para.id:
+                            if not self.media_only or para.images:
                                 yield para
                                 yielded = True
 
