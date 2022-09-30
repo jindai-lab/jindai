@@ -717,6 +717,7 @@ def query_terms(field, pattern='', regex=False, scope=''):
 
     if pattern:
         if regex:
+            pattern = pattern.replace(' ', '.*')
             pattern = {'term': {'$regex': pattern, '$options': 'i'}}
         else:
             pattern = (F.term == pattern) | (F.aliases == pattern)
@@ -816,8 +817,18 @@ def dbconsole(mongocollection='', query='', operation='', operation_params='', p
     mongo = Paragraph.db.database[mongocollection]
     query = parser.parse(query)
     operation_params = parser.parse(operation_params)
-    if isinstance(operation_params, dict) and list(operation_params) == ['keywords']:
-        operation_params = {'$addToSet': operation_params}
+    if isinstance(operation_params, dict):
+        keys = list(operation_params)
+        if len(keys) != 1:
+            operation_params = {
+                '$set': operation_params
+            }
+        elif keys[0] in ['keywords', 'images']:
+            operation_params = {'$addToSet': operation_params}
+        elif not keys[0].startswith('$'):
+            operation_params = {
+                '$set': operation_params
+            }
 
     if preview:
         return {
