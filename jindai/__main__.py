@@ -1,6 +1,8 @@
 """CLI for jindai"""
 
+from ast import keyword
 from email.policy import default
+from pydoc import text
 import subprocess
 import base64
 import datetime
@@ -21,7 +23,7 @@ import numpy as np
 from flask import Flask
 from tqdm import tqdm
 
-from PyMongoWrapper import ObjectId
+from PyMongoWrapper import ObjectId, Fn
 from PyMongoWrapper.dbo import create_dbo_json_encoder
 from . import Plugin, PluginManager, Task, storage, config
 from .api import run_service, prepare_plugins
@@ -414,7 +416,7 @@ def plugin_export(output: str, infiles):
             _export_one(os.path.basename(p).split('.')[0], [p])
 
 
-@cli.command('clear-duplicates')
+@cli.command('items-clear-dup')
 @click.option('--limit', '-l', type=int, default=0)
 @click.option('--offset', '-s', type=str, default='')
 @click.option('--maxdups', '-m', type=int, default=10)
@@ -461,6 +463,23 @@ def clear_duplicates(limit: int, offset: str, maxdups: int):
     print(cleared, 'duplicates merged.')
     if m:
         print('You may continue with offset', m.id)
+        
+        
+@cli.command('items-fix')
+def fix_integrity():
+    mediaitems = {m['_id'] for m in MediaItem.aggregator.project(_id=1).perform(raw=True)}
+    checkeditems = set()
+    print(len(mediaitems), 'items')
+    for p in tqdm(Paragraph.aggregator.project(_id=1, images=1).perform(raw=True), desc='Checking paragraph items'):
+        images = set(p['images']).intersection(mediaitems)
+        checkeditems.update(images)
+        if len(images) != len(p['images']):
+            Paragraph.query(F.id == p['_id']).update(Fn.set(images=list(images)))
+    for m in tqdm(mediaitems - checkeditems, desc='Restoring unlinked media items'):
+        m = MediaItem.first(F.id == m)
+        Paragraph(dataset='', lang='auto', images=[m], source=m.source,
+                  keywords=['restored', 'restored:' + datetime.datetime.now().strftime('%Y%m%d_%H%M%S')]
+        ).save()
 
 
 @cli.command('sync-terms')
@@ -566,14 +585,6 @@ def call_ipython():
         for m in mediaitems:
             Paragraph.query(F.images == m.id).update(Fn.pull(images=m.id))
             
-    def fix_integrity():
-        mediaitems = {m['_id'] for m in MediaItem.aggregator.project(_id=1).perform(raw=True)}
-        print(len(mediaitems), 'items')
-        for p in tqdm(Paragraph.aggregator.project(_id=1, images=1).perform(raw=True)):
-            images = set(p['images']).intersection(mediaitems)
-            if len(images) != len(p['images']):
-                Paragraph.query(F.id == p['_id']).update(Fn.set(images=list(images)))
-    
     ns = dict(jindai.__dict__)
     ns.update(**locals())
 

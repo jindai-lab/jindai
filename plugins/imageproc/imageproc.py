@@ -295,6 +295,9 @@ class DownloadMedia(MediaItemStage):
             
         if i.no_download:
             return
+        
+        if 'file' in i.source:
+            return
 
         try:
             resp = requests.get(i.source['url'],
