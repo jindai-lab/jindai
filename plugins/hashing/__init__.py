@@ -115,6 +115,7 @@ def resolve_dups(input_file, slimit):
     """Resolve duplications from temp file, with scores <= slimit"""
 
     input_file = open(input_file, 'r') if isinstance(input_file, str) else input_file
+    ids = set()
 
     def _parse_compare_results():
         with input_file:
@@ -123,13 +124,25 @@ def resolve_dups(input_file, slimit):
                 if len(row) < 3:
                     continue
                 id1, id2, score = row
-                if id1 == id2:
+                id1, id2, score = ObjectId(id1), ObjectId(id2), int(score)
+                ids.add(id1)
+                ids.add(id2)
+                if id1 == id2 or score > slimit:
                     continue
-                items = {str(i.id): i for i in MediaItem.query(F.id.in_(ObjectId(id1), ObjectId(id2)))}
-                if len(items) == 2:
-                    yield items[id1], items[id2], int(score)
-
-    return sorted(filter(lambda x: x[2] <= slimit, _parse_compare_results()), key=lambda x: x[2])
+                yield id1, id2, score
+                
+    results = list(_parse_compare_results())
+    items = {
+        i.id: i for i in MediaItem.query(F.id.in_(list(ids)))
+    }
+    
+    results = [
+        (items[id1], items[id2], score)
+        for id1, id2, score in results
+        if id1 in items and id2 in items
+    ]
+                
+    return sorted(results, key=lambda x: x[2])
 
 
 class ImageHash(MediaItemStage):
@@ -200,17 +213,17 @@ class ImageHashDuplications(MediaItemStage):
             self.result_pairs.add(f'{target_id}-{i.id}')
             if (float(i.width) / i.height > 1) != (float(j.width) / j.height > 1):
                 continue
-            if j.width * j.height < image_width * image_height:
+            if j.width * j.height < image_width * image_height or (j.width * j.height == image_width * image_height and i.id > j.id):
                 i, j = j, i
                 
             score = bitcount(to_int(j.dhash) ^ d_hash) + bitcount(to_int(j.whash) ^ w_hash)
             if score <= self.auto_remove:
-                Paragraph.merge_by_mediaitems(i, [j])
-                continue
-
-            result_line = f'{i.id}\t{j.id}\t{score}'
-            self.logger(result_line)
-            self.results.append(result_line + '\n')
+                Paragraph.merge_by_mediaitems(j, [i])
+                self.logger(f'delete {i.id}, preserving {j.id}')
+            else:
+                result_line = f'{i.id}\t{j.id}\t{score}'
+                self.logger(result_line)
+                self.results.append(result_line + '\n')
 
         return i
     
