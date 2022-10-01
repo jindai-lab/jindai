@@ -100,8 +100,9 @@ def run_task(task_id, concurrent, verbose, edit, log):
         subprocess.Popen([editor, temp_name]).communicate()
     
         with open(temp_name, encoding='utf-8') as fi:
-            dbo.fill_dict(yaml.safe_load(fi))
-        dbo.id = oid
+            d = yaml.safe_load(fi)
+            d['_id'] = oid
+            dbo.fill_dict(d)
         dbo.save()
         
         os.unlink(temp_name)
