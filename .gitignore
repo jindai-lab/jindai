@@ -51,3 +51,5 @@ core
 
 *.swp
 docker-compose.yaml
+*.db
+*.pickle

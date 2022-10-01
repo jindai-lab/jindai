@@ -490,11 +490,11 @@ def merge_items(pairs):
        keeping the first one, deleting the second and merging
        the Paragraphs where they locate
     """
-    for rese, dele in pairs:
+    for rese, dele in pairs.items():
         rese, dele = MediaItem.first(
-            F.id == rese), MediaItem.first(F.id == dele)
+            F.id == rese), list(MediaItem.query(F.id.in_([ObjectId(_) for _ in dele])))
         if rese and dele:
-            Paragraph.merge_by_mediaitems(rese, [dele])
+            Paragraph.merge_by_mediaitems(rese, dele)
 
     return True
 
@@ -752,6 +752,9 @@ def resolve_media_item(coll=None, storage_id=None, ext=None):
             if fpath == 'blocks.h5':
                 assert 'block_id' in source
                 return f'hdf5/{source["block_id"]}'
+            if fpath == 'sblobs.db':
+                assert 'block_id' in source
+                return f'sqlite/{source["block_id"]}'
             elif fpath.endswith('.pdf') and 'page' in source:
                 return f'file/{fpath}/__hash/pdf/{source["page"]}'
             else:

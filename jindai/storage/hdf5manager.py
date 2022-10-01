@@ -2,6 +2,7 @@
 import glob
 import itertools
 import os
+import re
 import tempfile
 import time
 import urllib
@@ -20,18 +21,24 @@ class Hdf5Manager(StorageManager):
 
     _lock = Lock()
 
-    def __init__(self, storage_base: str) -> None:
+    def __init__(self, storage_base: str, quota='40G') -> None:
         files = []
+        self.quota = self.parse_size(quota)
         if isinstance(storage_base, list):
             storage_base, *external_storage = storage_base
         else:
             external_storage = []
 
+        self.storage_base = storage_base
+
         for storage_parent in [storage_base, *external_storage]:
             files += glob.glob(os.path.join(storage_parent, '*.h5'))
-        self.base = os.path.join(storage_base, 'blocks.h5')
-        if self.base in files:
-            files.remove(self.base)
+
+        self._num = 0
+        self._next_file()
+
+        if self._filename in files:
+            files.remove(self._filename)
 
         self.files = []
         for g in files:
@@ -42,15 +49,38 @@ class Hdf5Manager(StorageManager):
 
         self._writable_file = None
 
-        if not os.path.exists(self.base):
+        if not os.path.exists(self._filename):
             try:
-                self._writable_file = h5py.File(self.base, 'w')
+                self._writable_file = h5py.File(self._filename, 'w')
             except:
-                self.base = tempfile.mktemp('.h5')
-                self._writable_file = h5py.File(self.base, 'w')
+                self._filename = tempfile.mktemp('.h5')
+                self._writable_file = h5py.File(self._filename, 'w')
 
             self._writable_file.close()
             self._writable_file = None
+
+        self._written_size = os.stat(self._filename).st_size
+
+    def _next_file(self):
+        while True:
+            self._num += 1
+            self._filename = os.path.join(
+                self.storage_base, f'blocks{self._num}.h5')
+            if os.path.exists(self._filename) and os.stat(self._filename).st_size > self.quota * 0.99:
+                continue
+            break
+
+    def parse_size(self, size: str) -> int:
+        m = re.match(r'(\d+)([gGmMkK])?B?', size)
+        if m:
+            size = int(m.group(1))
+            if m.group(2):
+                size <<= {
+                    'g': 30,
+                    'm': 20,
+                    'k': 10
+                }.get(m.group(2).lower(), 1)
+        return size
 
     def stat(self, path: str) -> dict:
         parsed = urllib.parse.urlparse(path)
@@ -83,12 +113,19 @@ class Hdf5Manager(StorageManager):
         path = self._get_item_id(path)
 
         self._lock.acquire()
+
+        if self._written_size + len(buf) > self.quota:
+            if self._writable_file:
+                self._writable_file.close()
+            self._next_file()
+            self._written_size = 0
+
         if self._writable_file and self._writable_file.mode != 'r+':
             self._writable_file.close()
             self._writable_file = None
 
         if not self._writable_file:
-            self._writable_file = h5py.File(self.base, 'r+')
+            self._writable_file = h5py.File(self._filename, 'r+')
 
         if isinstance(data, bytes):
             data = BytesIO(data)
@@ -97,10 +134,13 @@ class Hdf5Manager(StorageManager):
         if k in self._writable_file:
             del self._writable_file[k]
 
-        self._writable_file[k] = np.frombuffer(
+        buf = np.frombuffer(
             data.read(), dtype='uint8')
+        self._writable_file[k] = buf
 
         self._writable_file.flush()
+        self._written_size += len(buf)
+
         self._lock.release()
 
         return True
@@ -117,7 +157,7 @@ class Hdf5Manager(StorageManager):
         path = self._get_item_id(path)
 
         if not self._writable_file:
-            self._writable_file = h5py.File(self.base, 'r')
+            self._writable_file = h5py.File(self._filename, 'r')
 
         key = f'data/{path}'
         for block_file in [self._writable_file, *self.files]:
