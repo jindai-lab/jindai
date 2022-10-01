@@ -112,9 +112,13 @@ class Hdf5Manager(StorageManager):
         """
         path = self._get_item_id(path)
 
+        if not isinstance(data, bytes):
+            data = data.read()
+        data = np.frombuffer(data, dtype='uint8')
+                    
         self._lock.acquire()
 
-        if self._written_size + len(buf) > self.quota:
+        if self._written_size + len(data) > self.quota:
             if self._writable_file:
                 self._writable_file.close()
             self._next_file()
@@ -127,19 +131,14 @@ class Hdf5Manager(StorageManager):
         if not self._writable_file:
             self._writable_file = h5py.File(self._filename, 'r+')
 
-        if isinstance(data, bytes):
-            data = BytesIO(data)
-
         k = f'data/{path}'
         if k in self._writable_file:
             del self._writable_file[k]
 
-        buf = np.frombuffer(
-            data.read(), dtype='uint8')
-        self._writable_file[k] = buf
+        self._writable_file[k] = data
 
         self._writable_file.flush()
-        self._written_size += len(buf)
+        self._written_size += len(data)
 
         self._lock.release()
 
