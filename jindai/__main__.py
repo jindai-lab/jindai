@@ -87,7 +87,6 @@ def run_task(task_id, concurrent, verbose, edit, log):
         temp_name = mktemp()
         with open(temp_name, 'w', encoding='utf-8') as fo:
             dat = dbo.as_dict()
-            oid = dat.pop('_id', '')
             yaml.safe_dump(dat, fo, allow_unicode=True)
         
         if os.name == 'nt':
@@ -100,9 +99,10 @@ def run_task(task_id, concurrent, verbose, edit, log):
         subprocess.Popen([editor, temp_name]).communicate()
     
         with open(temp_name, encoding='utf-8') as fi:
-            dbo.fill_dict(yaml.safe_load(fi))
-        dbo.id = oid
-        dbo.save()
+            param = yaml.safe_load(fi)
+            for key, val in param.items():
+                dbo[key] = val
+            dbo.save()
         
         os.unlink(temp_name)
         
@@ -163,33 +163,98 @@ def meta(key, value):
 
 
 @cli.command('storage-merge')
-@click.option('--output', '-o', default='tmp.h5')
+@click.option('--output', '-o', default='tmp')
 @click.argument('infiles', nargs=-1)
 def storage_merge(infiles, output):
     """Merge h5df storage files"""
-
-    items = {str(i['_id']) for i in MediaItem.aggregator.match(
-        F['source.file'] == 'blocks.h5').project(_id=1).perform(raw=True)}
-
-    items = items.union({i.thumbnail[:24] for i in MediaItem.query(
+    
+    class _QuotaWriter:
+        
+        def __init__(self, quota: int, pattern = 'out') -> None:
+            self.quota = quota
+            self.subtotal = 0
+            self.file_num = 1
+            self.file_pattern = pattern + '{}.h5'
+            self._file = None
+            
+        @property
+        def file(self):
+            if not self._file:
+                self._file = h5py.File(self.file_pattern.format(self.file_num), 'w')
+                self.file_num += 1
+            return self._file
+        
+        def close(self):
+            if self._file:
+                self._file.flush()
+                self._file.close()
+                self._file = None
+            self.subtotal = 0
+        
+        def write(self, key, val):
+            if self.subtotal + len(val) > self.quota:
+                self.close()
+            
+            self.file[f'data/{key}'] = np.frombuffer(val, dtype='uint8')
+            self.subtotal += len(val)
+            
+    inputs = []
+    for file in infiles:
+        inputs += glob.glob(file)
+    print(len(inputs), 'files')
+            
+    items = {str(i['_id']) for i in MediaItem.aggregator.project(_id=1).perform(raw=True)}
+    items.update({i.thumbnail[:24] for i in MediaItem.query(
         F.thumbnail.exists(1) & (F.thumbnail != '')) if i.thumbnail})
-
     print(len(items), 'items')
-    output_file = h5py.File(output, 'r+' if os.path.exists(output) else 'w')
+        
+    output_file = _QuotaWriter(40 << 30, output)
     total = 0
-    for filename in infiles:
-        filename = h5py.File(filename, 'r')
-        for k in tqdm(filename['data']):
+    for h5 in inputs:
+        h5 = h5py.File(h5, 'r')
+        if 'data' not in h5: continue
+        for key in tqdm(h5['data']):
             try:
-                if k[:24] in items:
-                    dat = filename[f'data/{k}']
-                    total += len(dat)
-                    output_file[f'data/{k}'] = np.frombuffer(dat[:].tobytes(),
-                                                             dtype='uint8')
+                if key in items:
+                    val = h5[f'data/{key}'][:].tobytes()
+                    total += len(val)
+                    output_file.write(key, val)
+                    items.remove(key)
             except Exception as ex:
-                print(k, ex)
+                print(key, ex)
+        h5.close()
     output_file.close()
     print('Total:', total, 'bytes')
+    
+    
+@cli.command('storage-convert')
+@click.option('--infile', '-i')
+@click.option('--output', '-o')
+@click.option('--format', '-f')
+def stroage_convert(infile, output, format):
+    assert format in ('sqlite',)
+    
+    if format == 'sqlite':
+        import sqlite3
+        conn = sqlite3.connect(output)
+        outp = conn.cursor()
+        outp.execute("""
+                     CREATE TABLE IF NOT EXISTS data (id TEXT PRIMARY KEY, bytes BLOB, ctime TIMESTAMP)
+                     """)
+        inp = h5py.File(infile)['data']
+        
+        for k in tqdm(inp):
+            buf = inp[k][:].tobytes() 
+            try:
+                outp.execute("""
+                            REPLACE INTO data VALUES (?, ?, ?)
+                            """, (k, buf, datetime.datetime.utcnow()))
+            except Exception as ex:
+                print(ex)
+        
+        outp.close()
+        conn.commit()
+        conn.close()
 
 
 @cli.command('dump')
@@ -287,7 +352,7 @@ def _save_db(coll: str, records: Iterable[Dict], force):
 
 @cli.command('restore')
 @click.option('--infile', default='')
-@click.option('--force', type=bool, default=False)
+@click.option('--force', type=bool, default=False, flag_value=True)
 @click.argument('colls', nargs=-1)
 def restore(infile, colls, force):
     """Restore the status of database from a zip file of jsons.
