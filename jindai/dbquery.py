@@ -56,7 +56,8 @@ def _gid(params):
                 input="$$t", regex=r'^\*'))
         ),
         Fn.unwind(path=Var.gid, preserveNullAndEmptyArrays=True),
-        Fn.addFields(gid=Fn.ifNull(Var.gid, Fn.concat('id=', Fn.toString('$_id')))),
+        Fn.addFields(gid=Fn.ifNull(
+            Var.gid, Fn.concat('id=', Fn.toString('$_id')))),
     ]
 
 
@@ -94,10 +95,10 @@ def _auto(param):
         param = param.lstrip('?')
     else:
         param = '`' + '`,`'.join([_.strip().lower().replace('`', '\\`')
-                                for _ in jieba.cut(param) if _.strip()]) + '`'
+                                  for _ in jieba.cut(param) if _.strip()]) + '`'
         if param == '``':
             param = ''
-    
+
     return param
 
 
@@ -181,7 +182,7 @@ class DBQuery:
                     (MongoOperand(first_query['$match']) & MongoOperand(req))()}
             ] + qparsed[1:]
 
-        return qparsed + [{'$match': req}] 
+        return qparsed + [{'$match': req}]
 
     def __init__(self, query, mongocollections='', limit=0, skip=0, sort='',
                  raw=False, groups='none', pmanager=None, wordcutter=None):
