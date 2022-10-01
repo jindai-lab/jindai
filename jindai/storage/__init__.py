@@ -20,6 +20,7 @@ from .osfile import OSFileSystemManager
 from .smbclient import SMBManager
 from .storage import StorageManager
 from .webmanager import DataSchemeManager, WebManager
+from .sqlitemanager import SqliteManager
 
 
 class StorageProxyManager(StorageManager):
@@ -86,6 +87,7 @@ class Storage:
             'https': WebManager(),
             'data': DataSchemeManager(),
             'hdf5': Hdf5Manager(config.storage),
+            'sqlite': SqliteManager(config.storage),
             '': OSFileSystemManager(config.storage),
         }
 
@@ -95,7 +97,7 @@ class Storage:
 
         if isinstance(self.storage_proxy, str):
             self.storage_proxy = {
-                k: [config.storage_proxy] for k in ('hdf5', 'smb', 'file')
+                k: [config.storage_proxy] for k in ('hdf5', 'smb', 'file', 'sqlite')
             }
 
         for key, val in self.storage_proxy.items():

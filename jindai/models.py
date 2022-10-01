@@ -148,6 +148,8 @@ class MediaItem(db.DbObject):
             filename = self.source['file']
             if filename == 'blocks.h5':
                 return f"hdf5://{self.source.get('block_id', self.id)}"
+            elif filename == 'sblobs.db':
+                return f"sqlite://{self.source.get('block_id', self.id)}"
             elif filename.lower().endswith('.pdf') and 'page' in self.source:
                 return f'{self.source["file"]}#pdf/{self.source["page"]}'
             else:
@@ -178,9 +180,9 @@ class MediaItem(db.DbObject):
     def save(self):
         """Save image items"""
         if self._image_flag:
-            self.source['file'] = 'blocks.h5'
-            with storage.open(f'hdf5://{self.id}', 'wb') as output:
-                buf = image.tobytes('jpeg')
+            self.source['file'] = 'sblobs.db'
+            with storage.open(f'sqlite://{self.id}', 'wb') as output:
+                buf = self._image.tobytes('jpeg')
                 output.write(buf)
             self._image_flag = False
            
@@ -295,40 +297,58 @@ class Paragraph(db.DbObject):
         return lambda x: temp(**x.as_dict())
     
     @staticmethod
-    def merge_by_mediaitems(reserved: MediaItem, duplicates: Iterable[MediaItem]):
-        assert isinstance(reserved, MediaItem), 'Must specify one MediaItem to preserve'
+    def merge_by_mediaitems(preserved: MediaItem, dups: Iterable[MediaItem]):
+        assert isinstance(preserved, MediaItem), 'Must specify one MediaItem to preserve'
         
-        result = Paragraph.first(F.images == reserved.id) or Paragraph(images=[reserved])
-        to_delete = {x.id for x in duplicates}
-        references = list(Paragraph.query(F.images.in_(list(to_delete))))
+        result = Paragraph.first(F.images == preserved.id) or Paragraph(images=[preserved])
+        dup_ids = {x.id for x in dups if x.id != preserved.id}
+        references = list(Paragraph.query(F.images.in_(list(dup_ids))))
         
         for para in references:
-            result.keywords += para.keywords
-            if not result.pdate and para.pdate:
-                result.pdate = para.pdate
-            
-            if isinstance(para.pdate, datetime.datetime):
-                if isinstance(result.pdate, datetime.datetime):
-                    result.pdate = min(para.pdate, result.pdate)
-                else:
-                    result.pdate = para.pdate
-            
-            if not result.source or not result.source.get('url', '').startswith('http'):
-                result.source = para.source
-                
-            if not result.author:
-                result.author = para.author
-            
-            para.images = [i for i in para.images if i.id not in to_delete]
+            result.merge(para)
+            para.images = [i for i in para.images if i.id not in dup_ids]
             para.save()
                 
-        for i in duplicates:
+        for i in dups:
+            if i.id == preserved.id:
+                continue
+            preserved.source = Paragraph.merge_source(preserved.source, i.source)
             i.delete()
 
         result.save()
+        preserved.save()
 
     def __lt__(self, another):
         return id(self) < id(another)
+    
+    @staticmethod
+    def merge_source(source1, source2, source2_id):
+        s_url = source1.get('url', '')
+        t_url = source2.get('url', '')
+        if '://' not in s_url and '://' in t_url:
+            source1['url'] = t_url
+            
+        s_file = source1.get('file', '')
+        t_file = source2.get('file', '')
+        if not s_file and t_file:
+            source1['file'] = t_file
+            if t_file in ('sblobs.db', 'blocks.h5'):
+                source1['block_id'] = str(source2_id)
+        return source1
+
+    def merge(self, another):
+        for field in another._fields:
+            if not self[field] and another[field]:
+                self[field] = another[field]
+            if self[field] and another[field]:
+                if field in ('pdate',):
+                    self[field] = min(self[field], another[field])
+
+                elif field == 'source':
+                    self[field] = Paragraph.merge_source(self[field], another[field], another.id)
+
+                elif field in ('keywords', 'images'):
+                    self[field] = list(set(self[field] + another[field]))
 
 
 class History(db.DbObject):
