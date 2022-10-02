@@ -5,7 +5,7 @@ import datetime
 from bson import SON
 from PyMongoWrapper import MongoOperand, F, Fn, Var, ObjectId, QueryExprParser
 
-from .models import Paragraph
+from .models import Paragraph, Term
 
 
 def _expr_groupby(params):
@@ -102,6 +102,15 @@ def _auto(param):
     return param
 
 
+def _term(param):
+    terms = []
+    for r in Term.query(F.term == param, F.aliases == param, logic='or'):
+        terms += [r.term] + r.aliases
+    if terms and len(terms) > 1:
+        return {'$in': terms}
+    return param
+
+
 parser = QueryExprParser(
     abbrev_prefixes={None: 'keywords=', '?': 'source.url%', '??': 'content%'},
     allow_spacing=True,
@@ -118,6 +127,7 @@ parser = QueryExprParser(
         'sort': _sort,
         'gid': _gid,
         'auto': _auto,
+        'term': _term
     },
     force_timestamp=False,
 )

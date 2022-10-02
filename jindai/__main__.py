@@ -1,8 +1,5 @@
 """CLI for jindai"""
 
-from ast import keyword
-from email.policy import default
-from pydoc import text
 import subprocess
 import base64
 import datetime
@@ -24,7 +21,7 @@ from flask import Flask
 from tqdm import tqdm
 
 from PyMongoWrapper import ObjectId, Fn
-from PyMongoWrapper.dbo import create_dbo_json_encoder
+from PyMongoWrapper.dbo import create_dbo_json_encoder, BatchSave
 from . import Plugin, PluginManager, Task, storage, config
 from .api import run_service, prepare_plugins
 from .helpers import get_context, safe_import
@@ -560,15 +557,9 @@ def sync_terms(field, cond):
         agg = agg.match(parser.parse(cond))
     agg = agg.group(_id='$' + field).project(term='$_id', field=field)
     
-    batch = []
-    for p in tqdm(agg.perform(raw=True)):
-        batch.append(p)
-        if len(batch) == 100:
-            Term.db.insert_many(batch)
-            batch.clear()
-    
-    if batch:
-        Term.db.insert_many(batch)
+    with BatchSave(saver=Term) as batch:
+        for p in tqdm(agg.perform(raw=True)):
+            batch.add(p)
     
     print('OK')
 
