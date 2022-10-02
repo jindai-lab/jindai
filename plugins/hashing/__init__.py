@@ -206,8 +206,10 @@ class ImageHashDuplications(MediaItemStage):
         w_hash = to_int(i.whash)
         image_height, image_width = i.height, i.width
 
-        def _score(j): return bitcount(to_int(j.dhash) ^ d_hash) + \
-            bitcount(to_int(j.whash) ^ w_hash)
+        def _score(j):
+            return bitcount(to_int(j.dhash) ^ d_hash) + \
+                bitcount(to_int(j.whash) ^ w_hash)
+        
         candidates = [
             (j, _score(j))
             for j in MediaItem.query(F.dhash.in_([

@@ -2,10 +2,12 @@ from datetime import datetime
 from itertools import chain
 import threading
 from time import sleep, time
-from .storage import StorageManager
 import sqlite3
 import glob
 import os
+
+from jindai import storage, config, Plugin
+from jindai.storage import StorageManager
 
 
 class _WrappedCursor:
@@ -134,3 +136,9 @@ class SqliteManager(StorageManager):
                 return True
         return False
     
+
+class SqliteManagerPlugin(Plugin):
+    
+    def __init__(self, pmanager, storage_base=None, **conf) -> None:
+        super().__init__(pmanager, **conf)
+        storage.register_scheme('sqlite', SqliteManager(storage_base or config.storage))
