@@ -15,7 +15,6 @@ from flask import Flask, Response, jsonify, request, stream_with_context
 from jindai.config import instance as config
 
 from .osfile import OSFileSystemManager
-from .smbclient import SMBManager
 from .storage import StorageManager
 from .webmanager import DataSchemeManager, WebManager
 
@@ -79,7 +78,6 @@ class Storage:
         """
 
         self._schema = {
-            'smb': SMBManager(),
             'http': WebManager(),
             'https': WebManager(),
             'data': DataSchemeManager(),

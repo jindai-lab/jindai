@@ -1,12 +1,13 @@
-"""SMB Storage
-"""
+"""SMB Storage"""
+
 import urllib
 import time
 from io import BytesIO
 from smb.SMBConnection import SMBConnection
 from smb.SMBHandler import SMBHandler
 
-from .storage import StorageManager
+from jindai.storage import StorageManager
+from jindai import storage, Plugin
 
 
 class SMBManager(StorageManager):
@@ -87,3 +88,10 @@ class SMBManager(StorageManager):
     def mkdir(self, path: str, new_folder: str) -> bool:
         conn, service, path = self._get_connection(path)
         return conn.createDirectory(service, path.rstrip('/') + '/' + new_folder)
+
+
+class SMBClientPlugin(Plugin):
+    
+    def __init__(self, pmanager, **conf) -> None:
+        super().__init__(pmanager, **conf)
+        storage.register_scheme('smb', SMBManager())
