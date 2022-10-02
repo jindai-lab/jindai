@@ -14,13 +14,9 @@ from waitress import serve
 from flask import Flask, Response, jsonify, request, stream_with_context
 from jindai.config import instance as config
 
-from .fragment_handlers import fragment_handlers
-from .hdf5manager import Hdf5Manager
 from .osfile import OSFileSystemManager
-from .smbclient import SMBManager
 from .storage import StorageManager
 from .webmanager import DataSchemeManager, WebManager
-from .sqlitemanager import SqliteManager
 
 
 class StorageProxyManager(StorageManager):
@@ -82,12 +78,9 @@ class Storage:
         """
 
         self._schema = {
-            'smb': SMBManager(),
             'http': WebManager(),
             'https': WebManager(),
             'data': DataSchemeManager(),
-            'hdf5': Hdf5Manager(config.storage),
-            'sqlite': SqliteManager(config.storage),
             '': OSFileSystemManager(config.storage),
         }
 
@@ -97,16 +90,14 @@ class Storage:
 
         if isinstance(self.storage_proxy, str):
             self.storage_proxy = {
-                k: [config.storage_proxy] for k in ('hdf5', 'smb', 'file', 'sqlite')
+                k: [config.storage_proxy] for k in self._schema if k not in ('http', 'https', 'data')
             }
 
         for key, val in self.storage_proxy.items():
             if isinstance(val, str):
                 self.storage_proxy[key] = [val]
 
-        self._fragment_handlers = {
-            fh[7:]: func for fh, func in fragment_handlers if fh.startswith('handle_')
-        }
+        self._fragment_handlers = {}
 
     def _get_managers(self, path) -> StorageManager:
         """Get storage manager according to scheme"""

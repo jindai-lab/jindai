@@ -312,7 +312,7 @@ class Paragraph(db.DbObject):
         for i in dups:
             if i.id == preserved.id:
                 continue
-            preserved.source = Paragraph.merge_source(preserved.source, i.source)
+            preserved.source = Paragraph.merge_source(preserved.source, i.source, i.id)
             i.delete()
 
         result.save()
@@ -342,7 +342,8 @@ class Paragraph(db.DbObject):
                 self[field] = another[field]
             if self[field] and another[field]:
                 if field in ('pdate',):
-                    self[field] = min(self[field], another[field])
+                    if type(self[field]) is type(another[field]):
+                        self[field] = min(self[field], another[field])
 
                 elif field == 'source':
                     self[field] = Paragraph.merge_source(self[field], another[field], another.id)

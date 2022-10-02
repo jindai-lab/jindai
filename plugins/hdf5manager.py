@@ -6,14 +6,14 @@ import re
 import tempfile
 import time
 import urllib
-from io import BytesIO
 from threading import Lock
 from typing import Iterable, List, Tuple
 
 import h5py
 import numpy as np
 
-from .storage import StorageManager
+from jindai.storage import StorageManager
+from jindai import storage, config, Plugin
 
 
 class Hdf5Manager(StorageManager):
@@ -177,3 +177,11 @@ class Hdf5Manager(StorageManager):
 
     def join(self, base_path: str, *path_segs: str) -> str:
         return path_segs[-1]
+
+
+
+class Hdf5ManagerPlugin(Plugin):
+    
+    def __init__(self, pmanager, storage_base=None, **conf) -> None:
+        super().__init__(pmanager, **conf)
+        storage.register_scheme('hdf5', Hdf5Manager(storage_base or config.storage))

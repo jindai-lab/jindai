@@ -532,16 +532,22 @@ def fix_integrity():
     mediaitems = {m['_id'] for m in MediaItem.aggregator.project(_id=1).perform(raw=True)}
     checkeditems = set()
     print(len(mediaitems), 'items')
+    
     for p in tqdm(Paragraph.aggregator.project(_id=1, images=1).perform(raw=True), desc='Checking paragraph items'):
         images = set(p['images']).intersection(mediaitems)
         checkeditems.update(images)
         if len(images) != len(p['images']):
             Paragraph.query(F.id == p['_id']).update(Fn.set(images=list(images)))
-    for m in tqdm(mediaitems - checkeditems, desc='Restoring unlinked media items'):
-        m = MediaItem.first(F.id == m)
-        Paragraph(dataset='', lang='auto', images=[m], source=m.source,
-                  keywords=['restored', 'restored:' + datetime.datetime.now().strftime('%Y%m%d_%H%M%S')]
-        ).save()
+            
+    mediaitems -= checkeditems
+    print(len(mediaitems), 'unlinked items')
+    if click.confirm('restore?'):
+        for m in tqdm(mediaitems, desc='Restoring unlinked media items'):
+            m = MediaItem.first(F.id == m)
+            if m is None: continue
+            Paragraph(dataset='', lang='auto', images=[m], source=m.source,
+                    keywords=['restored', 'restored:' + datetime.datetime.now().strftime('%Y%m%d_%H%M%S')]
+            ).save()
 
 
 @cli.command('sync-terms')
