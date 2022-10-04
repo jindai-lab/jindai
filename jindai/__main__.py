@@ -201,8 +201,7 @@ def storage_merge(infiles, output):
     print(len(inputs), 'files')
             
     items = {str(i['_id']) for i in MediaItem.aggregator.project(_id=1).perform(raw=True)}
-    items.update({i.thumbnail[:24] for i in MediaItem.query(
-        F.thumbnail.exists(1) & (F.thumbnail != '')) if i.thumbnail})
+    items.update({i.thumbnail.split('://')[1] for i in MediaItem.query(F.thumbnail.regex('^hdf5://')) if i.thumbnail})
     print(len(items), 'items')
         
     output_file = _QuotaWriter(40 << 30, output)
@@ -542,12 +541,13 @@ def fix_integrity():
     mediaitems -= checkeditems
     print(len(mediaitems), 'unlinked items')
     if click.confirm('restore?'):
-        for m in tqdm(mediaitems, desc='Restoring unlinked media items'):
-            m = MediaItem.first(F.id == m)
-            if m is None: continue
-            Paragraph(dataset='', lang='auto', images=[m], source=m.source,
-                    keywords=['restored', 'restored:' + datetime.datetime.now().strftime('%Y%m%d_%H%M%S')]
-            ).save()
+        with BatchSave(performer=Paragraph) as batch:
+            for m in tqdm(mediaitems, desc='Restoring unlinked media items'):
+                m = MediaItem.first(F.id == m)
+                if m is None: continue
+                batch.add(Paragraph(dataset='', lang='auto', images=[m], source=m.source,
+                        keywords=['restored', 'restored:' + datetime.datetime.now().strftime('%Y%m%d_%H%M%S')]
+                ))
 
 
 @cli.command('sync-terms')

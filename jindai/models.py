@@ -302,8 +302,8 @@ class Paragraph(db.DbObject):
         dup_ids = {x.id for x in dups if x.id != preserved.id}
         references = list(Paragraph.query(F.images.in_(list(dup_ids))))
         
+        result.merge(references)
         for para in references:
-            result.merge(para)
             para.images = [i for i in para.images if i.id not in dup_ids]
             para.save()
                 
@@ -333,20 +333,28 @@ class Paragraph(db.DbObject):
             source1['block_id'] = str(source2_id)
         return source1
 
-    def merge(self, another):
-        for field in another._fields:
-            if not self[field] and another[field]:
-                self[field] = another[field]
-            if self[field] and another[field]:
+    def merge(self, others):
+        for field in self._fields:
+            if not self[field]:
+                for another in others:
+                    if another[field]:
+                        self[field] = another[field]
+                        break
+            else:
                 if field in ('pdate',):
-                    if type(self[field]) is type(another[field]):
-                        self[field] = min(self[field], another[field])
+                    self[field] = min(self, *others, key=lambda x: dateutil.parser.parse(x[field]))
 
                 elif field == 'source':
-                    self[field] = Paragraph.merge_source(self[field], another[field], another.id)
+                    for another in others:
+                        if '://' in self[field].get('url', ''):
+                            break
+                        self[field] = Paragraph.merge_source(self[field], another[field], another.id)
 
                 elif field in ('keywords', 'images'):
-                    self[field] = list(set(self[field] + another[field]))
+                    arr = self[field]
+                    for another in others:
+                        arr += another[field]
+                    self[field] = list(set(arr))
 
 
 class History(db.DbObject):
