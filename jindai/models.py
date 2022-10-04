@@ -368,6 +368,7 @@ class Dataset(db.DbObject):
     order_weight = int
     mongocollection = str
     name = str
+    display_name = str
     sources = list
 
     def update_sources(self):
