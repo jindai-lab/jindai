@@ -121,6 +121,7 @@ class Hdf5Manager(StorageManager):
         if self._written_size + len(data) > self.quota:
             if self._writable_file:
                 self._writable_file.close()
+                self._writable_file = None
             self._next_file()
             self._written_size = 0
 
