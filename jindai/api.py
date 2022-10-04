@@ -508,9 +508,8 @@ def delete_item(album_items: dict):
         if para is None:
             continue
 
-        items = list(map(ObjectId, items))
-        para.images = [_ for _ in para.images if isinstance(
-            _, MediaItem) and _.id not in items]
+        items = [ObjectId(i) for i in items]
+        para.images.remove(items)
         para.save()
         del_items.update(items)
 
@@ -520,8 +519,6 @@ def delete_item(album_items: dict):
         image_item = MediaItem.first(F.id == i)
         if image_item:
             image_item.delete()
-
-    # Paragraph.query(F.images == []).delete()
 
     return True
 

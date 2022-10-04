@@ -423,13 +423,13 @@ class VideoFrame(MediaItemStage):
         return BytesIO()
 
     def resolve_video(self, i: MediaItem, _):
-        thumb = f'{ObjectId()}.thumb.jpg'
+        thumb = f'hdf5://{ObjectId()}.thumb.jpg'
         
         # generate video thumbnail
         read_from = i.data_path + f'#videoframe/{self.frame_num}'
         pic = storage.open(read_from, 'rb').read()
         if pic:
-            with storage.open(f'hdf5://{thumb}', 'wb') as output:
+            with storage.open(thumb, 'wb') as output:
                 output.write(pic)
             setattr(i, self.field, thumb)
             i.save()

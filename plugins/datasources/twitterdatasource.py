@@ -189,15 +189,14 @@ class TwitterDataSource(DataSourceStage):
                         url = media.media_url_https
                     if url:
                         item = MediaItem.first(F['source.url'] == url)
-                        if item:
-                            modified = Paragraph.query(F.images == item.id, F.id != para.id).update(Fn.pull(images=item.id)).modified_count
-                            self.logger('... add existent item', url, item.id, 'pulled out of', modified, 'paragraphs')
-                        else:
+                        if not item:
                             item = MediaItem(
                                 source={'url': url},
                                 item_type='video' if media.video_info else 'image')
                             item.save()
                             self.logger('... add new item', url)
+                        else:
+                            Paragraph.query(F.images == item.id).update(Fn.pull(images=item.id))
                         para.images.append(item)
                 if tweet.text.startswith('RT '):
                     author = re.match(r'^RT (@[\w_-]*)', tweet.text)
@@ -212,7 +211,7 @@ class TwitterDataSource(DataSourceStage):
                 para.content = text
                 para.author = author
                 self.logger(len(para.images), 'media items')
-
+                
             return para
 
         def import_twiimg(self, urls: List[str]):
