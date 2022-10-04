@@ -325,7 +325,7 @@ class DownloadMedia(MediaItemStage):
             output.write(content)
             self.logger(i.id, len(content))
 
-        i.source = {'file': 'blocks.h5', 'url': i.source['url']}
+        i.source = {'file': 'hdf5://$', 'url': i.source['url']}
         i.save()
         
         

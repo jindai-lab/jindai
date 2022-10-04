@@ -146,11 +146,7 @@ class MediaItem(db.DbObject):
         """Get full path for data"""
         if self.source.get('file'):
             filename = self.source['file']
-            if filename == 'blocks.h5':
-                return f"hdf5://{self.source.get('block_id', self.id)}"
-            elif filename == 'sblobs.db':
-                return f"sqlite://{self.source.get('block_id', self.id)}"
-            elif filename.lower().endswith('.pdf') and 'page' in self.source:
+            if filename.lower().endswith('.pdf') and 'page' in self.source:
                 return f'{self.source["file"]}#pdf/{self.source["page"]}'
             else:
                 return storage.expand_path(filename)
@@ -332,8 +328,7 @@ class Paragraph(db.DbObject):
         t_file = source2.get('file', '')
         if not s_file and t_file:
             source1['file'] = t_file
-            if t_file in ('sblobs.db', 'blocks.h5'):
-                source1['block_id'] = str(source2_id)
+            source1['block_id'] = str(source2_id)
         return source1
 
     def merge(self, another):
@@ -373,6 +368,7 @@ class Dataset(db.DbObject):
     order_weight = int
     mongocollection = str
     name = str
+    display_name = str
     sources = list
 
     def update_sources(self):

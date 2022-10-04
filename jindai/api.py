@@ -474,8 +474,6 @@ def reset_storage(ids):
     for i in items:
         if 'file' in i.source:
             del i.source['file']
-        else:
-            i.source['file'] = 'blocks.h5'
         i.save()
     return {
         str(i.id): i.source.get('file')
@@ -748,13 +746,10 @@ def resolve_media_item(coll=None, storage_id=None, ext=None):
 
     def _build_image_string(source):
         fpath, url = source.get('file'), source.get('url')
+        block_id = str(source.get('block_id', ''))
         if fpath:
-            if fpath == 'blocks.h5':
-                assert 'block_id' in source
-                return f'hdf5/{source["block_id"]}'
-            if fpath == 'sblobs.db':
-                assert 'block_id' in source
-                return f'sqlite/{source["block_id"]}'
+            if '://' in fpath:
+                return fpath.replace('://', '/').replace('$', block_id)
             elif fpath.endswith('.pdf') and 'page' in source:
                 return f'file/{fpath}/__hash/pdf/{source["page"]}'
             else:
