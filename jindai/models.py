@@ -146,7 +146,9 @@ class MediaItem(db.DbObject):
         """Get full path for data"""
         if self.source.get('file'):
             filename = self.source['file']
-            if filename.lower().endswith('.pdf') and 'page' in self.source:
+            if '://' in filename:
+                return filename.replace('$', str(self.id))
+            elif filename.lower().endswith('.pdf') and 'page' in self.source:
                 return f'{self.source["file"]}#pdf/{self.source["page"]}'
             else:
                 return storage.expand_path(filename)

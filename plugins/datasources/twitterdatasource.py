@@ -298,7 +298,7 @@ class TwitterDataSource(DataSourceStage):
                             last_updated = Paragraph.query(F['source.url'].regex(
                                 f'^https://twitter.com/{u}/')).sort(-F.pdate).first()
                             if last_updated:
-                                self.time_after = last_updated.pdate.timestamp()
+                                self.time_after = _stamp(last_updated.pdate)
                         self.logger(u)
                         yield from self.import_timeline(u)
                 else:
