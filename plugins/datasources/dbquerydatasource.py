@@ -198,7 +198,7 @@ class ImageImportDataSource(DataSourceStage):
                     with storage.open(f'hdf5://{i.id}', 'wb') as fout:
                         fout.write(storage.open(loc, 'rb').read())
 
-                    i.source = dict(i.source, file='blocks.h5')
+                    i.source = dict(i.source, file='hdf5://$')
                     i.save()
                     self.logger('Writing', i.id)
                     album.images.append(i)
