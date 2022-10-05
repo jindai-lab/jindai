@@ -153,8 +153,9 @@ class TwitterDataSource(DataSourceStage):
             Returns:
                 Post: post
             """
-            if skip_existent is None: skip_existent = self.skip_existent
-            
+            if skip_existent is None:
+                skip_existent = self.skip_existent
+
             tweet_url = f'https://twitter.com/{tweet.user.screen_name}/status/{tweet.id}'
 
             author = '@' + tweet.user.screen_name
@@ -163,19 +164,21 @@ class TwitterDataSource(DataSourceStage):
             self.imported.add(tweet.id)
             para = Paragraph.first(F.tweet_id == f'{tweet.id}')
 
-            self.logger(tweet_url, 'skip' if para is not None and skip_existent else '')
+            self.logger(
+                tweet_url, 'skip' if para is not None and skip_existent else '')
             if not skip_existent or not para:
                 para = para or Paragraph()
-                
-                para.dataset=self.dataset_name
-                para.pdate=datetime.datetime.utcfromtimestamp(tweet.created_at_in_seconds)
-                para.source={'url': tweet_url}
-                para.tweet_id=f'{tweet.id}'
+
+                para.dataset = self.dataset_name
+                para.pdate = datetime.datetime.utcfromtimestamp(
+                    tweet.created_at_in_seconds)
+                para.source = {'url': tweet_url}
+                para.tweet_id = f'{tweet.id}'
                 para.images = []
-                
+
                 if para.id:
                     self.logger('... matched existent paragraph', para.id)
-                
+
                 for media in tweet.media or []:
                     if media.video_info:
                         if not self.allow_video:
@@ -189,15 +192,18 @@ class TwitterDataSource(DataSourceStage):
                         url = media.media_url_https
                     if url:
                         item = MediaItem.first(F['source.url'] == url)
-                        if not item:
+                        if item is None:
                             item = MediaItem(
                                 source={'url': url},
                                 item_type='video' if media.video_info else 'image')
                             item.save()
                             self.logger('... add new item', url)
-                        else:
-                            Paragraph.query(F.images == item.id).update(Fn.pull(images=item.id))
-                        para.images.append(item)
+                            para.images.append(item)
+                        elif not self.skip_existent:
+                            Paragraph.query(F.images == item.id).update(
+                                Fn.pull(images=item.id))
+                            para.images.append(item)
+
                 if tweet.text.startswith('RT '):
                     author = re.match(r'^RT (@[\w_-]*)', tweet.text)
                     if author:
@@ -211,7 +217,7 @@ class TwitterDataSource(DataSourceStage):
                 para.content = text
                 para.author = author
                 self.logger(len(para.images), 'media items')
-                
+
             return para
 
         def import_twiimg(self, urls: List[str]):
@@ -261,14 +267,16 @@ class TwitterDataSource(DataSourceStage):
                 while before > self.time_after and pages < 50:
                     pages += 1
                     yielded = False
-                    self.logger(max_id, datetime.datetime.fromtimestamp(before), self.time_after)
+                    self.logger(max_id, datetime.datetime.fromtimestamp(
+                        before), self.time_after)
 
                     timeline = source(max_id)
                     for status in timeline:
                         before = min(before, status.created_at_in_seconds)
                         max_id = min(max_id, status.id)
                         para = self.parse_tweet(status)
-                        if not para: continue
+                        if not para:
+                            continue
                         if self.skip_existent and para.id:
                             continue
                         if para.author != '@' + status.user.screen_name and not self.allow_retweet:
