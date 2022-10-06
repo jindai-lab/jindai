@@ -124,7 +124,7 @@ class MediaItem(db.DbObject):
     def image(self) -> Image.Image:
         """Get the PIL.Image.Image object for the image/thumbnail"""
         if self.item_type == 'video' and self.thumbnail:
-            return Image.open(storage.open(f'hdf5://{self.thumbnail}', 'rb'))
+            return Image.open(storage.open(self.thumbnail, 'rb'))
 
         if self.item_type == 'sound':
             return None
@@ -304,7 +304,7 @@ class Paragraph(db.DbObject):
         
         result.merge(references)
         for para in references:
-            para.images = [i for i in para.images if i.id not in dup_ids]
+            para.images.remove(dup_ids)
             para.save()
                 
         for i in dups:
@@ -334,6 +334,14 @@ class Paragraph(db.DbObject):
         return source1
 
     def merge(self, others):
+        
+        def _date_str(s):
+            try:
+                dt = dateutil.parser.parse(s) if isinstance(s, str) else s
+                return dt.strftime('%Y-%m-%d %H:%M:%S')
+            except:
+                return s
+        
         for field in self._fields:
             if not self[field]:
                 for another in others:
@@ -342,7 +350,7 @@ class Paragraph(db.DbObject):
                         break
             else:
                 if field in ('pdate',):
-                    self[field] = min(self, *others, key=lambda x: dateutil.parser.parse(x[field]))
+                    self[field] = min(self, *others, key=lambda x: _date_str(x[field]))[field]
 
                 elif field == 'source':
                     for another in others:

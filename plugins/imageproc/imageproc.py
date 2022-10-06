@@ -321,11 +321,12 @@ class DownloadMedia(MediaItemStage):
                         i.source['url'], type(ex).__name__, ex)
             return
 
-        with storage.open(f'hdf5://{i.id}', 'wb') as output:
+        path = storage.default_path(i.id)
+        with storage.open(path, 'wb') as output:
             output.write(content)
             self.logger(i.id, len(content))
 
-        i.source = {'file': 'hdf5://$', 'url': i.source['url']}
+        i.source = {'file': path, 'url': i.source['url']}
         i.save()
         
         
@@ -423,7 +424,7 @@ class VideoFrame(MediaItemStage):
         return BytesIO()
 
     def resolve_video(self, i: MediaItem, _):
-        thumb = f'hdf5://{ObjectId()}.thumb.jpg'
+        thumb = storage.default_path(f'{i.id}.thumb.jpg')
         
         # generate video thumbnail
         read_from = i.data_path + f'#videoframe/{self.frame_num}'

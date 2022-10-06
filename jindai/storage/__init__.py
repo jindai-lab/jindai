@@ -147,7 +147,7 @@ class Storage:
                     may use `proxies`, `referer`, and `headers` in `params`
                     - Data URLs, i.e. data:...
                     readonly, `mode` should be 'rb'
-                    - hdf5://<item id>
+                    - <custom scheme>://<item id>
                     `mode` should be 'rb' or 'wb'
                     - <file path>#zip/<zip path>
                     read a zipped file inside a tar specified by <file path>
@@ -429,6 +429,13 @@ class Storage:
             str: full os file path
         """
         return os.path.join(os.path.dirname(os.path.abspath(base_file)), *segs)
+    
+    def default_path(self, name):
+        if '://' not in config.default_storage:
+            config.default_storage += '://'
+        elif not config.default_storage.endswith('/'):
+            config.default_storage += '/'
+        return f'{config.default_storage}{name}'
 
     def serve(self, host='0.0.0.0', port=8371, debug=False):
         """Start storage server

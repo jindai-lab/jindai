@@ -527,7 +527,8 @@ def clear_duplicates(limit: int, offset: str, maxdups: int):
         
         
 @cli.command('items-fix')
-def fix_integrity():
+@click.option('-q', '--quiet', default=False, flag_value=True)
+def fix_integrity(quiet):
     mediaitems = {m['_id'] for m in MediaItem.aggregator.project(_id=1).perform(raw=True)}
     checkeditems = set()
     print(len(mediaitems), 'items')
@@ -540,7 +541,7 @@ def fix_integrity():
             
     mediaitems -= checkeditems
     print(len(mediaitems), 'unlinked items')
-    if click.confirm('restore?'):
+    if len(mediaitems) and (quiet or click.confirm('restore?')):
         with BatchSave(performer=Paragraph) as batch:
             for m in tqdm(mediaitems, desc='Restoring unlinked media items'):
                 m = MediaItem.first(F.id == m)
