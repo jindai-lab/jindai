@@ -195,10 +195,11 @@ class ImageImportDataSource(DataSourceStage):
                     i = MediaItem(source={'file': loc, 'url': '.' + extname},
                                   item_type=MediaItem.get_type(extname))
                     i.save()
-                    with storage.open(f'hdf5://{i.id}', 'wb') as fout:
+                    path = storage.default_path(i.id)
+                    with storage.open(path, 'wb') as fout:
                         fout.write(storage.open(loc, 'rb').read())
 
-                    i.source = dict(i.source, file='hdf5://$')
+                    i.source = dict(i.source, file=path)
                     i.save()
                     self.logger('Writing', i.id)
                     album.images.append(i)

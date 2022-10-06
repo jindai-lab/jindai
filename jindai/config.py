@@ -30,7 +30,6 @@ class ConfigObject(DictObject):
             'mongoDbName': 'hamster',
             'rootpath': '',
             'storage': 'storage',
-            'external_storage': {},
             'file_serve': {},
             'secret_key': '!!seckey',
             'concurrent': 3,
@@ -38,6 +37,8 @@ class ConfigObject(DictObject):
             'allowed_ips': {},
             'ui_proxy': '',
             'port': 8370,
+            'debug': False,
+            'default_storage': 'file'
         }
         filename = filename or os.environ.get('CONFIG_FILE', 'config.yaml')
 
