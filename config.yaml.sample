@@ -10,3 +10,4 @@ plugins:
 rootpath: /app/
 secret_key: '!'
 storage: sources
+default_storage: hdf5
