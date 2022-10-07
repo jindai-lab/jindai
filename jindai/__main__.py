@@ -1,35 +1,36 @@
 """CLI for jindai"""
 
-import subprocess
 import base64
 import datetime
-import json
 import glob
+import json
 import os
-import sys
-import yaml
 import re
-from tempfile import mktemp
+import subprocess
+import sys
 import zipfile
 from io import BytesIO
+from itertools import chain
+from tempfile import mktemp
 from typing import Dict, Iterable
 
 import click
 import h5py
 import numpy as np
+import urllib3
+import yaml
 from flask import Flask
+from PyMongoWrapper import Fn, ObjectId
+from PyMongoWrapper.dbo import BatchSave, create_dbo_json_encoder
 from tqdm import tqdm
 
-from PyMongoWrapper import ObjectId, Fn
-from PyMongoWrapper.dbo import create_dbo_json_encoder, BatchSave
-from . import Plugin, PluginManager, Task, storage, config
-from .api import run_service, prepare_plugins
+from . import Plugin, PluginManager, Task, config, storage
+from .api import prepare_plugins, run_service
 from .helpers import get_context, safe_import
 from .models import F, MediaItem, Meta, Paragraph, TaskDBO, User
 
 MongoJSONEncoder = create_dbo_json_encoder(json.encoder.JSONEncoder)
 
-import urllib3
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 
@@ -79,46 +80,47 @@ def run_task(task_id, concurrent, verbose, edit, log):
     if not dbo:
         print(f'Task {task_id} not found')
         return
-    
+
     if edit:
         temp_name = mktemp()
         with open(temp_name, 'w', encoding='utf-8') as fo:
             dat = dbo.as_dict()
             yaml.safe_dump(dat, fo, allow_unicode=True)
-        
+
         if os.name == 'nt':
             editor = 'notepad.exe'
         elif os.system('which nano') == 0:
             editor = 'nano'
         else:
             editor = 'vi'
-            
+
         subprocess.Popen([editor, temp_name]).communicate()
-    
+
         with open(temp_name, encoding='utf-8') as fi:
             param = yaml.safe_load(fi)
             for key, val in param.items():
                 dbo[key] = val
             dbo.save()
-        
+
         os.unlink(temp_name)
-        
+
     _init_plugins()
-    
+
     logfile = open(log, 'w', encoding='utf-8') if log else sys.stderr
-        
-    task = Task.from_dbo(dbo, verbose=verbose, logger=lambda *x: print(*x, file=logfile))
-    
+
+    task = Task.from_dbo(dbo, verbose=verbose,
+                         logger=lambda *x: print(*x, file=logfile))
+
     if concurrent > 0:
         task.concurrent = concurrent
-    
+
     result = task.execute()
-    
+
     print()
     print(result)
-    
+
     if log:
-        print(result, file = logfile)
+        print(result, file=logfile)
         logfile.close()
 
 
@@ -167,51 +169,55 @@ def meta(key, value):
 @click.argument('infiles', nargs=-1)
 def storage_merge(infiles, output):
     """Merge h5df storage files"""
-    
+
     class _QuotaWriter:
-        
-        def __init__(self, quota: int, pattern = 'out') -> None:
+
+        def __init__(self, quota: int, pattern='out') -> None:
             self.quota = quota
             self.subtotal = 0
             self.file_num = 1
             self.file_pattern = pattern + '{}.h5'
             self._file = None
-            
+
         @property
         def file(self):
             if not self._file:
-                self._file = h5py.File(self.file_pattern.format(self.file_num), 'w')
+                self._file = h5py.File(
+                    self.file_pattern.format(self.file_num), 'w')
                 self.file_num += 1
             return self._file
-        
+
         def close(self):
             if self._file:
                 self._file.flush()
                 self._file.close()
                 self._file = None
             self.subtotal = 0
-        
+
         def write(self, key, val):
             if self.subtotal + len(val) > self.quota:
                 self.close()
-            
+
             self.file[f'data/{key}'] = np.frombuffer(val, dtype='uint8')
             self.subtotal += len(val)
-            
+
     inputs = []
     for file in infiles:
         inputs += glob.glob(file)
     print(len(inputs), 'files')
-            
-    items = {str(i['_id']) for i in MediaItem.aggregator.project(_id=1).perform(raw=True)}
-    items.update({i.thumbnail.split('://')[1] for i in MediaItem.query(F.thumbnail.regex('^hdf5://')) if i.thumbnail})
+
+    items = {str(i['_id'])
+             for i in MediaItem.aggregator.project(_id=1).perform(raw=True)}
+    items.update({i.thumbnail.split(
+        '://')[1] for i in MediaItem.query(F.thumbnail.regex('^hdf5://')) if i.thumbnail})
     print(len(items), 'items')
-        
+
     output_file = _QuotaWriter(40 << 30, output)
     total = 0
     for h5 in inputs:
         h5 = h5py.File(h5, 'r')
-        if 'data' not in h5: continue
+        if 'data' not in h5:
+            continue
         for key in tqdm(h5['data']):
             try:
                 if key in items:
@@ -224,15 +230,15 @@ def storage_merge(infiles, output):
         h5.close()
     output_file.close()
     print('Total:', total, 'bytes')
-    
-    
+
+
 @cli.command('storage-convert')
 @click.option('--infile', '-i')
 @click.option('--output', '-o')
 @click.option('--format', '-f')
 def stroage_convert(infile, output, format):
     assert format in ('sqlite',)
-    
+
     if format == 'sqlite':
         import sqlite3
         conn = sqlite3.connect(output)
@@ -241,16 +247,16 @@ def stroage_convert(infile, output, format):
                      CREATE TABLE IF NOT EXISTS data (id TEXT PRIMARY KEY, bytes BLOB, ctime TIMESTAMP)
                      """)
         inp = h5py.File(infile)['data']
-        
+
         for k in tqdm(inp):
-            buf = inp[k][:].tobytes() 
+            buf = inp[k][:].tobytes()
             try:
                 outp.execute("""
                             REPLACE INTO data VALUES (?, ?, ?)
                             """, (k, buf, datetime.datetime.utcnow()))
             except Exception as ex:
                 print(ex)
-        
+
         outp.close()
         conn.commit()
         conn.close()
@@ -288,22 +294,26 @@ def dump(output, colls):
 @click.option('--to', '-t')
 def replace_tag(from_, to):
     from plugins.autotagging import AutoTag
-    from .models import Paragraph, Term, Fn
-    Paragraph.query(F.keywords == from_, F.author == from_).update(Fn.set(author=to))
+
+    from .models import Fn, Paragraph, Term
+    Paragraph.query(F.keywords == from_, F.author ==
+                    from_).update(Fn.set(author=to))
     qs = Paragraph.query(F.keywords == from_)
     qs.update(Fn.addToSet(keywords=to))
     qs.update(Fn.pull(keywords=from_))
     AutoTag.query(F.tag == from_).update(Fn.set(tag=to))
-    Term.query(F.term == from_, F.field == 'keywords').update(Fn.set(F.term == to))
+    Term.query(F.term == from_, F.field ==
+               'keywords').update(Fn.set(F.term == to))
     print('OK')
 
 
 @cli.command('keywords-fix')
 @click.option('--cond', '-c')
 def replace_tag(cond):
-    from .models import Paragraph, Fn
     from .dbquery import parser
-    rs = Paragraph.query(parser.parse(cond)).update([Fn.set(keywords=Fn.setIntersection('$keywords', '$keywords'))])
+    from .models import Fn, Paragraph
+    rs = Paragraph.query(parser.parse(cond)).update(
+        [Fn.set(keywords=Fn.setIntersection('$keywords', '$keywords'))])
     print('OK', rs.modified_count)
 
 
@@ -441,42 +451,43 @@ def plugin_export(output: str, infiles):
     :param infiles: includes path
     :type infiles: path
     """
-        
+
     def _all_files(path):
         if os.path.isfile(path):
             yield path
         else:
             for base, _, files in os.walk(path):
-                if base == '__pycache__': continue
+                if base == '__pycache__':
+                    continue
                 for f in files:
                     yield os.path.join(base, f)
-                
+
     def _export_one(outputzip, filelist):
         if not outputzip.startswith('jindai.plugins.'):
             outputzip = f'jindai.plugins.{outputzip}'
         if outputzip.endswith('.zip'):
             outputzip = outputzip[:-4]
-            
+
         print('output to', outputzip)
         with zipfile.ZipFile(outputzip + '.zip', 'w', zipfile.ZIP_DEFLATED) as zout:
             for filepath in filelist:
                 for filename in _all_files(filepath):
                     print(' ...', filename)
                     zout.write(filename, filename)
-                
+
     if len(infiles) > 0:
         _export_one(output, infiles)
     else:
         for p in glob.glob('plugins/*'):
             pname = os.path.basename(p)
             if pname.startswith(('_', 'temp_')) \
-                or ('.' in p and not p.endswith('.py')) \
-                or ('.' not in p and os.path.isfile(p)):
+                    or ('.' in p and not p.endswith('.py')) \
+                    or ('.' not in p and os.path.isfile(p)):
                 continue
             if pname in ('datasources', 'hashing', 'imageproc', 'pipelines', 'shortcuts',
-                     'taskqueue.py', 'onedrive.py', 'scheduler.py', 'autotagging.py'):
+                         'taskqueue.py', 'onedrive.py', 'scheduler.py', 'autotagging.py'):
                 continue
-            
+
             _export_one(os.path.basename(p).split('.')[0], [p])
 
 
@@ -496,9 +507,10 @@ def clear_duplicates(limit: int, offset: str, maxdups: int):
     else:
         offset = {}
 
-    from .models import Paragraph, MediaItem
+    from .models import MediaItem, Paragraph
 
-    rs = MediaItem.query(~F.dhash.empty(), ~F.whash.empty(), offset).sort(-F.id)
+    rs = MediaItem.query(~F.dhash.empty(), ~
+                         F.whash.empty(), offset).sort(-F.id)
     if limit:
         rs = rs.limit(limit)
 
@@ -512,10 +524,10 @@ def clear_duplicates(limit: int, offset: str, maxdups: int):
         for m in (pbar := tqdm(rs, total=min(limit, rs.count()) if limit else rs.count())):
             if m.id in cleared:
                 continue
-            
+
             dups = [d for d in MediaItem.query(
                     F.dhash == m.dhash, F.whash == m.whash, F.id != m.id, _around(m))]
-            
+
             if len(dups) > maxdups:
                 print(m.id, m.dhash.hex(), len(dups))
                 continue
@@ -524,7 +536,7 @@ def clear_duplicates(limit: int, offset: str, maxdups: int):
                 Paragraph.merge_by_mediaitems(m, dups)
                 cleared.update({d.id for d in dups})
                 pbar.set_description(f'{len(cleared)} merged')
-                
+
     except KeyboardInterrupt:
         pass
     except Exception as ex:
@@ -533,40 +545,51 @@ def clear_duplicates(limit: int, offset: str, maxdups: int):
     print(len(cleared), 'duplicates merged.')
     if 'm' in locals():
         print('You may continue with offset', m.id)
-        
-        
+
+
 @cli.command('items-fix')
 @click.option('-q', '--quiet', default=False, flag_value=True)
 def fix_integrity(quiet):
-    mediaitems = {m['_id'] for m in MediaItem.aggregator.project(_id=1).perform(raw=True)}
-    checkeditems = set()
+    mediaitems = {m['_id']
+                  for m in MediaItem.aggregator.project(_id=1).perform(raw=True)}
+    checkeditems = set(chain(
+        *[p['images'] for p in Paragraph.aggregator.project(images=1).perform(raw=True)]))
+    unlinked = mediaitems - checkeditems
+
     print(len(mediaitems), 'items')
-    
-    for p in tqdm(Paragraph.aggregator.project(_id=1, images=1).perform(raw=True), desc='Checking paragraph items'):
+
+    for p in tqdm(Paragraph.aggregator.match(
+            F.images.in_(checkeditems - mediaitems)
+        ).project(
+            _id=1, images=1
+    ).perform(
+            raw=True
+    ), desc='Checking paragraph items'):
         images = set(p['images']).intersection(mediaitems)
-        checkeditems.update(images)
         if len(images) != len(p['images']):
-            Paragraph.query(F.id == p['_id']).update(Fn.set(images=list(images)))
-            
-    mediaitems -= checkeditems
-    print(len(mediaitems), 'unlinked items')
-    if len(mediaitems) and (quiet or click.confirm('restore?')):
+            Paragraph.query(F.id == p['_id']).update(
+                Fn.set(images=list(images)))
+
+    print(len(unlinked), 'unlinked items')
+    if len(unlinked) and (quiet or click.confirm('restore?')):
         with BatchSave(performer=Paragraph) as batch:
-            for m in tqdm(mediaitems, desc='Restoring unlinked media items'):
+            for m in tqdm(unlinked, desc='Restoring unlinked media items'):
                 m = MediaItem.first(F.id == m)
-                if m is None: continue
+                if m is None:
+                    continue
                 batch.add(Paragraph(dataset='', lang='auto', images=[m], source=m.source,
-                        keywords=['restored', 'restored:' + datetime.datetime.now().strftime('%Y%m%d_%H%M%S')]
-                ))
+                                    keywords=[
+                                        'restored', 'restored:' + datetime.datetime.now().strftime('%Y%m%d_%H%M%S')]
+                                    ))
 
 
 @cli.command('sync-terms')
 @click.option('--field', default='keywords')
 @click.option('--cond', default='')
 def sync_terms(field, cond):
-    from .models import Term, Paragraph
     from .dbquery import parser
-    
+    from .models import Paragraph, Term
+
     Term.query(F.field == field).delete()
     agg = Paragraph.aggregator.project(**{field: 1})
     if field == 'keywords':
@@ -574,11 +597,11 @@ def sync_terms(field, cond):
     if cond:
         agg = agg.match(parser.parse(cond))
     agg = agg.group(_id='$' + field).project(term='$_id', field=field)
-    
+
     with BatchSave(performer=Term) as batch:
         for p in tqdm(agg.perform(raw=True)):
             batch.add(p)
-    
+
     print('OK')
 
 
@@ -600,7 +623,7 @@ def web_service(port: int, deployment: bool):
     else:
         run_service(port=port)
 
-            
+
 @cli.command('storage-serve')
 @click.option('--port', '-p', default=8371)
 @click.option('--host', '-h', default='0.0.0.0')
@@ -608,7 +631,8 @@ def web_service(port: int, deployment: bool):
 def serve_storage(port: int, host: str, debug: bool):
     """Serve storage
     """
-    if debug is None: debug = config.debug
+    if debug is None:
+        debug = config.debug
     _init_plugins()
     storage.serve(host, port, debug=debug)
 
@@ -617,35 +641,38 @@ def serve_storage(port: int, host: str, debug: bool):
 def call_ipython():
     from IPython import start_ipython
     os.chdir(os.path.join(os.path.dirname(os.path.abspath(__file__)), '..'))
-    
-    import jindai
-    from PyMongoWrapper import F, Fn, Var
-    from bson import SON, Binary, ObjectId
-    import sys
+
     import glob
-    from tqdm import tqdm
+    import sys
     from concurrent.futures import ThreadPoolExecutor
+
+    from bson import SON, Binary, ObjectId
+    from PyMongoWrapper import F, Fn, Var
+    from tqdm import tqdm
+
+    import jindai
     tpe = ThreadPoolExecutor(os.cpu_count())
     init = _init_plugins
-    
+
     def q(query_str, model=''):
-        from jindai import parser, Paragraph
-        
+        from jindai import Paragraph, parser
+
         if isinstance(model, str):
             model = Paragraph.get_coll(model)
-        
+
         q = parser.parse(query_str)
         if isinstance(q, list):
             return model.aggregate(q)
-        
+
         return model.query(q)
-    
+
     def run(task_name):
-        dbo = TaskDBO.first((F.id if re.match('^[0-9a-fA-F]{24}$', task_name) else F.name) == task_name)
+        dbo = TaskDBO.first(
+            (F.id if re.match('^[0-9a-fA-F]{24}$', task_name) else F.name) == task_name)
         if dbo:
             task = Task.from_dbo(dbo)
             return task.execute()
-        
+
     def deep_delete(rs):
         mediaitems = set()
         for p in rs:
@@ -655,10 +682,10 @@ def call_ipython():
             elif isinstance(p, MediaItem):
                 mediaitems.add(m.id)
             p.delete()
-        
+
         for m in mediaitems:
             Paragraph.query(F.images == m.id).update(Fn.pull(images=m.id))
-            
+
     ns = dict(jindai.__dict__)
     ns.update(**locals())
 
