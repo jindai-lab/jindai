@@ -506,7 +506,7 @@ def clear_duplicates(limit: int, offset: str, maxdups: int):
     cleared = 0
 
     try:
-        for m in tqdm(rs, total=min(limit, rs.count()) if limit else rs.count()):
+        for m in (pbar := tqdm(rs, total=min(limit, rs.count()) if limit else rs.count())):
             dups = list(MediaItem.query(F.dhash == m.dhash,
                         F.whash == m.whash, F.id != m.id, _around(m)))
             if len(dups) > maxdups:
@@ -516,13 +516,14 @@ def clear_duplicates(limit: int, offset: str, maxdups: int):
             if dups:
                 Paragraph.merge_by_mediaitems(m, dups)
                 cleared += len(dups)
+                pbar.set_description(f'{cleared} merged')
     except KeyboardInterrupt:
         pass
     except Exception as ex:
-        print(ex)
+        print(type(ex).__name__, ex, locals().get('m', {'id': ''})['id'])
 
     print(cleared, 'duplicates merged.')
-    if m:
+    if 'm' in locals():
         print('You may continue with offset', m.id)
         
         
@@ -557,14 +558,16 @@ def fix_integrity(quiet):
 def sync_terms(field, cond):
     from .models import Term, Paragraph
     from .dbquery import parser
+    
     Term.query(F.field == field).delete()
     agg = Paragraph.aggregator.project(**{field: 1})
-    if field == 'keywords': agg = agg.unwind('$' + field)
+    if field == 'keywords':
+        agg = agg.unwind('$' + field)
     if cond:
         agg = agg.match(parser.parse(cond))
     agg = agg.group(_id='$' + field).project(term='$_id', field=field)
     
-    with BatchSave(saver=Term) as batch:
+    with BatchSave(performer=Term) as batch:
         for p in tqdm(agg.perform(raw=True)):
             batch.add(p)
     
