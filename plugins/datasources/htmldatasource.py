@@ -11,6 +11,7 @@ from concurrent.futures import ThreadPoolExecutor
 from urllib.parse import urljoin
 from bs4 import BeautifulSoup as B
 
+from PyMongoWrapper import F
 from jindai.models import MediaItem, Paragraph
 from jindai.pipeline import DataSourceStage
 from jindai import storage, parser
@@ -50,7 +51,6 @@ class HTMLDataSource(DataSourceStage):
             self.files = storage.expand_patterns(content)
             self.fields = parser.parse(fields)
             self.paragraph_selector = paragraph_selector
-        
 
         def import_html_src(self, path, html, outline=''):
             """Generate paragraph from html datasources"""
@@ -239,10 +239,11 @@ class WebPageListingDataSource(DataSourceStage):
 
         def read_html(self, url):
             """Read html from url, return BeautifulSoup object"""
-            html = storage.open(url, proxies=self.proxies).read()
-            if not html:
+            try:
+                html = storage.open(url, proxies=self.proxies).read()
+            except OSError:
                 self.logger('Cannot read from', url)
-                return
+                html = b''
 
             b = B(html.decode('utf-8'), 'lxml')
             return b
@@ -259,7 +260,7 @@ class WebPageListingDataSource(DataSourceStage):
             if not b:
                 return None
 
-            para = Paragraph(source={'url': url}, pdate=datetime.datetime.utcnow(),
+            para = Paragraph.first(F['source.url'] == url) or Paragraph(source={'url': url}, pdate=datetime.datetime.utcnow(),
                              dataset=self.dataset, lang=self.lang)
             para.content = self.get_text(b)
             para.keywords = self.tags
@@ -279,7 +280,7 @@ class WebPageListingDataSource(DataSourceStage):
                         continue
                     items.add(upath)
 
-                    para.images.append(MediaItem(
+                    para.images.append(MediaItem.first(F['source.url'] == upath) or MediaItem(
                         source={'url': upath},
                         item_type=MediaItem.get_type(upath.rsplit('.', 1)[-1]) or 'image')
                     )
@@ -298,41 +299,50 @@ class WebPageListingDataSource(DataSourceStage):
                 urljoin(url, a['href'])
                 for a in b.select('a[href]')
             }
+            self.logger(len(links), 'links')
 
-            return [u for u in links if self.list_link.search(u) or self.detail_link.search(u)]
+            links = [u for u in links if self.list_link.search(u) or self.detail_link.search(u)]
+            self.logger(len(links), 'matched list or detail pattern')
+            
+            return links
 
         def fetch(self):
-
             queue = [(p, 1) for p in storage.expand_patterns(self.patterns)]
             visited = set()
 
             def _do_parse(q_tup):
                 url, level = q_tup
-                if url in visited or Paragraph.get_coll(self.mongocollection).first(
-                        {'source.url': url}):
+                if url in visited:
+                    self.logger('found', url, 'visited, skip')
                     return
+                if level > self.list_depth:
+                    self.logger('exceeded max list depth, skip', url)
+                    return
+                
+                visited.add(url)
 
                 b = self.read_html(url)
 
-                if level <= self.list_depth:
+                if self.list_link.search(url) or self.detail_link.search(url):
+                    self.logger('parse as list', url)
                     for upath in self.parse_list(url, b):
-                        yield upath, level
+                        yield upath, level + 1
 
-                if level == self.list_depth or self.detail_link.search(url):
+                if self.detail_link.search(url):
+                    self.logger('parse as detail', url)
                     para = self.parse_detail(url, b)
                     if para:
-                        yield para, level
+                        yield para, level + 1
 
+            tpe = ThreadPoolExecutor(5)
             while queue:
                 self.logger(f'Queuing {len(queue)} urls')
-                tpe = ThreadPoolExecutor(5)
                 for riter in tpe.map(_do_parse, queue[:5]):
                     for res, level in riter:
                         if isinstance(res, Paragraph):
                             yield res
                         elif isinstance(res, str):
-                            if res not in visited:
-                                visited.add(res)
+                            if res not in visited and res not in queue:
                                 self.logger('add', res, 'to queue')
                                 queue.append((res, level))
                 queue = queue[5:]

@@ -191,11 +191,10 @@ class TwitterDataSource(DataSourceStage):
                     else:
                         url = media.media_url_https
                     if url:
-                        item = MediaItem.first(F['source.url'] == url)
-                        if item is None:
-                            item = MediaItem(
+                        item = MediaItem.first(F['source.url'] == url) or MediaItem(
                                 source={'url': url},
                                 item_type='video' if media.video_info else 'image')
+                        if not item.id:
                             item.save()
                             self.logger('... add new item', url)
                             para.images.append(item)
