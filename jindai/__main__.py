@@ -142,6 +142,9 @@ def user_manage(add, delete, setrole, roles):
         User.query(F.username == delete).delete()
     elif setrole:
         user = User.first(F.username == setrole)
+        if not user:
+            print('User', setrole, 'does not exist.')
+            exit()
         user.roles = roles
         user.save()
 
@@ -477,7 +480,7 @@ def plugin_export(output: str, infiles):
             _export_one(os.path.basename(p).split('.')[0], [p])
 
 
-@cli.command('items-clear-dup')
+@cli.command('items-dedup')
 @click.option('--limit', '-l', type=int, default=0)
 @click.option('--offset', '-s', type=str, default='')
 @click.option('--maxdups', '-m', type=int, default=10)
@@ -503,26 +506,31 @@ def clear_duplicates(limit: int, offset: str, maxdups: int):
         return (F.width <= m.width * (1+ratio)) & (F.width >= m.width * (1-ratio)) & \
             (F.height <= m.height * (1+ratio)) & (F.height >= m.height * (1-ratio))
 
-    cleared = 0
+    cleared = set()
 
     try:
         for m in (pbar := tqdm(rs, total=min(limit, rs.count()) if limit else rs.count())):
-            dups = list(MediaItem.query(F.dhash == m.dhash,
-                        F.whash == m.whash, F.id != m.id, _around(m)))
+            if m.id in cleared:
+                continue
+            
+            dups = [d for d in MediaItem.query(
+                    F.dhash == m.dhash, F.whash == m.whash, F.id != m.id, _around(m))]
+            
             if len(dups) > maxdups:
                 print(m.id, m.dhash.hex(), len(dups))
                 continue
 
             if dups:
                 Paragraph.merge_by_mediaitems(m, dups)
-                cleared += len(dups)
-                pbar.set_description(f'{cleared} merged')
+                cleared.update({d.id for d in dups})
+                pbar.set_description(f'{len(cleared)} merged')
+                
     except KeyboardInterrupt:
         pass
     except Exception as ex:
         print(type(ex).__name__, ex, locals().get('m', {'id': ''})['id'])
 
-    print(cleared, 'duplicates merged.')
+    print(len(cleared), 'duplicates merged.')
     if 'm' in locals():
         print('You may continue with offset', m.id)
         

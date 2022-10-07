@@ -44,6 +44,7 @@ sources*
 ui/
 
 plugins/jiayan
+plugins/autocompletion
 plugins/libgen
 plugins/nima
 plugins/image_captioning
