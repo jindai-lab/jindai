@@ -4,10 +4,12 @@ Import from web or file
 """
 
 import codecs
+from collections import deque
 import re
 import json
 import datetime
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import Future, ThreadPoolExecutor
+import time
 from urllib.parse import urljoin
 from bs4 import BeautifulSoup as B
 
@@ -187,6 +189,7 @@ class WebPageListingDataSource(DataSourceStage):
         def __init__(self, dataset, patterns,
                      mongocollection='', lang='auto', detail_link='',
                      list_link='', proxy='', list_depth=1, tags='',
+                     parallel_n=10,
                      img_pattern=DEFAULT_IMG_PATTERNS) -> None:
             """
             Args:
@@ -220,6 +223,9 @@ class WebPageListingDataSource(DataSourceStage):
                 mongocollection (str):
                     Mongo Collection name
                     @chs 数据库集合名
+                parallel_n (int):
+                    Parallel download threads
+                    @chs 并行下载线程数
             """
             super().__init__()
             self.proxies = {} if not proxy else {
@@ -236,6 +242,7 @@ class WebPageListingDataSource(DataSourceStage):
             self.image_patterns = img_pattern.split('\n')
             self.mongocollection = mongocollection
             self.convert = Paragraph.get_converter(mongocollection)
+            self.n = parallel_n
 
         def read_html(self, url):
             """Read html from url, return BeautifulSoup object"""
@@ -260,8 +267,9 @@ class WebPageListingDataSource(DataSourceStage):
             if not b:
                 return None
 
-            para = Paragraph.first(F['source.url'] == url) or Paragraph(source={'url': url}, pdate=datetime.datetime.utcnow(),
-                             dataset=self.dataset, lang=self.lang)
+            para = Paragraph.first(F['source.url'] == url) or Paragraph(
+                source={'url': url}, pdate=datetime.datetime.utcnow(),
+                dataset=self.dataset, lang=self.lang)
             para.content = self.get_text(b)
             para.keywords = self.tags
             para.title = self.get_text(b.find('title'))
@@ -301,24 +309,21 @@ class WebPageListingDataSource(DataSourceStage):
             }
             self.logger(len(links), 'links')
 
-            links = [u for u in links if self.list_link.search(u) or self.detail_link.search(u)]
+            links = [u for u in links if self.list_link.search(
+                u) or self.detail_link.search(u)]
             self.logger(len(links), 'matched list or detail pattern')
-            
+
             return links
 
         def fetch(self):
-            queue = [(p, 1) for p in storage.expand_patterns(self.patterns)]
+            queue = deque([(p, 1)
+                          for p in storage.expand_patterns(self.patterns)])
             visited = set()
 
-            def _do_parse(q_tup):
-                url, level = q_tup
+            def _do_parse(url, level):
                 if url in visited:
                     self.logger('found', url, 'visited, skip')
                     return
-                if level > self.list_depth:
-                    self.logger('exceeded max list depth, skip', url)
-                    return
-                
                 visited.add(url)
 
                 b = self.read_html(url)
@@ -334,18 +339,33 @@ class WebPageListingDataSource(DataSourceStage):
                     if para:
                         yield para, level + 1
 
-            tpe = ThreadPoolExecutor(5)
-            while queue:
-                self.logger(f'Queuing {len(queue)} urls')
-                for riter in tpe.map(_do_parse, queue[:5]):
-                    for res, level in riter:
-                        if isinstance(res, Paragraph):
-                            yield res
-                        elif isinstance(res, str):
-                            if res not in visited and res not in queue:
-                                self.logger('add', res, 'to queue')
-                                queue.append((res, level))
-                queue = queue[5:]
+            running_futures = set()
+            results = deque()
+
+            def _enqueue(fut: Future):
+                riter = fut.result()
+                running_futures.remove(id(fut))
+                for res, level in riter:
+                    if isinstance(res, Paragraph):
+                        results.append(res)
+                    elif isinstance(res, str):
+                        if res not in visited and res not in queue and level <= self.list_depth:
+                            self.logger('add', res, 'to queue')
+                            queue.append((res, level))
+
+            tpe = ThreadPoolExecutor(self.n)
+
+            while queue or running_futures or results:
+                if queue:
+                    self.logger(f'Queuing {len(queue)} urls')
+                    arg = queue.popleft()
+                    future = tpe.submit(_do_parse, *arg)
+                    running_futures.add(id(future))
+                    future.add_done_callback(_enqueue)
+                if running_futures:
+                    time.sleep(1)
+                while results:
+                    yield results.popleft()
 
 
 class JSONDataSource(DataSourceStage):
