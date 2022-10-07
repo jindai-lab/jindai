@@ -186,13 +186,13 @@ class ImageImportDataSource(DataSourceStage):
 
                     album = albums[filename]
                     if not album.source:
-                        album.source = {'file': filename}
+                        album.source = {'url': 'file://' + filename}
                         album.keywords += self.keywords
                         album.pdate = datetime.datetime.utcfromtimestamp(ftime)
                         album.dataset = self.dataset
                         album.content = filename
 
-                    i = MediaItem(source={'file': loc, 'url': '.' + extname},
+                    i = MediaItem(source={'file': loc, 'url': 'file://' + loc},
                                   item_type=MediaItem.get_type(extname))
                     i.save()
                     path = storage.default_path(i.id)

@@ -363,7 +363,7 @@ class WebPageListingDataSource(DataSourceStage):
                     running_futures.add(id(future))
                     future.add_done_callback(_enqueue)
                 if running_futures:
-                    time.sleep(1)
+                    time.sleep(0.1)
                 while results:
                     yield results.popleft()
 
