@@ -335,6 +335,9 @@ class Paragraph(db.DbObject):
 
     def merge(self, others):
         
+        if not others:
+            return
+        
         def _date_str(s):
             try:
                 dt = dateutil.parser.parse(s) if isinstance(s, str) else s

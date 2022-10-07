@@ -43,12 +43,21 @@ docs/_build/
 sources*
 ui/
 
-# all plugins should be excepted from main git repo
-# they can be installed and updated with plugin manager
-plugins/
+plugins/jiayan
+plugins/libgen
+plugins/nima
+plugins/image_captioning
+plugins/hanzi
+plugins/facedet
+plugins/autorating
+plugins/onedrive_token_cache
+plugins/mt.py
+plugins/ner.py
+plugins/sentiment.py
+plugins/calibre.py
 
 core
-
+._*
 *.swp
 docker-compose.yaml
 *.db
