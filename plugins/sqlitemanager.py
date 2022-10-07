@@ -12,49 +12,35 @@ from jindai.storage import StorageManager
 
 class _WrappedCursor:
     
-    def __init__(self, cursor) -> None:
-        self._cursor = cursor
+    def __init__(self, conn) -> None:
+        self._conn = conn
+        self._cursor = conn.cursor()
         
     def __enter__(self, *_):
         return self._cursor
     
     def __exit__(self, *_):
         self._cursor.close()
+        self._conn.commit()
+        self._conn.close()
 
 
 class SqliteSingleAccessor:
     
     def __init__(self, file) -> None:
-        self._conn = sqlite3.connect(file)
+        self._file = file
         self._last_write = 0
         with self.cursor() as cursor:
             cursor.execute("""CREATE TABLE IF NOT EXISTS data (id TEXT PRIMARY KEY, bytes BLOB, updated TIMESTAMP)""")
-        self._daemon_thread = None
-        self._daemon_lock = threading.Lock
-        
-    def _daemon(self):
-        while self._last_write != 0:
-            if self._last_write != 0 and time() - self._last_write > 60:
-                self._conn.commit()
-                self._last_write = 0
-            sleep(60)
-        with self._daemon_lock:
-            self._daemon_thread = None
         
     def cursor(self):
-        return _WrappedCursor(self._conn.cursor())
+        _conn = sqlite3.connect(self._file)
+        return _WrappedCursor(_conn)
         
     def write(self, key, buf):
         self._last_write = time()
         with self.cursor() as cursor:
             cursor.execute("""INSERT OR REPLACE INTO data VALUES (?, ?, ?)""", (key, buf, datetime.utcnow()))
-        self._check_daemon()
-        
-    def _check_daemon(self):
-        if not self._daemon_thread:
-            with self._daemon_lock:
-                self._daemon_thread = threading.Thread(target=self._daemon)
-                self._daemon_thread.start()
         
     def read(self, key):
         with self.cursor() as cursor:
@@ -109,7 +95,7 @@ class SqliteManager(StorageManager):
     
     def write(self, path, data: bytes) -> bool:
         path = self._get_item_id(path)
-        self.dbs[-1].write(data)
+        self.dbs[-1].write(path, data)
         return True
     
     def listdir(self, path: str) -> list:
