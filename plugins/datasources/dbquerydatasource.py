@@ -192,8 +192,9 @@ class ImageImportDataSource(DataSourceStage):
                         album.dataset = self.dataset
                         album.content = filename
 
-                    i = MediaItem(source={'file': loc, 'url': 'file://' + loc},
-                                  item_type=MediaItem.get_type(extname))
+                    i = MediaItem.get('file://' + loc,
+                                      source={'file': loc},
+                                      item_type=MediaItem.get_type(extname))
                     i.save()
                     path = storage.default_path(i.id)
                     with storage.open(path, 'wb') as fout:
@@ -220,9 +221,9 @@ class ImageImportDataSource(DataSourceStage):
             imgset = set()
 
             for url in storage.expand_patterns(paths):
-                p = Paragraph.first(F.source == {'url': url}) or Paragraph(
+                p = Paragraph.get(url,
                     dataset=self.dataset,
-                    source={'url': url}, images=[], pdate=datetime.datetime.utcnow())
+                    images=[], pdate=datetime.datetime.utcnow())
                 if url.endswith('.jpg'):
                     imgs = [('', url)]
                     title = ''
@@ -259,8 +260,7 @@ class ImageImportDataSource(DataSourceStage):
                             continue
                     if imgurl not in imgset:
                         self.logger(imgurl)
-                        i = MediaItem.first(F.source == {'url': imgurl}) or MediaItem(
-                            source={'url': imgurl}, item_type=MediaItem.get_type(imgurl))
+                        i = MediaItem.get(imgurl, item_type=MediaItem.get_type(imgurl))
                         i.save()
                         p.images.append(i)
                         imgset.add(imgurl)

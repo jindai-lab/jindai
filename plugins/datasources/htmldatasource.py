@@ -288,9 +288,8 @@ class WebPageListingDataSource(DataSourceStage):
                         continue
                     items.add(upath)
 
-                    para.images.append(MediaItem.first(F['source.url'] == upath) or MediaItem(
-                        source={'url': upath},
-                        item_type=MediaItem.get_type(upath.rsplit('.', 1)[-1]) or 'image')
+                    para.images.append(
+                        MediaItem.get(upath, item_type=MediaItem.get_type(upath.rsplit('.', 1)[-1]) or 'image')
                     )
 
             self.logger(f'Found {len(para.images)} images in {url}')

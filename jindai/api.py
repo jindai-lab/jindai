@@ -737,16 +737,14 @@ def resolve_media_item(coll=None, storage_id=None, ext=None):
         if item is None:
             return Response('', 404)
         source = item.source
-        source['block_id'] = str(item.id)
     else:
         source = request.args.to_dict()
 
     def _build_image_string(source):
         fpath, url = source.get('file'), source.get('url')
-        block_id = str(source.get('block_id', ''))
         if fpath:
             if '://' in fpath:
-                return fpath.replace('://', '/').replace('$', block_id)
+                return fpath.replace('://', '/')
             elif fpath.endswith('.pdf') and 'page' in source:
                 return f'file/{fpath}/__hash/pdf/{source["page"]}'
             else:
