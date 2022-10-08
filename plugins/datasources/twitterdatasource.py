@@ -162,7 +162,7 @@ class TwitterDataSource(DataSourceStage):
             if tweet.id in self.imported:
                 return
             self.imported.add(tweet.id)
-            para = Paragraph.first(F.tweet_id == f'{tweet.id}')
+            para = Paragraph.get(F.tweet_id == f'{tweet.id}', tweet_id=f'{tweet.id}')
 
             self.logger(
                 tweet_url, 'skip' if para is not None and skip_existent else '')
@@ -191,9 +191,7 @@ class TwitterDataSource(DataSourceStage):
                     else:
                         url = media.media_url_https
                     if url:
-                        item = MediaItem.first(F['source.url'] == url) or MediaItem(
-                                source={'url': url},
-                                item_type='video' if media.video_info else 'image')
+                        item = MediaItem.get(url, item_type='video' if media.video_info else 'image')
                         if not item.id:
                             item.save()
                             self.logger('... add new item', url)

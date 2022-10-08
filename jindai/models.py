@@ -1,6 +1,6 @@
 """DB Objects"""
 import datetime
-from typing import Iterable, List
+from typing import Iterable, List, Union
 import unicodedata
 import dateutil
 import time
@@ -9,7 +9,7 @@ from io import BytesIO
 import pyotp
 
 from PIL import Image, ImageFile
-from PyMongoWrapper import F, Fn, Var
+from PyMongoWrapper import F, Fn, Var, MongoOperand
 from PyMongoWrapper.dbo import (Anything, DbObjectCollection,
                                 DbObjectInitializer, MongoConnection, classproperty)
 
@@ -62,9 +62,41 @@ class Term(db.DbObject):
         if term is not None:
             return tobj
         return Term(term=term, field=field).save()
+    
+    
+class ObjectWithSource(db.DbObject):
+    """Object with Source"""
+    source = DbObjectInitializer(dict, dict)
+    
+    @classmethod
+    def get(cls, url_or_cond: Union[str, MongoOperand, dict], **kwargs):
+        source = kwargs.pop('source', {})
+        if isinstance(url_or_cond, str):
+            source['url'] = url_or_cond
+            cond = F['source.url'] == url_or_cond
+        else:
+            cond = url_or_cond
 
+        p = cls.first(cond)
+        if p:
+            return p
+        return cls(source=source, **kwargs)
 
-class MediaItem(db.DbObject):
+    @staticmethod
+    def merge_source(source1, source2):
+        s_url = source1.get('url', '')
+        t_url = source2.get('url', '')
+        if '://' not in s_url and '://' in t_url:
+            source1['url'] = t_url
+            
+        s_file = source1.get('file', '')
+        t_file = source2.get('file', '')
+        if not s_file and t_file:
+            source1['file'] = t_file
+        return source1
+    
+
+class MediaItem(ObjectWithSource):
     """Image item"""
 
     width = int
@@ -72,7 +104,6 @@ class MediaItem(db.DbObject):
     thumbnail = str
     item_type = str
     rating = float
-    source = DbObjectInitializer(dict, dict)
 
     _IMAGE_EXTS = ['jpg',
                    'jpeg',
@@ -168,6 +199,10 @@ class MediaItem(db.DbObject):
             self._data.seek(0)
             
         return self._data
+    
+    @data.setter
+    def data(self, value):
+        self._data = value
 
     def as_dict(self, expand=False):
         d = super().as_dict(expand)
@@ -194,9 +229,9 @@ class MediaItem(db.DbObject):
 
     def __lt__(self, another):
         return id(self) < id(another)
+    
 
-
-class Paragraph(db.DbObject):
+class Paragraph(ObjectWithSource):
     """Paragraph object"""
 
     dataset = str
@@ -303,6 +338,8 @@ class Paragraph(db.DbObject):
         references = list(Paragraph.query(F.images.in_(list(dup_ids))))
         
         result.merge(references)
+        result.images.append(preserved)
+
         for para in references:
             para.images.remove(dup_ids)
             para.save()
@@ -310,7 +347,7 @@ class Paragraph(db.DbObject):
         for i in dups:
             if i.id == preserved.id:
                 continue
-            preserved.source = Paragraph.merge_source(preserved.source, i.source, i.id)
+            preserved.source = ObjectWithSource.merge_source(preserved.source, i.source)
             i.delete()
 
         result.save()
@@ -319,20 +356,6 @@ class Paragraph(db.DbObject):
     def __lt__(self, another):
         return id(self) < id(another)
     
-    @staticmethod
-    def merge_source(source1, source2, source2_id):
-        s_url = source1.get('url', '')
-        t_url = source2.get('url', '')
-        if '://' not in s_url and '://' in t_url:
-            source1['url'] = t_url
-            
-        s_file = source1.get('file', '')
-        t_file = source2.get('file', '')
-        if not s_file and t_file:
-            source1['file'] = t_file
-            source1['block_id'] = str(source2_id)
-        return source1
-
     def merge(self, others):
         
         if not others:
@@ -359,7 +382,7 @@ class Paragraph(db.DbObject):
                     for another in others:
                         if '://' in self[field].get('url', ''):
                             break
-                        self[field] = Paragraph.merge_source(self[field], another[field], another.id)
+                        self[field] = ObjectWithSource.merge_source(self[field], another[field])
 
                 elif field in ('keywords', 'images'):
                     arr = self[field]
