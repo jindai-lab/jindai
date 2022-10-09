@@ -243,7 +243,7 @@ class Paragraph(ObjectWithSource):
     content = str
     pagenum = Anything
     lang = str
-    images = DbObjectCollection(MediaItem)
+    images = DbObjectCollection(MediaItem, allow_duplicates=False)
 
     @classmethod
     def on_initialize(cls):

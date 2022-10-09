@@ -143,6 +143,7 @@ class TwitterDataSource(DataSourceStage):
                     tweet.created_at_in_seconds)
                 para.source = {'url': tweet_url}
                 para.tweet_id = f'{tweet.id}'
+                para.images = []
                 
                 if para.id:
                     self.logger('... matched existent paragraph', para.id)
