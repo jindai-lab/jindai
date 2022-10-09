@@ -120,11 +120,23 @@ class TwitterDataSource(DataSourceStage):
             author = '@' + tweet.user.screen_name
             if tweet.id in self.imported:
                 return
+            
             self.imported.add(tweet.id)
-            para = Paragraph.get(F.tweet_id == f'{tweet.id}', tweet_id=f'{tweet.id}')
 
+            if tweet.text.startswith('RT '):
+                if not self.allow_retweet:
+                    return
+                
+                author = re.match(r'^RT (@[\w_-]*)', tweet.text)
+                if author:
+                    author = author.group(1)
+                else:
+                    author = ''
+                    
+            para = Paragraph.get(F.tweet_id == f'{tweet.id}', tweet_id=f'{tweet.id}', author=author)
             self.logger(
                 tweet_url, 'skip' if para is not None and skip_existent else '')
+            
             if not skip_existent or not para.id:
                 para.dataset = self.dataset_name
                 para.pdate = datetime.datetime.utcfromtimestamp(
@@ -156,18 +168,11 @@ class TwitterDataSource(DataSourceStage):
                                 Fn.pull(images=item.id))
                         para.images.append(item)
 
-                if tweet.text.startswith('RT '):
-                    author = re.match(r'^RT (@[\w_-]*)', tweet.text)
-                    if author:
-                        author = author.group(1)
-                    else:
-                        author = ''
                 text = re.sub(r'https?://[^\s]+', '', tweet.text).strip()
                 para.keywords += [t.strip().strip('#') for t in re.findall(
                     r'@[a-z_A-Z0-9]+', text) + re.findall(r'[#\s][^\s@]{,10}', text)] + [author]
                 para.keywords = [_ for _ in para.keywords if _]
                 para.content = text
-                para.author = author
                 self.logger(len(para.images), 'media items')
 
             return para
