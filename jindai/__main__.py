@@ -1,6 +1,7 @@
 """CLI for jindai"""
 
 import base64
+from collections import defaultdict
 import datetime
 import glob
 import json
@@ -552,24 +553,25 @@ def clear_duplicates(limit: int, offset: str, maxdups: int):
 def fix_integrity(quiet):
     mediaitems = {m['_id']
                   for m in MediaItem.aggregator.project(_id=1).perform(raw=True)}
-    checkeditems = set(chain(
-        *[p['images'] for p in Paragraph.aggregator.project(images=1).perform(raw=True)]))
+    paraitems = {p['_id']: p['images']
+                 for p in Paragraph.aggregator.project(_id=1, images=1).perform(raw=True)}
+    checkeditems = set(chain(*paraitems.values()))
     unlinked = mediaitems - checkeditems
 
-    print(len(mediaitems), 'items')
+    print(len(mediaitems), 'items', len(unlinked), 'unlinked')
 
     for p in tqdm(Paragraph.aggregator.match(
             F.images.in_(checkeditems - mediaitems)
         ).project(
             _id=1, images=1
-    ).perform(
-            raw=True
-    ), desc='Checking paragraph items'):
+        ).perform(
+                raw=True
+        ), desc='Checking paragraph items'):
         images = set(p['images']).intersection(mediaitems)
         if len(images) != len(p['images']):
             Paragraph.query(F.id == p['_id']).update(
                 Fn.set(images=list(images)))
-
+            
     print(len(unlinked), 'unlinked items')
     if len(unlinked) and (quiet or click.confirm('restore?')):
         batch_name = 'restored:' + datetime.datetime.now().strftime('%Y%m%d_%H%M%S')
