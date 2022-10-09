@@ -572,14 +572,14 @@ def fix_integrity(quiet):
 
     print(len(unlinked), 'unlinked items')
     if len(unlinked) and (quiet or click.confirm('restore?')):
+        batch_name = 'restored:' + datetime.datetime.now().strftime('%Y%m%d_%H%M%S')
         with BatchSave(performer=Paragraph) as batch:
             for m in tqdm(unlinked, desc='Restoring unlinked media items'):
                 m = MediaItem.first(F.id == m)
                 if m is None:
                     continue
                 batch.add(Paragraph(dataset='', lang='auto', images=[m], source=m.source,
-                                    keywords=[
-                                        'restored', 'restored:' + datetime.datetime.now().strftime('%Y%m%d_%H%M%S')]
+                                    keywords=['restored', batch_name]
                                     ))
 
 

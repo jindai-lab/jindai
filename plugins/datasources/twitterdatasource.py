@@ -26,47 +26,6 @@ def twitter_id_from_timestamp(stamp: float) -> int:
     return (int(stamp * 1000) - 1288834974657) << 22
 
 
-def create_albums(posts_imported: List[Paragraph]):
-    """Create posts from imported files
-
-    Args:
-        posts_imported (List[Paragraph]): posts representing imported files
-    """
-    def _expand_twi_url(zipfn):
-        a = zipfn.split('-', 2)
-        if len(a) != 3:
-            return zipfn
-        a, b, _ = a
-        return f'https://twitter.com/{a}/status/{b}'
-
-    items = []
-    impids = []
-    for para in posts_imported:
-        items += list(para.images)
-        impids.append(ObjectId(para.id))
-
-    albums = defaultdict(Paragraph)
-
-    for i in items:
-        filename = i.source['url'].split('/')[-1].split('#')[-1][:-5]
-        page_url = _expand_twi_url(filename)
-        para = albums[page_url]
-        if para.source.get('url') != page_url:
-            author = '@' + filename.split('-')[0]
-            para.keywords.append(author)
-            para.source = {'url': page_url}
-            dtstr = ('--' + filename).rsplit('-', 2)[1].replace('_', '')
-            if len(dtstr) == 14:
-                para.pdate = datetime.datetime(int(dtstr[:4]), *[int(_1 + _2) for _1, _2 in
-                                                                 zip(dtstr[4::2], dtstr[5::2])])
-        para.images.append(i)
-
-    for para in albums.values():
-        yield para
-
-    Paragraph.query(F.id.in_(impids)).delete()
-
-
 def _stamp(dtval):
     if isinstance(dtval, str):
         dtval = parser.parse_literal(dtval)
@@ -166,16 +125,13 @@ class TwitterDataSource(DataSourceStage):
 
             self.logger(
                 tweet_url, 'skip' if para is not None and skip_existent else '')
-            if not skip_existent or not para:
-                para = para or Paragraph()
-
+            if not skip_existent or not para.id:
                 para.dataset = self.dataset_name
                 para.pdate = datetime.datetime.utcfromtimestamp(
                     tweet.created_at_in_seconds)
                 para.source = {'url': tweet_url}
                 para.tweet_id = f'{tweet.id}'
-                para.images = []
-
+                
                 if para.id:
                     self.logger('... matched existent paragraph', para.id)
 
@@ -195,11 +151,10 @@ class TwitterDataSource(DataSourceStage):
                         if not item.id:
                             item.save()
                             self.logger('... add new item', url)
-                            para.images.append(item)
                         elif not self.skip_existent:
-                            Paragraph.query(F.images == item.id).update(
+                            Paragraph.query(F.images == item.id, F.id != para.id).update(
                                 Fn.pull(images=item.id))
-                            para.images.append(item)
+                        para.images.append(item)
 
                 if tweet.text.startswith('RT '):
                     author = re.match(r'^RT (@[\w_-]*)', tweet.text)
@@ -236,7 +191,7 @@ class TwitterDataSource(DataSourceStage):
                     continue
 
                 para = self.parse_tweet(tweet, False)
-                if para and (not self.media_only or para.images) and not para.id:
+                if para and (not self.media_only or para.images):
                     yield para
 
         def import_timeline(self, user=''):
@@ -310,7 +265,5 @@ class TwitterDataSource(DataSourceStage):
                         yield from self.import_timeline(u)
             elif arg.startswith('http://') or arg.startswith('https://'):
                 yield from self.import_twiimg(args)
-            elif os.path.exists(arg) or glob.glob(arg):
-                yield from create_albums(list(ImageImportDataSource.Implementation('\n'.join(args)).fetch()))
             else:
                 yield from self.import_timeline()
