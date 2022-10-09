@@ -189,15 +189,20 @@ class ImageHashDuplications(MediaItemStage):
         super().__init__()
         self.results = deque()
         self.result_pairs = set()
+        self.auto_remove = auto_remove
+
         self._tmpfile = tempfile.mktemp('.tsv')
         self._writable_file = open(self._tmpfile, 'w', encoding='utf-8')
         self._write_lock = Lock()
-        self.auto_remove = auto_remove
+        self._deleted = set()
 
     def resolve_image(self, i: MediaItem, _):
         """处理图像哈希
         """
         if not i.dhash:
+            return
+        
+        if i.id in self._deleted:
             return
 
         if not isinstance(i.dhash, bytes):
@@ -236,7 +241,8 @@ class ImageHashDuplications(MediaItemStage):
         
         if dups:
             Paragraph.merge_by_mediaitems(best, dups)
-            self.logger(f'delete {" ".join([str(j.id) for j in dups])}, preserving {best.id}')
+            self._deleted.update({d.id for d in dups})
+            self.logger(f'delete {" ".join([str(d.id) for d in dups])}, preserving {best.id}')
 
         for j, score in sims:
             target_id = j.id
