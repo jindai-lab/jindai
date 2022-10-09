@@ -327,6 +327,7 @@ class DownloadMedia(MediaItemStage):
             self.logger(i.id, len(content))
 
         i.source = {'file': path, 'url': i.source['url']}
+        i.data = BytesIO(content)
         i.save()
         
         
