@@ -273,7 +273,7 @@ class ImageHashDuplications(MediaItemStage):
     def summarize(self, _):
         self.flush_results()
         self._writable_file.close()
-        return PipelineStage.return_redirect(f'/api/plugins/compare?{self._tmpfile}')
+        return PipelineStage.return_redirect(f'/api/plugins/compare?{self._tmpfile[:-4]}')
     
     
 class HashContext:
