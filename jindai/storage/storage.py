@@ -162,7 +162,7 @@ class StorageManager:
         """Make a new directory in path"""
         return False
 
-    def move(self, path: str, new_path: str) -> bool:
+    def move(self, path: str, dst: str) -> bool:
         """Move path name"""
         return False
 

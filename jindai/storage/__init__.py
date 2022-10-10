@@ -69,7 +69,10 @@ class StorageProxyManager(StorageManager):
 
     def search(self, path, name_pattern):
         yield from self._get_json(path, 'search', name_pattern=name_pattern) or []
-
+        
+    def move(self, path, dst):
+        return self._get_json(path, 'move', dst=dst) or []
+        
 
 class Storage:
 
