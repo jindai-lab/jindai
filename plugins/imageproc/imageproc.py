@@ -17,6 +17,31 @@ from PIL import Image, ImageOps
 from PyMongoWrapper import ObjectId
 
 
+class VideoItemImageDelegate:
+    
+    def __init__(self, item) -> None:
+        self._i = item
+    
+    @property
+    def source(self):
+        return {'file': self._i.thumbnail}
+    
+    def save(self):
+        self._i.save()
+        
+    def __getattribute__(self, __name: str):
+        if __name not in ('_i', 'source', 'save'):
+            return getattr(self._i, __name)
+        
+        return object.__getattribute__(self, __name)
+    
+    def __setattr__(self, __name: str, __value) -> None:
+        if __name != '_i':
+            setattr(self._i, __name, __value)
+        else:
+            object.__setattr__(self, __name, __value)
+
+
 class MediaItemStage(PipelineStage):
     """Base class for pipeline stages relating to media processing"""
 
@@ -27,6 +52,13 @@ class MediaItemStage(PipelineStage):
         for i in items:
             try:
                 self.resolve_item(i, paragraph)
+                
+                if i.item_type == 'video' and i.thumbnail:
+                    i_img = VideoItemImageDelegate(i)
+                    i_img.source['file'] = i_img.thumbnail
+                    self.resolve_image(i_img, paragraph)
+                    i_img.save()
+
                 getattr(self, f'resolve_{i.item_type or "image"}')(
                     i, paragraph)
                 i.save()

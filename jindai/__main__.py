@@ -527,6 +527,7 @@ def clear_duplicates(limit: int, offset: str, maxdups: int):
                 continue
 
             dups = [d for d in MediaItem.query(
+                    F.item_type == m.item_type,
                     F.dhash == m.dhash, F.whash == m.whash, F.id != m.id, _around(m))]
 
             if len(dups) > maxdups:

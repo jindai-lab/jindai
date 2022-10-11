@@ -488,6 +488,12 @@ def merge_items(pairs):
        keeping the first one, deleting the second and merging
        the Paragraphs where they locate
     """
+    if isinstance(pairs, list):
+        d_pairs = defaultdict(list)
+        for rese, dele in pairs:
+            d_pairs[rese].append(dele)
+        pairs = d_pairs
+        
     for rese, dele in pairs.items():
         rese, dele = MediaItem.first(
             F.id == rese), list(MediaItem.query(F.id.in_([ObjectId(_) for _ in dele])))
