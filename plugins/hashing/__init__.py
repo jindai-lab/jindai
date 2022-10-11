@@ -10,6 +10,8 @@ import imagehash
 from bson import binary
 from flask import Response, request
 from PIL import Image, ImageFile
+from collections import namedtuple
+
 from PyMongoWrapper import F, ObjectId
 from jindai import *
 from jindai.models import MediaItem, Paragraph
@@ -201,7 +203,7 @@ class ImageHashDuplications(MediaItemStage):
         """
         if not i.dhash:
             return
-        
+
         if i.id in self._deleted:
             return
 
@@ -214,7 +216,7 @@ class ImageHashDuplications(MediaItemStage):
         def _score(j):
             return bitcount(to_int(j.dhash) ^ d_hash) + \
                 bitcount(to_int(j.whash) ^ w_hash)
-        
+
         candidates = [
             (j, _score(j))
             for j in MediaItem.query(F.dhash.in_([
@@ -224,11 +226,12 @@ class ImageHashDuplications(MediaItemStage):
             if (i.width > i.height) == (j.width > j.height)
         ]
 
-        dups, sims = [j for j, sc in candidates if sc <= self.auto_remove], [(j, sc) for j, sc in candidates if sc > self.auto_remove]
+        dups, sims = [j for j, sc in candidates if sc <= self.auto_remove], [
+            (j, sc) for j, sc in candidates if sc > self.auto_remove]
 
         if len(dups) == 1:
             return
-        
+
         best = i
         for j in dups:
             if j.width * j.height > best.width * best.height:
@@ -238,11 +241,12 @@ class ImageHashDuplications(MediaItemStage):
             elif j.id < best.id:
                 best = j
         dups = [j for j in dups if j.id != best.id]
-        
+
         if dups:
             Paragraph.merge_by_mediaitems(best, dups)
             self._deleted.update({d.id for d in dups})
-            self.logger(f'delete {" ".join([str(d.id) for d in dups])}, preserving {best.id}')
+            self.logger(
+                f'delete {" ".join([str(d.id) for d in dups])}, preserving {best.id}')
 
         for j, score in sims:
             target_id = j.id
@@ -269,15 +273,95 @@ class ImageHashDuplications(MediaItemStage):
     def summarize(self, _):
         self.flush_results()
         self._writable_file.close()
-        return PipelineStage.return_redirect(f'/api/plugins/compare?{self._tmpfile}')
+        return PipelineStage.return_redirect(f'/api/plugins/compare?{self._tmpfile[:-4]}')
+    
+    
+class HashContext:
+    
+    def __init__(self, **kwargs) -> None:
+        self.__dict__.update(kwargs)
+    
+    def __setattr__(self, __name: str, __value) -> None:
+        if __name not in self.__dict__:
+            self.__dict__[__name] = __value
+        else:
+            object.__setattr__(self, __name, __value)
 
 
-class Hashing(Plugin):
+class HashingBase(Plugin):
+    
+    def __init__(self, pmanager) -> None:
+        super().__init__(pmanager)
+        
+    def handle_filter_check(self, context):
+        return False
+    
+    def handle_filter_item(self, context):
+        return False
+        
+    def handle_filter(self, dbq, iid, *args):
+        """Handle page"""
+        limit = dbq.limit
+        offset = dbq.skip
+        dbq.limit = 0
+        dbq.raw = False
+
+        groupby = dbq.groups
+        dbq.groups = 'none'
+
+        pgroups = [g
+                   for g in (Paragraph.first(F.images == ObjectId(iid)) or Paragraph()).keywords
+                   if g.startswith('*')
+                   ] or [(Paragraph.first(F.images == ObjectId(iid))
+                          or Paragraph()).source.get('url', '')]
+        groupped = {}
+        
+        context = HashContext(sticky_paragraphs=single_item('', iid), iid=ObjectId(iid), args=args)
+        
+        if not self.handle_filter_check(context):
+            return []
+        
+        for paragraph in dbq.fetch_all_rs():
+            for i in paragraph.images:
+                if i.id == iid:
+                    continue
+                
+                i = self.handle_filter_item(i, context)
+                if i is None:
+                    continue
+                
+                new_paragraph = Paragraph(**paragraph.as_dict())
+                new_paragraph.images = [i]
+                new_paragraph.score = i.score
+                
+                if groupby == 'group':
+                    groups = [
+                        g for g in paragraph.keywords if g.startswith('*')] or [new_paragraph.source.get('url')]
+                elif groupby == 'source':
+                    groups = [paragraph.source.get(
+                        'url', paragraph.source.get('file')) or str(paragraph.id)]
+                elif groupby == 'none':
+                    groups = [str(paragraph.id)]
+                else:
+                    groups = [paragraph[groupby] or str(paragraph.id)]
+
+                for group in groups:
+                    if group not in pgroups and \
+                        (group not in groupped or groupped[group].score >
+                            new_paragraph.score):
+                        groupped[group] = new_paragraph
+        
+        results = sorted(groupped.values(), key=lambda x: x.score)[offset:offset+limit]
+
+        return context.sticky_paragraphs + [{'spacer': 'spacer'}] + results
+
+
+class Hashing(HashingBase):
     """哈希插件"""
 
     def __init__(self, pmanager):
         super().__init__(pmanager)
-        app = self.pmanager.app
+        
         MediaItem.set_field('dhash', bytes)
         MediaItem.set_field('whash', bytes)
         self.register_pipelines([ImageHashDuplications, ImageHash])
@@ -285,6 +369,8 @@ class Hashing(Plugin):
             'sim', keybind='s', format_string='sim/{mediaitem._id}', icon='mdi-image',
             handler=self.handle_filter)
 
+        app = self.pmanager.app
+        
         @app.route('/api/plugins/compare.tsv')
         def _compare_tsv():
             file_path = request.args.get('key', '') + '.tsv'
@@ -304,64 +390,22 @@ class Hashing(Plugin):
         def _jquery_js():
             return storage.serve_file(open(os.path.join(os.path.dirname(__file__), 'jquery.min.js'), 'rb'))
 
-    def handle_filter(self, dbq, iid):
-        """Handle page"""
-        limit = dbq.limit
-        offset = dbq.skip
-        dbq.limit = 0
-        dbq.raw = False
-
-        groupby = dbq.groups
-        dbq.groups = 'none'
-
-        image_item = MediaItem.first(F.id == iid)
-        if image_item.dhash is None:
+    def handle_filter_check(self, context):
+        image_item = MediaItem.first(F.id == context.iid)
+        
+        if not image_item.dhash:
             ImageHash().resolve_image(image_item, None)
 
-        if image_item.dhash is None:
-            return []
+        if not image_item.dhash:
+            return False
+        
+        context.dha, context.dhb = to_int(image_item.dhash), to_int(image_item.whash)
+        return True
 
-        pgroups = [g
-                   for g in (Paragraph.first(F.images == ObjectId(iid)) or Paragraph()).keywords
-                   if g.startswith('*')
-                   ] or [(Paragraph.first(F.images == ObjectId(iid))
-                          or Paragraph()).source.get('url', '')]
-        dha, dhb = to_int(image_item.dhash), to_int(image_item.whash)
-        results = []
-        groupped = {}
-
-        for paragraph in dbq.fetch_all_rs():
-            for i in paragraph.images:
-                if i.id == image_item.id:
-                    continue
-                if i.dhash is None or i.dhash == b'':
-                    continue
-                dha1, dhb1 = to_int(i.dhash), to_int(i.whash)
-                i.score = bitcount(dha ^ dha1) + bitcount(dhb ^ dhb1)
-                new_paragraph = Paragraph(**paragraph.as_dict())
-                new_paragraph.images = [i]
-                new_paragraph.score = i.score
-                if groupby != 'none':
-                    if groupby == 'group':
-                        groups = [
-                            g for g in paragraph.keywords if g.startswith('*')] or [new_paragraph.source.get('url')]
-                    elif groupby == 'source':
-                        groups = [paragraph.source.get(
-                            'url', paragraph.source.get('file')) or str(paragraph.id)]
-                    else:
-                        groups = [paragraph[groupby] or str(paragraph.id)]
-
-                    for group in groups:
-                        if group not in pgroups and \
-                            (group not in groupped or groupped[group].score >
-                                new_paragraph.score):
-                            groupped[group] = new_paragraph
-                else:
-                    results.append(new_paragraph)
-
-        if groupped:
-            results = list(groupped.values())
-
-        results = sorted(results, key=lambda x: x.score)[
-            offset:offset + limit]
-        return single_item('', iid) + [{'spacer': 'spacer'}] + results
+    def handle_filter_item(self, i, context):
+        if i.dhash is None or i.dhash == b'':
+            return
+        
+        dha1, dhb1 = to_int(i.dhash), to_int(i.whash)
+        i.score = bitcount(context.dha ^ dha1) + bitcount(context.dhb ^ dhb1)
+        return i

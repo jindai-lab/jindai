@@ -164,10 +164,11 @@ class TwitterDataSource(DataSourceStage):
                         if not item.id:
                             item.save()
                             self.logger('... add new item', url)
+                            para.images.append(item)
                         elif not self.skip_existent:
                             Paragraph.query(F.images == item.id, F.id != para.id).update(
                                 Fn.pull(images=item.id))
-                        para.images.append(item)
+                            para.images.append(item)
 
                 text = re.sub(r'https?://[^\s]+', '', tweet.text).strip()
                 para.keywords += [t.strip().strip('#') for t in re.findall(
