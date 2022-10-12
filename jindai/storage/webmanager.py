@@ -27,7 +27,8 @@ class WebManager(StorageManager):
             self.proxies = proxies
 
             with self._urlopen() as resp:
-                self.content_length = int(resp.headers.get('content-length', -1))
+                self.content_length = int(
+                    resp.headers.get('content-length', -1))
                 if self.content_length < 0:
                     self._seekable = False
                 self.st_size = self.content_length
@@ -84,19 +85,26 @@ class WebManager(StorageManager):
             return self._pos
 
         def _urlopen(self, byte_range=None):
-
             if byte_range:
                 self.req.headers['Range'] = '{}-{}'.format(*byte_range)
             else:
                 self.req.headers.pop('Range', '')
 
+            last_ex = None
             for _ in range(self.attempts):
                 with WebManager.session() as s:
-                    resp = s.send(
-                        self.req, stream=True, proxies=self.proxies,
-                        verify=self.verify, timeout=self.timeout)
-                    if resp.status_code != 200:
-                        raise OSError(f'HTTP {resp.status_code}: reading {self.req.url}')
+                    try:
+                        resp = s.send(
+                            self.req, stream=True, proxies=self.proxies,
+                            verify=self.verify, timeout=self.timeout)
+                        if resp.status_code >= 300:
+                            raise OSError(
+                                f'HTTP {resp.status_code}: reading {self.req.url}')
+                        return resp
+                    except OSError as ex:
+                        last_ex = ex
+
+            raise last_ex
 
     @staticmethod
     def _build_proxies(proxies):

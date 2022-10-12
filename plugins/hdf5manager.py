@@ -29,6 +29,7 @@ class Hdf5Manager(StorageManager):
             storage_base = config.storage['file']
 
         if isinstance(storage_base, list):
+            storage_base = [base[6:] for base in storage_base if base.startswith('local:')]
             storage_base, *external_storage = storage_base
         else:
             external_storage = []
@@ -189,4 +190,5 @@ class Hdf5ManagerPlugin(Plugin):
     
     def __init__(self, pmanager, **conf) -> None:
         super().__init__(pmanager, **conf)
-        storage.register_scheme('hdf5', Hdf5Manager)
+        mgr = Hdf5Manager(config.storage['file'])
+        storage.register_scheme('hdf5', lambda *_: mgr)
