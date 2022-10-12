@@ -444,7 +444,6 @@ class VideoFrame(MediaItemStage):
                 rval, frame = cap.read()
                 cap.release()
                 if rval:
-                    # write to hdf5
                     rval, npa = cv2.imencode('.jpg', frame)
                     pic = npa.tobytes()
 
