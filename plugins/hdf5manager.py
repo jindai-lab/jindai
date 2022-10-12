@@ -183,6 +183,6 @@ class Hdf5Manager(StorageManager):
 
 class Hdf5ManagerPlugin(Plugin):
     
-    def __init__(self, pmanager, storage_base=None, **conf) -> None:
+    def __init__(self, pmanager, **conf) -> None:
         super().__init__(pmanager, **conf)
-        storage.register_scheme('hdf5', Hdf5Manager(storage_base or config.storage))
+        storage.register_scheme('hdf5', Hdf5Manager)

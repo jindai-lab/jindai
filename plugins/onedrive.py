@@ -127,7 +127,7 @@ class OneDrivePlugin(Plugin):
 
     def __init__(self, pmanager, **_) -> None:
         super().__init__(pmanager)
-        storage.register_scheme('onedrive', OneDriveManager(oda))
+        storage.register_scheme('onedrive', lambda *_: OneDriveManager(oda))
         
         @pmanager.app.route('/api/plugins/onedrive/login')
         def onedrive_login():

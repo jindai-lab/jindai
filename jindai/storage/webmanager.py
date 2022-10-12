@@ -92,9 +92,11 @@ class WebManager(StorageManager):
 
             for _ in range(self.attempts):
                 with WebManager.session() as s:
-                    return s.send(
+                    resp = s.send(
                         self.req, stream=True, proxies=self.proxies,
                         verify=self.verify, timeout=self.timeout)
+                    if resp.status_code != 200:
+                        raise OSError(f'HTTP {resp.status_code}: reading {self.req.url}')
 
     @staticmethod
     def _build_proxies(proxies):
@@ -160,7 +162,7 @@ class WebManager(StorageManager):
         return requests.Request(url=url, method=method, headers=headers,
                                 data=data)
 
-    def __init__(self, attempts=3, verify=False, timeout=30, seekable=False):
+    def __init__(self, *_, attempts=3, verify=False, timeout=30, seekable=False):
         """
         Args:
             attempts (int, optional): Maximal retries when fetching data from server. Defaults to 3.
@@ -178,7 +180,7 @@ class WebManager(StorageManager):
             resp = s.send(req, proxies=WebManager._build_proxies(
                 proxy), verify=self.verify, timeout=self.timeout)
         if resp.status_code != 200:
-            raise OSError(f'HTTP {resp.status_code}')
+            raise OSError(f'HTTP {resp.status_code}: writing {path}')
         return True
 
     def readbuf(self, path: str, proxy=None, **params) -> IOBase:

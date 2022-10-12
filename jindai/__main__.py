@@ -86,6 +86,7 @@ def run_task(task_id, concurrent, verbose, edit, log):
         temp_name = mktemp()
         with open(temp_name, 'w', encoding='utf-8') as fo:
             dat = dbo.as_dict()
+            dat.pop('_id', '')
             yaml.safe_dump(dat, fo, allow_unicode=True)
 
         if os.name == 'nt':

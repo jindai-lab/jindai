@@ -81,24 +81,28 @@ class Storage:
         """
 
         self._schema = {
-            'http': WebManager(),
-            'https': WebManager(),
-            'data': DataSchemeManager(),
-            '': OSFileSystemManager(config.storage),
+            'http': WebManager,
+            'https': WebManager,
+            'data': DataSchemeManager,
+            'file': OSFileSystemManager,
         }
 
-        self.storage_proxy = config.storage_proxy
-        if not self.storage_proxy:
-            self.storage_proxy = {}
+        self.storage = config.storage
+        if not self.storage:
+            self.storage = {}
 
-        if isinstance(self.storage_proxy, str):
-            self.storage_proxy = {
-                k: [config.storage_proxy] for k in self._schema if k not in ('http', 'https', 'data')
+        if isinstance(self.storage, str):
+            self.storage = {
+                k: [self.storage] for k in self._schema if k not in ('http', 'https', 'data')
             }
 
-        for key, val in self.storage_proxy.items():
+        for key, val in self.storage.items():
+            if key == 'default':
+                continue
             if isinstance(val, str):
-                self.storage_proxy[key] = [val]
+                self.storage[key] = [val]
+            if key not in self._schema:
+                self._schema[key] = StorageManager()
 
         self._fragment_handlers = {}
 
@@ -112,11 +116,14 @@ class Storage:
             tmp = path.split('://', 1)[0]
             if tmp in self._schema:
                 scheme = tmp
+                
+        if not scheme:
+            scheme = 'file'
 
-        if scheme in self.storage_proxy:
-            for server in self.storage_proxy[scheme]:
-                if server == 'local':
-                    yield self._schema[scheme]
+        if scheme in self.storage:
+            for server in self.storage[scheme]:
+                if server.startswith('local:'):
+                    yield self._schema[scheme](server[6:])
                 else:
                     yield StorageProxyManager(server)
         else:
@@ -131,15 +138,15 @@ class Storage:
         """
         self._fragment_handlers[frag_name] = func
 
-    def register_scheme(self, scheme: str, mgr: StorageManager):
+    def register_scheme(self, scheme: str, mgr):
         """Register scheme
 
         Args:
             scheme (str): scheme name
-            mgr (StorageManager): manager instance
+            mgr (any func/type that accepts one argument and yieldsStorageManager): manager instance
         """
         self._schema[scheme.lower()] = mgr
-
+        
     def open(self, path: str, mode='rb', **params):
         """Open the path for read/write
 
@@ -177,6 +184,7 @@ class Storage:
                         path.replace('#', '__hash/'))
                 buf = getattr(mgr, 'readbuf' if mode ==
                               'rb' else 'writebuf')(dst, **params)
+                break
             except OSError as ex:
                 StorageManager().dprint('OSError', ex)
 
@@ -414,11 +422,15 @@ class Storage:
                 for mgr in self._get_managers(parent):
                     for pattern in mgr.search(parent, pattern):
                         patterns.append(pattern)
+                continue
 
-            if pattern.endswith('.zip') or pattern.endswith('.epub'):
-                with zipfile.ZipFile(self.open(pattern, 'rb')) as zfile:
-                    for item in zfile.filelist:
-                        yield pattern + '#zip/' + item.filename
+            if pattern.endswith(('.zip', '.epub')):
+                try:
+                    with zipfile.ZipFile(self.open(pattern, 'rb')) as zfile:
+                        for item in zfile.filelist:
+                            yield pattern + '#zip/' + item.filename
+                except zipfile.BadZipFile:
+                    print('Bad zip file', pattern)
             else:
                 yield pattern
 
@@ -434,11 +446,12 @@ class Storage:
         return os.path.join(os.path.dirname(os.path.abspath(base_file)), *segs)
     
     def default_path(self, name):
-        if '://' not in config.default_storage:
-            config.default_storage += '://'
-        elif not config.default_storage.endswith('/'):
-            config.default_storage += '/'
-        return f'{config.default_storage}{name}'
+        default_storage = config.storage.get('default', 'file')
+        if '://' not in default_storage:
+            default_storage += '://'
+        elif not default_storage.endswith('/'):
+            default_storage += '/'
+        return f'{default_storage}{name}'
 
     def serve(self, host='0.0.0.0', port=8371, debug=False):
         """Start storage server
