@@ -169,6 +169,9 @@ class StorageManager:
     def dprint(self, *args):
         """Print debug info"""
         print(*args, file=sys.stderr)
+        
+    def __init__(self, *_) -> None:
+        pass
 
 
 class WriteBuffer(BytesIO):

@@ -14,7 +14,7 @@ class SMBManager(StorageManager):
     """SMB Client
     """
 
-    def __init__(self) -> None:
+    def __init__(self, *_) -> None:
         self._connections = {}
         self._last_active = {}
         self._ttl = 60
@@ -94,4 +94,4 @@ class SMBClientPlugin(Plugin):
     
     def __init__(self, pmanager, **conf) -> None:
         super().__init__(pmanager, **conf)
-        storage.register_scheme('smb', SMBManager())
+        storage.register_scheme('smb', SMBManager)

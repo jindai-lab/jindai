@@ -37,8 +37,7 @@ class ConfigObject(DictObject):
             'allowed_ips': {},
             'ui_proxy': '',
             'port': 8370,
-            'debug': False,
-            'default_storage': 'file'
+            'debug': False
         }
         filename = filename or os.environ.get('CONFIG_FILE', 'config.yaml')
 
@@ -54,10 +53,13 @@ class ConfigObject(DictObject):
         if orig['rootpath'] == '':
             orig['rootpath'] = str(
                 Path(os.path.abspath(__file__)).parent.parent.absolute())
-        if not isinstance(orig['storage'], list):
+        
+        if isinstance(orig['storage'], str):
             orig['storage'] = [orig['storage']]
-        orig['storage'] = [os.path.join(orig['rootpath'], p)
-                           for p in orig['storage']]
+        if isinstance(orig['storage'], list):
+            orig['storage'] = {'file': orig['storage']}
+        if not 'default' in orig['storage']:
+            orig['storage']['default'] = 'file'
 
         super().__init__(orig)
 
