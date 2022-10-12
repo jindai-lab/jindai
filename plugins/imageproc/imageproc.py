@@ -416,23 +416,24 @@ class VideoFrame(MediaItemStage):
         cv2 = self.cv2
         use_temp = False
         read_from = tempfile.mktemp('.mp4')
+        pic = b''
 
+        # read video data
+        if isinstance(buf, str):
+            read_from = buf
+        elif hasattr(buf, 'name'):
+            read_from = buf.name
+        elif hasattr(buf, 'read'):
+            use_temp = True
+            with open(read_from, 'wb') as fo:
+                fo.write(buf.read())
+
+        if not isinstance(read_from, str) or not os.path.exists(read_from):
+            self.logger(f'{read_from} not found')
+            return
+        
         try:
-            # read video data
-            if isinstance(buf, str):
-                read_from = buf
-            elif hasattr(buf, 'name'):
-                read_from = buf.name
-            elif hasattr(buf, 'read'):
-                use_temp = True
-                with open(read_from, 'wb') as fo:
-                    fo.write(buf.read())
-
-            if not os.path.exists(read_from):
-                self.logger(f'{read_from} not found')
-                return
-
-            self.logger(f'generate thumbnail from {read_from}')
+            self.logger(f'generate frame image from {read_from}')
             cap = cv2.VideoCapture(read_from)
             frame = float(frame)
             frame_num = int(cap.get(cv2.CAP_PROP_FRAME_COUNT) *
@@ -446,7 +447,6 @@ class VideoFrame(MediaItemStage):
                     # write to hdf5
                     rval, npa = cv2.imencode('.jpg', frame)
                     pic = npa.tobytes()
-                    return BytesIO(pic)
 
         except Exception as ex:
             self.logger(ex)
@@ -454,7 +454,7 @@ class VideoFrame(MediaItemStage):
         if use_temp and os.path.exists(read_from):
             os.unlink(read_from)
 
-        return BytesIO()
+        return BytesIO(pic)
 
     def resolve_video(self, i: MediaItem, _):
         thumb = storage.default_path(f'{i.id}.thumb.jpg')
