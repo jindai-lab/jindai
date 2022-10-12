@@ -238,12 +238,13 @@ class TwitterDataSource(DataSourceStage):
                             continue
                         if self.skip_existent and para.id:
                             continue
+
+                        yielded = True
                         if para.author != '@' + status.user.screen_name and not self.allow_retweet:
                             continue
                         if status.created_at_in_seconds > self.time_after:
                             if not self.media_only or para.images:
                                 yield para
-                                yielded = True
 
                     if not yielded:
                         break

@@ -415,10 +415,13 @@ class Storage:
                     for pattern in mgr.search(parent, pattern):
                         patterns.append(pattern)
 
-            if pattern.endswith('.zip') or pattern.endswith('.epub'):
-                with zipfile.ZipFile(self.open(pattern, 'rb')) as zfile:
-                    for item in zfile.filelist:
-                        yield pattern + '#zip/' + item.filename
+            if os.path.exists(pattern) and pattern.endswith(('.zip', '.epub')):
+                try:
+                    with zipfile.ZipFile(self.open(pattern, 'rb')) as zfile:
+                        for item in zfile.filelist:
+                            yield pattern + '#zip/' + item.filename
+                except zipfile.BadZipFile:
+                    print('Badzip file', pattern)
             else:
                 yield pattern
 
