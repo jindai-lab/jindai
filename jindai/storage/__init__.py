@@ -127,7 +127,7 @@ class Storage:
                 else:
                     yield StorageProxyManager(server)
         else:
-            yield self._schema[scheme]
+            yield self._schema[scheme]()
 
     def register_fragment_handler(self, frag_name, func):
         """Register fragment handler
@@ -145,6 +145,8 @@ class Storage:
             scheme (str): scheme name
             mgr (any func/type that accepts one argument and yieldsStorageManager): manager instance
         """
+        if isinstance(mgr, StorageManager):
+            mgr = lambda *_: mgr
         self._schema[scheme.lower()] = mgr
         
     def open(self, path: str, mode='rb', **params):
