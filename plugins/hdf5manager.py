@@ -21,9 +21,13 @@ class Hdf5Manager(StorageManager):
 
     _lock = Lock()
 
-    def __init__(self, storage_base: str, quota='40G') -> None:
+    def __init__(self, storage_base: str = '', quota='40G') -> None:
         files = []
         self.quota = self.parse_size(quota)
+        
+        if not storage_base:
+            storage_base = config.storage['file']
+
         if isinstance(storage_base, list):
             storage_base, *external_storage = storage_base
         else:
