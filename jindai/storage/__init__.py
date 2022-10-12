@@ -210,7 +210,10 @@ class Storage:
             default (Any): default value
         """
         for mgr in self._get_managers(path):
-            val = getattr(mgr, action)(path, **params)
+            try:
+                val = getattr(mgr, action)(path, **params)
+            except OSError:
+                val = None
             if val:
                 return val
         return default
@@ -361,7 +364,7 @@ class Storage:
         Returns:
             str: os file path
         """
-        return self._query_until('expand_path', path, self._schema[''].expand_path(path))
+        return self._query_until('expand_path', path, path)
 
     def truncate_path(self, path):
         """Truncate path to relative path
@@ -372,7 +375,7 @@ class Storage:
         Returns:
             str: path relative to storage bases
         """
-        return self._query_until('truncate_path', path, self._schema[''].truncate_path(path))
+        return self._query_until('truncate_path', path, path)
 
     def move(self, src, dst):
         """Move file from src to dst

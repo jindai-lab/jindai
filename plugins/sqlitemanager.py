@@ -75,7 +75,9 @@ class SqliteManager(StorageManager):
         super().__init__()
         self.dbs = []
         for base in storage_base:
-            self.dbs += [SqliteSingleAccessor(f) for f in glob.glob(os.path.join(base, 'sblobs*.db'))]
+            if base.startswith('local:'):
+                base = base[6:]
+                self.dbs += [SqliteSingleAccessor(f) for f in glob.glob(os.path.join(base, 'sblobs*.db'))]
         if not self.dbs:
             self.dbs = [SqliteSingleAccessor(os.path.join(storage_base[0], 'sblobs1.db'))]
 
@@ -127,4 +129,5 @@ class SqliteManagerPlugin(Plugin):
     
     def __init__(self, pmanager, **conf) -> None:
         super().__init__(pmanager, **conf)
-        storage.register_scheme('sqlite', SqliteManager)
+        mgr = SqliteManager(config.storage['file'])
+        storage.register_scheme('sqlite', lambda *_: mgr)
