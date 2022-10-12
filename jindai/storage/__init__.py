@@ -364,7 +364,17 @@ class Storage:
         Returns:
             str: os file path
         """
-        return self._query_until('expand_path', path, path)
+        expanded = ''
+        for mgr in self._get_managers(path):
+            try:
+                val = mgr.expand_path(path)
+            except OSError:
+                val = None
+            if mgr.exists(val):
+                return val
+            elif val and not expanded:
+                expanded = val
+        return expanded or path
 
     def truncate_path(self, path):
         """Truncate path to relative path
