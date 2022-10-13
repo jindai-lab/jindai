@@ -1,13 +1,13 @@
 allowed_ips:
-  172.24.0.3: hocadmon
+  127.0.0.1: admin
 concurrent: 3
-file_serve:
-  books/: http://my-nas/books/
-mongo: 172.17.0.1:27017
-mongoDbName: hamster
+storage:
+  default: hdf5
+  file:
+    - local:/sources
+mongo: jindai-mongo
+mongoDbName: jindai
 plugins:
 - '*'
-rootpath: /app/
+- ~SMBClientPlugin
 secret_key: '!'
-storage: sources
-default_storage: hdf5
