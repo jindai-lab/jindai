@@ -337,13 +337,13 @@ class Paragraph(ObjectWithSource):
         dup_ids = {x.id for x in dups if x.id != preserved.id}
         references = list(Paragraph.query(F.images.in_(list(dup_ids))))
         
-        result.merge(references)
-        result.images.append(preserved)
-
         for para in references:
             para.images.remove(dup_ids)
             para.save()
                 
+        result.merge(references, no_images=True)
+        result.images.append(preserved)
+
         for i in dups:
             if i.id == preserved.id:
                 continue
@@ -356,7 +356,7 @@ class Paragraph(ObjectWithSource):
     def __lt__(self, another):
         return id(self) < id(another)
     
-    def merge(self, others):
+    def merge(self, others, no_images=True):
         
         if not others:
             return
@@ -385,6 +385,9 @@ class Paragraph(ObjectWithSource):
                         self[field] = ObjectWithSource.merge_source(self[field], another[field])
 
                 elif field in ('keywords', 'images'):
+                    if no_images and field == 'images':
+                        continue
+                    
                     arr = self[field]
                     for another in others:
                         arr += another[field]

@@ -27,6 +27,7 @@ from tqdm import tqdm
 
 from . import Plugin, PluginManager, Task, config, storage
 from .api import prepare_plugins, run_service
+from .common import DictObject
 from .helpers import get_context, safe_import
 from .models import F, MediaItem, Meta, Paragraph, TaskDBO, User
 
@@ -43,6 +44,16 @@ def _mongodb(coll):
 def _init_plugins():
     """Inititalize plugins"""
     return PluginManager(get_context('plugins', Plugin), Flask(__name__))
+
+
+def _get_items():
+    mediaitems = {m['_id']
+                  for m in MediaItem.aggregator.project(_id=1).perform(raw=True)}
+    paraitems = {p['_id']: p['images']
+                 for p in Paragraph.aggregator.project(_id=1, images=1).perform(raw=True)}
+    checkeditems = set(chain(*paraitems.values()))    
+    unlinked = mediaitems - checkeditems
+    return DictObject(locals())
 
 
 @click.group()
@@ -87,6 +98,7 @@ def run_task(task_id, concurrent, verbose, edit, log):
         with open(temp_name, 'w', encoding='utf-8') as fo:
             dat = dbo.as_dict()
             dat.pop('_id', '')
+            dat.pop('last_run', '')
             yaml.safe_dump(dat, fo, allow_unicode=True)
 
         if os.name == 'nt':
@@ -315,7 +327,7 @@ def replace_tag(cond):
     from .dbquery import parser
     from .models import Fn, Paragraph
     rs = Paragraph.query(parser.parse(cond)).update(
-        [Fn.set(keywords=Fn.setIntersection('$keywords', '$keywords'))])
+        [Fn.set(keywords=Fn.setUnion('$keywords', []))])
     print('OK', rs.modified_count)
 
 
@@ -362,7 +374,7 @@ def _save_db(coll: str, records: Iterable[Dict], force):
 
 
 @cli.command('restore')
-@click.option('--infile', default='')
+@click.option('-i', '--infile', default='')
 @click.option('--force', type=bool, default=False, flag_value=True)
 @click.argument('colls', nargs=-1)
 def restore(infile, colls, force):
@@ -410,14 +422,12 @@ def restore(infile, colls, force):
                                 set(record['images'])))
                     )
                 ):
-                    # print('\nfound match', p['_id'])
                     records.append(record)
                 elif restore_albums and (
                     coll == 'paragraph' and (
                         record['_id'] in restore_albums or
                             restore_albums.intersection(set(record['keywords'])))
                 ):
-                    # print('\nfound match', p['_id'], p['images'])
                     records.append(record)
                     for i in record['images']:
                         restore_items.add(i)
@@ -553,27 +563,38 @@ def clear_duplicates(limit: int, offset: str, maxdups: int):
 @cli.command('items-fix')
 @click.option('-q', '--quiet', default=False, flag_value=True)
 def fix_integrity(quiet):
-    mediaitems = {m['_id']
-                  for m in MediaItem.aggregator.project(_id=1).perform(raw=True)}
-    paraitems = {p['_id']: p['images']
-                 for p in Paragraph.aggregator.project(_id=1, images=1).perform(raw=True)}
-    checkeditems = set(chain(*paraitems.values()))
-    unlinked = mediaitems - checkeditems
-
+    Paragraph.query().update([Fn.set(images=Fn.setUnion('$images', []))])
+    
+    r = _get_items()
+    mediaitems = r.mediaitems
+    unlinked = r.unlinked
+    checkeditems = r.checkeditems
+    paraitems = r.paraitems
+    
     print(len(mediaitems), 'items', len(unlinked), 'unlinked')
-
+    
     for p in tqdm(Paragraph.aggregator.match(
             F.images.in_(checkeditems - mediaitems)
         ).project(
             _id=1, images=1
         ).perform(
-                raw=True
+            raw=True
         ), desc='Checking paragraph items'):
         images = set(p['images']).intersection(mediaitems)
         if len(images) != len(p['images']):
             Paragraph.query(F.id == p['_id']).update(
                 Fn.set(images=list(images)))
+            paraitems[p['_id']] = list(images)
             
+    itemparas = defaultdict(set)
+    for pid, images in paraitems.items():
+        for i in images:
+            itemparas[i].add(pid)
+    for iid, paras in tqdm(itemparas.items(), desc='Clearing repeated items'):
+        if len(paras) > 1:
+            paras = sorted(paras)
+            Paragraph.query(F.id.in_(paras[1:])).update(Fn.pull(images=iid))
+    
     print(len(unlinked), 'unlinked items')
     if len(unlinked) and (quiet or click.confirm('restore?')):
         batch_name = 'restored:' + datetime.datetime.now().strftime('%Y%m%d_%H%M%S')
@@ -652,11 +673,13 @@ def call_ipython():
 
     from bson import SON, Binary, ObjectId
     from PyMongoWrapper import F, Fn, Var
+    from PyMongoWrapper.dbo import BatchQuery, BatchSave
     from tqdm import tqdm
 
     import jindai
     tpe = ThreadPoolExecutor(os.cpu_count())
     init = _init_plugins
+    get_items = _get_items
 
     def q(query_str, model=''):
         from jindai import Paragraph, parser
@@ -689,7 +712,13 @@ def call_ipython():
 
         for m in mediaitems:
             Paragraph.query(F.images == m.id).update(Fn.pull(images=m.id))
-
+            
+    def read_dump(dump_file, collection):
+        with zipfile.ZipFile(dump_file, 'r') as zfile:
+            for obj in zfile.open(collection):
+                obj = json.loads(obj)
+                yield DictObject(obj)
+                
     ns = dict(jindai.__dict__)
     ns.update(**locals())
 

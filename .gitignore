@@ -63,3 +63,4 @@ core
 docker-compose.yaml
 *.db
 *.pickle
+tests/
