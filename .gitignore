@@ -41,7 +41,6 @@ docs/_build/
 .ipynb_checkpoints
 
 sources*
-ui/
 
 plugins/jiayan
 plugins/autocompletion
