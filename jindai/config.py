@@ -43,10 +43,9 @@ class ConfigObject(DictObject):
 
         if not os.path.exists(filename):
             print('Config file not found:', filename)
-            sys.exit(255)
-
-        with open(filename, 'r', encoding='utf-8') as fin:
-            orig.update(**yaml.safe_load(fin))
+        else:
+            with open(filename, 'r', encoding='utf-8') as fin:
+                orig.update(**yaml.safe_load(fin))
 
         self._filename = filename
 

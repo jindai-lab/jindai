@@ -13,7 +13,7 @@ import time
 from urllib.parse import urljoin
 from bs4 import BeautifulSoup as B
 
-from PyMongoWrapper import F
+from PyMongoWrapper import F, Fn
 from jindai.models import MediaItem, Paragraph
 from jindai.pipeline import DataSourceStage
 from jindai import storage, parser
@@ -284,13 +284,14 @@ class WebPageListingDataSource(DataSourceStage):
                     else:
                         attr = self.get_text(i)
                     upath = urljoin(url, attr)
-                    if upath in items or MediaItem.first({'source.url': upath}):
+                    image = MediaItem.get(upath, item_type=MediaItem.get_type(upath.rsplit('.', 1)[-1]) or 'image')
+                    if upath in items:
                         continue
+                    if image.id:
+                        Paragraph.query(F.images == image.id).update(Fn.pull(images=image.id))
                     items.add(upath)
 
-                    para.images.append(
-                        MediaItem.get(upath, item_type=MediaItem.get_type(upath.rsplit('.', 1)[-1]) or 'image')
-                    )
+                    para.images.append(image)
 
             self.logger(f'Found {len(para.images)} images in {url}')
             return self.convert(para)
