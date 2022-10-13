@@ -12,4 +12,29 @@ Refer to [wiki](https://github.com/jindai-lab/jindai/wiki) for further informati
 
 License: MIT
 
+
+## Installation
+
+### Install with Docker
+
+```bash
+git clone https://github.com/jindai-lab/jindai/
+cd jindai
+cp config.yaml.sample config.yaml
+cp docker-compose.yaml.sample docker-compose.yaml
+# IMPORTANT! EDIT config.yaml AND docker-compose.yaml FIRST
+nano config.yaml docker-compose.yaml
+docker build . -t jindai
+docker compose up -d
+```
+
+## Install on local machine
+
+```bash
+cd jindai
+pip install -r requirements.txt
+# IMPORTANT! EDIT config.yaml AND docker-compose.yaml FIRST
+python3 -m jindai web-service
+```
+
 ☕ [Buy me a coffee](https://www.buymeacoffee.com/zhuth90)
