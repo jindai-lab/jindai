@@ -13,6 +13,8 @@ from PyMongoWrapper import F, Fn, Var, MongoOperand
 from PyMongoWrapper.dbo import (Anything, DbObjectCollection,
                                 DbObjectInitializer, MongoConnection, classproperty)
 
+from jindai.common import DictObject
+
 from .config import instance as config
 from .storage import instance as storage
 
@@ -66,11 +68,11 @@ class Term(db.DbObject):
     
 class ObjectWithSource(db.DbObject):
     """Object with Source"""
-    source = DbObjectInitializer(dict, dict)
+    source = DbObjectInitializer(DictObject, DictObject)
     
     @classmethod
     def get(cls, url_or_cond: Union[str, MongoOperand, dict], **kwargs):
-        source = kwargs.pop('source', {})
+        source = kwargs.pop('source', DictObject)
         if isinstance(url_or_cond, str):
             source['url'] = url_or_cond
             cond = F['source.url'] == url_or_cond
@@ -236,7 +238,6 @@ class Paragraph(ObjectWithSource):
 
     dataset = str
     author = str
-    source = DbObjectInitializer(dict, dict)
     keywords = list
     pdate = StringOrDate()
     outline = str
