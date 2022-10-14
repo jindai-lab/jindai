@@ -1,5 +1,7 @@
 """图像哈希"""
+from locale import format_string
 import os
+from re import S
 import tempfile
 from io import BytesIO, IOBase
 from queue import deque
@@ -15,7 +17,8 @@ from collections import namedtuple
 from PyMongoWrapper import F, ObjectId
 from jindai import *
 from jindai.models import MediaItem, Paragraph
-from jindai.common import DictObject
+from jindai.common import DictObject, CacheDict
+from jindai.helpers import execute_query_expr
 from plugins.imageproc import MediaItemStage
 
 ImageFile.LOAD_TRUNCATED_IMAGES = True
@@ -153,7 +156,8 @@ def resolve_dups(input_file, slimit):
 
 
 class ImageHash(MediaItemStage):
-    """建立图像哈希检索
+    """Hash images
+    @chs 建立图像哈希检索
     """
 
     def resolve_image(self, i: MediaItem, _):
@@ -179,7 +183,8 @@ class ImageHash(MediaItemStage):
 
 
 class ImageHashDuplications(MediaItemStage):
-    """进行图像哈希去重
+    """Deduplication with image hash
+    @chs 进行图像哈希去重
     """
 
     def __init__(self, auto_remove=-1) -> None:
@@ -200,8 +205,6 @@ class ImageHashDuplications(MediaItemStage):
         self._deleted = set()
 
     def resolve_image(self, i: MediaItem, _):
-        """处理图像哈希
-        """
         if not i.dhash:
             return
 
@@ -278,9 +281,12 @@ class ImageHashDuplications(MediaItemStage):
     
 
 class HashingBase(Plugin):
+    """Hashing plugin base; also used for facedet"""
     
     def __init__(self, pmanager) -> None:
         super().__init__(pmanager)
+        
+        self._cache = CacheDict()
         
     def handle_filter_check(self, context):
         return False
@@ -318,34 +324,40 @@ class HashingBase(Plugin):
         context = DictObject(dict(sticky_paragraphs=single_item('', iid), iid=ObjectId(iid), args=args))
         
         if not self.handle_filter_check(context):
-            return []
+            return context.sticky_paragraphs
         
-        for paragraph in dbq.fetch_all_rs():
-            for i in paragraph.images:
-                if i.id == iid:
-                    continue
-                
-                i = self.handle_filter_item(i, context)
-                if i is None:
-                    continue
-                
-                new_paragraph = Paragraph(**paragraph.as_dict())
-                new_paragraph.images = [i]
-                new_paragraph.score = i.score
-                
-                for group in _groups(paragraph):
-                    if group not in pgroups and \
-                        (group not in groupped or groupped[group].score >
-                            new_paragraph.score):
-                        groupped[group] = new_paragraph
+        all_results = self._cache[iid]
         
-        results = sorted(groupped.values(), key=lambda x: x.score)[offset:offset+limit]
+        if not all_results:        
+            for paragraph in dbq.fetch_all_rs():
+                for i in paragraph.images:
+                    if i.id == iid:
+                        continue
+                    
+                    i = self.handle_filter_item(i, context)
+                    if i is None:
+                        continue
+                    
+                    new_paragraph = Paragraph(**paragraph.as_dict())
+                    new_paragraph.images = [i]
+                    new_paragraph.score = i.score
+                    
+                    for group in _groups(paragraph):
+                        if group not in pgroups and \
+                            (group not in groupped or groupped[group].score >
+                                new_paragraph.score):
+                            groupped[group] = new_paragraph
+        
+            all_results = sorted(groupped.values(), key=lambda x: x.score)
+            self._cache[iid] = all_results
+            
+        results = all_results[offset:offset+limit]
 
         return context.sticky_paragraphs + [{'spacer': 'spacer'}] + results
 
 
 class Hashing(HashingBase):
-    """哈希插件"""
+    """Hashing plugin"""
 
     def __init__(self, pmanager):
         super().__init__(pmanager)
@@ -356,6 +368,11 @@ class Hashing(HashingBase):
         self.register_filter(
             'sim', keybind='s', format_string='sim/{mediaitem._id}', icon='mdi-image',
             handler=self.handle_filter)
+        self.register_filter(
+            'around', handler=self.handle_filter_around
+        )
+        
+        self._around_cache = CacheDict()
 
         app = self.pmanager.app
         
@@ -397,3 +414,34 @@ class Hashing(HashingBase):
         dha1, dhb1 = to_int(i.dhash), to_int(i.whash)
         i.score = bitcount(context.dha ^ dha1) + bitcount(context.dhb ^ dhb1)
         return i
+
+    def handle_filter_around(self, dbq, cond, count=1):
+        cond = parser.parse(cond)
+        prevs = []
+        nexts_count = count
+        
+        limit, skip = dbq.limit, dbq.skip
+        dbq.limit = 0
+        dbq.skip = self._around_cache[f'{cond};{skip-limit}'] or 0
+        
+        total = 0
+        fetched = 0
+        
+        for paragraph in dbq.fetch_all_rs():
+            fetched += 1
+            if execute_query_expr(cond, paragraph):
+                yield from prevs
+                yield paragraph
+                total += len(prevs) + 1
+                prevs = []
+                nexts_count = count
+            elif nexts_count > 0:
+                nexts_count -= 1
+                total += 1
+                yield paragraph
+            else:
+                prevs = prevs[:count - 1] + [paragraph]
+            if total >= limit:
+                break
+                
+        self._around_cache[f'{cond};{skip}'] = dbq.skip + fetched

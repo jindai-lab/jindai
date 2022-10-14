@@ -1,3 +1,6 @@
+from collections import defaultdict
+import threading
+import time
 from typing import Any
 from bson import ObjectId
 
@@ -24,3 +27,29 @@ class DictObject(dict):
             value = ObjectId(value)
         self[name] = value
         
+        
+class CacheDict:
+    
+    def __init__(self, ttl=300) -> None:
+        self.ttl = ttl
+        self._orig = defaultdict(DictObject)
+        self._lock = threading.Lock()
+        
+    def __getitem__(self, key):
+        self._orig[key].access = time.time()
+        return self._orig[key].value
+    
+    def __setitem__(self, key, value):
+        self.clear()
+        self._orig[key].value = value
+        self._orig[key].access = time.time()
+    
+    def clear(self):
+        to_pop = []
+        for key, cached in self._orig.items():
+            if time.time() - cached.access > self.ttl:
+                to_pop.append(key)
+        if to_pop:
+            with self._lock:
+                for key in to_pop:
+                    self._orig.pop(key, None)
