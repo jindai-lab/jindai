@@ -24,8 +24,8 @@ class Plugin:
         self.config = conf
         self.pmanager = pmanager
 
-    def register_filter(self, name: str, keybind: str, format_string: str,
-                        icon: str, handler: Callable) -> None:
+    def register_filter(self, name: str, keybind: str = '', format_string: str = '',
+                        icon: str = '', handler: Callable = lambda *_: list()) -> None:
         """Register filter
 
         :param name: filter name

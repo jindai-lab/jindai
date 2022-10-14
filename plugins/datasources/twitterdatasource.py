@@ -1,3 +1,4 @@
+import base64
 import datetime
 import glob
 import os
@@ -24,6 +25,36 @@ def twitter_id_from_timestamp(stamp: float) -> int:
         int: twitter id representing the timestamp
     """
     return (int(stamp * 1000) - 1288834974657) << 22
+
+
+def timestamp_from_twitter_id(tweet_id: int) -> float:
+    """Get timestamp from tweet id
+
+    Args:
+        tweet_id (int): tweet id
+
+    Returns:
+        float: timestamp in UTC
+    """
+    return ((tweet_id >> 22) + 1288834974657) / 1000
+
+
+def tweet_id_from_media_url(url: str) -> int:
+    url = url.split('/')[-1].split('.')[0]
+    tweet_id = int.from_bytes(base64.urlsafe_b64decode(url[:12])[:8], 'big')
+    return tweet_id    
+
+
+def timestamp_from_media_url(url: str) -> float:
+    """Get timestamp from Base64-encoded media url
+
+    Args:
+        url (str): _description_
+
+    Returns:
+        float: _description_
+    """
+    return timestamp_from_twitter_id(tweet_id_from_media_url(url))
 
 
 def _stamp(dtval):
