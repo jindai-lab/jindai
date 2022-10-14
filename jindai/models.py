@@ -9,7 +9,7 @@ from io import BytesIO
 import pyotp
 
 from PIL import Image, ImageFile
-from PyMongoWrapper import F, Fn, Var, MongoOperand
+from PyMongoWrapper import F, Fn, Var, MongoField, MongoOperand
 from PyMongoWrapper.dbo import (Anything, DbObjectCollection,
                                 DbObjectInitializer, MongoConnection, classproperty)
 
@@ -72,10 +72,10 @@ class ObjectWithSource(db.DbObject):
     
     @classmethod
     def get(cls, url_or_cond: Union[str, MongoOperand, dict], **kwargs):
-        source = kwargs.pop('source', DictObject)
+        source = kwargs.pop('source', DictObject())
         if isinstance(url_or_cond, str):
             source['url'] = url_or_cond
-            cond = F['source.url'] == url_or_cond
+            cond = F.source.url == url_or_cond
         else:
             cond = url_or_cond
 
@@ -96,6 +96,20 @@ class ObjectWithSource(db.DbObject):
         if not s_file and t_file:
             source1['file'] = t_file
         return source1
+    
+    
+class SourceMongoOperand(MongoField):
+    
+    @property
+    def url(self):
+        return MongoField(self._literal + '.url')
+    
+    @property
+    def file(self):
+        return MongoField(self._literal + '.file')
+    
+
+F.source = SourceMongoOperand('source')
     
 
 class MediaItem(ObjectWithSource):

@@ -101,7 +101,8 @@ class TwitterDataSource(DataSourceStage):
             self.time_before = _stamp(time_before) or time.time()
             self.proxies = {'http': proxy, 'https': proxy} if proxy else {}
             self.api = twitter.Api(consumer_key=consumer_key, consumer_secret=consumer_secret,
-                                   access_token_key=access_token_key, access_token_secret=access_token_secret, proxies=self.proxies)
+                                   access_token_key=access_token_key, access_token_secret=access_token_secret, proxies=self.proxies,
+                                   tweet_mode='extended')
             self.skip_existent = skip_existent
             self.imported = set()
 
@@ -122,6 +123,9 @@ class TwitterDataSource(DataSourceStage):
                 return
             
             self.imported.add(tweet.id)
+            
+            if not tweet.text:
+                tweet.text = tweet.full_text or ''
 
             if tweet.text.startswith('RT '):
                 if not self.allow_retweet:
@@ -213,40 +217,54 @@ class TwitterDataSource(DataSourceStage):
                     return self.api.GetHomeTimeline(
                         count=100, max_id=max_id-1, exclude_replies=True)
 
-            self.logger('twiuser', self.time_before, self.time_after)
-
             if self.time_before < self.time_after:
                 self.time_before, self.time_after = self.time_after, self.time_before
 
             max_id = twitter_id_from_timestamp(self.time_before)+1
             before = self.time_before
 
+            self.logger('import timeline', user, self.time_before, self.time_after)
+
             try:
                 pages = 0
                 while before > self.time_after and pages < 50:
                     pages += 1
                     yielded = False
+                    has_data = False
                     self.logger(max_id, datetime.datetime.fromtimestamp(
                         before), self.time_after)
 
                     timeline = source(max_id)
                     for status in timeline:
-                        before = min(before, status.created_at_in_seconds)
-                        max_id = min(max_id, status.id)
-                        para = self.parse_tweet(status)
+                        if max_id > status.id:
+                            has_data = True
+                            before = min(before, status.created_at_in_seconds)
+                            max_id = min(max_id, status.id)
+                        
+                        try:
+                            para = self.parse_tweet(status)
+                        except Exception as exc:
+                            self.logger('parse tweet error', exc.__class__.__name__, exc)
+                            para = None
+                            
                         if not para:
                             continue
                         if self.skip_existent and para.id:
                             continue
-                        yielded = True
                         if para.author != '@' + status.user.screen_name and not self.allow_retweet:
                             continue
                         if status.created_at_in_seconds > self.time_after:
                             if not self.media_only or para.images:
                                 yield para
+                                yielded = True
+                        else:
+                            # force break loop when done
+                            has_data = False
 
-                    if not yielded:
+                    if (not user and not yielded) or (user and not has_data):
                         break
+                        
+                    time.sleep(1)
             except twitter.TwitterError as ex:
                 self.logger('twitter exception', ex.__class__.__name__, ex)
 
@@ -261,7 +279,7 @@ class TwitterDataSource(DataSourceStage):
                         unames = [_ for _ in unames if re.search(arg[2:], _)]
                     for u in unames:
                         if self.time_after == 0:
-                            last_updated = Paragraph.query(F['source.url'].regex(
+                            last_updated = Paragraph.query(F.source.url.regex(
                                 f'^https://twitter.com/{u}/')).sort(-F.pdate).first()
                             if last_updated:
                                 self.time_after = _stamp(last_updated.pdate)

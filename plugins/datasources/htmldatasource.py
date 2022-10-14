@@ -267,7 +267,7 @@ class WebPageListingDataSource(DataSourceStage):
             if not b:
                 return None
 
-            para = Paragraph.first(F['source.url'] == url) or Paragraph(
+            para = Paragraph.first(F.source.url == url) or Paragraph(
                 source={'url': url}, pdate=datetime.datetime.utcnow(),
                 dataset=self.dataset, lang=self.lang)
             para.content = self.get_text(b)
