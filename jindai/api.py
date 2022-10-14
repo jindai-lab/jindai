@@ -250,7 +250,7 @@ def move_storage(source, destination, keep_folder=True):
     if keep_folder:
         destination = os.path.basename(destination)
         destination = os.path.join(os.path.dirname(source), destination)
-    paragraphs = Paragraph.query(F['source.file'] == source)
+    paragraphs = Paragraph.query(F.source.file == source)
     source = storage.expand_path(source)
     destination = storage.expand_path(destination)
     storage.move(source, destination)
