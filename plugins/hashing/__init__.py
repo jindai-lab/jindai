@@ -15,6 +15,7 @@ from collections import namedtuple
 from PyMongoWrapper import F, ObjectId
 from jindai import *
 from jindai.models import MediaItem, Paragraph
+from jindai.common import DictObject
 from plugins.imageproc import MediaItemStage
 
 ImageFile.LOAD_TRUNCATED_IMAGES = True
@@ -275,18 +276,6 @@ class ImageHashDuplications(MediaItemStage):
         self._writable_file.close()
         return PipelineStage.return_redirect(f'/api/plugins/compare?{self._tmpfile[:-4]}')
     
-    
-class HashContext:
-    
-    def __init__(self, **kwargs) -> None:
-        self.__dict__.update(kwargs)
-    
-    def __setattr__(self, __name: str, __value) -> None:
-        if __name not in self.__dict__:
-            self.__dict__[__name] = __value
-        else:
-            object.__setattr__(self, __name, __value)
-
 
 class HashingBase(Plugin):
     
@@ -308,15 +297,25 @@ class HashingBase(Plugin):
 
         groupby = dbq.groups
         dbq.groups = 'none'
+        
+        def _groups(paragraph):
+            if groupby == 'group':
+                groups = [
+                    g for g in paragraph.keywords if g.startswith('*')] or [paragraph.source.get('url')]
+            elif groupby == 'source':
+                groups = [paragraph.source.get(
+                    'url', paragraph.source.get('file')) or str(paragraph.id)]
+            elif groupby == 'none':
+                groups = [str(paragraph.id)]
+            else:
+                groups = [paragraph[groupby] or str(paragraph.id)]
+            return groups
 
-        pgroups = [g
-                   for g in (Paragraph.first(F.images == ObjectId(iid)) or Paragraph()).keywords
-                   if g.startswith('*')
-                   ] or [(Paragraph.first(F.images == ObjectId(iid))
-                          or Paragraph()).source.get('url', '')]
+
+        pgroups = _groups(Paragraph.first(F.images == ObjectId(iid)) or Paragraph())
         groupped = {}
         
-        context = HashContext(sticky_paragraphs=single_item('', iid), iid=ObjectId(iid), args=args)
+        context = DictObject(dict(sticky_paragraphs=single_item('', iid), iid=ObjectId(iid), args=args))
         
         if not self.handle_filter_check(context):
             return []
@@ -334,18 +333,7 @@ class HashingBase(Plugin):
                 new_paragraph.images = [i]
                 new_paragraph.score = i.score
                 
-                if groupby == 'group':
-                    groups = [
-                        g for g in paragraph.keywords if g.startswith('*')] or [new_paragraph.source.get('url')]
-                elif groupby == 'source':
-                    groups = [paragraph.source.get(
-                        'url', paragraph.source.get('file')) or str(paragraph.id)]
-                elif groupby == 'none':
-                    groups = [str(paragraph.id)]
-                else:
-                    groups = [paragraph[groupby] or str(paragraph.id)]
-
-                for group in groups:
+                for group in _groups(paragraph):
                     if group not in pgroups and \
                         (group not in groupped or groupped[group].score >
                             new_paragraph.score):
