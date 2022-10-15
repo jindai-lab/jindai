@@ -59,7 +59,8 @@ class LanguageDetect(PipelineStage):
                 paragraph.lang = 'cht'
             elif '-' in paragraph.lang:
                 paragraph.lang = paragraph.lang.split('-')[0]
-            return paragraph
+        
+        return paragraph
 
     def detect(self, sentence):
         """Detect language"""
