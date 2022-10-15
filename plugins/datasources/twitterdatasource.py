@@ -242,14 +242,14 @@ class TwitterDataSource(DataSourceStage):
             """Import posts of a twitter user, or timeline if blank"""
 
             if user:
-                def source(max_id, since_id):
+                def source(max_id):
                     return self.api.user_timeline(
                         screen_name=user, 
-                        count=100, since_id=since_id, max_id=max_id-1, include_rts=self.allow_retweet, exclude_replies=True)
+                        count=100, max_id=max_id-1, include_rts=self.allow_retweet, exclude_replies=True)
             else:
-                def source(max_id, since_id):
+                def source(max_id):
                     return self.api.home_timeline(
-                        count=100, max_id=max_id-1, since_id=since_id, include_rts=self.allow_retweet, exclude_replies=True)
+                        count=100, max_id=max_id-1, include_rts=self.allow_retweet, exclude_replies=True)
 
             if self.time_before < self.time_after:
                 self.time_before, self.time_after = self.time_after, self.time_before
@@ -268,7 +268,7 @@ class TwitterDataSource(DataSourceStage):
                     has_data = False
                     self.logger(max_id, datetime.datetime.fromtimestamp(before), self.time_after)
 
-                    timeline = source(max_id, min_id)
+                    timeline = source(max_id)
                     for status in timeline:
                     
                         if max_id > status.id:
@@ -276,6 +276,9 @@ class TwitterDataSource(DataSourceStage):
                             before = min(before, timestamp_from_twitter_id(status.id))
                             max_id = min(max_id, status.id)
                         
+                        if min_id > status.id:
+                            break
+                           
                         try:
                             para = self.parse_tweet(status)
                         except Exception as exc:
@@ -286,7 +289,7 @@ class TwitterDataSource(DataSourceStage):
                             yield para
                             yielded = True
                         
-                    if (not user and not yielded) or (user and not has_data):
+                    if (not user and not yielded) or not has_data:
                         break
                         
                     time.sleep(1)
