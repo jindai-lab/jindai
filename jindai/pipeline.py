@@ -3,6 +3,7 @@ import inspect
 import json
 import sys
 import re
+import traceback
 from typing import Dict, List, Tuple, Any, Type, Union, Callable
 from collections.abc import Iterable as IterableClass
 from collections import defaultdict
@@ -148,7 +149,11 @@ class PipelineStage:
         :type val: Callable
         """
         self._logger = val
-
+        
+    def log_exception(self, info, exc):
+        self.logger(info, type(exc).__name__, exc)
+        self.logger('\n'.join(traceback.format_tb(exc.__traceback__)))
+        
     def resolve(self, paragraph: Paragraph) -> Paragraph:
         """Map period, handling paragraph.
 
