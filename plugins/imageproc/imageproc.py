@@ -349,8 +349,9 @@ class DownloadMedia(MediaItemStage):
             if isinstance(ex, OSError):
                 i.no_download = True
                 i.save()
-            self.logger('Error while downloading item',
-                        i.source['url'], type(ex).__name__, ex)
+            self.log_exception(
+                f'Error while downloading item {i.source.url}',
+                ex)
             return
 
         path = storage.default_path(i.id)
@@ -448,7 +449,7 @@ class VideoFrame(MediaItemStage):
                     pic = npa.tobytes()
 
         except Exception as ex:
-            self.logger(ex)
+            self.log_exception('Error while generating thumbnail from video', ex)
 
         if use_temp and os.path.exists(read_from):
             os.unlink(read_from)
