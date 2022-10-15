@@ -14,7 +14,7 @@ requests
 requests-oauthlib
 lxml
 h5py
-python-twitter
+tweepy
 scipy
 Pillow
 gunicorn
