@@ -7,6 +7,7 @@ import sys
 import itertools
 import time
 from collections import defaultdict
+from urllib.parse import quote
 
 import pyotp
 from flask import Flask, Response, redirect, request, send_file
@@ -649,6 +650,15 @@ def do_search(q='', req='', sort='', limit=100, offset=0,
         return datasource.count()
 
     results = _expand_results(datasource.fetch())
+    
+    if datasource.groups != 'none':
+        for res in results:
+            group = res.get(datasource.groups)
+            if isinstance(group, dict):
+                group = '(' + ','.join([f'{k}={app.json_encoder().encode(v)}' for k, v in group.items()]) + ')'
+            else:
+                group = app.json_encoder().encode(group)
+            res['group_url'] = quote(f'{datasource.groups}={group}')
 
     History(user=logined(), queries=[q, req],
             created_at=datetime.datetime.utcnow()).save()
