@@ -29,7 +29,7 @@ from . import Plugin, PluginManager, Task, config, storage
 from .api import prepare_plugins, run_service
 from .common import DictObject
 from .helpers import get_context, safe_import
-from .models import F, MediaItem, Meta, Paragraph, TaskDBO, User
+from .models import F, MediaItem, Meta, Paragraph, TaskDBO, User, Dataset
 
 MongoJSONEncoder = create_dbo_json_encoder(json.encoder.JSONEncoder)
 
@@ -59,6 +59,22 @@ def _get_items():
 @click.group()
 def cli():
     """Cli group"""
+    
+    
+@cli.command('init')
+def first_run():
+    if Meta.query().count() != 0:
+        print('Already initialized.')
+        return
+    
+    admin = User(name='admin', roles=['admin'])
+    admin.set_password('admin')
+    admin.save()
+    print('Created user: admin, password: admin')
+    
+    Dataset(display_name='Default').save()
+    
+    Meta().save()
 
 
 @cli.command('export')
@@ -287,7 +303,7 @@ def dump(output, colls):
         colls (optional): list of collections
     """
     if not output:
-        output = f'dump-{datetime.datetime.utcnow().strftime("%Y%m%d%H%M%S")}'
+        output = f'dump-{config.mongoDbName}-{datetime.datetime.utcnow().strftime("%Y%m%d%H%M%S")}'
         if colls:
             output += '{("," + ",".join(colls))}.zip'
         else:
