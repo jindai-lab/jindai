@@ -7,7 +7,8 @@ import time
 from collections import defaultdict
 from typing import List
 
-import twitter
+import tweepy
+from jindai.common import DictObject
 from jindai.models import MediaItem, Paragraph
 from jindai.pipeline import DataSourceStage
 from jindai.dbquery import parser, ObjectId, F, Fn
@@ -130,10 +131,8 @@ class TwitterDataSource(DataSourceStage):
             self.import_username = import_username
             self.time_after = _stamp(time_after) or 0
             self.time_before = _stamp(time_before) or time.time()
-            self.proxies = {'http': proxy, 'https': proxy} if proxy else {}
-            self.api = twitter.Api(consumer_key=consumer_key, consumer_secret=consumer_secret,
-                                   access_token_key=access_token_key, access_token_secret=access_token_secret, proxies=self.proxies,
-                                   tweet_mode='extended')
+            self.api = tweepy.API(tweepy.OAuth1UserHandler( consumer_key, consumer_secret, access_token_key, access_token_secret), 
+                                  proxy=proxy)
             self.skip_existent = skip_existent
             self.imported = set()
 
@@ -146,71 +145,74 @@ class TwitterDataSource(DataSourceStage):
             """
             if skip_existent is None:
                 skip_existent = self.skip_existent
-
-            tweet_url = f'https://twitter.com/{tweet.user.screen_name}/status/{tweet.id}'
-
-            author = '@' + tweet.user.screen_name
+            
             if tweet.id in self.imported:
                 return
-            
             self.imported.add(tweet.id)
             
+            tweet_url = f'https://twitter.com/{tweet.user.screen_name}/status/{tweet.id}'
+            
+            # get author info
+            author = '@' + tweet.user.screen_name            
             if not tweet.text:
                 tweet.text = tweet.full_text or ''
-
             if tweet.text.startswith('RT '):
-                if not self.allow_retweet:
-                    return
-                
                 author = re.match(r'^RT (@[\w_-]*)', tweet.text)
                 if author:
                     author = author.group(1)
                 else:
                     author = ''
+            
+            # get media entities
+            media_entities = [
+                DictObject(media)
+                for media in tweet.entities.get('media', [])
+            ]
+            if not media_entities and self.media_only:
+                return
                     
             para = Paragraph.get(F.tweet_id == f'{tweet.id}', tweet_id=f'{tweet.id}', author=author)
-            self.logger(
-                tweet_url, 'skip' if para is not None and skip_existent else '')
+            self.logger(tweet_url, 'existent' if para.id else '')
             
-            if not skip_existent or not para.id:
-                para.dataset = self.dataset_name
-                para.pdate = datetime.datetime.utcfromtimestamp(
-                    tweet.created_at_in_seconds)
-                para.source = {'url': tweet_url}
-                para.tweet_id = f'{tweet.id}'
-                para.images = []
-                
-                if para.id:
-                    self.logger('... matched existent paragraph', para.id)
-
-                for media in tweet.media or []:
-                    if media.video_info:
-                        if not self.allow_video:
-                            continue  # skip videos
-                        url = media.video_info['variants'][-1]['url'].split('?')[
-                            0]
-                        if url.endswith('.m3u8'):
-                            self.logger('found m3u8, pass', url)
-                            continue
-                    else:
-                        url = media.media_url_https
-                    if url:
-                        item = MediaItem.get(url, item_type='video' if media.video_info else 'image')
-                        if not item.id:
-                            item.save()
-                            self.logger('... add new item', url)
-                            para.images.append(item)
-                        elif not self.skip_existent:
-                            Paragraph.query(F.images == item.id, F.id != para.id).update(
-                                Fn.pull(images=item.id))
-                            para.images.append(item)
-
-                text = re.sub(r'https?://[^\s]+', '', tweet.text).strip()
-                para.keywords += [t.strip().strip('#') for t in re.findall(
-                    r'@[a-z_A-Z0-9]+', text) + re.findall(r'[#\s][^\s@]{,10}', text)] + [author]
-                para.keywords = [_ for _ in para.keywords if _]
-                para.content = text
-                self.logger(len(para.images), 'media items')
+            if skip_existent and para.id:
+                return
+            
+            para.dataset = self.dataset_name
+            para.pdate = datetime.datetime.utcfromtimestamp(timestamp_from_twitter_id(tweet.id))
+            para.source = {'url': tweet_url}
+            para.tweet_id = f'{tweet.id}'
+            para.images = []
+            
+            if para.id:
+                self.logger('... matched existent paragraph', para.id)
+                            
+            for media in media_entities:
+                if media.video_info:
+                    if not self.allow_video:
+                        continue  # skip videos
+                    url = media.video_info['variants'][-1]['url'].split('?')[
+                        0]
+                    if url.endswith('.m3u8'):
+                        self.logger('found m3u8, pass', url)
+                        continue
+                else:
+                    url = media.media_url_https
+                    
+                if url:
+                    item = MediaItem.get(url, item_type='video' if media.video_info else 'image')
+                    if not item.id:
+                        item.save()
+                        self.logger('... add new item', url)
+                    para.images.append(item)
+                    
+            text = re.sub(r'https?://[^\s]+', '', tweet.text).strip()
+            para.keywords += [t.strip().strip('#') for t in re.findall(
+                r'@[a-z_A-Z0-9]+', text) + re.findall(r'[#\s][^\s@]{,10}', text)] + [author]
+            para.keywords = [_ for _ in para.keywords if _]
+            para.content = text
+            para.save()
+            
+            self.logger(len(para.images), 'media items')
 
             return para
 
@@ -228,25 +230,26 @@ class TwitterDataSource(DataSourceStage):
                 tweet_id = tweet_id[tweet_id.index('status') + 1]
 
                 try:
-                    tweet = self.api.GetStatus(tweet_id)
+                    tweet = self.api.get_status(tweet_id)
                 except Exception:
                     continue
 
                 para = self.parse_tweet(tweet, False)
-                if para and (not self.media_only or para.images):
+                if para:
                     yield para
 
         def import_timeline(self, user=''):
             """Import posts of a twitter user, or timeline if blank"""
 
             if user:
-                def source(max_id):
-                    return self.api.GetUserTimeline(
-                        screen_name=user, count=100, max_id=max_id-1)
+                def source(max_id, since_id):
+                    return self.api.user_timeline(
+                        screen_name=user, 
+                        count=100, since_id=since_id, max_id=max_id-1, include_rts=self.allow_retweet, exclude_replies=True)
             else:
-                def source(max_id):
-                    return self.api.GetHomeTimeline(
-                        count=100, max_id=max_id-1, exclude_replies=True)
+                def source(max_id, since_id):
+                    return self.api.home_timeline(
+                        count=100, max_id=max_id-1, since_id=since_id, include_rts=self.allow_retweet, exclude_replies=True)
 
             if self.time_before < self.time_after:
                 self.time_before, self.time_after = self.time_after, self.time_before
@@ -258,18 +261,19 @@ class TwitterDataSource(DataSourceStage):
 
             try:
                 pages = 0
-                while before > self.time_after and pages < 50:
+                min_id = max(0, twitter_id_from_timestamp(self.time_after))
+                while before >= self.time_after and pages < 50:
                     pages += 1
                     yielded = False
                     has_data = False
-                    self.logger(max_id, datetime.datetime.fromtimestamp(
-                        before), self.time_after)
+                    self.logger(max_id, datetime.datetime.fromtimestamp(before), self.time_after)
 
-                    timeline = source(max_id)
+                    timeline = source(max_id, min_id)
                     for status in timeline:
+                    
                         if max_id > status.id:
                             has_data = True
-                            before = min(before, status.created_at_in_seconds)
+                            before = min(before, timestamp_from_twitter_id(status.id))
                             max_id = min(max_id, status.id)
                         
                         try:
@@ -278,25 +282,15 @@ class TwitterDataSource(DataSourceStage):
                             self.logger('parse tweet error', exc.__class__.__name__, exc)
                             para = None
                             
-                        if not para:
-                            continue
-                        if self.skip_existent and para.id:
-                            continue
-                        if para.author != '@' + status.user.screen_name and not self.allow_retweet:
-                            continue
-                        if status.created_at_in_seconds > self.time_after:
-                            if not self.media_only or para.images:
-                                yield para
-                                yielded = True
-                        else:
-                            # force break loop when done
-                            has_data = False
-
+                        if para:
+                            yield para
+                            yielded = True
+                        
                     if (not user and not yielded) or (user and not has_data):
                         break
                         
                     time.sleep(1)
-            except twitter.TwitterError as ex:
+            except tweepy.TwitterServerError as ex:
                 self.logger('twitter exception', ex.__class__.__name__, ex)
 
         def fetch(self):
@@ -305,7 +299,7 @@ class TwitterDataSource(DataSourceStage):
             if arg.startswith('@'):
                 if arg == '@' or arg.startswith('@%'):
                     unames = sorted(
-                        map(lambda x: x.screen_name, self.api.GetFriends()))
+                        map(lambda x: x.screen_name, self.api.get_friends()))
                     if arg.startswith('@%'):
                         unames = [_ for _ in unames if re.search(arg[2:], _)]
                     for u in unames:
