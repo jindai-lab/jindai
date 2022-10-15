@@ -1,10 +1,7 @@
 import base64
 import datetime
-import glob
-import os
 import re
 import time
-from collections import defaultdict
 from typing import List
 
 import tweepy
@@ -43,7 +40,7 @@ def timestamp_from_twitter_id(tweet_id: int) -> float:
 def tweet_id_from_media_url(url: str) -> int:
     url = url.split('/')[-1].split('.')[0]
     tweet_id = int.from_bytes(base64.urlsafe_b64decode(url[:12])[:8], 'big')
-    return tweet_id    
+    return tweet_id
 
 
 def timestamp_from_media_url(url: str) -> float:
@@ -131,7 +128,7 @@ class TwitterDataSource(DataSourceStage):
             self.import_username = import_username
             self.time_after = _stamp(time_after) or 0
             self.time_before = _stamp(time_before) or time.time()
-            self.api = tweepy.API(tweepy.OAuth1UserHandler( consumer_key, consumer_secret, access_token_key, access_token_secret), 
+            self.api = tweepy.API(tweepy.OAuth1UserHandler(consumer_key, consumer_secret, access_token_key, access_token_secret),
                                   proxy=proxy)
             self.skip_existent = skip_existent
             self.imported = set()
@@ -145,15 +142,15 @@ class TwitterDataSource(DataSourceStage):
             """
             if skip_existent is None:
                 skip_existent = self.skip_existent
-            
+
             if tweet.id in self.imported:
                 return
             self.imported.add(tweet.id)
-            
+
             tweet_url = f'https://twitter.com/{tweet.user.screen_name}/status/{tweet.id}'
-            
+
             # get author info
-            author = '@' + tweet.user.screen_name            
+            author = '@' + tweet.user.screen_name
             if not tweet.text:
                 tweet.text = tweet.full_text or ''
             if tweet.text.startswith('RT '):
@@ -162,7 +159,7 @@ class TwitterDataSource(DataSourceStage):
                     author = author.group(1)
                 else:
                     author = ''
-            
+
             # get media entities
             media_entities = [
                 DictObject(media)
@@ -170,22 +167,24 @@ class TwitterDataSource(DataSourceStage):
             ]
             if not media_entities and self.media_only:
                 return
-                    
-            para = Paragraph.get(F.tweet_id == f'{tweet.id}', tweet_id=f'{tweet.id}', author=author)
+
+            para = Paragraph.get(
+                F.tweet_id == f'{tweet.id}', tweet_id=f'{tweet.id}', author=author)
             self.logger(tweet_url, 'existent' if para.id else '')
-            
+
             if skip_existent and para.id:
                 return
-            
+
             para.dataset = self.dataset_name
-            para.pdate = datetime.datetime.utcfromtimestamp(timestamp_from_twitter_id(tweet.id))
+            para.pdate = datetime.datetime.utcfromtimestamp(
+                timestamp_from_twitter_id(tweet.id))
             para.source = {'url': tweet_url}
             para.tweet_id = f'{tweet.id}'
             para.images = []
-            
+
             if para.id:
                 self.logger('... matched existent paragraph', para.id)
-                            
+
             for media in media_entities:
                 if media.video_info:
                     if not self.allow_video:
@@ -197,21 +196,23 @@ class TwitterDataSource(DataSourceStage):
                         continue
                 else:
                     url = media.media_url_https
-                    
+
                 if url:
-                    item = MediaItem.get(url, item_type='video' if media.video_info else 'image')
+                    item = MediaItem.get(
+                        url, item_type='video' if media.video_info else 'image')
                     if not item.id:
                         item.save()
                         self.logger('... add new item', url)
                     para.images.append(item)
-                    
+
             text = re.sub(r'https?://[^\s]+', '', tweet.text).strip()
             para.keywords += [t.strip().strip('#') for t in re.findall(
                 r'@[a-z_A-Z0-9]+', text) + re.findall(r'[#\s][^\s@]{,10}', text)] + [author]
             para.keywords = [_ for _ in para.keywords if _]
             para.content = text
             para.save()
-            
+
+            assert len(para.images) == len(media_entities) or len(para.images) == 0
             self.logger(len(para.images), 'media items')
 
             return para
@@ -241,15 +242,17 @@ class TwitterDataSource(DataSourceStage):
         def import_timeline(self, user=''):
             """Import posts of a twitter user, or timeline if blank"""
 
+            params = dict(count=100, include_rts=self.allow_retweet, exclude_replies=True)
             if user:
                 def source(max_id):
                     return self.api.user_timeline(
-                        screen_name=user, 
-                        count=100, max_id=max_id-1, include_rts=self.allow_retweet, exclude_replies=True)
+                        screen_name=user, max_id=max_id-1,
+                        **params)
             else:
                 def source(max_id):
                     return self.api.home_timeline(
-                        count=100, max_id=max_id-1, include_rts=self.allow_retweet, exclude_replies=True)
+                        max_id=max_id-1,
+                        **params)
 
             if self.time_before < self.time_after:
                 self.time_before, self.time_after = self.time_after, self.time_before
@@ -257,7 +260,8 @@ class TwitterDataSource(DataSourceStage):
             max_id = twitter_id_from_timestamp(self.time_before)+1
             before = self.time_before
 
-            self.logger('import timeline', user, self.time_before, self.time_after)
+            self.logger('import timeline', user,
+                        self.time_before, self.time_after)
 
             try:
                 pages = 0
@@ -266,36 +270,42 @@ class TwitterDataSource(DataSourceStage):
                     pages += 1
                     yielded = False
                     has_data = False
-                    self.logger(max_id, datetime.datetime.fromtimestamp(before), self.time_after)
+                    self.logger(max_id, datetime.datetime.fromtimestamp(
+                        before), self.time_after)
 
                     timeline = source(max_id)
                     for status in timeline:
-                    
-                        if max_id > status.id:
-                            has_data = True
-                            before = min(before, timestamp_from_twitter_id(status.id))
-                            max_id = min(max_id, status.id)
-                        
+
                         if min_id > status.id:
                             break
-                           
+
+                        if max_id > status.id:
+                            has_data = True
+                            before = min(
+                                before, timestamp_from_twitter_id(status.id))
+                            max_id = min(max_id, status.id)
+
                         try:
                             para = self.parse_tweet(status)
                         except Exception as exc:
-                            self.logger('parse tweet error', exc.__class__.__name__, exc)
+                            self.log_exception('parse tweet error', exc)
                             para = None
-                            
+
                         if para:
                             yield para
                             yielded = True
-                        
+
                     if (not user and not yielded) or not has_data:
                         break
-                        
-                    time.sleep(1)
-            except tweepy.TwitterServerError as ex:
-                self.logger('twitter exception', ex.__class__.__name__, ex)
 
+                    time.sleep(1)
+                
+                if pages >= 50:
+                    self.logger(f'Reached max pages count, interrupted. {user}')
+            
+            except tweepy.TwitterServerError as ex:
+                self.log_exception('twitter exception', ex)
+            
         def fetch(self):
             args = self.import_username.split('\n')
             arg = args[0]

@@ -183,8 +183,7 @@ class Task:
                     break
             self._pbar.inc_total(counter)
         except Exception as ex:
-            self.logger('Error:', ex)
-            self.logger('\n'.join(traceback.format_tb(ex.__traceback__)))
+            self.logger('Error while executing', type(ex).__name__, ex)
             if not self.resume_next:
                 self.alive = False
                 
@@ -249,8 +248,7 @@ class Task:
             try:
                 self.returned = self.execute()
             except Exception as ex:
-                self.logger('Error:', ex)
-                self.logger(traceback.format_exc())
+                self.logger('Error while running task', type(ex).__name__, ex)
             self.alive = False
             if callback:
                 callback(self)
