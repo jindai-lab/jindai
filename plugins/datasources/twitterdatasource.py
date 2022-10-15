@@ -300,7 +300,7 @@ class TwitterDataSource(DataSourceStage):
 
                     time.sleep(1)
                 
-                if page >= 50:
+                if pages >= 50:
                     self.logger(f'Reached max pages count, interrupted. {user}')
             
             except tweepy.TwitterServerError as ex:
