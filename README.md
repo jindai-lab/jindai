@@ -41,4 +41,9 @@ mkdir ui && tar xzf dist.tgz -C ui && rm dist.tgz
 python3 -m jindai web-service
 ```
 
+## Run init script
+```bash
+docker exec -it -w /app jindai python3 -m jindai init
+```
+
 ☕ [Buy me a coffee](https://www.buymeacoffee.com/zhuth90)
