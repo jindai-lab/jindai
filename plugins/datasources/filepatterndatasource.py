@@ -14,19 +14,15 @@ class FilePatternDataSource(DataSourceStage):
     @chs 文件名模式匹配数据源
     """
 
-    class Implementation(DataSourceStage.Implementation):
-        """Implementing File Pattern Data Source"""
+    def apply_params(self, content=""):
+        """File Pattern Data Source
 
-        def __init__(self, content=""):
-            """File Pattern Data Source
+        :param content: Patterns
+            @chs 文件名模式
+        :type content: str, optional
+        """
+        self.patterns = content
 
-            :param content: Patterns
-                @chs 文件名模式
-            :type content: str, optional
-            """
-            self.patterns = content
-            super().__init__()
-
-        def fetch(self):
-            for path in storage.expand_patterns(self.patterns):
-                yield Paragraph(content=path)
+    def fetch(self):
+        for path in storage.expand_patterns(self.patterns):
+            yield Paragraph(content=path)
