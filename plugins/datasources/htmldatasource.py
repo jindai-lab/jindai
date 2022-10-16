@@ -35,7 +35,7 @@ class HTMLDataSource(DataSourceStage):
             lang (LANG):
                 Language code
                 @chs 语言标识
-            content (str):
+            content (LINES):
                 Paths
                 @chs HTML或包含HTML的ZIP压缩包文件列表
             paragraph_selector (str):
@@ -115,7 +115,7 @@ class TextDataSource(DataSourceStage):
             lang (LANG):
                 Language code
                 @chs 语言标识
-            content (str):
+            content (LINES):
                 Paths
                 @chs HTML或包含HTML的ZIP压缩包文件列表
         """
@@ -147,7 +147,7 @@ class LinesDataSource(DataSourceStage):
             lang (LANG):
                 Language code
                 @chs 语言标识
-            content (str):
+            content (LINES):
                 Text contents
                 @chs 文本内容
             params (object):
@@ -187,7 +187,7 @@ class WebPageListingDataSource(DataSourceStage):
             lang (LANG):
                 Language code
                 @chs 语言标识
-            patterns (str):
+            patterns (LINES):
                 Patterns for web pages
                 @chs 列表页面模式
             list_depth (int):
@@ -196,18 +196,18 @@ class WebPageListingDataSource(DataSourceStage):
             proxy (str):
                 Proxy settings
                 @chs 代理服务器
-            tags (str):
+            tags (LINES):
                 Tags, one tag per line
-                @chs 标签，一行一个
+                @chs 标签
             detail_link (str):
                 Regex for detailed page URL
                 @chs 详情页面正则表达式
             list_link (str):
                 Regex for listing page URL
                 @chs 列表页面正则表达式
-            img_pattern (str):
+            img_pattern (LINES):
                 Image pattern
-                @chs 图像检索标记，一行一个
+                @chs 图像检索标记
             mongocollection (str):
                 Mongo Collection name
                 @chs 数据库集合名
@@ -397,7 +397,7 @@ class BiblioDataSource(DataSourceStage):
             lang (LANG):
                 Language code
                 @chs 语言标识
-            content (str):
+            content (LINES):
                 Paths
                 @chs 文件列表
             format (endnote|other, unsupported):
