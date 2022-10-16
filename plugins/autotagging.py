@@ -14,10 +14,10 @@ class AutoTag(db.DbObject):
     cond = str
     tag = str
 
-    def __init__(self, cond='', **kwargs):
+    def __init__(self, **kwargs):
         super().__init__(**kwargs)
         self._parsed = {}
-        self.cond = cond
+        self._parsed_cond = ''
 
     @property
     def parsed(self):
@@ -26,26 +26,13 @@ class AutoTag(db.DbObject):
         :return: parsed condition
         :rtype: dict
         """
-        if not self._parsed:
+        if self._parsed_cond != self.cond:
+            self._parsed_cond = self.cond
             try:
                 self._parsed = parser.parse(self.cond)
             except QueryExpressionError:
-                self._parsed = 'False'
+                self._parsed = {'__FALSE__': True}
         return self._parsed
-
-    @property
-    def cond(self):
-        return self._orig.get('cond')
-
-    @cond.setter
-    def cond(self, val):
-        self._orig['cond'] = val
-        self._parsed = {}
-
-    def as_dict(self, expand=False):
-        d = super().as_dict(expand)
-        d = {k: v for k, v in d.items() if k == '_id' or not k.startswith('_')}
-        return d
 
 
 class ApplyAutoTags(PipelineStage):

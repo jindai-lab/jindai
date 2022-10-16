@@ -47,12 +47,28 @@ def _init_plugins():
 
 
 def _get_items():
-    mediaitems = {m['_id']
-                  for m in MediaItem.aggregator.project(_id=1).perform(raw=True)}
-    paraitems = {p['_id']: p['images']
-                 for p in Paragraph.aggregator.project(_id=1, images=1).perform(raw=True)}
-    checkeditems = set(chain(*paraitems.values()))    
-    unlinked = mediaitems - checkeditems
+    itemparas = {
+        m['_id'] : m['paragraphs']
+        for m in MediaItem.aggregator.lookup(
+            foreignField='images',
+            localField='_id',
+            from_='paragraph',
+            as_='paragraphs'
+        ).project(
+            _id=1, paragraphs=1
+        ).perform(raw=True)
+    }
+    
+    mediaitems = set(itemparas)
+    checkeditems = {
+        m for m, paras in itemparas.items() if len(paras) == 1
+    }
+    unlinked = {
+        m for m, paras in itemparas.items() if len(paras) == 0
+    }
+    itemparas = {
+        m: paras for m, paras in itemparas.items() if len(paras) > 1
+    }
     return DictObject(locals())
 
 
@@ -585,7 +601,7 @@ def fix_integrity(quiet):
     mediaitems = r.mediaitems
     unlinked = r.unlinked
     checkeditems = r.checkeditems
-    paraitems = r.paraitems
+    itemparas = r.itemparas
     
     print(len(mediaitems), 'items', len(unlinked), 'unlinked')
     
@@ -600,12 +616,7 @@ def fix_integrity(quiet):
         if len(images) != len(p['images']):
             Paragraph.query(F.id == p['_id']).update(
                 Fn.set(images=list(images)))
-            paraitems[p['_id']] = list(images)
-            
-    itemparas = defaultdict(set)
-    for pid, images in paraitems.items():
-        for i in images:
-            itemparas[i].add(pid)
+    
     for iid, paras in tqdm(itemparas.items(), desc='Clearing repeated items'):
         if len(paras) > 1:
             paras = sorted(paras)
