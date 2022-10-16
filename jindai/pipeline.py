@@ -4,7 +4,7 @@ import json
 import sys
 import re
 import traceback
-from typing import Dict, List, Tuple, Any, Type, Union, Callable
+from typing import Dict, Iterable, List, Tuple, Any, Type, Union, Callable
 from collections.abc import Iterable as IterableClass
 from collections import defaultdict
 from .models import Paragraph
@@ -197,33 +197,18 @@ class PipelineStage:
 class DataSourceStage(PipelineStage):
     """PipelineStage for data sources
     """
-
-    @classmethod
-    def get_spec(cls):
-        """Overwrite the method for getting specifications
-
-        :return: Name, docstring and argument info
-        :rtype: dict
-        """
-        return {
-            'name': cls.__name__,
-            'doc': (cls.__doc__ or '').strip(),
-            'args': PipelineStage._spec(cls.Implementation)
-        }
-
-    class Implementation:
-        """Implementing the data source"""
-
-        def __init__(self) -> None:
-            self.logger = print
-
-        def fetch(self):
-            """Yield data (Paragraph objects)"""
-
+    
     def __init__(self, **params) -> None:
         super().__init__()
         self.params = params
-
+        self.apply_params(**params)
+    
+    def apply_params(self, **params):
+        pass
+    
+    def fetch(self) -> Iterable[Paragraph]:
+        yield from []
+    
     def resolve(self, paragraph: Paragraph) -> Paragraph:
         """Update the parameters of the data source with
             the input paragraph
@@ -235,12 +220,15 @@ class DataSourceStage(PipelineStage):
         :rtype: Paragraph
         """
 
-        args = dict(**self.params)
-        args.update(paragraph.as_dict())
+        args = paragraph.as_dict()
+        for k, v in self.params.items():
+            if k not in args:
+                args[k] = v
+        
         Pipeline.ensure_args(type(self), args)
-        instance = type(self).Implementation(**args)
-        instance.logger = self.logger
-        yield from instance.fetch()
+        self.apply_params(**args)
+        
+        yield from self.fetch()
 
 
 class Pipeline:
