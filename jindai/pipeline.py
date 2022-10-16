@@ -30,8 +30,8 @@ class PipelineStage:
         }
 
     @staticmethod
-    def _spec(stage_cls: Type):
-        """Get argument info for `__init__` method of stage_cls
+    def _spec(stage_cls: Type, method = '__init__'):
+        """Get argument info for method of stage_cls
 
         :param stage_cls: a class
         :type stage_cls: Type
@@ -81,9 +81,9 @@ class PipelineStage:
                                 args_docs[arg_name]['type'] = arg_type.strip()
             return args_docs
 
-        args_docs = _parse_docstring(stage_cls.__init__.__doc__ or '')
+        args_docs = _parse_docstring(getattr(stage_cls, method).__doc__ or '')
 
-        args_spec = inspect.getfullargspec(stage_cls.__init__)
+        args_spec = inspect.getfullargspec(getattr(stage_cls, method))
         args_defaults = dict(zip(reversed(args_spec.args),
                              reversed(args_spec.defaults or [])))
 
@@ -202,6 +202,19 @@ class DataSourceStage(PipelineStage):
         super().__init__()
         self.params = params
         self.apply_params(**params)
+    
+    @classmethod
+    def get_spec(cls):
+        """Overwrite the method for getting specifications
+
+        :return: Name, docstring and argument info
+        :rtype: dict
+        """
+        return {
+            'name': cls.__name__,
+            'doc': (cls.__doc__ or '').strip(),
+            'args': PipelineStage._spec(cls, 'apply_params')
+        }
     
     def apply_params(self, **params):
         pass
