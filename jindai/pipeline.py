@@ -289,6 +289,10 @@ class Pipeline:
                     if name.startswith('$'):
                         name = name[1:]
                     stage = (name, kwargs)
+                
+                if kwargs.get('disabled'):
+                    continue
+                
                 if isinstance(stage, (tuple, list)) and len(stage) == 2 and Pipeline.ctx:
                     name, kwargs = stage
                     stage_type = Pipeline.ctx[name]

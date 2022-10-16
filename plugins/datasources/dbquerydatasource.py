@@ -40,9 +40,9 @@ class DBQueryDataSource(DataSourceStage):
             skip (int):
                 Skip %1 results
                 @chs 返回从第%1个开始的结果
-            mongocollections (str):
-                Name for collection name in MongoDB, one item per line
-                @chs 数据库中其他数据集的名称，一行一个
+            mongocollections (LINES):
+                Name for colletion name in MongoDB, one item per line
+                @chs 数据库中其他数据集的名称
             raw (bool):
                 Return dicts instead of Paragraph objects
                 @chs 若为 False（默认值）则返回 Paragraph 对象，否则返回原始数据，仅对于聚合查询有效
@@ -109,24 +109,24 @@ class MediaDataSource(DataSourceStage):
         yield from self.result_set
 
 
-class ImageImportDataSource(DataSourceStage):
+class MediaImportDataSource(DataSourceStage):
     """
-    Import images from datasource
-    @chs 从本地文件或网址导入图像到图集
+    Import media from datasource
+    @chs 从本地文件或网址导入图像信息
     """
     
     def apply_params(self, patterns, dataset='', tags='', proxy='', excluding_patterns=''):
         """
         Args:
-            patterns (str):
+            patterns (LINES):
                 Import images from locations, one per line
-                @chs 网址或文件通配符，一行一个
-            excluding_patterns (str):
+                @chs 网址或文件通配符
+            excluding_patterns (LINES):
                 Excluding patterns
-                @chs 排除的图片网址正则表达式，一行一个
-            tags (str):
+                @chs 排除的图片网址正则表达式
+            tags (LINES):
                 Tags, one tag per line
-                @chs 标签，一行一个
+                @chs 标签
             dataset (DATASET):
                 Dataset name
                 @chs 数据集名称
@@ -175,15 +175,12 @@ class ImageImportDataSource(DataSourceStage):
 
                 album = albums[filename]
                 if not album.source:
-                    album.source = {'url': 'file://' + filename}
+                    album.source = {'url': filename}
                     album.keywords += self.keywords
                     album.pdate = datetime.datetime.utcfromtimestamp(ftime)
                     album.dataset = self.dataset
-                    album.content = filename
 
-                i = MediaItem.get('file://' + loc,
-                                    source={'file': loc},
-                                    item_type=MediaItem.get_type(extname))
+                i = MediaItem.get(loc, item_type=MediaItem.get_type(extname))
                 i.save()
                 path = storage.default_path(i.id)
                 with storage.open(path, 'wb') as fout:

@@ -83,7 +83,6 @@ class TwitterDataSource(DataSourceStage):
                      proxy=''
                      ) -> None:
         """
-
         Args:
             dataset_name (DATASET):
                 Dataset name
@@ -101,7 +100,7 @@ class TwitterDataSource(DataSourceStage):
             consumer_secret (str, optional): API CONSUMER SECRET
             access_token_key (str, optional): API ACCESS TOKEN KEY
             access_token_secret (str, optional): API ACCESS TOKEN SECRET
-            import_username (str, optional):
+            import_username (LINES, optional):
                 Import source, blank for timeline
                 @chs 导入的用户名或留空以导入 Timeline
             time_after (str):

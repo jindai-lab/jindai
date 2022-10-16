@@ -1,4 +1,6 @@
 """Database access functionality"""
+import hashlib
+import json
 import re
 import jieba
 import datetime
@@ -278,6 +280,10 @@ class DBQuery:
         self.sort = sort or 'id'
         self.skips = {}
         self.skip = skip
+        
+    @property
+    def query_hash(self):
+        return hashlib.sha1(json.dumps(self.query).encode('utf-8')).hexdigest()
 
     def fetch_rs(self, mongocollection, sort=None, limit=-1, skip=-1):
         """Fetch result set for single mongo collection"""

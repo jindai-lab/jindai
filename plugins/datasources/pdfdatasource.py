@@ -46,7 +46,7 @@ class PDFDataSource(DataSourceStage):
             lang (LANG):
                 Language
                 @chs 语言标识
-            content (str):
+            content (LINES):
                 Paths
                 @chs PDF文件列表
             mongocollection (str):

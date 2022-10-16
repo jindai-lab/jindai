@@ -296,6 +296,8 @@ class HashingBase(Plugin):
         
     def handle_filter(self, dbq, iid, *args):
         """Handle page"""
+        query_hash = f'{dbq.query_hash}:{iid}'
+        
         limit = dbq.limit
         offset = dbq.skip
         dbq.limit = 0
@@ -326,7 +328,7 @@ class HashingBase(Plugin):
         if not self.handle_filter_check(context):
             return context.sticky_paragraphs
         
-        all_results = self._cache[iid]
+        all_results = self._cache[query_hash]
         
         if not all_results:        
             for paragraph in dbq.fetch_all_rs():
@@ -349,7 +351,7 @@ class HashingBase(Plugin):
                             groupped[group] = new_paragraph
         
             all_results = sorted(groupped.values(), key=lambda x: x.score)
-            self._cache[iid] = all_results
+            self._cache[query_hash] = all_results
             
         results = all_results[offset:offset+limit]
 
