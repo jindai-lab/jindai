@@ -265,10 +265,9 @@ class WebPageListingDataSource(DataSourceStage):
             """Parse url as a detail page"""
 
             if not b:
-                return None
+                return
 
-            para = Paragraph.first(F.source.url == url) or Paragraph(
-                source={'url': url}, pdate=datetime.datetime.utcnow(),
+            para = Paragraph.get(url, pdate=datetime.datetime.utcnow(),
                 dataset=self.dataset, lang=self.lang)
             para.content = self.get_text(b)
             para.keywords = self.tags
@@ -304,7 +303,7 @@ class WebPageListingDataSource(DataSourceStage):
                 return []
 
             links = {
-                urljoin(url, a['href'])
+                urljoin(url, a['href'].split('#')[0])
                 for a in b.select('a[href]')
             }
             self.logger(len(links), 'links')
@@ -325,7 +324,10 @@ class WebPageListingDataSource(DataSourceStage):
                     self.logger('found', url, 'visited, skip')
                     return
                 visited.add(url)
-
+                para = Paragraph.get(url)
+                if para.id:
+                    return
+                
                 b = self.read_html(url)
 
                 if self.list_link.search(url) or self.detail_link.search(url):
