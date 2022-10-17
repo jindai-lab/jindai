@@ -156,7 +156,7 @@ class TwitterDataSource(DataSourceStage):
         # get media entities
         media_entities = [
             DictObject(media)
-            for media in tweet.entities.get('media', [])
+            for media in tweet.extended_entities.get('media', [])
         ]
         if not media_entities and self.media_only:
             return
