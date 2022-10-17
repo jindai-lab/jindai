@@ -273,7 +273,7 @@ class Task:
         :rtype: Task
         """
         if db_object.pipeline:
-            return Task(params=db_object.pipeline[0][1],
+            return Task(params={},
                         stages=db_object.pipeline,
                         concurrent=db_object.concurrent,
                         resume_next=db_object.resume_next,

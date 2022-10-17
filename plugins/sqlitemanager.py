@@ -78,6 +78,9 @@ class SqliteManager(StorageManager):
             if base.startswith('local:'):
                 base = base[6:]
                 self.dbs += [SqliteSingleAccessor(f) for f in glob.glob(os.path.join(base, 'sblobs*.db'))]
+        if not storage_base:
+            print('Please specify local storage base in `file` section first.')
+            return
         if not self.dbs:
             self.dbs = [SqliteSingleAccessor(os.path.join(storage_base[0], 'sblobs1.db'))]
 

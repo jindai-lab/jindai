@@ -16,10 +16,16 @@ def _expr_groupby(params):
     if 'id' in params:
         params['_id'] = {k[1:]: k for k in params['id']}
         del params['id']
+    
+    # get field name
+    field, *_ = params['_id']
+    field = field.lstrip('$')
+    
     return [
         Fn.group(orig=Fn.first('$$ROOT'), **params),
         Fn.replaceRoot(newRoot=Fn.mergeObjects(
-            '$orig', {'group_id': '$_id'}, {k: f'${k}' for k in params if k != '_id'}))
+            '$orig', {'group_id': '$_id'}, {k: f'${k}' for k in params if k != '_id'})),
+        Fn.addFields(group_field=field)
     ]
 
 
@@ -45,7 +51,7 @@ def _gid(params):
     '''
     => addFields(gid=filter(input=$keywords,as=t,cond=regexMatch(input=$$t,regex=`^\*`)))
     => unwind(path=$gid,preserveNullAndEmptyArrays=true)
-    => addFields(gid=ifNull($gid;concat('id=';toString($_id))),images=ifNull($images;[]))
+    => addFields(gid=ifNull($gid;concat('id="';toString($_id));'"'),images=ifNull($images;[]))
     => groupby(id=$gid,pdate=max($pdate),count=sum(size($images)),images=push($images))
     '''
     if isinstance(params, MongoOperand):

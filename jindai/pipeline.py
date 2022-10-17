@@ -202,7 +202,7 @@ class DataSourceStage(PipelineStage):
         super().__init__()
         self.params = params
         self.apply_params(**params)
-    
+        
     @classmethod
     def get_spec(cls):
         """Overwrite the method for getting specifications
@@ -239,10 +239,10 @@ class DataSourceStage(PipelineStage):
                 args[k] = v
         
         Pipeline.ensure_args(type(self), args)
-        self.apply_params(**args)
         
-        yield from self.fetch()
-
+        instance = type(self)(**args)
+        yield from instance.fetch()
+        
 
 class Pipeline:
     """Pipeline"""
@@ -290,14 +290,14 @@ class Pipeline:
                         name = name[1:]
                     stage = (name, kwargs)
                 
-                if kwargs.get('disabled'):
-                    continue
-                
                 if isinstance(stage, (tuple, list)) and len(stage) == 2 and Pipeline.ctx:
                     name, kwargs = stage
+                    if kwargs.pop('disabled', False): continue
+                    
                     stage_type = Pipeline.ctx[name]
                     Pipeline.ensure_args(stage_type, kwargs)
                     stage = stage_type(**kwargs)
+                
                 assert isinstance(
                     stage, PipelineStage), f'unknown format for {stage}'
 

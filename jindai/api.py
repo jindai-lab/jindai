@@ -658,7 +658,6 @@ def do_search(q='', req='', sort='', limit=100, offset=0,
                 group = '(' + ','.join([f'{k}={app.json_encoder().encode(v)}' for k, v in group.items()]) + ')'
             else:
                 group = app.json_encoder().encode(group)
-            res['group_url'] = quote(f'{datasource.groups}={group}')
 
     History(user=logined(), queries=[q, req],
             created_at=datetime.datetime.utcnow()).save()

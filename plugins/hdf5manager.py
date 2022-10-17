@@ -30,6 +30,10 @@ class Hdf5Manager(StorageManager):
 
         if isinstance(storage_base, list):
             storage_base = [base[6:] for base in storage_base if base.startswith('local:')]
+            if len(storage_base) == 0:
+                print('Please specify a local storage base in `file` section.')
+                return
+            
             storage_base, *external_storage = storage_base
         else:
             external_storage = []

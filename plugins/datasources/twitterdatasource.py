@@ -10,8 +10,6 @@ from jindai.models import MediaItem, Paragraph
 from jindai.pipeline import DataSourceStage
 from jindai.dbquery import parser, ObjectId, F, Fn
 
-from .dbquerydatasource import ImageImportDataSource
-
 
 def twitter_id_from_timestamp(stamp: float) -> int:
     """Get twitter id from timestamp
