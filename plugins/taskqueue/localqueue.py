@@ -24,6 +24,7 @@ class Job:
         self.task = None
         self.status = 'pending'
         self.exception = {}
+        self.logs = deque()
         self._worker = worker
 
     @property
@@ -88,9 +89,13 @@ class Job:
         def _callback(_):
             self.status = 'stopped'
             announcer.announce("updated")
+            
+        def _logging(*args):
+            announcer.logger(self.key)(*args)
+            self.logs.append(datetime.datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S') + ' '.join([str(_) for _ in args]))
 
         self.task = Task.from_dbo(
-            self.task_dbo, logger=announcer.logger(self.key))
+            self.task_dbo, logger=_logging)
         self.status = 'running'
         self.task.run(_callback)
 
