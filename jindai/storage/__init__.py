@@ -122,8 +122,8 @@ class Storage:
 
         if scheme in self.storage:
             for server in self.storage[scheme]:
-                if server.startswith('local:'):
-                    yield self._schema[scheme](server[6:])
+                if '://' not in server:
+                    yield self._schema[scheme](server)
                 else:
                     yield StorageProxyManager(server)
         else:

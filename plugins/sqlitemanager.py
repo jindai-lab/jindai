@@ -75,7 +75,7 @@ class SqliteManager(StorageManager):
         super().__init__()
         self.dbs = []
         for base in storage_base:
-            if base.startswith('local:'):
+            if '://' not in base:
                 base = base[6:]
                 self.dbs += [SqliteSingleAccessor(f) for f in glob.glob(os.path.join(base, 'sblobs*.db'))]
         if not storage_base:
