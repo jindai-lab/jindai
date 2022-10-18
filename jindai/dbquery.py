@@ -128,7 +128,8 @@ parser = QueryExprParser(
         'expand': lambda *x: [
             Fn.unwind('$images')(),
             Fn.lookup(from_='mediaitem', localField='images',
-                      foreignField='_id', as_='images')()
+                      foreignField='_id', as_='images')(),
+            Fn.sort(SON({'images.source': 1}))
         ],
         'bytes': bytes.fromhex,
         'begin': _begins_with,
