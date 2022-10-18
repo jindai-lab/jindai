@@ -19,7 +19,7 @@ class SchedulerJob(db.DbObject):
     cron = str
 
 
-class JobTask:
+class ScheduledTask:
     """Scheduled task"""
 
     def __init__(self, pmanager, task_id: str):
@@ -83,7 +83,7 @@ class Scheduler(Plugin):
             elif token in ['at', 'do']:
                 context = token
             elif re.match(r'[0-9a-fA-F]{24}', token) and context == 'do':
-                jobs.append(executor.do(JobTask(self.pmanager, token)))
+                jobs.append(executor.do(ScheduledTask(self.pmanager, token)))
                 context = 'end'
             else:
                 print(
