@@ -123,6 +123,15 @@ class TaskQueue:
                 bool: true if successful
             """
             return self.remove(key)
+        
+        @app.route('/api/queue/logs/<path:key>', methods=['GET'])
+        @rest()
+        def fetch_task_log(key):
+            job = self.get(key)
+            if not job or job.status != 'stopped':
+                return 'Not found or not finished', 404
+
+            return list(job.logs)
 
         @app.route('/api/queue/<path:key>', methods=['GET'])
         @rest(cache=True)
@@ -179,7 +188,7 @@ class TaskQueue:
             if not logined('admin'):
                 status = [_ for _ in status if _['run_by'] == logined()]
             return status
-
+        
     @property
     def jobs(self) -> list:
         """Queue jobs, a list of Job-like objects"""
