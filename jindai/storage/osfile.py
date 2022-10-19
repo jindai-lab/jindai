@@ -11,10 +11,10 @@ from .storage import StorageManager
 class OSFileSystemManager(StorageManager):
     """Storage manager for local file system"""
 
-    def __init__(self, base: str) -> None:
+    def __init__(self, base: Union[str, list] = None) -> None:
         allowed_locations = []
         if isinstance(base, list):
-            base, *allowed_locations = base
+            base, *allowed_locations = [b for b in base if '://' not in b]
 
         allowed_locations = [
             (loc + os.path.sep) if not loc.endswith(os.path.sep) else loc
@@ -88,11 +88,11 @@ class OSFileSystemManager(StorageManager):
         :return: truncated path
         :rtype: str
         """
-        path = path.replace(os.path.sep, '/')
         if path.startswith('file://'):
             path = path[7:]
+        path = path.replace(os.path.sep, '/')
         for base in self.allowed_locations:
-            if path.startswith(base):
+            if path.startswith(base.replace(os.path.sep, '/')):
                 return path[len(base):]
         return path
 
