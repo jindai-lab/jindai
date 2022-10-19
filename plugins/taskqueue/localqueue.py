@@ -92,7 +92,7 @@ class Job:
             
         def _logging(*args):
             announcer.logger(self.key)(*args)
-            self.logs.append(datetime.datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S') + ' '.join([str(_) for _ in args]))
+            self.logs.append(datetime.datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S ') + ' '.join([str(_) for _ in args]))
 
         self.task = Task.from_dbo(
             self.task_dbo, logger=_logging)
