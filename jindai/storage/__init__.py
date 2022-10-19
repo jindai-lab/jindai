@@ -102,7 +102,7 @@ class Storage:
             if isinstance(val, str):
                 self.storage[key] = [val]
             if key not in self._schema:
-                self._schema[key] = StorageManager()
+                self._schema[key] = StorageManager
 
         self._fragment_handlers = {}
 
@@ -121,12 +121,12 @@ class Storage:
             scheme = 'file'
 
         if scheme in self.storage:
+            if scheme in self._schema:
+                yield self._schema[scheme](self.storage[scheme])
             for server in self.storage[scheme]:
-                if '://' not in server:
-                    yield self._schema[scheme](server)
-                else:
+                if '://' in server:
                     yield StorageProxyManager(server)
-        else:
+        elif scheme in self._schema:
             yield self._schema[scheme]()
 
     def register_fragment_handler(self, frag_name, func):
@@ -175,7 +175,8 @@ class Storage:
         """
         parsed = urllib.parse.urlparse(path)
         buf = None
-
+        exc = None
+        
         for mgr in self._get_managers(parsed.scheme):
             try:
                 if not isinstance(mgr, StorageProxyManager):
@@ -188,10 +189,10 @@ class Storage:
                               'rb' else 'writebuf')(dst, **params)
                 break
             except OSError as ex:
-                StorageManager().dprint('OSError', ex)
-
-        if not buf:
-            raise OSError('Unable to open: ' + path)
+                exc = ex
+                
+        if buf is None:
+            raise exc or OSError('Unable to open: ' + path)
 
         if parsed.fragment:
             handler_name, *fragments = parsed.fragment.split('/')
@@ -435,9 +436,11 @@ class Storage:
                         break
                 parent = '/'.join(parents)
                 for mgr in self._get_managers(parent):
-                    for pattern in mgr.search(parent, pattern):
-                        patterns.append(pattern)
-                continue
+                    try:
+                        for pattern in mgr.search(parent, pattern):
+                            patterns.append(pattern)
+                    except OSError:
+                        continue
 
             if pattern.endswith(('.zip', '.epub')):
                 try:

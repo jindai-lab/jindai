@@ -37,7 +37,7 @@ class StorageManager:
         Returns:
             list: List of names in path
         """
-        return []
+        raise OSError('Not implemented')
 
     def statdir(self, path: str) -> list:
         """Stat folder and return list of stat results
@@ -63,7 +63,7 @@ class StorageManager:
 
     def read(self, path: str, **params) -> bytes:
         """Get data bytes"""
-        return b''
+        raise OSError('Not implemented')
 
     def readbuf(self, path: str, **params) -> BytesIO:
         """Get read buffer for path
@@ -83,7 +83,7 @@ class StorageManager:
 
     def write(self, path, data: bytes) -> bool:
         """Write bytes data"""
-        return True
+        raise OSError('Not implemented')
 
     def unlink(self, path: str) -> bool:
         """Unlink a file/folder
