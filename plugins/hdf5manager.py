@@ -29,7 +29,7 @@ class Hdf5Manager(StorageManager):
             storage_base = config.storage['file']
 
         if isinstance(storage_base, list):
-            storage_base = [base[6:] for base in storage_base if '://' not in base]
+            storage_base = [base for base in storage_base if '://' not in base]
             if len(storage_base) == 0:
                 print('Please specify a local storage base in `file` section.')
                 return
