@@ -14,7 +14,7 @@ class OSFileSystemManager(StorageManager):
     def __init__(self, base: Union[str, list] = None) -> None:
         allowed_locations = []
         if isinstance(base, list):
-            base, *allowed_locations = [b for b in base if '://' not in b]
+            base, *allowed_locations = [b for b in base if '://' not in b] or ['./']
 
         allowed_locations = [
             (loc + os.path.sep) if not loc.endswith(os.path.sep) else loc
