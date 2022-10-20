@@ -122,7 +122,7 @@ class TwitterDataSource(DataSourceStage):
         self.time_after = _stamp(time_after) or 0
         self.time_before = _stamp(time_before) or time.time()
         self.api = tweepy.API(tweepy.OAuth1UserHandler(consumer_key, consumer_secret, access_token_key, access_token_secret),
-                                proxy=proxy)
+                              proxy=proxy)
         self.skip_existent = skip_existent
         self.imported = set()
 
@@ -193,6 +193,10 @@ class TwitterDataSource(DataSourceStage):
             if url:
                 item = MediaItem.get(
                     url, item_type='video' if media.video_info else 'image')
+
+                if item.id and not self.skip_existent:
+                    continue
+
                 if not item.id:
                     item.save()
                     self.logger('... add new item', url)
@@ -235,7 +239,8 @@ class TwitterDataSource(DataSourceStage):
     def import_timeline(self, user=''):
         """Import posts of a twitter user, or timeline if blank"""
 
-        params = dict(count=100, include_rts=self.allow_retweet, exclude_replies=True)
+        params = dict(count=100, include_rts=self.allow_retweet,
+                      exclude_replies=True)
         if user:
             def source(max_id):
                 return self.api.user_timeline(
@@ -292,13 +297,13 @@ class TwitterDataSource(DataSourceStage):
                     break
 
                 time.sleep(1)
-            
+
             if pages >= 50:
                 self.logger(f'Reached max pages count, interrupted. {user}')
-        
+
         except tweepy.TwitterServerError as ex:
             self.log_exception('twitter exception', ex)
-        
+
     def fetch(self):
         args = self.import_username.split('\n')
         arg = args[0]
