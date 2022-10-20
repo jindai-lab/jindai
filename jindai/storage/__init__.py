@@ -101,22 +101,14 @@ class Storage:
                 continue
             if isinstance(val, str):
                 self.storage[key] = [val]
-            if key not in self._schema:
-                self._schema[key] = StorageManager
-
+        
         self._fragment_handlers = {}
 
     def _get_managers(self, path) -> StorageManager:
         """Get storage manager according to scheme"""
-
-        scheme = ''
-        if path in self._schema:
-            scheme = path
-        elif '://' in path:
-            tmp = path.split('://', 1)[0]
-            if tmp in self._schema:
-                scheme = tmp
-                
+        scheme = path
+        if '://' in path:
+            scheme = path.split('://', 1)[0]
         if not scheme:
             scheme = 'file'
 
