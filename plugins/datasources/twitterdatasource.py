@@ -194,7 +194,7 @@ class TwitterDataSource(DataSourceStage):
                 item = MediaItem.get(
                     url, item_type='video' if media.video_info else 'image')
 
-                if item.id and not self.skip_existent:
+                if item.id and self.skip_existent:
                     continue
 
                 if not item.id:
