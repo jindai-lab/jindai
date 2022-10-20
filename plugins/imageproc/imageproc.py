@@ -46,7 +46,7 @@ class VideoItemImageDelegate:
     def __setattr__(self, __name: str, __value) -> None:
         if __name != '_i':
             setattr(self._i, __name, __value)
-        else:
+        elif __name not in ('source', 'save', 'data', 'data_path'):
             object.__setattr__(self, __name, __value)
 
 
@@ -63,7 +63,6 @@ class MediaItemStage(PipelineStage):
                 
                 if i.item_type == 'video' and i.thumbnail:
                     i_img = VideoItemImageDelegate(i)
-                    print(i_img.source)
                     self.resolve_image(i_img, paragraph)
                     i_img.save()
 
