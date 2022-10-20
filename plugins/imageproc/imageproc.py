@@ -26,11 +26,19 @@ class VideoItemImageDelegate:
     def source(self):
         return {'file': self._i.thumbnail}
     
+    @property
+    def data_path(self):
+        return self._i.thumbnail
+    
+    @property
+    def data(self):
+        return storage.open(self._i.thumbnail)
+    
     def save(self):
         self._i.save()
         
     def __getattribute__(self, __name: str):
-        if __name not in ('_i', 'source', 'save'):
+        if __name not in ('_i', 'source', 'save', 'data', 'data_path'):
             return getattr(self._i, __name)
         
         return object.__getattribute__(self, __name)
@@ -55,7 +63,7 @@ class MediaItemStage(PipelineStage):
                 
                 if i.item_type == 'video' and i.thumbnail:
                     i_img = VideoItemImageDelegate(i)
-                    i_img.source['file'] = i_img.thumbnail
+                    print(i_img.source)
                     self.resolve_image(i_img, paragraph)
                     i_img.save()
 
