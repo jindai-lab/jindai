@@ -807,12 +807,13 @@ def quick_task(query='', pipeline='', raw=False, mongocollection=''):
             args = args[1]
         elif isinstance(args, dict):
             args, = args.values()
-        results = Task(stages=pipeline, params=args).execute()
+        results = Task(stages=pipeline).execute()
     else:
+        params = {'query': query, 'raw': raw, 'mongocollections': mongocollection}
         results = Task(stages=[
-            ('DBQueryDataSource', {}),
+            ('DBQueryDataSource', params),
             ('AccumulateParagraphs', {}),
-        ], params={'query': query, 'raw': raw, 'mongocollections': mongocollection}).execute()
+        ]).execute()
 
     return _expand_results(results)
 
