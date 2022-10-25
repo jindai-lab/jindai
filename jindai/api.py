@@ -813,8 +813,7 @@ def quick_task(query='', pipeline='', raw=False, mongocollection=''):
         results = Task(stages=[
             ('DBQueryDataSource', params),
             ('AccumulateParagraphs', {}),
-            params={}
-        ]).execute()
+        ], params={}).execute()
 
     return _expand_results(results)
 

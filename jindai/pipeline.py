@@ -201,7 +201,6 @@ class DataSourceStage(PipelineStage):
     def __init__(self, **params) -> None:
         super().__init__()
         self.params = params
-        self.apply_params(**params)
         
     @classmethod
     def get_spec(cls):
@@ -235,7 +234,7 @@ class DataSourceStage(PipelineStage):
 
         args = paragraph.as_dict()
         for k, v in self.params.items():
-            if k not in args:
+            if args.get(k) is None or args[k] == '':
                 args[k] = v
         
         Pipeline.ensure_args(type(self), args)
