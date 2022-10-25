@@ -33,7 +33,18 @@ class AutoTag(db.DbObject):
             except QueryExpressionError:
                 self._parsed = {'__FALSE__': True}
         return self._parsed
-
+    
+    
+def apply_tag(parsed, tag, paragraph):
+    try:
+        if execute_query_expr(parsed, paragraph):
+            if tag not in paragraph.keywords:
+                paragraph.keywords.append(tag)
+            if tag.startswith('@'):
+                paragraph.author = tag
+    except TypeError:
+        pass
+    
 
 class ApplyAutoTags(PipelineStage):
     """
@@ -48,16 +59,33 @@ class ApplyAutoTags(PipelineStage):
     def resolve(self, paragraph):
         for i in self.ats:
             parsed, tag = i.parsed, i.tag
-            try:
-                if execute_query_expr(parsed, paragraph):
-                    if tag not in paragraph.keywords:
-                        paragraph.keywords.append(tag)
-                    if tag.startswith('@'):
-                        paragraph.author = tag
-            except TypeError:
-                pass
+            apply_tag(parsed, tag, paragraph)
         paragraph.save()
         return paragraph
+    
+    
+class AddAutoTag(PipelineStage):
+    """
+    Create new auto tagging rule
+    @chs 创建新的自动标签规则
+    """
+    
+    def __init__(self, cond='false', tag='') -> None:
+        """
+        Args:
+            cond (str, optional):
+                Condition
+                @chs 条件
+            tag (str, optional): 
+                Tag
+                @chs 标签
+        """        
+        super().__init__()
+        self.cond = cond
+        self.parsed = parser.parse(cond)
+        self.tag = tag
+        if not AutoTag.first(F.cond == cond, F.tag == tag):
+            AutoTag(cond=cond, tag=tag).save()
 
 
 class AutoTaggingPlugin(Plugin):
