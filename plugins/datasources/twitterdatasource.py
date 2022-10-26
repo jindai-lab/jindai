@@ -239,12 +239,20 @@ class TwitterDataSource(DataSourceStage):
     def import_timeline(self, user=''):
         """Import posts of a twitter user, or timeline if blank"""
 
-        params = dict(count=100, include_rts=self.allow_retweet,
+        params = dict(count=100, 
                       exclude_replies=True)
-        if user:
+        if user and user.startswith('@'):
             def source(max_id):
                 return self.api.user_timeline(
                     screen_name=user, max_id=max_id-1,
+                    include_rts=self.allow_retweet,
+                    **params)
+        elif user and user.startswith('#'):
+            def source(max_id):
+                return self.api.user_timeline(
+                    user_id=user[1:],
+                    max_id=max_id-1,
+                    include_rts=self.allow_retweet,
                     **params)
         else:
             def source(max_id):
@@ -308,17 +316,10 @@ class TwitterDataSource(DataSourceStage):
         args = self.import_username.split('\n')
         arg = args[0]
         if arg.startswith('@'):
-            if arg == '@' or arg.startswith('@%'):
+            if arg == '@':
                 unames = sorted(
-                    map(lambda x: x.screen_name, self.api.get_friends()))
-                if arg.startswith('@%'):
-                    unames = [_ for _ in unames if re.search(arg[2:], _)]
+                    map(lambda x: f'#{x}', tweepy.Cursor(self.api.get_friend_ids).items()))
                 for u in unames:
-                    if self.time_after == 0:
-                        last_updated = Paragraph.query(F.source.url.regex(
-                            f'^https://twitter.com/{u}/')).sort(-F.pdate).first()
-                        if last_updated:
-                            self.time_after = _stamp(last_updated.pdate)
                     self.logger(u)
                     yield from self.import_timeline(u)
             else:
