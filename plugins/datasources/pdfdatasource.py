@@ -61,7 +61,7 @@ class PDFDataSource(DataSourceStage):
         """
         self.name = dataset_name
         self.lang = lang
-        self.files = storage.expand_patterns(content)
+        self.files = storage.globs(content)
         self.mongocollection = mongocollection
         self.skip_existed = skip_existed
         self.page_range = sorted(resolve_range(page_range))

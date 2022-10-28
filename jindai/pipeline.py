@@ -240,6 +240,7 @@ class DataSourceStage(PipelineStage):
         Pipeline.ensure_args(type(self), args)
         
         instance = type(self)(**args)
+        instance.apply_params(**args)
         instance.logger = self.logger
         yield from instance.fetch()
         
