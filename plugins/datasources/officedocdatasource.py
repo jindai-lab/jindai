@@ -33,7 +33,7 @@ class WordDataSource(DataSourceStage):
         """
         self.name = dataset_name
         self.lang = lang
-        self.files = storage.expand_patterns(content)
+        self.files = storage.globs(content)
 
     def call_abiword(self, file):
         """Call abiword to extract text from a word document"""
@@ -76,7 +76,7 @@ class ExcelDataSource(DataSourceStage):
                 Paths
                 @chs 文件列表
         """
-        self.files = storage.expand_patterns(content)
+        self.files = storage.globs(content)
         self.dataset = dataset_name
         self.lang = lang
 
