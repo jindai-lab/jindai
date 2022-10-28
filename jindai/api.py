@@ -210,6 +210,9 @@ def list_storage(path='', search='', mkdir=''):
     """List out files in directory"""
     
     path = 'file://' + path.split('://')[-1]
+    
+    if path.rsplit('.', 1)[-1].lower() in ('py', 'pyc', 'yaml', 'yml', 'sh'):
+        return 'Not supported extension name', 400
 
     if mkdir:
         storage.mkdir(path, mkdir)
@@ -220,14 +223,14 @@ def list_storage(path='', search='', mkdir=''):
         results = list(storage.search(path, '**' + search))
     else:
         results = storage.statdir(path)
-        if len(results) == 1 and results[0]['type'] == 'file':
+        if not results and storage.exists(path):
             results = storage.open(path)
 
     if isinstance(results, list):
         return sorted(results,
                       key=lambda x: x['ctime'], reverse=True)
     else:
-        return send_file(results)
+        return send_file(results, download_name=path.split('/')[-1])
 
 
 @app.route('/api/storage/<path:path>', methods=['PUT'])
