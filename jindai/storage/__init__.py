@@ -392,7 +392,7 @@ class Storage:
         """
         return self._query_until('move', src, False, dst=dst)
 
-    def expand_patterns(self, patterns: Union[list, str, tuple]):
+    def globs(self, patterns: Union[list, str, tuple]):
         """Get expanded paths according to wildcards patterns
 
         :param patterns: patterns for looking up files.
@@ -412,6 +412,9 @@ class Storage:
         patterns = deque(patterns)
         while patterns:
             pattern = patterns.popleft()
+            
+            if '://' not in pattern:
+                pattern = 'file://' + pattern
 
             iterate = re.search(r'\{(\d+\-\d+)\}', pattern)
             if iterate:
@@ -433,7 +436,8 @@ class Storage:
                             patterns.append(pattern)
                     except OSError:
                         continue
-
+                continue
+            
             if pattern.endswith(('.zip', '.epub')):
                 try:
                     with zipfile.ZipFile(self.open(pattern, 'rb')) as zfile:

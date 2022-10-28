@@ -24,5 +24,5 @@ class FilePatternDataSource(DataSourceStage):
         self.patterns = content
 
     def fetch(self):
-        for path in storage.expand_patterns(self.patterns):
+        for path in storage.globs(self.patterns):
             yield Paragraph(content=path)

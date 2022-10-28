@@ -47,7 +47,7 @@ class HTMLDataSource(DataSourceStage):
         """
         self.name = dataset_name
         self.lang = lang
-        self.files = storage.expand_patterns(content)
+        self.files = storage.globs(content)
         self.fields = parser.parse(fields)
         self.paragraph_selector = paragraph_selector
 
@@ -124,7 +124,7 @@ class TextDataSource(DataSourceStage):
         self.content = content.split('\n')
 
     def fetch(self):
-        for path in storage.expand_patterns(self.content):
+        for path in storage.globs(self.content):
             for i, line in enumerate(storage.open(path)):
                 yield Paragraph(content=codecs.decode(line),
                                 source={
@@ -305,7 +305,7 @@ class WebPageListingDataSource(DataSourceStage):
 
     def fetch(self):
         queue = deque([(p, 1)
-                       for p in storage.expand_patterns(self.patterns)])
+                       for p in storage.globs(self.patterns)])
         visited = set()
 
         def _do_parse(url, level):
@@ -408,7 +408,7 @@ class BiblioDataSource(DataSourceStage):
             raise NotImplementedError()
 
         self.method = getattr(self, input_format)
-        self.files = storage.expand_patterns(content)
+        self.files = storage.globs(content)
         self.dataset = dataset_name
         self.lang = lang
 

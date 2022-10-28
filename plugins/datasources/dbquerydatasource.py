@@ -167,7 +167,7 @@ class MediaImportDataSource(DataSourceStage):
         """
         albums = defaultdict(Paragraph)
 
-        for loc in storage.expand_patterns(locs):
+        for loc in storage.globs(locs):
             extname = loc.rsplit('.', 1)[-1].lower()
             filename = loc.split('#')[0]
             if extname in MediaItem.acceptable_extensions or loc.endswith('.mp4.thumb.jpg'):
@@ -206,7 +206,7 @@ class MediaImportDataSource(DataSourceStage):
         albums = []
         imgset = set()
 
-        for url in storage.expand_patterns(paths):
+        for url in storage.globs(paths):
             p = Paragraph.get(url,
                 dataset=self.dataset,
                 images=[], pdate=datetime.datetime.utcnow())
