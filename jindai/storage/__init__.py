@@ -433,7 +433,8 @@ class Storage:
                             patterns.append(pattern)
                     except OSError:
                         continue
-
+                continue
+            
             if pattern.endswith(('.zip', '.epub')):
                 try:
                     with zipfile.ZipFile(self.open(pattern, 'rb')) as zfile:
