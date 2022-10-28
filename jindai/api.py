@@ -208,6 +208,8 @@ def admin_users_del(username):
 @rest()
 def list_storage(path='', search='', mkdir=''):
     """List out files in directory"""
+    
+    path = 'file://' + path.split('://')[-1]
 
     if mkdir:
         storage.mkdir(path, mkdir)
