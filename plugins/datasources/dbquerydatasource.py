@@ -19,7 +19,7 @@ from jindai.storage import instance as storage
 
 class DBQueryDataSource(DataSourceStage):
     """Query from Database
-    @chs 从数据库查询
+    @zhs 从数据库查询
     """
     
     def apply_params(self, query, req='', mongocollections='', limit=0, skip=0, sort='', raw=False, groups='none'):
@@ -27,28 +27,28 @@ class DBQueryDataSource(DataSourceStage):
         Args:
             query (QUERY):
                 Query expression, or keywords
-                @chs 查询字符串，或以 ? 开头的查询表达式，或以 ?? 开头的聚合查询表达式
+                @zhs 查询字符串，或以 ? 开头的查询表达式，或以 ?? 开头的聚合查询表达式
             req (QUERY):
                 Additional query expression
-                @chs 附加的条件
+                @zhs 附加的条件
             sort (str):
                 Sorting expression
-                @chs 排序表达式
+                @zhs 排序表达式
             limit (int):
                 Limitation for maximal results, 0 for none
-                @chs 查询最多返回的结果数量，默认为0即无限制
+                @zhs 查询最多返回的结果数量，默认为0即无限制
             skip (int):
                 Skip %1 results
-                @chs 返回从第%1个开始的结果
+                @zhs 返回从第%1个开始的结果
             mongocollections (LINES):
                 Name for colletion name in MongoDB, one item per line
-                @chs 数据库中其他数据集的名称
+                @zhs 数据库中其他数据集的名称
             raw (bool):
                 Return dicts instead of Paragraph objects
-                @chs 若为 False（默认值）则返回 Paragraph 对象，否则返回原始数据，仅对于聚合查询有效
+                @zhs 若为 False（默认值）则返回 Paragraph 对象，否则返回原始数据，仅对于聚合查询有效
             groups (str):
                 @choose(none|group|source|both) Groups
-                @chs @choose(无:none|按组:group|按来源:source|分组和来源:both) 分组
+                @zhs @choose(无:none|按组:group|按来源:source|分组和来源:both) 分组
         """
         self.dbquery = DBQuery(
             query if not req else (query, req), mongocollections, limit, skip, sort, raw, groups)
@@ -60,7 +60,7 @@ class DBQueryDataSource(DataSourceStage):
 class MediaDataSource(DataSourceStage):
     """
     Data Source for Media Items
-    @chs 多媒体项目数据源
+    @zhs 多媒体项目数据源
     """
     
     def apply_params(self, query='', limit=20, offset=0, raw=False, sort_keys='-id'):
@@ -68,19 +68,19 @@ class MediaDataSource(DataSourceStage):
         Args:
             query (QUERY):
                 Query expression
-                @chs 查询表达式
+                @zhs 查询表达式
             limit (int):
                 Limit
-                @chs 数量限制
+                @zhs 数量限制
             offset (int):
                 Skipped results
-                @chs 跳过的结果数量
+                @zhs 跳过的结果数量
             raw (bool):
                 Return dicts instead of MediaItem objects
-                @chs 返回字典而非 MediaItem
+                @zhs 返回字典而非 MediaItem
             sort_keys (str):
                 Sorting expression
-                @chs 排序表达式
+                @zhs 排序表达式
         """
         self.query_str = query
         self.query = parser.parse(query)
@@ -112,7 +112,7 @@ class MediaDataSource(DataSourceStage):
 class MediaImportDataSource(DataSourceStage):
     """
     Import media from datasource
-    @chs 从本地文件或网址导入图像信息
+    @zhs 从本地文件或网址导入图像信息
     """
     
     def apply_params(self, patterns, dataset='', tags='', proxy='', excluding_patterns=''):
@@ -120,19 +120,19 @@ class MediaImportDataSource(DataSourceStage):
         Args:
             patterns (LINES):
                 Import images from locations, one per line
-                @chs 网址或文件通配符
+                @zhs 网址或文件通配符
             excluding_patterns (LINES):
                 Excluding patterns
-                @chs 排除的图片网址正则表达式
+                @zhs 排除的图片网址正则表达式
             tags (LINES):
                 Tags, one tag per line
-                @chs 标签
+                @zhs 标签
             dataset (DATASET):
                 Dataset name
-                @chs 数据集名称
+                @zhs 数据集名称
             proxy (str):
                 Proxy settings
-                @chs 代理服务器
+                @zhs 代理服务器
         """
         self.keywords = tags.split('\n')
 

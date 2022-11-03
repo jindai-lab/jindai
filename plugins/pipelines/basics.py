@@ -19,7 +19,7 @@ from jindai.models import Dataset, Paragraph, db
 class Passthrough(PipelineStage):
     """
     Passthrough
-    @chs 直接通过
+    @zhs 直接通过
     """
 
     def resolve(self, paragraph: Paragraph) -> Paragraph:
@@ -29,22 +29,22 @@ class Passthrough(PipelineStage):
 class TradToSimpChinese(PipelineStage):
     """
     Convert Traditional Chinese to Simplified Chinese
-    @chs 繁体中文转为简体中文
-    @cht 繁體中文轉爲簡體中文
+    @zhs 繁体中文转为简体中文
+    @zht 繁體中文轉爲簡體中文
     """
 
     t2s = safe_import('opencc', 'opencc-python-reimplementation').OpenCC('t2s')
 
     def resolve(self, paragraph: Paragraph) -> Paragraph:
         paragraph.content = TradToSimpChinese.t2s.convert(paragraph.content)
-        if paragraph.lang == 'cht':
-            paragraph.lang = 'chs'
+        if paragraph.lang == 'zht':
+            paragraph.lang = 'zhs'
         return paragraph
 
 
 class LanguageDetect(PipelineStage):
     """Simple language detection
-    @chs 简易语言检测
+    @zhs 简易语言检测
     """
 
     def resolve(self, paragraph: Paragraph) -> Paragraph:
@@ -54,9 +54,9 @@ class LanguageDetect(PipelineStage):
         if paragraph.content:
             paragraph.lang = self.detect(paragraph.content)
             if paragraph.lang in ('zh-cn', 'zh-sg'):
-                paragraph.lang = 'chs'
+                paragraph.lang = 'zhs'
             elif paragraph.lang.startswith('zh-'):
-                paragraph.lang = 'cht'
+                paragraph.lang = 'zht'
             elif '-' in paragraph.lang:
                 paragraph.lang = paragraph.lang.split('-')[0]
         
@@ -78,9 +78,9 @@ class LanguageDetect(PipelineStage):
 
         if hanzidentifier.has_chinese(sentence):
             if hanzidentifier.is_simplified(sentence):
-                return 'chs'
+                return 'zhs'
             else:
-                return 'cht'
+                return 'zht'
 
         try:
             return langdetect.detect(sentence)
@@ -91,7 +91,7 @@ class LanguageDetect(PipelineStage):
 class WordStemmer(PipelineStage):
     """
     Stemming words in tokens field
-    @chs 附加词干到 tokens 中（需要先进行切词）
+    @zhs 附加词干到 tokens 中（需要先进行切词）
     """
 
     def __init__(self, append=True):
@@ -99,7 +99,7 @@ class WordStemmer(PipelineStage):
         Args:
             append (bool):
                 Append to/overwrite tokens field
-                @chs 是添加到结尾还是覆盖
+                @zhs 是添加到结尾还是覆盖
         """
         super().__init__()
         self.append = append
@@ -117,7 +117,7 @@ class WordStemmer(PipelineStage):
 class LatinTransliterate(PipelineStage):
     """
     Transliterate tokens
-    @chs 转写为拉丁字母的单词（需要先进行切词）
+    @zhs 转写为拉丁字母的单词（需要先进行切词）
     """
 
     def __init__(self, append=True):
@@ -125,7 +125,7 @@ class LatinTransliterate(PipelineStage):
         Args:
             append (bool):
                 Append to/overwrite tokens field
-                @chs 是添加到结尾还是覆盖
+                @zhs 是添加到结尾还是覆盖
         """
         super().__init__()
         self.append = append
@@ -147,7 +147,7 @@ class LatinTransliterate(PipelineStage):
 class WordCut(PipelineStage):
     """
     Multilingual word cutting
-    @chs 多语种分词
+    @zhs 多语种分词
     """
 
     t2s = safe_import('opencc', 'opencc-python-reimplementation').OpenCC('t2s')
@@ -161,7 +161,7 @@ class WordCut(PipelineStage):
         Args:
             for_search (bool): 
                 Append redundant word-cutting results or stemming/transliteration
-                @chs 是否用于搜索（添加冗余分词结果或词干/转写）
+                @zhs 是否用于搜索（添加冗余分词结果或词干/转写）
         """
         super().__init__()
         self.for_search = for_search
@@ -169,10 +169,10 @@ class WordCut(PipelineStage):
     def resolve(self, paragraph: Paragraph) -> Paragraph:
         paragraph.tokens = []
 
-        if paragraph.lang == 'cht':
+        if paragraph.lang == 'zht':
             paragraph.content = WordCut.t2s.convert(paragraph.content)
 
-        if paragraph.lang in ('chs', 'cht'):
+        if paragraph.lang in ('zhs', 'zht'):
             paragraph.tokens = list(WordCut.jieba.cut_for_search(paragraph.content)
                                     if self.for_search else WordCut.jieba.cut(paragraph.content))
         elif paragraph.lang == 'ja':
@@ -196,7 +196,7 @@ class WordCut(PipelineStage):
 class KeywordsFromTokens(PipelineStage):
     """
     Set tokens as keywords and unset tokens field
-    @chs 将检索词设为分词结果并删除词串字段
+    @zhs 将检索词设为分词结果并删除词串字段
     """
     
     def __init__(self, append=False) -> None:
@@ -226,7 +226,7 @@ class KeywordsFromTokens(PipelineStage):
 class FilterPunctuations(PipelineStage):
     """
     Filter punctuations
-    @chs 过滤标点符号
+    @zhs 过滤标点符号
     """
 
     re_punctuations = re.compile(
@@ -241,7 +241,7 @@ class FilterPunctuations(PipelineStage):
 class Reparagraph(PipelineStage):
     """
     Reparagraphize
-    @chs 重新分段"""
+    @zhs 重新分段"""
 
     def resolve(self, paragraph: Paragraph) -> Paragraph:
         lang = paragraph.lang
@@ -288,7 +288,7 @@ class Reparagraph(PipelineStage):
 class SplitParagraph(PipelineStage):
     """
     Split paragraphs
-    @chs 拆分语段
+    @zhs 拆分语段
     """
 
     def __init__(self, delimeter='\n'):
@@ -296,7 +296,7 @@ class SplitParagraph(PipelineStage):
         Args:
             delimeter (str):
                 Delimeter
-                @chs 拆分的分隔符
+                @zhs 拆分的分隔符
         """
         super().__init__()
         self.delimeter = delimeter
@@ -312,7 +312,7 @@ class SplitParagraph(PipelineStage):
 class AccumulateParagraphs(PipelineStage):
     """
     Accumulate all paragraphs iterated
-    @chs 聚集段落遍历结果
+    @zhs 聚集段落遍历结果
     """
 
     def __init__(self):
@@ -329,7 +329,7 @@ class AccumulateParagraphs(PipelineStage):
 class Export(PipelineStage):
     """
     Export accumulated result to file
-    @chs 结果导出为文件
+    @zhs 结果导出为文件
     """
 
     def __init__(self, output_format='xlsx', limit=0) -> None:
@@ -338,10 +338,10 @@ class Export(PipelineStage):
         Args:
             output_format (xlsx|json|csv):
                 Export file foramt
-                @chs 输出格式
+                @zhs 输出格式
             limit (int, optional):
                 Max export records count, 0 for no limit
-                @chs 最多导出的记录数量，0表示无限制。
+                @zhs 最多导出的记录数量，0表示无限制。
         """
         super().__init__()
         self.extension = output_format
@@ -370,7 +370,7 @@ class Export(PipelineStage):
 class AutoSummary(PipelineStage):
     """
     Auto summary for Chinese texts
-    @chs 中文自动摘要
+    @zhs 中文自动摘要
     """
 
     def __init__(self, count) -> None:
@@ -378,7 +378,7 @@ class AutoSummary(PipelineStage):
         Args:
             count (int):
                 Sentences count
-                @chs 摘要中的句子数量
+                @zhs 摘要中的句子数量
         """
         super().__init__()
         self.count = count
@@ -397,19 +397,19 @@ class AutoSummary(PipelineStage):
 class ArrayField(PipelineStage):
     """
     Manipulate array field
-    @chs 操作数组字段
+    @zhs 操作数组字段
     """
 
     def __init__(self, field, push=True, elements='') -> None:
         """
         Args:
             field (str): Field name
-                @chs 字段名
+                @zhs 字段名
             push (bool): push or delete
-                @chs 添加或删除
+                @zhs 添加或删除
             elements (str):
                 Element to push or delete, use $<field> or constants
-                @chs 添加或删除的元素，每行一个 $ 开头的字段名或常量
+                @zhs 添加或删除的元素，每行一个 $ 开头的字段名或常量
         """
         super().__init__()
         self.field = field
@@ -442,15 +442,15 @@ class ArrayField(PipelineStage):
 class ArrayAggregation(PipelineStage):
     """
     Concat arrays in an array field
-    @chs 减少一层数组嵌套层级"""
+    @zhs 减少一层数组嵌套层级"""
 
     def __init__(self, field, new_field='') -> None:
         """
         Args:
             field (str): Field name
-                @chs 字段名
+                @zhs 字段名
             new_field (str): New field name, blank for replacement
-                @chs 新的字段名，留空表示替换原数组字段
+                @zhs 新的字段名，留空表示替换原数组字段
         """
         super().__init__()
         self.field = field
@@ -504,9 +504,9 @@ class NgramCounter(PipelineStage):
 
         Args:
             n (int): Max string lenght
-                @chs 最大字串长度
+                @zhs 最大字串长度
             lr (bool): Count left/right characters
-                @chs 是否同时记录左右字符计数
+                @zhs 是否同时记录左右字符计数
         """
         super().__init__()
         if lr:
@@ -541,7 +541,7 @@ class NgramCounter(PipelineStage):
 class Limit(PipelineStage):
     """
     Limit results count
-    @chs 限制返回的结果数量
+    @zhs 限制返回的结果数量
     """
 
     def __init__(self, limit):
@@ -549,7 +549,7 @@ class Limit(PipelineStage):
         Args:
             limit (int):
                 Max results count
-                @chs 要返回的最大结果数量，0则不返回
+                @zhs 要返回的最大结果数量，0则不返回
         """
         super().__init__()
         self.limit = limit
@@ -564,16 +564,16 @@ class Limit(PipelineStage):
 class FilterDuplication(PipelineStage):
     """
     Filter duplications in specified database collection
-    @chs 过滤已经存储在指定数据库中的段落
+    @zhs 过滤已经存储在指定数据库中的段落
     """
 
     def __init__(self, field, mongocollection='paragraph') -> None:
         """
         Args:
             mongocollection (str): Database collection name
-                @chs 数据库集合名
+                @zhs 数据库集合名
             field (str): Field that mark an duplication
-                @chs 要去重的字段值
+                @zhs 要去重的字段值
         """
         super().__init__()
         self.mongocollection = mongocollection or 'paragraph'
@@ -588,7 +588,7 @@ class FilterDuplication(PipelineStage):
 class RegexReplace(PipelineStage):
     """
     Replace with regular expression
-    @chs 正则表达式匹配并替换
+    @zhs 正则表达式匹配并替换
     """
 
     def __init__(self, pattern, replacement='', plain=False):
@@ -596,10 +596,10 @@ class RegexReplace(PipelineStage):
         Args:
             pattern (str):
                 Regular expression
-                @chs 正则表达式
+                @zhs 正则表达式
             replacement (str):
                 Replacement string
-                @chs 要替换成的字符串
+                @zhs 要替换成的字符串
         """
         super().__init__()
         if plain:
@@ -616,7 +616,7 @@ class RegexReplace(PipelineStage):
 class RegexFilter(PipelineStage):
     """
     Match regular expression and extract result to field
-    @chs 正则表达式匹配并提取到字段中
+    @zhs 正则表达式匹配并提取到字段中
     """
 
     def __init__(self, pattern, target, source='content', match='{0}',
@@ -624,18 +624,18 @@ class RegexFilter(PipelineStage):
         """
         Args:
             pattern (str): Regular expression
-                @chs 正则表达式
+                @zhs 正则表达式
             source (str): String to match, default to content
-                @chs 匹配的字段，默认为内容
+                @zhs 匹配的字段，默认为内容
             target (str): Field name to fill in
-                @chs 要提取入的字段名称
+                @zhs 要提取入的字段名称
             match (str): Fill the target with, in forms like '{1}{2}', default to
                 all matched text
-                @chs 填入的值，如 '{1}{2}' 等形式，默认为全部匹配到的文本
+                @zhs 填入的值，如 '{1}{2}' 等形式，默认为全部匹配到的文本
             filter_out (bool): Filter out unmatched paragraphs
-                @chs 过滤未匹配到的语段
+                @zhs 过滤未匹配到的语段
             continuous (bool): Use previous matched value for unmatched paragraph
-                @chs 未匹配到的语段自动使用上次的值
+                @zhs 未匹配到的语段自动使用上次的值
         """
         super().__init__()
         self.regexp = re.compile(pattern)
@@ -663,20 +663,20 @@ class RegexFilter(PipelineStage):
 class FieldAssignment(PipelineStage):
     """
     Assign value/field to another field
-    @chs 将某一个字段的值或输入值保存到另一个字段
+    @zhs 将某一个字段的值或输入值保存到另一个字段
     """
 
     def __init__(self, field, value='', delete_field=False):
         """
         Args:
             field (str): Field name
-                @chs 新的字段名
+                @zhs 新的字段名
             value (QUERY):
                 $<field> or contants
-                @chs 以 $ 开头的字段名，或常数值（类型将自动匹配）
+                @zhs 以 $ 开头的字段名，或常数值（类型将自动匹配）
             delete_field (bool):
                 Delete the field
-                @chs 删除该字段
+                @zhs 删除该字段
         """
         super().__init__()
         self.field = field
@@ -693,17 +693,17 @@ class FieldAssignment(PipelineStage):
 
 class FilterArrayField(PipelineStage):
     """Filter array field
-    @chs 过滤列表字段的值
+    @zhs 过滤列表字段的值
     """
 
     def __init__(self, field, cond) -> None:
         """
         Args:
             field (str): Field name
-                @chs 字段名称
+                @zhs 字段名称
             cond (QUERY): Conditional expression, use `iter` for the iterated item,
                 or use abbreviated form like '>0' to mean 'iter>0'
-                @chs 条件式，用 iter 表示被判断的项目，或用省略形式。将仅保留满足条件式的项目。
+                @zhs 条件式，用 iter 表示被判断的项目，或用省略形式。将仅保留满足条件式的项目。
         """
         super().__init__()
         self.field = field
@@ -729,7 +729,7 @@ class FilterArrayField(PipelineStage):
 
 class DeleteParagraph(PipelineStage):
     """Delete Paragraph from Database
-    @chs 从数据库删除段落
+    @zhs 从数据库删除段落
     """
 
     def resolve(self, paragraph: Paragraph):
@@ -740,14 +740,14 @@ class DeleteParagraph(PipelineStage):
 
 class SaveParagraph(PipelineStage):
     """Save
-    @chs 保存
+    @zhs 保存
     """
 
     def __init__(self, mongocollection=''):
         '''
         Args:
             mongocollection (str): Database collection name
-                @chs 数据库集合名
+                @zhs 数据库集合名
         '''
         super().__init__()
         self.mongocollection = mongocollection
@@ -783,16 +783,16 @@ class SaveParagraph(PipelineStage):
 class FieldIncresement(PipelineStage):
     """
     Increment on field
-    @chs 对字段进行自增操作
+    @zhs 对字段进行自增操作
     """
 
     def __init__(self, field, inc_value):
         '''
         Args:
             field (str): Field name
-                @chs 字段名称
+                @zhs 字段名称
             inc_value (str): Increment by, or $<field>
-                @chs 自增的值，或以 $ 开头的另一字段名
+                @zhs 自增的值，或以 $ 开头的另一字段名
         '''
         super().__init__()
         self.field = field
@@ -808,7 +808,7 @@ class FieldIncresement(PipelineStage):
 class OutlineFilter(PipelineStage):
     """
     Identify Chinese/Roman ordinal numbers for outline
-    @chs 中英文大纲序号识别
+    @zhs 中英文大纲序号识别
     """
 
     chnum = '[一二三四五六七八九十首甲乙丙丁戊己庚辛壬癸]'
@@ -904,16 +904,16 @@ class OutlineFilter(PipelineStage):
 class ConditionalAssignment(PipelineStage):
     """
     Conditional assignment
-    @chs 按条件赋值字段"""
+    @zhs 按条件赋值字段"""
 
     def __init__(self, cond, field):
         """
         Args:
             cond (QUERY): Conditions and assignment values, in forms like:
                 (<condition> => <constant>);
-                @chs 检查的条件，与最终要赋予的值之间用 => 连缀，条件之间用 ; 连接
+                @zhs 检查的条件，与最终要赋予的值之间用 => 连缀，条件之间用 ; 连接
             field (str): Target field name
-                @chs 要赋值的字段
+                @zhs 要赋值的字段
         """
         super().__init__()
         self.cond = parser.parse('[];' + cond)
@@ -930,17 +930,17 @@ class ConditionalAssignment(PipelineStage):
 
 class KeywordsReplacement(PipelineStage):
     """Replace keywords/tags
-    @chs 替换关键词（标签）"""
+    @zhs 替换关键词（标签）"""
 
     def __init__(self, from_tag, to_tag, arr='keywords'):
         """
         Args:
             from_tag (str): Original keyword
-                @chs 原标签
+                @zhs 原标签
             to_tag (str): Target keyword
-                @chs 目标标签
+                @zhs 目标标签
             arr (str): Target field, default to keywords
-                @chs 替换的数组字段（默认为标签）
+                @zhs 替换的数组字段（默认为标签）
         """
         super().__init__()
         self.from_tag = from_tag
@@ -959,19 +959,19 @@ class KeywordsReplacement(PipelineStage):
 
 class MongoCollectionBatchOper(PipelineStage):
     """Batch operation on database collection
-    @chs 数据库批处理"""
+    @zhs 数据库批处理"""
 
     def __init__(self, mongocollection='', updates='[]'):
         """
         Args:
             mongocollection (str):
                 Database collection
-                @chs 要处理的数据库
+                @zhs 要处理的数据库
             updates (QUERY):
                 Updates to perform, in the form of a list like [(<query>; <update>); ...]
                 where <update> can be function calls to set, pull, unset, etc.
-                @chs 要执行的更新，应表示为一个列表，其中的每个元素为 (query; update)，
-                @chs 如 (keywords=test; pull(keywords=key)) 。update 可为 set, pull, unset 等，也可使用聚合
+                @zhs 要执行的更新，应表示为一个列表，其中的每个元素为 (query; update)，
+                @zhs 如 (keywords=test; pull(keywords=key)) 。update 可为 set, pull, unset 等，也可使用聚合
         """
         super().__init__()
         self.collection = Paragraph.get_coll(mongocollection)
@@ -1004,13 +1004,13 @@ class MongoCollectionBatchOper(PipelineStage):
 
 class PDFUnlock(PipelineStage):
     """Unlock "secured" PDF
-    @chs 解锁读保护的 PDF
+    @zhs 解锁读保护的 PDF
     """
 
     def __init__(self, file: bytes):
         """
         :param file: File binary
-            @chs 文件 data: URL
+            @zhs 文件 data: URL
         :type file: file:pdf
         """
         super().__init__()

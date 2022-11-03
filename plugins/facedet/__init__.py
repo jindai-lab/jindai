@@ -22,7 +22,7 @@ class FaceDet(MediaItemStage):
         """
         Args:
             method (opencv|dlib|mtcnn|ssd|retinaface): Face detection method.
-                @chs 人脸检测方法
+                @zhs 人脸检测方法
         """        
         self.method = method
         from deepface.detectors.FaceDetector import detect_faces, build_model

@@ -1,5 +1,5 @@
 """Handling File Uploads
-@chs 处理用户通过网页上传的文档
+@zhs 处理用户通过网页上传的文档
 """
 
 import tempfile
@@ -12,7 +12,7 @@ from jindai.pipeline import DataSourceStage
 class FileUploadDataSource(DataSourceStage):
     """
     Use user-uploaded temporary file for input
-    @chs 上传文件
+    @zhs 上传文件
     """
 
     def apply_params(self, file='file', field='content'):
@@ -20,10 +20,10 @@ class FileUploadDataSource(DataSourceStage):
         Args:
             file (file:pdf,html,zip,txt):
                 File data-url string
-                @chs 上传的文件
+                @zhs 上传的文件
             field (str):
                 Field to store temporary file name
-                @chs 文件名写入到的字段
+                @zhs 文件名写入到的字段
         """
         self.files = self.parse_data_uri(file)
         self.field = field
