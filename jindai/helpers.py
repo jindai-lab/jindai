@@ -307,4 +307,4 @@ JSONDecoder = create_dbo_json_decoder(json.JSONDecoder)
 language_iso639 = {
     lang.pt1: lang.name for lang in iso639.iter_langs() if lang.pt1 and lang.pt1 != 'zh'
 }
-language_iso639.update(chs='Chinese Simplified', zht='Chinese Traditional')
+language_iso639.update(zhs='Chinese Simplified', zht='Chinese Traditional')

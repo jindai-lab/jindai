@@ -1,5 +1,5 @@
 """Import from PDF
-@chs 从 PDF 导入
+@zhs 从 PDF 导入
 """
 
 import re
@@ -34,7 +34,7 @@ def resolve_range(page_range: str):
 class PDFDataSource(DataSourceStage):
     """
     Import paragraphs from PDF
-    @chs 从PDF中导入语段
+    @zhs 从PDF中导入语段
     """
     
     def apply_params(self, dataset_name='', lang='auto', content='', mongocollection='', skip_existed=True, page_range=''):
@@ -42,22 +42,22 @@ class PDFDataSource(DataSourceStage):
         Args:
             dataset_name (DATASET):
                 Dataset name
-                @chs 数据集名称
+                @zhs 数据集名称
             lang (LANG):
                 Language
-                @chs 语言标识
+                @zhs 语言标识
             content (LINES):
                 Paths
-                @chs PDF文件列表
+                @zhs PDF文件列表
             mongocollection (str):
                 MongoDB collection name
-                @chs 数据库集合名
+                @zhs 数据库集合名
             skip_existed (bool):
                 Skip existed pages and files
-                @chs 直接跳过已存在于数据集中的文件
+                @zhs 直接跳过已存在于数据集中的文件
             page_range (str):
                 Page range, e.g. 1-3
-                @chs 页码范围，例如 1-3
+                @zhs 页码范围，例如 1-3
         """
         self.name = dataset_name
         self.lang = lang

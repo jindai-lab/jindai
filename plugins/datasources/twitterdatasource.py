@@ -66,7 +66,7 @@ def _stamp(dtval):
 class TwitterDataSource(DataSourceStage):
     """
     Load from social network
-    @chs 导入社交网络信息
+    @zhs 导入社交网络信息
     """
 
     def apply_params(self,
@@ -84,35 +84,35 @@ class TwitterDataSource(DataSourceStage):
         Args:
             dataset_name (DATASET):
                 Dataset name
-                @chs 数据集名称
+                @zhs 数据集名称
             allow_video (bool, optional):
                 Allow video
-                @chs 允许导入视频
+                @zhs 允许导入视频
             allow_retweet (bool, optional):
                 Allow retweet
-                @chs 允许导入转发
+                @zhs 允许导入转发
             media_only (bool, optional):
                 Media only
-                @chs 只导入包含媒体内容的 Tweets
+                @zhs 只导入包含媒体内容的 Tweets
             consumer_key (str, optional): API CONSUMER KEY
             consumer_secret (str, optional): API CONSUMER SECRET
             access_token_key (str, optional): API ACCESS TOKEN KEY
             access_token_secret (str, optional): API ACCESS TOKEN SECRET
             import_username (LINES, optional):
                 Import source, blank for timeline
-                @chs 导入的用户名或留空以导入 Timeline
+                @zhs 导入的用户名或留空以导入 Timeline
             time_after (str):
                 Time after
-                @chs 时间上限
+                @zhs 时间上限
             time_before (str):
                 Time before
-                @chs 时间下限
+                @zhs 时间下限
             skip_existent (bool):
                 Skip existent tweets
-                @chs 跳过已经导入的 URL
+                @zhs 跳过已经导入的 URL
             proxy (str):
                 Proxy settings
-                @chs 代理服务器
+                @zhs 代理服务器
         """
         self.dataset_name = dataset_name
         self.allow_video = allow_video

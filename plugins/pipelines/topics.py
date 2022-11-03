@@ -1,5 +1,5 @@
 """Topics, clustering and classification
-@chs 话题与分类
+@zhs 话题与分类
 """
 
 from collections import defaultdict
@@ -34,7 +34,7 @@ def import_sklearn_kmeans_pca():
 
 class FilterStopWords(PipelineStage):
     """Filter stop words
-    @chs 过滤停用词
+    @zhs 过滤停用词
     """
 
     _lang_stopwords = {
@@ -59,7 +59,7 @@ class FilterStopWords(PipelineStage):
 
 class LDA(PipelineStage):
     """Topic model based on LDA
-    @chs 基于 LDA 的话题模型
+    @zhs 基于 LDA 的话题模型
     """
 
     def __init__(self, num_topics):
@@ -106,15 +106,15 @@ class LDA(PipelineStage):
 
 class Word2Vec(PipelineStage):
     """Vectorize text, multilingual support
-    @chs 根据不同语言自动进行 Word2Vec 向量化
-    @chs （调用 transformers 的 paraphrase-multilingual-MiniLM-L12-v2 模型）
+    @zhs 根据不同语言自动进行 Word2Vec 向量化
+    @zhs （调用 transformers 的 paraphrase-multilingual-MiniLM-L12-v2 模型）
     """
 
     def __init__(self, model_name='paraphrase-multilingual-MiniLM-L12-v2'):
         '''
         Args:
             model_name (str): Model name
-                @chs 模型名称，默认为多语言小模型
+                @zhs 模型名称，默认为多语言小模型
         '''
         text2vec = safe_import('text2vec')
         self.bert = text2vec.SBert(model_name)
@@ -127,14 +127,14 @@ class Word2Vec(PipelineStage):
 
 class WordsBagVec(PipelineStage):
     """Vectorize with one-shot words bag
-    @chs 使用词袋模型进行 0/1 编码的向量化
+    @zhs 使用词袋模型进行 0/1 编码的向量化
     """
 
     def __init__(self, dims=100000) -> None:
         """
         Args:
             dims (int, optional): Dimensions
-                @chs 维数
+                @zhs 维数
         """
         self.words = {}
         self.dims = dims
@@ -154,16 +154,16 @@ class WordsBagVec(PipelineStage):
 
 class CosSimFSClassifier(AccumulateParagraphs):
     """Classification with cosine similarity
-    @chs 基于余弦相似度的小样本分类
+    @zhs 基于余弦相似度的小样本分类
     """
 
     def __init__(self, label_field, auto_update=False):
         '''
         Args:
             label_field (str): Field for labels
-                @chs 标签字段
+                @zhs 标签字段
             auto_update (bool): Update exemplars
-                @chs 将先前识别结果用于之后的样本
+                @zhs 将先前识别结果用于之后的样本
         '''
         super().__init__()
         self.label_field = label_field
@@ -210,17 +210,17 @@ class CosSimFSClassifier(AccumulateParagraphs):
 
 class CosSimClustering(AccumulateParagraphs):
     """Clustering with cosine similarity
-    @chs 余弦相似度聚类"""
+    @zhs 余弦相似度聚类"""
 
     def __init__(self, min_community_size=10, threshold=0.75, label_field='label'):
         '''
         Args:
             min_community_size (int): Min size for clustering community
-                @chs 最少的聚类数量
+                @zhs 最少的聚类数量
             threshold (float): Threshold for similarity
-                @chs 相似度阈值
+                @zhs 相似度阈值
             label_field (str): Label field name
-                @chs 生成的标签字段名
+                @zhs 生成的标签字段名
         '''
         super().__init__()
         self.min_community_size = min_community_size
@@ -247,16 +247,16 @@ class CosSimClustering(AccumulateParagraphs):
 
 class KmeansClustering(PipelineStage):
     """Clustering with K-Means
-    @chs 使用 K-Means 方法聚类
+    @zhs 使用 K-Means 方法聚类
     """
 
     def __init__(self, k, vector_field='vec'):
         """
         Args:
             k (int): Clusters
-                @chs 聚类的数量
+                @zhs 聚类的数量
             vector_field (str): Vector field
-                @chs 向量字段名
+                @zhs 向量字段名
         """
         KMeans, _ = import_sklearn_kmeans_pca()
         self.kmeans = KMeans(n_clusters=k)
@@ -290,7 +290,7 @@ class KmeansClustering(PipelineStage):
 
 class DrawClusters(PipelineStage):
     """Draw clusters
-    @chs 画出二维点图
+    @zhs 画出二维点图
     """
 
     def __init__(self,
@@ -299,11 +299,11 @@ class DrawClusters(PipelineStage):
         '''
         Args:
             label_field (str): Label field
-                @chs 聚类标签字段名
+                @zhs 聚类标签字段名
             notation_field (str): Notation field
-                @chs 标记文本字段名
+                @zhs 标记文本字段名
             notation_length (int): Max notation text length
-                @chs 标记文本最大长度
+                @zhs 标记文本最大长度
         '''
         self.label_field = label_field
         self.notation_field = notation_field
@@ -337,14 +337,14 @@ class DrawClusters(PipelineStage):
 
 class GenerateCooccurance(PipelineStage):
     """Generate cooccurance matrix
-    @chs 生成共现矩阵
+    @zhs 生成共现矩阵
     """
 
     def __init__(self, weighted_by='vec_cos') -> None:
         """
         Args:
             weighted_by (vec_cos|token): Weight by
-            @chs 权重方式，vec_cos 表示*语段间*向量余弦相似度，token 表示语段内各词的共现次数
+            @zhs 权重方式，vec_cos 表示*语段间*向量余弦相似度，token 表示语段内各词的共现次数
         """
         super().__init__()
         safe_import('sentence_transformers')
@@ -379,13 +379,13 @@ class GenerateCooccurance(PipelineStage):
 
 class GraphicClustering(PipelineStage):
     """Clustering by undirectional graph
-    @chs 按无向图进行聚类"""
+    @zhs 按无向图进行聚类"""
 
     def __init__(self, topk=1000) -> None:
         """
         Args:
             topk (int, optional): Max edges count
-                @chs 最多绘制边的数量
+                @zhs 最多绘制边的数量
         """
         self.topk = topk
         self.paragraphs = []

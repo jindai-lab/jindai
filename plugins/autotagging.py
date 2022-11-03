@@ -1,6 +1,6 @@
 """
 Auto tagging
-@chs 自动标签
+@zhs 自动标签
 """
 from PyMongoWrapper import F, Fn, ObjectId, QueryExpressionError, MongoOperand
 from jindai import PipelineStage, Plugin, parser
@@ -49,7 +49,7 @@ def apply_tag(parsed, tag, paragraph):
 class ApplyAutoTags(PipelineStage):
     """
     Apply auto tagging settings
-    @chs 应用自动标签设置
+    @zhs 应用自动标签设置
     """
 
     def __init__(self) -> None:
@@ -67,7 +67,7 @@ class ApplyAutoTags(PipelineStage):
 class AddAutoTag(PipelineStage):
     """
     Create new auto tagging rule
-    @chs 创建新的自动标签规则
+    @zhs 创建新的自动标签规则
     """
     
     def __init__(self, cond='false', tag='') -> None:
@@ -75,10 +75,10 @@ class AddAutoTag(PipelineStage):
         Args:
             cond (str, optional):
                 Condition
-                @chs 条件
+                @zhs 条件
             tag (str, optional): 
                 Tag
-                @chs 标签
+                @zhs 标签
         """        
         super().__init__()
         self.cond = cond
