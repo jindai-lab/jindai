@@ -157,7 +157,7 @@ def resolve_dups(input_file, slimit):
 
 class ImageHash(MediaItemStage):
     """Hash images
-    @chs 建立图像哈希检索
+    @zhs 建立图像哈希检索
     """
 
     def resolve_image(self, i: MediaItem, _):
@@ -184,7 +184,7 @@ class ImageHash(MediaItemStage):
 
 class ImageHashDuplications(MediaItemStage):
     """Deduplication with image hash
-    @chs 进行图像哈希去重
+    @zhs 进行图像哈希去重
     """
 
     def __init__(self, auto_remove=-1) -> None:
@@ -192,7 +192,7 @@ class ImageHashDuplications(MediaItemStage):
         Args:
             auto_remove (int, optional):
                 Auto remove duplicates with max diff. score
-                @chs 自动删除差异值小于等于该数值的项目，默认为 -1 即不删除
+                @zhs 自动删除差异值小于等于该数值的项目，默认为 -1 即不删除
         """
         super().__init__()
         self.results = deque()

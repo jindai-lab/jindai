@@ -1,6 +1,6 @@
 """
 Basic processing for multimedia materials
-@chs 多媒体相关的简单处理
+@zhs 多媒体相关的简单处理
 """
 import os
 import tempfile
@@ -89,7 +89,7 @@ class MediaItemStage(PipelineStage):
 
 class ImagesFromSource(PipelineStage):
     """Use paragraph as images from PDF
-    @chs 将来自 PDF 等语段的页面作为图片"""
+    @zhs 将来自 PDF 等语段的页面作为图片"""
 
     def resolve(self, paragraph: Paragraph) -> Paragraph:
         i = MediaItem(**paragraph.as_dict())
@@ -101,7 +101,7 @@ class ImagesFromSource(PipelineStage):
 class CheckImage(MediaItemStage):
     """
     Get Basic Info for Images
-    @chs 获取图像基本信息
+    @zhs 获取图像基本信息
     """
 
     def resolve_image(self, i: MediaItem, _):
@@ -121,7 +121,7 @@ class CheckImage(MediaItemStage):
 class ImageGrayScale(MediaItemStage):
     """
     Image Grayscalize
-    @chs 图像灰度化
+    @zhs 图像灰度化
     """
 
     def resolve_image(self, i: MediaItem, _):
@@ -132,7 +132,7 @@ class ImageGrayScale(MediaItemStage):
 class ImageBW(MediaItemStage):
     """
     Image Binaryzation with Threshold
-    @chs 图像简单二值化
+    @zhs 图像简单二值化
     """
 
     def __init__(self, threshold=128):
@@ -152,16 +152,16 @@ class ImageBW(MediaItemStage):
 class ImageBWAdaptive(MediaItemStage):
     """
     Adapative Binaryzation for Images
-    @chs 图像自适应二值化
+    @zhs 图像自适应二值化
     """
 
     def __init__(self, block_size=35, offset=10):
         """
         Args:
             block_size (int): Block size
-                @chs 区域大小
+                @zhs 区域大小
             offset (int): Offset
-                @chs 偏差值
+                @zhs 偏差值
         """
         super().__init__()
         self.block_size = block_size
@@ -180,7 +180,7 @@ class ImageBWAdaptive(MediaItemStage):
 class ImageEnhance(MediaItemStage):
     """
     Enhance images
-    @chs 图像增强
+    @zhs 图像增强
     """
 
     def __init__(self, method, args):
@@ -188,9 +188,9 @@ class ImageEnhance(MediaItemStage):
         Args:
             method (autocontrast|colorize|crop|deform|equalize|exif_transpose|expand|fit|flip|grayscale|invert|mirror|operator|pad|posterize|scale|solarize): 
                 Method to call
-                @chs 要调用的方法
+                @zhs 要调用的方法
             args (str): Arguments, split by lines
-                @chs 调用的参数，以回车分隔，类型将自动转换
+                @zhs 调用的参数，以回车分隔，类型将自动转换
         """
         super().__init__()
         self.method = method
@@ -204,18 +204,18 @@ class ImageEnhance(MediaItemStage):
 
 class ImageResize(MediaItemStage):
     """Resize image
-    @chs 调整大小
+    @zhs 调整大小
     """
 
     def __init__(self, max_width, max_height, proportional=True):
         """
         Args:
             max_width (float): Max width, in pixels (>=1) or ratio (0-1)
-                @chs 最大宽度或0-1之间的比例，下同
+                @zhs 最大宽度或0-1之间的比例，下同
             max_height (float): Max height
-                @chs 最大高度
+                @zhs 最大高度
             proportional (bool): Keep proportion
-                @chs 是否等比例放大缩小
+                @zhs 是否等比例放大缩小
         """
         super().__init__()
         self.proportional = proportional
@@ -236,16 +236,16 @@ class ImageResize(MediaItemStage):
 
 class ImageCrop(MediaItemStage):
     """Crop images
-    @chs 图像切割
+    @zhs 图像切割
     """
 
     def __init__(self, top, left, right, bottom):
         """
         Args:
             top (float): Top, in pixels (>=1) or ratio (0-1)
-                @chs 上端距离（像素或0-1之间的比例，下同）
+                @zhs 上端距离（像素或0-1之间的比例，下同）
             bottom (float): Bottom
-                @chs 下端距离
+                @zhs 下端距离
             left (float): Left
                 @chs 左端距离
             right (float): Right
