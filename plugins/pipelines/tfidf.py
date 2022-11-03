@@ -10,7 +10,7 @@ import math
 
 class TermFreq(PipelineStage):
     """Term frequency
-    @chs 词频统计
+    @zhs 词频统计
     """
 
     def __init__(self):
@@ -29,7 +29,7 @@ class TermFreq(PipelineStage):
 
 class TFIDFWordFetch(PipelineStage):
     """Word extraction with TF/IDF. Cut words first.
-    @chs 基于TFIDF的词汇抽取，需要先分词或产生 tokens 字段
+    @zhs 基于TFIDF的词汇抽取，需要先分词或产生 tokens 字段
     """
 
     def __init__(self, min_df=1e-3):

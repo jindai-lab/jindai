@@ -1,6 +1,6 @@
 """
 Import from Word/Excel Documents
-@chs Word/Excel 用作数据源"""
+@zhs Word/Excel 用作数据源"""
 import os
 import subprocess
 import tempfile
@@ -15,7 +15,7 @@ from jindai.pipeline import DataSourceStage
 class WordDataSource(DataSourceStage):
     """
     Import from Word documents
-    @chs 从Word文档中导入语段
+    @zhs 从Word文档中导入语段
     """
 
     def apply_params(self, dataset_name='', lang='auto', content=''):
@@ -23,13 +23,13 @@ class WordDataSource(DataSourceStage):
         Args:
             dataset_name (DATASET): 
                 Data name
-                @chs 数据集名称
+                @zhs 数据集名称
             lang (LANG):
                 Language code
-                @chs 语言标识
+                @zhs 语言标识
             content (LINES):
                 Paths
-                @chs 文件列表
+                @zhs 文件列表
         """
         self.name = dataset_name
         self.lang = lang
@@ -60,7 +60,7 @@ class WordDataSource(DataSourceStage):
 class ExcelDataSource(DataSourceStage):
     """
     Import from Excel documents
-    @chs 从Word文档中导入语段
+    @zhs 从Word文档中导入语段
     """
 
     def apply_params(self, content='', dataset_name='', lang='auto') -> None:
@@ -68,13 +68,13 @@ class ExcelDataSource(DataSourceStage):
         Args:
             dataset_name (DATASET): 
                 Data name
-                @chs 数据集名称
+                @zhs 数据集名称
             lang (LANG):
                 Language code
-                @chs 语言标识
+                @zhs 语言标识
             content (LINES):
                 Paths
-                @chs 文件列表
+                @zhs 文件列表
         """
         self.files = storage.globs(content)
         self.dataset = dataset_name

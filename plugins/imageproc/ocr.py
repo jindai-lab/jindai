@@ -18,7 +18,7 @@ class TesseractOCR(MediaItemStage):
         """
         super().__init__()
         self.langs = '+'.join([{
-            'chs': 'chi_sim', 'zht': 'chi_tra',
+            'zhs': 'chi_sim', 'zht': 'chi_tra',
             'cht-vert': 'chi_tra_vert', 'en': 'eng',
             'ru': 'rus', 'ja': 'jpn'}.get(l, l) for l in langs.split(',')])
         self.lang = langs.split(',')[0].split('-')[0]

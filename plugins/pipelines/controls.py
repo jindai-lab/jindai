@@ -1,5 +1,5 @@
 """Workflow control
-@chs 工作流程控制
+@zhs 工作流程控制
 """
 
 from PyMongoWrapper import F
@@ -43,17 +43,17 @@ class FlowControlStage(PipelineStage):
 
 class RepeatWhile(FlowControlStage):
     """Repeat loops
-    @chs 重复"""
+    @zhs 重复"""
 
     def __init__(self, pipeline, times=1, cond=''):
         """
         Args:
             pipeline (pipeline): Loop pipeline
-                @chs 要重复执行的流程
+                @zhs 要重复执行的流程
             times (int): Max repeat times
-                @chs 重复的次数
+                @zhs 重复的次数
             cond (QUERY): Condition for repeat
-                @chs 重复的条件
+                @zhs 重复的条件
         """
         self.times = times
         self.times_key = f'REPEATWHILE_{id(self)}_TIMES_COUNTER'
@@ -82,17 +82,17 @@ class RepeatWhile(FlowControlStage):
 
 class Condition(FlowControlStage):
     """Conditional execution
-    @chs 条件判断"""
+    @zhs 条件判断"""
 
     def __init__(self, cond, iftrue, iffalse):
         """
         Args:
             cond (QUERY): Condition to check
-                @chs 检查的条件
+                @zhs 检查的条件
             iftrue (pipeline): Pipeline when condition is satisfied
-                @chs 条件成立时执行的流程
+                @zhs 条件成立时执行的流程
             iffalse (pipeline): Pipeline when condition is not satisfied
-                @chs 条件不成立时执行的流程
+                @zhs 条件不成立时执行的流程
         """
         self.cond = parser.parse(cond)
         self.iftrue = Pipeline(iftrue, self.logger)
@@ -115,17 +115,17 @@ class Condition(FlowControlStage):
 
 class CallTask(FlowControlStage):
     """Call to other task
-    @chs 调用其他任务"""
+    @zhs 调用其他任务"""
 
     def __init__(self, task, pipeline_only=False, params=''):
         """
         Args:
             task (TASK): Task ID
-                @chs 任务ID
+                @zhs 任务ID
             pipeline_only (bool): Join the pipeline in the current pipeline 
-                @chs 仅调用任务中的处理流程，若为 false，则于 summarize 阶段完整调用该任务
+                @zhs 仅调用任务中的处理流程，若为 false，则于 summarize 阶段完整调用该任务
             params (QUERY): Override parameters in the task
-                @chs 设置任务中各处理流程参数
+                @zhs 设置任务中各处理流程参数
         """
         task = TaskDBO.first(F.id == task)
         assert task, f'No specified task: {task}'

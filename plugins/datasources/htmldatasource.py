@@ -1,6 +1,6 @@
 """
 Import from web or file
-@chs 来自网页或文本文件
+@zhs 来自网页或文本文件
 """
 
 import codecs
@@ -22,7 +22,7 @@ from jindai import storage, parser
 class HTMLDataSource(DataSourceStage):
     """
     Read paragraphs from HTML pages, generate one Paragraph per page
-    @chs 从HTML网页中读取语段，每个网页计作一个语段
+    @zhs 从HTML网页中读取语段，每个网页计作一个语段
     """
 
     def apply_params(self, dataset_name='', lang='auto', content='',
@@ -31,19 +31,19 @@ class HTMLDataSource(DataSourceStage):
         Args:
             dataset_name (DATASET):
                 Data name
-                @chs 数据集名称
+                @zhs 数据集名称
             lang (LANG):
                 Language code
-                @chs 语言标识
+                @zhs 语言标识
             content (LINES):
                 Paths
-                @chs HTML或包含HTML的ZIP压缩包文件列表
+                @zhs HTML或包含HTML的ZIP压缩包文件列表
             paragraph_selector (str):
                 CSS selector for paragraph
-                @chs 确定段落的 CSS 选择器，为空则整个网页作为一个段落
+                @zhs 确定段落的 CSS 选择器，为空则整个网页作为一个段落
             fields (str):
                 Mapping element attribute to field, e.g. field=".css-selector//attribute"
-                @chs 字段与搜索字符串的关系，形如 field=".css-selector//attribute"
+                @zhs 字段与搜索字符串的关系，形如 field=".css-selector//attribute"
         """
         self.name = dataset_name
         self.lang = lang
@@ -103,7 +103,7 @@ class HTMLDataSource(DataSourceStage):
 class TextDataSource(DataSourceStage):
     """
     Read Paragraphs from text files
-    @chs 从文本文件中读取语段
+    @zhs 从文本文件中读取语段
     """
 
     def apply_params(self, dataset_name='', lang='auto', content=''):
@@ -111,13 +111,13 @@ class TextDataSource(DataSourceStage):
         Args:
             dataset_name (DATASET):
                 Data name
-                @chs 数据集名称
+                @zhs 数据集名称
             lang (LANG):
                 Language code
-                @chs 语言标识
+                @zhs 语言标识
             content (LINES):
                 Paths
-                @chs HTML或包含HTML的ZIP压缩包文件列表
+                @zhs HTML或包含HTML的ZIP压缩包文件列表
         """
         self.name = dataset_name
         self.lang = lang
@@ -135,7 +135,7 @@ class TextDataSource(DataSourceStage):
 class LinesDataSource(DataSourceStage):
     """
     Import paragraphs from lines
-    @chs 从直接输入的文本中获得语段，每行一个语段
+    @zhs 从直接输入的文本中获得语段，每行一个语段
     """
 
     def apply_params(self, dataset_name='', lang="auto", content="", params=None):
@@ -143,16 +143,16 @@ class LinesDataSource(DataSourceStage):
         Args:
             dataset_name (DATASET):
                 Data name
-                @chs 数据集名称
+                @zhs 数据集名称
             lang (LANG):
                 Language code
-                @chs 语言标识
+                @zhs 语言标识
             content (LINES):
                 Text contents
-                @chs 文本内容
+                @zhs 文本内容
             params (object):
                 Other customizable fields
-                @chs 其他自定义字段
+                @zhs 其他自定义字段
         """
         self.name = dataset_name
         self.lang = lang
@@ -171,7 +171,7 @@ DEFAULT_IMG_PATTERNS = 'img[src]|[zoomfile]|[data-original]|[data-src]|[file]|[d
 class WebPageListingDataSource(DataSourceStage):
     """
     Import web page listings
-    @chs 从网页列表中导入语段
+    @zhs 从网页列表中导入语段
     """
 
     def apply_params(self, dataset='', patterns='',
@@ -183,37 +183,37 @@ class WebPageListingDataSource(DataSourceStage):
         Args:
             dataset (DATASET):
                 Data name
-                @chs 数据集名称
+                @zhs 数据集名称
             lang (LANG):
                 Language code
-                @chs 语言标识
+                @zhs 语言标识
             patterns (LINES):
                 Patterns for web pages
-                @chs 列表页面模式
+                @zhs 列表页面模式
             list_depth (int):
                 List depth
-                @chs 列表深度
+                @zhs 列表深度
             proxy (str):
                 Proxy settings
-                @chs 代理服务器
+                @zhs 代理服务器
             tags (LINES):
                 Tags, one tag per line
-                @chs 标签
+                @zhs 标签
             detail_link (str):
                 Regex for detailed page URL
-                @chs 详情页面正则表达式
+                @zhs 详情页面正则表达式
             list_link (str):
                 Regex for listing page URL
-                @chs 列表页面正则表达式
+                @zhs 列表页面正则表达式
             img_pattern (LINES):
                 Image pattern
-                @chs 图像检索标记
+                @zhs 图像检索标记
             mongocollection (str):
                 Mongo Collection name
-                @chs 数据库集合名
+                @zhs 数据库集合名
             parallel_n (int):
                 Parallel download threads
-                @chs 并行下载线程数
+                @zhs 并行下载线程数
         """
         self.proxies = {} if not proxy else {
             'http': proxy,
@@ -361,7 +361,7 @@ class WebPageListingDataSource(DataSourceStage):
 
 class JSONDataSource(DataSourceStage):
     """Parse JSON data to Paragraphs, used to interact with web interface
-    @chs 从 JSON 数据解析出语段，用于与网页客户端交互
+    @zhs 从 JSON 数据解析出语段，用于与网页客户端交互
     """
 
     def apply_params(self, content='', **kwargs) -> None:
@@ -385,24 +385,24 @@ class JSONDataSource(DataSourceStage):
 class BiblioDataSource(DataSourceStage):
     """
     Import paragraph from EndNote bibliography items
-    @chs 从 EndNote 文献条目产生语段
+    @zhs 从 EndNote 文献条目产生语段
     """
     
-    def apply_params(self, content='', dataset_name='', lang='chs', input_format='endnote') -> None:
+    def apply_params(self, content='', dataset_name='', lang='zhs', input_format='endnote') -> None:
         """
         Args:
             dataset_name (DATASET):
                 Data name
-                @chs 数据集名称
+                @zhs 数据集名称
             lang (LANG):
                 Language code
-                @chs 语言标识
+                @zhs 语言标识
             content (LINES):
                 Paths
-                @chs 文件列表
+                @zhs 文件列表
             format (endnote|other, unsupported):
                 Format
-                @chs 文献条目信息格式
+                @zhs 文献条目信息格式
         """
         if not hasattr(self, input_format):
             raise NotImplementedError()

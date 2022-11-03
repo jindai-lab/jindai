@@ -247,9 +247,9 @@ class ImageCrop(MediaItemStage):
             bottom (float): Bottom
                 @zhs 下端距离
             left (float): Left
-                @chs 左端距离
+                @zhs 左端距离
             right (float): Right
-                @chs 右端距离
+                @zhs 右端距离
         """
         super().__init__()
         self.box = (top, left, right, bottom)
@@ -267,14 +267,14 @@ class ImageCrop(MediaItemStage):
 
 class ImageRotate(MediaItemStage):
     """Rotate Image
-    @chs 图像旋转
+    @zhs 图像旋转
     """
 
     def __init__(self, degree=90):
         """
         Args:
             degree (int): Rotate by degree, one of 0, 90, 180, and 270.
-                @chs 旋转的角度，应为90、180、270中的一个
+                @zhs 旋转的角度，应为90、180、270中的一个
         """
         super().__init__()
         assert degree in (90, 180, 270, 0), "Degree must in (0, 90, 180, 270)"
@@ -287,14 +287,14 @@ class ImageRotate(MediaItemStage):
 
 class DumpImages(MediaItemStage):
     """Save Images to Folder
-    @chs 保存图像
+    @zhs 保存图像
     """
 
     def __init__(self, folder):
         """
         Args:
             folder (str): Folder name
-                @chs 文件夹名称
+                @zhs 文件夹名称
         """
         super().__init__()
         self.folder = folder
@@ -314,14 +314,14 @@ class DumpImages(MediaItemStage):
 
 class DownloadMedia(MediaItemStage):
     """Download media items
-    @chs 下载媒体内容
+    @zhs 下载媒体内容
     """
 
     def __init__(self, proxy='') -> None:
         """
         Args:
             proxy (str): Proxy server
-                @chs 代理服务器
+                @zhs 代理服务器
         """
         super().__init__()
         self.proxies = {
@@ -373,7 +373,7 @@ class DownloadMedia(MediaItemStage):
         
 class QRCodeScanner(PipelineStage):
     """Read QR-Code info from image
-    @chs 获取图像中的二维码信息
+    @zhs 获取图像中的二维码信息
     """
 
     def __init__(self) -> None:
@@ -404,16 +404,16 @@ class QRCodeScanner(PipelineStage):
 class VideoFrame(MediaItemStage):
     """
     Get a frame from video
-    @chs 获取视频中的某一帧
+    @zhs 获取视频中的某一帧
     """
 
     def __init__(self, frame_num=0.5, field='thumbnail') -> None:
         """
         Args:
             frame_num (float): Frame #, or ratio
-                @chs 大于等于一的帧数，或表示时长占比的0-1之间的浮点数
+                @zhs 大于等于一的帧数，或表示时长占比的0-1之间的浮点数
             field (str): Write storage ID to field
-                @chs 写入到字段名
+                @zhs 写入到字段名
         """
         super().__init__()
         self.frame_num = frame_num
