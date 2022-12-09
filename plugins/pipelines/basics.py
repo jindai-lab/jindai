@@ -735,6 +735,10 @@ class DeleteParagraph(PipelineStage):
     def resolve(self, paragraph: Paragraph):
         if paragraph.id:
             paragraph.delete()
+        if paragraph.images:
+            for i in paragraph.images:
+                if Paragraph.query(F.images == i.id).count() == 0:
+                    i.delete()
         return  # no yielding paragraph anymore
 
 
