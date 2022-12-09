@@ -149,6 +149,7 @@ def rest(login=True, cache=False, role='', mapping=None):
         @wraps(func)
         def wrapped(*args, **kwargs):
             try:
+                erred = False
                 if login and not logined(role):
                     raise Exception(
                         f'Forbidden. Client: {request.remote_addr}')
@@ -162,11 +163,12 @@ def rest(login=True, cache=False, role='', mapping=None):
 
                 resp = jsonify({'result': result})
             except Exception as ex:
+                erred = True
                 resp = jsonify(
                     {'__exception__': type(ex).__name__ + ': ' + str(ex), '__tracestack__': traceback.format_tb(ex.__traceback__)})
 
             resp.headers.add("Access-Control-Allow-Origin", "*")
-            if cache:
+            if cache and not erred:
                 resp.headers.add("Cache-Control", "public,max-age=86400")
             return resp
         return wrapped
