@@ -4,7 +4,7 @@
 
 from collections import defaultdict
 from io import BytesIO
-
+import re
 import numpy as np
 from jindai import PipelineStage
 from jindai.helpers import safe_import
@@ -38,8 +38,19 @@ class FilterStopWords(PipelineStage):
     """
 
     _lang_stopwords = {
-        l: many_stop_words.get_stop_words(l) for l in ['en', 'fr', 'de', 'ru', 'ja']
+        l: many_stop_words.get_stop_words(l) for l in ['en', 'fr', 'de', 'ru', 'ja', 'zh']
     }
+    
+    _punctuations = re.compile(r'[\u3000-\u303F\uFF00-\uFFEF\"\'{}\\(\\)\\[\\]\\*&.?!,…:;]')
+    
+    @staticmethod
+    def get(lang):
+        if lang == 'chs':
+            return FilterStopWords._lang_stopwords['zh']
+        elif lang in FilterStopWords._lang_stopwords:
+            return FilterStopWords._lang_stopwords[lang]
+        else:
+            return []
 
     def __init__(self, stopwords=''):
         """
@@ -48,12 +59,14 @@ class FilterStopWords(PipelineStage):
         """
         self.stopwords = set(stopwords.split())
         super().__init__()
-
+    
     def resolve(self, paragraph):
         paragraph.tokens = [
             _ for _ in paragraph.tokens
-            if _ not in self.stopwords and _ not in FilterStopWords._lang_stopwords.get(
-                paragraph.lang, [])]
+            if _ not in self.stopwords and \
+                _ not in FilterStopWords.get(paragraph.lang) and \
+                not FilterStopWords._punctuations.match(_)
+        ]
         return paragraph
 
 
