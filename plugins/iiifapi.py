@@ -56,7 +56,7 @@ class IIIFEndPoints(Plugin):
             aspect = float(ow) / oh
             
             # handling region
-            if region == 'square'
+            if region == 'square':
                 sq = min(ow, oh)
                 region = ((ow - sq) // 2, (oh - sq) // 2, sq, sq)
             elif region.startswith('pct:'):
