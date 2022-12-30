@@ -5,7 +5,7 @@ import re
 import jieba
 import datetime
 from bson import SON
-from PyMongoWrapper import MongoOperand, F, Fn, Var, ObjectId, QueryExprParser
+from PyMongoWrapper import MongoOperand, F, Fn, Var, ObjectId, QueryExprParser, MongoParserConcatingList
 
 from .models import Paragraph, Term
 
@@ -21,12 +21,24 @@ def _expr_groupby(params):
     field, *_ = params['_id']
     field = field.lstrip('$')
     
-    return [
+    return MongoParserConcatingList([
         Fn.group(orig=Fn.first('$$ROOT'), **params),
         Fn.replaceRoot(newRoot=Fn.mergeObjects(
             '$orig', {'group_id': '$_id'}, {k: f'${k}' for k in params if k != '_id'})),
         Fn.addFields(group_field=field)
-    ]
+    ])
+    
+    
+def _expr_join(params):
+    if isinstance(params, MongoOperand):
+        params = params()
+    params = str(params).lstrip('$')
+    
+    return MongoParserConcatingList([
+        Fn.addFields({
+            params: Fn.reduce(input='$' + params, initialValue=[], in_=Fn.concatArrays('$$value', '$$this'))
+        })
+    ])    
 
 
 def _object_id(params):
@@ -58,7 +70,7 @@ def _gid(params):
         params = params()
     if not isinstance(params, dict):
         params = {}
-    return [
+    return MongoParserConcatingList([
         Fn.addFields(
             gid=Fn.filter(input=Var.keywords, as_='t', cond=Fn.regexMatch(
                 input="$$t", regex=r'^\*'))
@@ -66,7 +78,7 @@ def _gid(params):
         Fn.unwind(path=Var.gid, preserveNullAndEmptyArrays=True),
         Fn.addFields(gid=Fn.ifNull(
             Var.gid, Fn.concat('id=', Fn.toString('$_id')))),
-    ]
+    ])
 
 
 def _sort(params):
@@ -124,13 +136,14 @@ parser = QueryExprParser(
     allow_spacing=True,
     functions={
         'groupby': _expr_groupby,
+        'join': _expr_join,
         'object_id': _object_id,
-        'expand': lambda *x: [
+        'expand': lambda *x: MongoParserConcatingList([
             Fn.unwind('$images')(),
             Fn.lookup(from_='mediaitem', localField='images',
                       foreignField='_id', as_='images')(),
             Fn.sort(SON({'images.source': 1}))
-        ],
+        ]),
         'bytes': bytes.fromhex,
         'begin': _begins_with,
         'sort': _sort,
