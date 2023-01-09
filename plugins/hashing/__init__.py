@@ -223,10 +223,13 @@ class ImageHashDuplications(MediaItemStage):
 
         candidates = [
             (j, _score(j))
-            for j in MediaItem.query(F.dhash.in_([
-                to_binary(x)
-                for x in [d_hash] + list(flips(d_hash, 1)) + list(flips(d_hash, 2))
-            ]))
+            for j in MediaItem.query(
+                F.item_type == 'image',
+                F.dhash.in_([
+                    to_binary(x)
+                    for x in [d_hash] + list(flips(d_hash, 1)) + list(flips(d_hash, 2))
+                ])
+            )
             if (i.width > i.height) == (j.width > j.height)
         ]
 

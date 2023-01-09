@@ -10,6 +10,13 @@ from PyMongoWrapper import MongoOperand, F, Fn, Var, ObjectId, QueryExprParser, 
 from .models import Paragraph, Term
 
 
+parser = QueryExprParser(
+    abbrev_prefixes={None: 'keywords=', '?': 'source.url%', '??': 'content%'},
+    allow_spacing=True,
+    force_timestamp=False,
+)
+
+
 def _expr_groupby(params):
     if isinstance(params, MongoOperand):
         params = params()
@@ -119,7 +126,7 @@ def _auto(param):
         if param == '``':
             param = ''
 
-    return param
+    return parser.parse(param)
 
 
 def _term(param):
@@ -131,28 +138,23 @@ def _term(param):
     return param
 
 
-parser = QueryExprParser(
-    abbrev_prefixes={None: 'keywords=', '?': 'source.url%', '??': 'content%'},
-    allow_spacing=True,
-    functions={
-        'groupby': _expr_groupby,
-        'join': _expr_join,
-        'object_id': _object_id,
-        'expand': lambda *x: MongoParserConcatingList([
-            Fn.unwind('$images')(),
-            Fn.lookup(from_='mediaitem', localField='images',
-                      foreignField='_id', as_='images')(),
-            Fn.sort(SON({'images.source': 1}))
-        ]),
-        'bytes': bytes.fromhex,
-        'begin': _begins_with,
-        'sort': _sort,
-        'gid': _gid,
-        'auto': _auto,
-        'term': _term
-    },
-    force_timestamp=False,
-)
+parser.functions.update({
+    'groupby': _expr_groupby,
+    'join': _expr_join,
+    'object_id': _object_id,
+    'expand': lambda *x: MongoParserConcatingList([
+        Fn.unwind('$images')(),
+        Fn.lookup(from_='mediaitem', localField='images',
+                    foreignField='_id', as_='images')(),
+        Fn.sort(SON({'images.source': 1}))
+    ]),
+    'bytes': bytes.fromhex,
+    'begin': _begins_with,
+    'sort': _sort,
+    'gid': _gid,
+    'auto': _auto,
+    'term': _term
+})
 
 
 class DBQuery:
