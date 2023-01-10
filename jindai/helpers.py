@@ -32,6 +32,11 @@ from .storage import instance as storage
 ee = QueryExprEvaluator()
 
 
+@ee.function()
+def _join_str(array):
+    return ' '.join([str(_) for _ in array])
+
+
 def _me(param=''):
     """Add me() Function for query
 
