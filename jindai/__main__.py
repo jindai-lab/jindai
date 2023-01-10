@@ -553,8 +553,7 @@ def clear_duplicates(limit: int, offset: str, maxdups: int):
 
     from .models import MediaItem, Paragraph
 
-    rs = MediaItem.query(~F.dhash.empty(), ~
-                         F.whash.empty(), offset).sort(-F.id)
+    rs = MediaItem.query(~F.dhash.empty(), ~F.whash.empty(), F.item_type == 'image', offset).sort(-F.id)
     if limit:
         rs = rs.limit(limit)
 
