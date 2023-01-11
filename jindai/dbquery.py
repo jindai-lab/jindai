@@ -143,10 +143,11 @@ parser.functions.update({
     'join': _expr_join,
     'object_id': _object_id,
     'expand': lambda *x: MongoParserConcatingList([
-        Fn.unwind('$images')(),
+        Fn.unwind('$images'),
+        Fn.addFields(originals='$images'),
         Fn.lookup(from_='mediaitem', localField='images',
-                    foreignField='_id', as_='images')(),
-        Fn.sort(SON({'images.source': 1}))
+                    foreignField='_id', as_='images'),
+        Fn.addFields(images=Fn.cond(Fn.size('$images') == 0, ['$originals'], '$images'))
     ]),
     'bytes': bytes.fromhex,
     'begin': _begins_with,
@@ -182,10 +183,8 @@ class DBQuery:
 
         if isinstance(query, str):
             # judge type of major query and formulate
-            query = _auto(query)
-            # parse query
-            query = parser.parse(query) or []
-
+            query = _auto(query) or []
+            
         if not isinstance(query, list):
             query = [query]
 
