@@ -48,6 +48,30 @@ def _expr_join(params):
     ])    
 
 
+def _expr_joinstr(params):
+    if isinstance(params, MongoOperand):
+        params = params()
+        
+    if isinstance(params, dict):
+        input_ = params.get('input', '')
+        delimeter = params.get('delimeter', ' ')
+    else:
+        input_ = str(params)
+        delimeter = ' '
+    
+    output = Fn.reduce(
+                input=input_, initialValue='', in_=Fn.concat('$$value', delimeter, '$$this')
+            )
+    
+    if delimeter:
+        output = Fn.replaceOne(
+            input=output,
+            find='^.{' + str(len(delimeter)) + '}',
+            replacement='')
+    
+    return output
+
+
 def _object_id(params):
     if isinstance(params, MongoOperand):
         params = params()
@@ -141,6 +165,7 @@ def _term(param):
 parser.functions.update({
     'groupby': _expr_groupby,
     'join': _expr_join,
+    'joinstr': _expr_joinstr,
     'object_id': _object_id,
     'expand': lambda *x: MongoParserConcatingList([
         Fn.unwind('$images'),
