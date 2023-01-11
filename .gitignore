@@ -2,7 +2,7 @@
 .DS_*
 config*.yaml
 dump*
-temp_*.py
+temp_*
 _*.sh
 *.h5
 *.zip
