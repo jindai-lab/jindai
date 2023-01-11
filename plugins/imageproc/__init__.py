@@ -8,6 +8,7 @@ from jindai import Plugin
 
 from .imageproc import *
 from .ocr import *
+from .demucs import *
 
 
 class ImageProcPlugin(Plugin):
