@@ -38,6 +38,8 @@ class AutoTag(db.DbObject):
 def apply_tag(parsed, tag, paragraph):
     try:
         if execute_query_expr(parsed, paragraph):
+            if tag.startswith('~') and tag[1:] in paragraph.keywords:
+                paragraph.keywords.remove(tag[1:])
             if tag not in paragraph.keywords:
                 paragraph.keywords.append(tag)
             if tag.startswith('@'):
@@ -111,9 +113,12 @@ class AutoTaggingPlugin(Plugin):
                 if not a:
                     return '', 404
                 cond = a.parsed
-                if a.tag.startswith('*'):
-                    cond = MongoOperand(cond) & (~F.keywords.regex(r'^\*'))
-                Paragraph.query(cond).update(Fn.addToSet(keywords=a.tag))
+                if a.tag.startswith('~'):
+                    Paragraph.query(cond).update(Fn.pull(keywords=a.tag[1:]))
+                else:
+                    if a.tag.startswith('*'):
+                        cond = MongoOperand(cond) & (~F.keywords.regex(r'^\*'))
+                    Paragraph.query(cond).update(Fn.addToSet(keywords=a.tag))
             else:
                 return list(AutoTag.query({}).sort('-_id'))
             return True

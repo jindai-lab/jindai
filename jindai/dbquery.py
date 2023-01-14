@@ -150,7 +150,7 @@ def _auto(param):
         if param == '``':
             param = ''
 
-    return parser.parse(param)
+    return parser.parse(param) or {}
 
 
 def _term(param):
