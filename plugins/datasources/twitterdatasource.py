@@ -8,7 +8,7 @@ import tweepy
 from jindai.common import DictObject
 from jindai.models import MediaItem, Paragraph
 from jindai.pipeline import DataSourceStage
-from jindai.dbquery import parser, ObjectId, F, Fn
+from jindai.dbquery import parser, F
 
 
 def twitter_id_from_timestamp(stamp: float) -> int:

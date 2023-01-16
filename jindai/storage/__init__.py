@@ -466,7 +466,7 @@ class Storage:
         elif not default_storage.endswith('/'):
             default_storage += '/'
         return f'{default_storage}{name}'
-
+    
     def serve(self, host='0.0.0.0', port=8371, debug=False):
         """Start storage server
 
@@ -507,8 +507,7 @@ class Storage:
                 return jsonify({'__exception__': 'No data, ignored.'})
             with self.open(path, 'wb') as fout:
                 fout.write(request.data)
-            return jsonify({'result': True})
-        
+            return jsonify({'result': True})        
 
         storage_app.debug = debug
 

@@ -50,6 +50,7 @@ def _expand_results(results):
                 res['mongocollection'] = type(result).db.name
         else:
             res = result
+            
         return res
 
     if not isinstance(results, (str, dict, bytes)) and hasattr(results, '__iter__'):

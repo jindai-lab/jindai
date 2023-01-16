@@ -3,9 +3,8 @@ import hashlib
 import json
 import re
 import jieba
-import datetime
 from bson import SON
-from PyMongoWrapper import MongoOperand, F, Fn, Var, ObjectId, QueryExprParser, MongoParserConcatingList
+from PyMongoWrapper import MongoOperand, F, Fn, Var, QueryExprParser, MongoParserConcatingList
 
 from .models import Paragraph, Term
 
@@ -17,115 +16,41 @@ parser = QueryExprParser(
 )
 
 
-def _expr_groupby(params):
-    if isinstance(params, MongoOperand):
-        params = params()
+def _groupby(_id='', images=None, count=None, **params):
     if 'id' in params:
-        params['_id'] = {k[1:]: k for k in params['id']}
-        del params['id']
-    
-    # get field name
-    field, *_ = params['_id']
-    field = field.lstrip('$')
-    
-    return MongoParserConcatingList([
-        Fn.group(orig=Fn.first('$$ROOT'), **params),
+        _id = params.pop('id')
+    field_name = re.sub(r'[{}"\']', str(_id).strip('$'), '_')
+
+    join_images = False
+    if images == 1:
+        params['images'] = Fn.push('$images')
+        join_images = True
+    elif images is not None:
+        params['images'] = images
+    if count is None:
+        params['count'] = Fn.sum(Fn.size('$images'))
+
+    stages = [
+        Fn.group(orig=Fn.first('$$ROOT'), _id=_id, **params),
         Fn.replaceRoot(newRoot=Fn.mergeObjects(
             '$orig', {'group_id': '$_id'}, {k: f'${k}' for k in params if k != '_id'})),
-        Fn.addFields(group_field=field)
-    ])
-    
-    
-def _expr_join(params):
-    if isinstance(params, MongoOperand):
-        params = params()
-    params = str(params).lstrip('$')
-    
-    return MongoParserConcatingList([
-        Fn.addFields({
-            params: Fn.reduce(input='$' + params, initialValue=[], in_=Fn.concatArrays('$$value', '$$this'))
-        })
-    ])    
+    ]
 
-
-def _expr_joinstr(params):
-    if isinstance(params, MongoOperand):
-        params = params()
-        
-    if isinstance(params, dict):
-        input_ = params.get('input', '')
-        delimeter = params.get('delimeter', ' ')
-    else:
-        input_ = str(params)
-        delimeter = ' '
-    
-    output = Fn.reduce(
-                input=input_, initialValue='', in_=Fn.concat('$$value', delimeter, '$$this')
+    if join_images:
+        stages.append(Fn.addFields(
+            group_field=field_name,
+            images=Fn.reduce(
+                input='$images',
+                initialValue=[],
+                in_=Fn.concatArrays('$$value', '$$this')
             )
-    
-    if delimeter:
-        output = Fn.replaceOne(
-            input=output,
-            find='^.{' + str(len(delimeter)) + '}',
-            replacement='')
-    
-    return output
+        ))
+    else:
+        stages.append(
+            Fn.addFields(group_field=field_name)
+        )
 
-
-def _object_id(params):
-    if isinstance(params, MongoOperand):
-        params = params()
-    if isinstance(params, str):
-        return ObjectId(params)
-    if isinstance(params, datetime.datetime):
-        return ObjectId.from_datetime(params)
-    return ObjectId()
-
-
-def _begins_with(params):
-    if isinstance(params, MongoOperand):
-        params = params()
-    if not isinstance(params, str):
-        params = str(params)
-    return F.keywords.regex(f'^{re.escape(params)}')()
-
-
-def _gid(params):
-    '''
-    => addFields(gid=filter(input=$keywords,as=t,cond=regexMatch(input=$$t,regex=`^\*`)))
-    => unwind(path=$gid,preserveNullAndEmptyArrays=true)
-    => addFields(gid=ifNull($gid;concat('id="';toString($_id));'"'),images=ifNull($images;[]))
-    => groupby(id=$gid,pdate=max($pdate),count=sum(size($images)),images=push($images))
-    '''
-    if isinstance(params, MongoOperand):
-        params = params()
-    if not isinstance(params, dict):
-        params = {}
-    return MongoParserConcatingList([
-        Fn.addFields(
-            gid=Fn.filter(input=Var.keywords, as_='t', cond=Fn.regexMatch(
-                input="$$t", regex=r'^\*'))
-        ),
-        Fn.unwind(path=Var.gid, preserveNullAndEmptyArrays=True),
-        Fn.addFields(gid=Fn.ifNull(
-            Var.gid, Fn.concat('id=', Fn.toString('$_id')))),
-    ])
-
-
-def _sort(params):
-
-    def _rectify(params):
-        if isinstance(params, MongoOperand):
-            params = params()
-        if isinstance(params, dict):
-            return params
-        if isinstance(params, str):
-            params = parser.parse_sort(params)
-        if isinstance(params, list):
-            return SON(params)
-        return params
-
-    return Fn.sort(_rectify(params))()
+    return MongoParserConcatingList(stages)
 
 
 def _auto(param):
@@ -153,31 +78,35 @@ def _auto(param):
     return parser.parse(param) or {}
 
 
-def _term(param):
+def _term(term):
     terms = []
-    for r in Term.query(F.term == param, F.aliases == param, logic='or'):
+    for r in Term.query(F.term == term, F.aliases == term, logic='or'):
         terms += [r.term] + r.aliases
     if terms and len(terms) > 1:
         return {'$in': terms}
-    return param
+    return term
 
 
 parser.functions.update({
-    'groupby': _expr_groupby,
-    'join': _expr_join,
-    'joinstr': _expr_joinstr,
-    'object_id': _object_id,
-    'expand': lambda *x: MongoParserConcatingList([
+    'expand': lambda: MongoParserConcatingList([
         Fn.unwind('$images'),
         Fn.addFields(originals='$images'),
         Fn.lookup(from_='mediaitem', localField='images',
-                    foreignField='_id', as_='images'),
-        Fn.addFields(images=Fn.cond(Fn.size('$images') == 0, ['$originals'], '$images'))
+                  foreignField='_id', as_='images'),
+        Fn.addFields(images=Fn.cond(Fn.size('$images')
+                     == 0, ['$originals'], '$images'))
     ]),
-    'bytes': bytes.fromhex,
-    'begin': _begins_with,
-    'sort': _sort,
-    'gid': _gid,
+    'gid': lambda: MongoParserConcatingList([
+        Fn.addFields(
+            gid=Fn.filter(input=Var.keywords, as_='t', cond=Fn.regexMatch(
+                input="$$t", regex=r'^\*'))
+        ),
+        Fn.unwind(path=Var.gid, preserveNullAndEmptyArrays=True),
+        Fn.addFields(gid=Fn.ifNull(
+            Var.gid, Fn.concat('id=', Fn.toString('$_id')))),
+    ]),
+    'begin': lambda prefix: F.keywords.regex(f'^{re.escape(prefix)}'),
+    'groupby': _groupby,
     'auto': _auto,
     'term': _term
 })
@@ -209,7 +138,7 @@ class DBQuery:
         if isinstance(query, str):
             # judge type of major query and formulate
             query = _auto(query) or []
-            
+
         if not isinstance(query, list):
             query = [query]
 
@@ -279,7 +208,7 @@ class DBQuery:
         self.groups = groups
 
         groupping = ''
-        if groups == 'none':
+        if groups in ('', 'none'):
             pass
         elif groups == 'group':
             groupping = '''
@@ -326,7 +255,7 @@ class DBQuery:
         self.sort = sort or 'id'
         self.skips = {}
         self.skip = skip
-        
+
     @property
     def query_hash(self):
         return hashlib.sha1(json.dumps(self.query).encode('utf-8')).hexdigest()
