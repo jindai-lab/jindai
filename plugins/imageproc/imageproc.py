@@ -10,6 +10,8 @@ from io import BytesIO
 from typing import Union
 
 import numpy as np
+import scipy.sparse as spsparse
+
 from jindai import PipelineStage, parser, storage
 from jindai.helpers import safe_import
 from jindai.models import MediaItem, Paragraph
@@ -18,31 +20,31 @@ from PyMongoWrapper import ObjectId
 
 
 class VideoItemImageDelegate:
-    
+
     def __init__(self, item) -> None:
         self._i = item
-    
+
     @property
     def source(self):
         return {'file': self._i.thumbnail}
-    
+
     @property
     def data_path(self):
         return self._i.thumbnail
-    
+
     @property
     def data(self):
         return storage.open(self._i.thumbnail)
-    
+
     def save(self):
         self._i.save()
-        
+
     def __getattribute__(self, __name: str):
         if __name not in ('_i', 'source', 'save', 'data', 'data_path'):
             return getattr(self._i, __name)
-        
+
         return object.__getattribute__(self, __name)
-    
+
     def __setattr__(self, __name: str, __value) -> None:
         if __name != '_i':
             setattr(self._i, __name, __value)
@@ -60,7 +62,7 @@ class MediaItemStage(PipelineStage):
         for i in items:
             try:
                 self.resolve_item(i, paragraph)
-                
+
                 if i.item_type == 'video' and i.thumbnail:
                     i_img = VideoItemImageDelegate(i)
                     self.resolve_image(i_img, paragraph)
@@ -331,26 +333,26 @@ class DownloadMedia(MediaItemStage):
     def resolve_item(self, i: MediaItem, post):
         if not i.id:
             i.save()
-            
+
         if i.no_download:
             return
-        
+
         if 'file' in i.source:
             return
 
         try:
             resp = requests.get(i.source['url'],
-                headers={
-                    'Referer': post.source.get('url', '')
-                },
+                                headers={
+                'Referer': post.source.get('url', '')
+            },
                 verify=False,
                 proxies=self.proxies)
-            
+
             if resp.status_code != 200:
                 raise OSError(f'HTTP {resp.status_code}')
             if not resp.content:
                 raise ValueError(f'Empty response')
-            
+
             content = resp.content
         except Exception as ex:
             if isinstance(ex, OSError):
@@ -369,8 +371,8 @@ class DownloadMedia(MediaItemStage):
         i.source = {'file': path, 'url': i.source['url']}
         i.data = BytesIO(content)
         i.save()
-        
-        
+
+
 class QRCodeScanner(PipelineStage):
     """Read QR-Code info from image
     @zhs 获取图像中的二维码信息
@@ -399,6 +401,31 @@ class QRCodeScanner(PipelineStage):
             paragraph.save()
         else:
             del paragraph.qrcodes
+
+
+class DenoiseImage(MediaItemStage):
+    """
+    Denoise image
+    """
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.cv2 = safe_import('cv2', 'opencv-python-headless')
+        
+    def denoise(self, buf, h=10, template_window=7, search_window=21, *_):
+        h, template_window, search_window = int(h), int(template_window), int(search_window)
+        img = self.cv2.imdecode(buf.read())
+        dst = self.cv2.fastNlMeanDenoisingColored(img, None, h, h, template_window, search_window)
+        _, npa = self.cv2.imencode('.jpg', dst)
+        pic = npa.tobytes()
+        return BytesIO(pic)
+        
+    def resolve_image(self, i: MediaItem, _: Paragraph):
+        i.image = Image.open(self.denoise(i.data))
+        return i
+
+
+storage.register_fragment_handler('denoise', DenoiseImage().denoise)
 
 
 class VideoFrame(MediaItemStage):
@@ -439,7 +466,7 @@ class VideoFrame(MediaItemStage):
         if not isinstance(read_from, str) or not os.path.exists(read_from):
             self.logger(f'{read_from} not found')
             return
-        
+
         try:
             self.logger(f'generate frame image from {read_from}')
             cap = cv2.VideoCapture(read_from)
@@ -456,7 +483,8 @@ class VideoFrame(MediaItemStage):
                     pic = npa.tobytes()
 
         except Exception as ex:
-            self.log_exception('Error while generating thumbnail from video', ex)
+            self.log_exception(
+                'Error while generating thumbnail from video', ex)
 
         if use_temp and os.path.exists(read_from):
             os.unlink(read_from)
@@ -465,7 +493,7 @@ class VideoFrame(MediaItemStage):
 
     def resolve_video(self, i: MediaItem, _):
         thumb = storage.default_path(f'{i.id}.thumb.jpg')
-        
+
         # generate video thumbnail
         read_from = i.data_path + f'#videoframe/{self.frame_num}'
         pic = storage.open(read_from, 'rb').read()
@@ -483,6 +511,57 @@ class VideoFrame(MediaItemStage):
 
 
 storage.register_fragment_handler('videoframe', VideoFrame().get_video_frame)
+
+
+class ColorCorrection(MediaItemStage):
+    
+    def __init__(self, method='cauchy') -> None:
+        '''
+        Args:
+            method (cauchy|logistic): Target distribution
+        '''
+        self.method = method
+        super().__init__()
+
+    def resolve_image(self, i: MediaItem, _):
+        i.image = self.correct(i.data, return_image=True)
+        return i
+    
+    def correct(self, buf, method='cauchy', *_, return_image=False):
+        from skimage import img_as_ubyte
+        from skimage.exposure import cumulative_distribution
+        from scipy.stats import cauchy, logistic
+
+        def individual_channel(image, dist, channel):
+            im_channel = img_as_ubyte(image[:,:,channel])
+            freq, _ = cumulative_distribution(im_channel)
+            new_vals = np.interp(freq, dist.cdf(np.arange(0,256)), 
+                                    np.arange(0,256))
+            return new_vals[im_channel].astype(np.uint8)
+        
+        def distribution(image, function, mean, std):
+            dist = function(mean, std)
+            red = individual_channel(image, dist, 0)
+            green = individual_channel(image, dist, 1)
+            blue = individual_channel(image, dist, 2)
+            image = np.dstack((red, green, blue))
+            return image
+            
+        image = np.array(Image.open(buf))
+        func = {'cauchy': cauchy, 'logistic': logistic}.get(method or self.method, cauchy)
+        image = distribution(image, func, 90, 30)
+        image = Image.fromarray(image)
+
+        if return_image:
+            return image
+        
+        buf = BytesIO()
+        image.save(buf, 'JPEG')
+        buf.seek(0)
+        return buf
+
+
+storage.register_fragment_handler('color_correction', ColorCorrection().correct)
 
 
 def handle_thumbnail(buf, width, height='', *_):
