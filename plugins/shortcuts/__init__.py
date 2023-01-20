@@ -36,11 +36,13 @@ class Shortcuts(Plugin):
             meta.save()
             return True
         
+        parser.shortcuts = {}
+        self.read_shortcuts()
+        
     def read_shortcuts(self):
         """Read shortcuts from Meta settings"""
         shortcuts = (Meta.first(F.shortcuts.exists(1))
                      or Meta()).shortcuts or {}
-        parser.shortcuts = {}
         for key, val in shortcuts.items():
             if key.startswith(':'):
                 print('setting shortcut', key[1:], val)
