@@ -86,8 +86,7 @@ class WordStemmer:
         :return: stemmed word
         :rtype: str
         """
-        if isinstance(param, MongoOperand):
-            param = param()
+        param = MongoOperand.literal(param)
         word, lang = str(param), 'en'
         if isinstance(param, (tuple, list)) and len(param) == 2:
             word, lang = param
@@ -229,7 +228,7 @@ def execute_query_expr(expr, obj):
     return ee.evaluate(expr, obj)
 
 
-def get_context(directory: str, parent_class: Type) -> Dict:
+def get_context(directory: str, parent_class: Type, *sub_dirs: str) -> Dict:
     """Get context for given directory and parent class
 
     :param directory: directory path relative to the working directory
@@ -240,17 +239,24 @@ def get_context(directory: str, parent_class: Type) -> Dict:
     :rtype: Dict
     """
 
-    def _prefix(name):
+    def _prefix(sub_dir, name):
         """Prefixing module name"""
-        return directory.replace(os.sep, '.') + '.' + name
+        dirpath = directory
+        if sub_dir != '.':
+            dirpath += os.sep + sub_dir
+        return dirpath.replace(os.sep, '.') + '.' + name
 
-    modules = [
-        _prefix(os.path.basename(f).split('.')[0])
-        for f in glob.glob(os.path.join(directory, "*.py"))
-    ] + [
-        _prefix(f.split(os.path.sep)[-2])
-        for f in glob.glob(os.path.join(directory, '*/__init__.py'))
-    ]
+    if len(sub_dirs) == 0:
+        sub_dirs = ['.']
+    modules = []
+    for sub_dir in sub_dirs:
+        modules += [
+            _prefix(sub_dir, os.path.basename(f).split('.')[0])
+            for f in glob.glob(os.path.join(directory, sub_dir, "*.py"))
+        ] + [
+            _prefix(sub_dir, f.split(os.path.sep)[-2])
+            for f in glob.glob(os.path.join(directory, sub_dir, '*/__init__.py'))
+        ]
     ctx = {}
     for module_name in modules:
         try:

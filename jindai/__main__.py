@@ -11,7 +11,6 @@ import subprocess
 import sys
 import zipfile
 from io import BytesIO
-from itertools import chain
 from tempfile import mktemp
 from typing import Dict, Iterable
 
@@ -41,9 +40,9 @@ def _mongodb(coll):
     return Meta.db.database[coll]
 
 
-def _init_plugins():
+def _init_plugins(*paths):
     """Inititalize plugins"""
-    return PluginManager(get_context('plugins', Plugin), Flask(__name__))
+    return PluginManager(get_context('plugins', Plugin, *paths), Flask(__name__))
 
 
 def _get_items():

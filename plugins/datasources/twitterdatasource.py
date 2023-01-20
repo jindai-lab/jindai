@@ -56,6 +56,8 @@ def timestamp_from_media_url(url: str) -> float:
 def _stamp(dtval):
     if isinstance(dtval, str):
         dtval = parser.parse_literal(dtval)
+    if isinstance(dtval, datetime.timedelta):
+        dtval = datetime.datetime.now() + dtval
     if isinstance(dtval, datetime.datetime):
         return dtval.timestamp()
     elif isinstance(dtval, (int, float)):

@@ -4,22 +4,18 @@ import json
 import re
 import jieba
 from bson import SON
-from PyMongoWrapper import MongoOperand, F, Fn, Var, QueryExprParser, MongoParserConcatingList
+from PyMongoWrapper import MongoOperand, F, Fn, Var, QueryExprInterpreter, MongoConcating
 
 from .models import Paragraph, Term
 
 
-parser = QueryExprParser(
-    abbrev_prefixes={None: 'keywords=', '?': 'source.url%', '??': 'content%'},
-    allow_spacing=True,
-    force_timestamp=False,
+parser = QueryExprInterpreter(
+    'keywords', '='
 )
 
 
 def _groupby(_id='', images=None, count=None, **params):
-    if 'id' in params:
-        _id = params.pop('id')
-    field_name = re.sub(r'[{}"\']', str(_id).strip('$'), '_')
+    field_name = re.sub(r'[{}"\']', '_', str(_id).strip('$'))
 
     join_images = False
     if images == 1:
@@ -50,7 +46,7 @@ def _groupby(_id='', images=None, count=None, **params):
             Fn.addFields(group_field=field_name)
         )
 
-    return MongoParserConcatingList(stages)
+    return MongoConcating(stages)
 
 
 def _auto(param):
@@ -88,7 +84,7 @@ def _term(term):
 
 
 parser.functions.update({
-    'expand': lambda: MongoParserConcatingList([
+    'expand': lambda: MongoConcating([
         Fn.unwind('$images'),
         Fn.addFields(originals='$images'),
         Fn.lookup(from_='mediaitem', localField='images',
@@ -96,10 +92,10 @@ parser.functions.update({
         Fn.addFields(images=Fn.cond(Fn.size('$images')
                      == 0, ['$originals'], '$images'))
     ]),
-    'gid': lambda: MongoParserConcatingList([
+    'gid': lambda: MongoConcating([
         Fn.addFields(
             gid=Fn.filter(input=Var.keywords, as_='t', cond=Fn.regexMatch(
-                input="$$t", regex=r'^\*'))
+                input="$$t", regex=r'^#'))
         ),
         Fn.unwind(path=Var.gid, preserveNullAndEmptyArrays=True),
         Fn.addFields(gid=Fn.ifNull(
@@ -133,7 +129,7 @@ class DBQuery:
         # parse limitations
         if limitations and limitations[0]:
             limitations = {
-                '$and': [parser.parse(expr) for expr in limitations]}
+                '$and': [parser.parse(expr) for expr in limitations if expr]}
 
         if isinstance(query, str):
             # judge type of major query and formulate
@@ -163,6 +159,8 @@ class DBQuery:
             return qparsed
 
         first_query = qparsed[0]
+        if isinstance(first_query, str):
+            first_query = {'$match': {'keywords': first_query}}
         if isinstance(first_query, dict) and '$match' in first_query:
             return [
                 {'$match':
@@ -211,19 +209,15 @@ class DBQuery:
         if groups in ('', 'none'):
             pass
         elif groups == 'group':
-            groupping = '''
-                addFields(group_id=filter(input=$keywords,as=t,cond=eq(substrCP($$t;0;1);"*")));
-                unwind(path=$group_id,preserveNullAndEmptyArrays=true);
-                addFields(group_id=ifNull($group_id;ifNull(concat('id=';toString($_id));$source.file)))
-            '''
+            groupping = ''';gid();group_id: $gid;'''
             if not sort:
                 sort = 'group_id,-pdate'
         elif groups == 'source':
-            groupping = 'addFields(group_id=ifNull($source.url;$source.file))'
+            groupping = ';addFields(group_id=ifNull($source.url,$source.file))'
             if not sort:
                 sort = 'source'
         else:
-            groupping = f'addFields(group_id=${groups})'
+            groupping = f';addFields(group_id=${groups})'
             if not sort:
                 sort = '-group_id'
 
@@ -237,15 +231,11 @@ class DBQuery:
                 sort = ('-' if sort.startswith('-') else '') + 'sorting_field'
             else:
                 sorting = ''
-            groupping += f'''
-                =>addFields(gid=ifNull($group_id;ifNull(concat('id=';toString($_id));$source.file)),images=ifNull($images;[]))
-                =>groupby(id=$gid,count=sum(size($images)),images=push($images){sorting})
-                =>groupby(id=$_id)
-                =>addFields(
-                    images=reduce(input=$images,initialValue=[],in=setUnion($$value;$$this)),
-                    keywords=cond(regexMatch(regex=`^\*`,input=toString($group_id));[toString($group_id)];$keywords),
-                    group_id=$gid
-                )
+            groupping += f''';
+                gid: ifNull($group_id, concat("id=o'", toString($_id), "'"));
+                images: ifNull($images,[]);
+                groupby(id=$gid{sorting});
+                groupby(id=$_id,count=sum($count),images=1);
             '''
             groupping = parser.parse(groupping)
 

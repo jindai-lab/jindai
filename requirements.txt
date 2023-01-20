@@ -33,3 +33,4 @@ opencc-python-reimplemented
 waitress
 pysmb
 pymupdf
+antlr4-python3-runtime

@@ -116,8 +116,8 @@ class AutoTaggingPlugin(Plugin):
                 if a.tag.startswith('~'):
                     Paragraph.query(cond).update(Fn.pull(keywords=a.tag[1:]))
                 else:
-                    if a.tag.startswith('*'):
-                        cond = MongoOperand(cond) & (~F.keywords.regex(r'^\*'))
+                    if a.tag.startswith('#'):
+                        cond = MongoOperand(cond) & (~F.keywords.regex(r'^#'))
                     Paragraph.query(cond).update(Fn.addToSet(keywords=a.tag))
             else:
                 return list(AutoTag.query({}).sort('-_id'))
