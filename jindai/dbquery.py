@@ -159,8 +159,6 @@ class DBQuery:
             return qparsed
 
         first_query = qparsed[0]
-        if isinstance(first_query, str):
-            first_query = {'$match': {'keywords': first_query}}
         if isinstance(first_query, dict) and '$match' in first_query:
             return [
                 {'$match':
