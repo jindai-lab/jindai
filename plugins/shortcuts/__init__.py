@@ -19,34 +19,31 @@ class Shortcuts(Plugin):
         @app.route('/api/plugins/shortcuts', methods=['GET', 'POST'])
         @rest()
         def shortcuts(key='', value=''):
+            shortcuts = self.read_shortcuts()
             if not key:
-                return self.read_shortcuts()
+                return [{
+                    'name': key,
+                    'expr': val
+                } for key, val in shortcuts.items()]
 
             meta = Meta.first(F.shortcuts.exists(1)) or Meta()
-            shortcuts = self.read_shortcuts()
-            if key in shortcuts and value == '':
-                del shortcuts[key]
+            if value == '':
+                shortcuts.pop(key, '')
             else:
                 shortcuts[key] = value
+            shortcuts.pop('', '')
             meta.shortcuts = shortcuts
             meta.save()
             return True
-
-        @app.route('/api/plugins/shortcuts.html')
-        @rest()
-        def _shortcuts_html():
-            return storage.serve_file(open(os.path.join(os.path.dirname(__file__), 'shortcuts.html'), 'rb'))
-
-        @app.route('/api/plugins/shortcuts-jquery.min.js')
-        def _shortcuts_jquery_js():
-            return storage.serve_file(open(os.path.join(os.path.dirname(__file__), 'jquery.min.js'), 'rb'))
-
+        
     def read_shortcuts(self):
         """Read shortcuts from Meta settings"""
         shortcuts = (Meta.first(F.shortcuts.exists(1))
                      or Meta()).shortcuts or {}
+        parser.shortcuts = {}
         for key, val in shortcuts.items():
             if key.startswith(':'):
+                print('setting shortcut', key[1:], val)
                 parser.set_shortcut(key[1:], val)
         return shortcuts
 

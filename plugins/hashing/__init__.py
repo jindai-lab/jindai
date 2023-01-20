@@ -42,7 +42,7 @@ def single_item(pid: str, iid: str):
         para = Paragraph.first(F.images == iid)
     if iid and para:
         para.images = [i for i in para.images if i.id == iid]
-        para.group_id = f"id={para['_id']}"
+        para.group_id = f"id=o'{para['_id']}'"
         return [para]
 
     return []
@@ -312,7 +312,7 @@ class HashingBase(Plugin):
         def _groups(paragraph):
             if groupby == 'group':
                 groups = [
-                    g for g in paragraph.keywords if g.startswith('*')] or [paragraph.source.get('url')]
+                    g for g in paragraph.keywords if g.startswith('#')] or [paragraph.source.get('url')]
             elif groupby == 'source':
                 groups = [paragraph.source.get(
                     'url', paragraph.source.get('file')) or str(paragraph.id)]

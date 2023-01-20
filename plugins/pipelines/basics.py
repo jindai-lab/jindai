@@ -9,7 +9,7 @@ from itertools import chain
 from itertools import count as iter_count
 import string
 
-from PyMongoWrapper import F, QueryExprParser, ObjectId
+from PyMongoWrapper import F, QueryExprInterpreter, ObjectId
 from PyMongoWrapper.dbo import DbObject, DbObjectCollection
 from jindai import PipelineStage, parser, storage
 from jindai.helpers import JSONEncoder, execute_query_expr, safe_import, WordStemmer as _Stemmer
@@ -707,8 +707,7 @@ class FilterArrayField(PipelineStage):
         """
         super().__init__()
         self.field = field
-        self.cond = QueryExprParser(allow_spacing=True, abbrev_prefixes={
-                                    None: 'iter='}).parse(cond)
+        self.cond = QueryExprInterpreter('iter', '=').parse(cond)
 
     def resolve(self, paragraph: Paragraph) -> Paragraph:
         vals = getattr(paragraph, self.field, [])
@@ -914,13 +913,13 @@ class ConditionalAssignment(PipelineStage):
         """
         Args:
             cond (QUERY): Conditions and assignment values, in forms like:
-                (<condition> => <constant>);
+                <condition> => <constant>;
                 @zhs 检查的条件，与最终要赋予的值之间用 => 连缀，条件之间用 ; 连接
             field (str): Target field name
                 @zhs 要赋值的字段
         """
         super().__init__()
-        self.cond = parser.parse('[];' + cond)
+        self.cond = parser.parse(cond)
         self.field = field
 
     def resolve(self, paragraph: Paragraph):
@@ -979,7 +978,7 @@ class MongoCollectionBatchOper(PipelineStage):
         """
         super().__init__()
         self.collection = Paragraph.get_coll(mongocollection)
-        updates = parser.parse('[];' + updates)
+        updates = parser.parse(updates)
         self.updates = []
 
         def _assert(cond, info=''):

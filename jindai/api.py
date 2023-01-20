@@ -368,23 +368,23 @@ def grouping(coll, ids, group='', ungroup=False):
         group_id = ''
         for para in paras:
             para.keywords = [
-                _ for _ in para.keywords if not _.startswith('*')]
+                _ for _ in para.keywords if not _.startswith('#')]
             para.save()
     else:
         if not paras:
             return True
         gids = []
         for para in paras:
-            gids += [_ for _ in para.keywords if _.startswith('*')]
-        named = [_ for _ in gids if not _.startswith('*0')]
+            gids += [_ for _ in para.keywords if _.startswith('#')]
+        named = [_ for _ in gids if not _.startswith('#0')]
         if group:
-            group_id = '*' + group
+            group_id = '#' + group
         elif named:
             group_id = min(named)
         elif gids:
             group_id = min(gids)
         else:
-            group_id = '*0' + _hashing(min(map(lambda p: str(p.id), paras)))
+            group_id = '#0' + _hashing(min(map(lambda p: str(p.id), paras)))
         for para in paras:
             if group_id not in para.keywords:
                 para.keywords.append(group_id)
@@ -621,8 +621,7 @@ def help_queryexpr():
     """Provide meta data for query expr"""
     return {
         'function_names': list(parser.functions.keys()) + list(ee.implemented_functions),
-        'operators': list([str(_) for _ in parser.operators]),
-        'defaults': list(map(str, parser.abbrev_prefixes.values()))
+        'operators': list([str(_) for _ in parser.operators])
     }
 
 
@@ -830,8 +829,8 @@ def dbconsole(mongocollection='', query='', operation='', operation_params='', p
     """Database console for admin"""
 
     mongo = Paragraph.db.database[mongocollection]
-    query = parser.parse(query)
-    operation_params = parser.parse(operation_params)
+    query = parser.parse(query) if query else {}
+    operation_params = parser.parse(operation_params) if operation_params else None
     if isinstance(operation_params, dict):
         keys = list(operation_params)
         if len(keys) != 1:
