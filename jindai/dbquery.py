@@ -193,8 +193,10 @@ class DBQuery:
         if sort == 'id':
             sort = ''
 
-        if len(self.query) > 1 and isinstance(self.query[0], str) and self.query[0].startswith('from'):
-            self.mongocollections = [self.query[0][4:]]
+        if len(self.query) > 1 and MongoOperand.get_key(self.query[0]) == '$from':
+            self.mongocollections = self.query[0]['$from']
+            if not isinstance(self.mongocollections, list):
+                self.mongocollections = self.mongocollections.split(',')
             self.query = self.query[1:]
 
         if len(self.query) > 1 and '$raw' in self.query[-1]:
