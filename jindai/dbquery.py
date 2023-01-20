@@ -70,6 +70,9 @@ def _auto(param):
                                   for _ in jieba.cut(param) if _.strip()]) + '`'
         if param == '``':
             param = ''
+    
+    if not param:
+        return {}
 
     return parser.parse(param) or {}
 

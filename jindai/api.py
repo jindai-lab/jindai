@@ -362,44 +362,42 @@ def grouping(coll, ids, group='', ungroup=False):
     Returns:
         Group ID
     """
-    paras = list(Paragraph.get_coll(coll).query(
-        F.id.in_([ObjectId(_) if len(_) == 24 else _ for _ in ids])))
+    para_query = Paragraph.get_coll(coll).query(
+        F.id.in_([ObjectId(_) if len(_) == 24 else _ for _ in ids]))
+    
+    
     if ungroup:
-        group_id = ''
-        for para in paras:
-            para.keywords = [
-                _ for _ in para.keywords if not _.startswith('#')]
-            para.save()
+        para_query.update(Fn.pull(F.keywords.regex('^#')))
+        return []
+    
     else:
+        paras = list(para_query)
         if not paras:
             return True
+        
         gids = []
         for para in paras:
             gids += [_ for _ in para.keywords if _.startswith('#')]
         named = [_ for _ in gids if not _.startswith('#0')]
+        
         if group:
-            group_id = '#' + group
+            if isinstance(group, str):
+                group = [group]
+            group_id = ['#' + _ for _ in group]
         elif named:
-            group_id = min(named)
+            group_id = [min(named)]
         elif gids:
-            group_id = min(gids)
+            group_id = [min(gids)]
         else:
-            group_id = '#0' + _hashing(min(map(lambda p: str(p.id), paras)))
-        for para in paras:
-            if group_id not in para.keywords:
-                para.keywords.append(group_id)
-                para.save()
-
-        gids = list(set(gids) - set(named))
+            group_id = ['#0' + _hashing(min(map(lambda p: str(p.id), paras)))]
+        
+        gids = list(set(gids) - set(named) - set(group_id))
+        para_query = Paragraph.get_coll(coll).query(F.id.in_([ObjectId(_) if len(_) == 24 else _ for _ in ids]) | F.keywords.in_(gids))
+        for g in group_id:
+            para_query.update(Fn.addToSet(keywords=g))
         if gids:
-            for para in Paragraph.query(F.keywords.in_(gids)):
-                for id0 in gids:
-                    if id0 in para.keywords:
-                        para.keywords.remove(id0)
-                if group_id not in para.keywords:
-                    para.keywords.append(group_id)
-                para.save()
-
+            para_query.update(Fn.pull(F.keywords.in_(gids)))
+            
     return group_id
 
 
