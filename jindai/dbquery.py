@@ -149,7 +149,7 @@ class DBQuery:
             if isinstance(stage, str):
                 query[i] = {'$match': parser.parse(stage)}
             elif isinstance(stage, dict) and \
-                    not [_ for _ in stage if _.startswith('$') and _ not in ('$and', '$or')]:
+                    not [_ for _ in stage if _.startswith('$') and _ not in ('$not', '$and', '$or')]:
                 query[i] = {'$match': stage}
 
         query = DBQuery._merge_req(query, limitations)
