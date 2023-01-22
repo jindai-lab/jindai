@@ -510,11 +510,11 @@ def merge_items(pairs):
 
 @app.route('/api/mediaitem/delete', methods=["POST"])
 @rest()
-def delete_item(album_items: dict):
+def delete_item(para_items: dict):
     """Remove Media Item from paragraph"""
 
     del_items = set()
-    for pid, items in album_items.items():
+    for pid, items in para_items.items():
         para = Paragraph.first(F.id == pid)
         if para is None:
             continue
