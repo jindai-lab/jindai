@@ -50,6 +50,8 @@ def _groupby(_id='', images=None, count=None, **params):
 
 
 def _auto(param):
+    
+    param = param.strip()
 
     def _judge_type(query):
         """Judge query mode: keywords or expression"""
@@ -70,7 +72,7 @@ def _auto(param):
                                   for _ in jieba.cut(param) if _.strip()]) + '`'
         if param == '``':
             param = ''
-    
+
     if not param:
         return {}
 
@@ -84,6 +86,13 @@ def _term(term):
     if terms and len(terms) > 1:
         return {'$in': terms}
     return term
+
+
+def _set_author(name):
+    if not name.startswith('@'): name = '@' + name
+    return MongoConcating([
+        Fn.addFields(author=name, keywords=Fn.setUnion(Var.keywords, [name]))
+    ])
 
 
 parser.functions.update({
@@ -107,8 +116,14 @@ parser.functions.update({
     'begin': lambda prefix: F.keywords.regex(f'^{re.escape(prefix)}'),
     'groupby': _groupby,
     'auto': _auto,
-    'term': _term
+    'term': _term,
+    'source': lambda url: (F.source.url == url) | (F.source.file == url),
+    'c': lambda text: F.content.regex(text),
+    'setAuthor': _set_author,
 })
+
+parser.functions['s'] = parser.functions['source']
+parser.functions['seta'] = parser.functions['setAuthor']
 
 
 class DBQuery:
@@ -245,7 +260,7 @@ class DBQuery:
             self.query += groupping
 
         self.limit = limit
-        self.sort = sort or 'id'
+        self.sort = sort
         self.skips = {}
         self.skip = skip
 
@@ -267,7 +282,8 @@ class DBQuery:
 
         agg = self.query
 
-        sort = parser.parse_sort(sort)
+        if sort:
+            sort = parser.parse_sort(sort)
 
         if not sort or sort == [('_id', 1)]:
             if not [stage for stage in agg if '$sort' in stage]:
