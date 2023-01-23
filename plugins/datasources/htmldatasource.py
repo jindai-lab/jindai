@@ -226,7 +226,7 @@ class WebPageListingDataSource(DataSourceStage):
         self.tags = tags.split('\n')
         self.dataset = dataset
         self.lang = lang
-        self.image_patterns = img_pattern.split('\n')
+        self.image_patterns = [_ for _ in img_pattern.split('\n') if _] or DEFAULT_IMG_PATTERNS.split('\n')
         self.mongocollection = mongocollection
         self.convert = Paragraph.get_converter(mongocollection)
         self.n = parallel_n
