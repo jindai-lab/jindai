@@ -446,9 +446,13 @@ def splitting(coll, paragraphs):
 
 @app.route('/api/mediaitem/rating', methods=["GET", "POST"])
 @rest()
-def set_rating(ids, inc=1, val=0, least=0):
+def set_rating(ids=None, inc=1, val=0, least=0):
     """Increase or decrease the rating of selected items
     """
+    
+    if not ids:
+        return False
+    
     items = list(MediaItem.query(
         F.id.in_([ObjectId(_) if len(_) == 24 else _ for _ in ids])))
     for i in items:
