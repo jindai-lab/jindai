@@ -398,7 +398,7 @@ def grouping(coll, ids, group='', ungroup=False):
         if gids:
             para_query.update(Fn.pull(F.keywords.in_(gids)))
             
-    return group_id
+    return {'group_ids': group_id, 'paragraph_ids': ids}
 
 
 @app.route('/api/collections/<coll>/split', methods=["GET", "POST"])
