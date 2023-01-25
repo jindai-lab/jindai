@@ -4,7 +4,7 @@ import json
 import re
 import jieba
 from bson import SON
-from PyMongoWrapper import MongoOperand, F, Fn, Var, QueryExprInterpreter, MongoConcating
+from PyMongoWrapper import MongoOperand, F, Fn, Var, QueryExprInterpreter, QueryExpressionError, MongoConcating
 
 from .models import Paragraph, Term
 
@@ -76,7 +76,15 @@ def _auto(param):
     if not param:
         return {}
 
-    return parser.parse(param) or {}
+    try:
+        return parser.parse(param) or {}
+    except QueryExpressionError as qe:
+        try:
+            return parser.parse(param + ';')
+        except QueryExpressionError:
+            raise qe
+        except:
+            pass
 
 
 def _term(term):
