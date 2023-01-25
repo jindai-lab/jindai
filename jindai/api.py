@@ -266,6 +266,16 @@ def move_storage(source, destination, keep_folder=True):
     return True
 
 
+@app.route('/api/parser/parse', methods=['POST'])
+@rest(login=True)
+def parser_parse(query, literal=False, tokens=False):
+    if literal:
+        return parser.parse_literal(query)
+    elif tokens:
+        return [{'text': token.text, 'type': parser.get_symbol(token.type)} for token in parser.tokenize(query)]
+    return parser.parse(query)
+
+
 @app.route('/api/collections/<coll>/<pid>', methods=['POST'])
 @rest()
 def modify_paragraph(coll, pid, **kws):
@@ -368,35 +378,33 @@ def grouping(coll, ids, group='', ungroup=False):
     
     if ungroup:
         para_query.update(Fn.pull(F.keywords.regex('^#')))
-        return []
+        group_id = []
     
     else:
         paras = list(para_query)
-        if not paras:
-            return True
-        
-        gids = []
-        for para in paras:
-            gids += [_ for _ in para.keywords if _.startswith('#')]
-        named = [_ for _ in gids if not _.startswith('#0')]
-        
-        if group:
-            if isinstance(group, str):
-                group = [group]
-            group_id = ['#' + _ for _ in group]
-        elif named:
-            group_id = [min(named)]
-        elif gids:
-            group_id = [min(gids)]
-        else:
-            group_id = ['#0' + _hashing(min(map(lambda p: str(p.id), paras)))]
-        
-        gids = list(set(gids) - set(named) - set(group_id))
-        para_query = Paragraph.get_coll(coll).query(F.id.in_([ObjectId(_) if len(_) == 24 else _ for _ in ids]) | F.keywords.in_(gids))
-        for g in group_id:
-            para_query.update(Fn.addToSet(keywords=g))
-        if gids:
-            para_query.update(Fn.pull(F.keywords.in_(gids)))
+        if paras:
+            gids = []
+            for para in paras:
+                gids += [_ for _ in para.keywords if _.startswith('#')]
+            named = [_ for _ in gids if not _.startswith('#0')]
+            
+            if group:
+                if isinstance(group, str):
+                    group = [group]
+                group_id = ['#' + _ for _ in group]
+            elif named:
+                group_id = [min(named)]
+            elif gids:
+                group_id = [min(gids)]
+            else:
+                group_id = ['#0' + _hashing(min(map(lambda p: str(p.id), paras)))]
+            
+            gids = list(set(gids) - set(named) - set(group_id))
+            para_query = Paragraph.get_coll(coll).query(F.id.in_([ObjectId(_) if len(_) == 24 else _ for _ in ids]) | F.keywords.in_(gids))
+            for g in group_id:
+                para_query.update(Fn.addToSet(keywords=g))
+            if gids:
+                para_query.update(Fn.pull(F.keywords.in_(gids)))
             
     return {'group_ids': group_id, 'paragraph_ids': ids}
 
