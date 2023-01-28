@@ -53,7 +53,7 @@ class PipelineStage:
 
                     if arg_name:
                         args_docs[arg_name] = {
-                            'type': arg_type.split(',')[0],
+                            'type': arg_type.split(', ')[0],
                             'description': arg_doc
                         }
             elif ':param ' in docstring:
