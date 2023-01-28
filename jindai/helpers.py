@@ -184,7 +184,7 @@ def logined(role=''):
     :rtype: Union[str, None]
     """
     token = Token.check(request.headers.get(
-        'X-Authentication-Token', request.cookies.get('token')))
+        'X-Authentication-Token', request.cookies.get('token', request.args.get('_token', ''))))
 
     if token and (not role or role in token.roles):
         return token.user
