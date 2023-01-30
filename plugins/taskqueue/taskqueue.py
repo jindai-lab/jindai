@@ -3,6 +3,7 @@ import datetime
 import json
 import os
 from io import BytesIO
+import queue
 
 from flask import Response, jsonify, request, send_file, stream_with_context
 from PyMongoWrapper import F
@@ -98,10 +99,16 @@ class TaskQueue:
 
             def stream():
                 messages = announcer.listen()
+                yield f'data: {json.dumps(filter_status())}\n\n'
                 while True:
-                    msg = messages.get()
+                    try:
+                        msg = messages.get(timeout=20)
+                    except queue.Empty:
+                        break
                     if msg == 'updated':
                         yield f'data: {json.dumps(filter_status())}\n\n'
+                    elif msg == 'pulse':
+                        continue
                     else:
                         yield f'data: {json.dumps({"log": msg})}\n\n'
 
