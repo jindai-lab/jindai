@@ -3,7 +3,7 @@
 import threading
 from queue import deque
 import datetime
-import uuid
+import nanoid
 import time
 import traceback
 
@@ -20,7 +20,7 @@ class Job:
         self.task_dbo = task_dbo
         self.run_by = run_by
         self.queued_at = datetime.datetime.now()
-        self.uuid = str(uuid.uuid4())
+        self.unique_id = nanoid.generate()
         self.task = None
         self.status = 'pending'
         self.exception = {}
@@ -30,7 +30,7 @@ class Job:
     @property
     def key(self):
         """Get task key"""
-        return f'{self.task_dbo.name}@{self.uuid}'
+        return f'{self.task_dbo.name}@{self.unique_id}'
 
     @property
     def result(self):

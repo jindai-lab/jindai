@@ -8,8 +8,8 @@ import time
 import traceback
 from queue import PriorityQueue
 from typing import Callable
-import uuid
 import ctypes
+import nanoid
 
 from .helpers import safe_import
 from .models import Paragraph
@@ -29,7 +29,7 @@ class WorkersPool:
         return len(self._threads)
         
     def submit(self, func, *args, **kwargs):
-        tid = uuid.uuid4()
+        tid = nanoid.generate()
         
         def _func():
             func(*args, **kwargs)
