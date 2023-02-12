@@ -617,7 +617,7 @@ def fix_integrity(quiet):
     
     for iid, paras in tqdm(itemparas.items(), desc='Clearing repeated items'):
         if len(paras) > 1:
-            paras = sorted(paras, key=lambda x: x['_id'])
+            paras = sorted(map(lambda x: x['_id'], paras))
             Paragraph.query(F.id.in_(paras[1:])).update(Fn.pull(images=iid))
     
     print(len(unlinked), 'unlinked items')
