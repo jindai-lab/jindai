@@ -233,7 +233,8 @@ class DBQuery:
 
         groupping = ''
         if groups in ('', 'none'):
-            pass
+            if not sort:
+                sort = '-pdate,-id'
         elif groups == 'group':
             groupping = ''';gid();group_id: $gid;'''
             if not sort:
@@ -293,12 +294,7 @@ class DBQuery:
         if sort:
             sort = parser.parse_sort(sort)
 
-        if not sort or sort == [('_id', 1)]:
-            if not [stage for stage in agg if '$sort' in stage]:
-                agg.append({
-                    '$sort': SON([('pdate', -1), ('_id', 1)])
-                })
-        elif sort == [('random', 1)]:
+        if sort == [('random', 1)]:
             agg.append({'$sample': {'size': limit}})
             limit = 0
             skip = 0
