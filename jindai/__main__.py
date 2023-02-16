@@ -19,6 +19,7 @@ import h5py
 import numpy as np
 import urllib3
 import yaml
+import dateutil.parser
 from flask import Flask
 from PyMongoWrapper import Fn, ObjectId
 from PyMongoWrapper.dbo import BatchSave, create_dbo_json_encoder
@@ -45,15 +46,26 @@ def _init_plugins(*paths):
     return PluginManager(get_context('plugins', Plugin, *paths), Flask(__name__))
 
 
-def _get_items():
+def _get_items(offset):
+    if not offset:
+        query = MediaItem.aggregator.lookup(
+                foreignField='images',
+                localField='_id',
+                from_='paragraph',
+                as_='paragraphs'
+            )
+    else:
+        offset = dateutil.parser.parse(offset)
+        query = Paragraph.aggregator.match(F.id>ObjectId.from_datetime(offset)).unwind('$images').lookup(
+                foreignField='_id',
+                localField='images',
+                from_='mediaitem',
+                as_='image'
+            ).unwind('$image').project(_id='$image._id', paragraphs=['$$ROOT'])
+        
     itemparas = {
         m['_id'] : m['paragraphs']
-        for m in MediaItem.aggregator.lookup(
-            foreignField='images',
-            localField='_id',
-            from_='paragraph',
-            as_='paragraphs'
-        ).project(
+        for m in query.project(
             _id=1, paragraphs=1
         ).perform(raw=True)
     }
@@ -592,10 +604,11 @@ def clear_duplicates(limit: int, offset: str, maxdups: int):
 
 @cli.command('items-fix')
 @click.option('-q', '--quiet', default=False, flag_value=True)
-def fix_integrity(quiet):
+@click.option('-o', '--offset', default='')
+def fix_integrity(quiet, offset):
     Paragraph.query().update([Fn.set(images=Fn.setUnion('$images', []))])
     
-    r = _get_items()
+    r = _get_items(offset)
     mediaitems = r.mediaitems
     unlinked = r.unlinked
     checkeditems = r.checkeditems

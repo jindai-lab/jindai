@@ -63,3 +63,4 @@ docker-compose.yaml
 *.db
 *.pickle
 tests/
+update-pymongowrapper
