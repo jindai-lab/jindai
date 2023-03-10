@@ -47,21 +47,26 @@ def _init_plugins(*paths):
 
 
 def _get_items(offset):
-    if not offset:
-        query = MediaItem.aggregator.lookup(
-                foreignField='images',
-                localField='_id',
-                from_='paragraph',
-                as_='paragraphs'
-            )
-    else:
+    items = MediaItem.aggregator
+    if offset:
         offset = dateutil.parser.parse(offset)
-        query = Paragraph.aggregator.match(F.id>ObjectId.from_datetime(offset)).unwind('$images').lookup(
+        items = Paragraph.aggregator.match(F.id>ObjectId.from_datetime(offset)).lookup(
                 foreignField='_id',
                 localField='images',
                 from_='mediaitem',
-                as_='image'
-            ).unwind('$image').project(_id='$image._id', paragraphs=['$$ROOT'])
+                as_='images'
+            ).unwind('$images').group(
+                _id='$images._id', images=Fn.first('$images')
+            ).replaceRoot(
+                newRoot='$images'
+            )
+
+    query = items.lookup(
+            foreignField='images',
+            localField='_id',
+            from_='paragraph',
+            as_='paragraphs'
+        )
         
     itemparas = {
         m['_id'] : m['paragraphs']
