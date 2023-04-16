@@ -964,45 +964,33 @@ class MongoCollectionBatchOper(PipelineStage):
     """Batch operation on database collection
     @zhs 数据库批处理"""
 
-    def __init__(self, mongocollection='', updates='[]'):
+    def __init__(self, mongocollection='', updates='[]', query=''):
         """
         Args:
             mongocollection (str):
                 Database collection
                 @zhs 要处理的数据库
+            query (QUERY):
+                Batch operand range condition
+                @zhs 查询范围
             updates (QUERY):
-                Updates to perform, in the form of a list like [(<query>; <update>); ...]
-                where <update> can be function calls to set, pull, unset, etc.
-                @zhs 要执行的更新，应表示为一个列表，其中的每个元素为 (query; update)，
-                @zhs 如 (keywords=test; pull(keywords=key)) 。update 可为 set, pull, unset 等，也可使用聚合
+                Updates to perform, composed of function calls to set, pull, unset, etc.
+                @zhs 要执行的更新，如 pull(keywords=newkey) 。update 可为 set, pull, unset 等。
         """
         super().__init__()
         self.collection = Paragraph.get_coll(mongocollection)
-        updates = parser.parse(updates)
-        self.updates = []
+        self.updates = updates
+        self.query = query
 
-        def _assert(cond, info=''):
-            assert cond, 'Wrong format for update' + repr(info)
-
-        _assert(isinstance(updates, list))
-        for tup in updates:
-            _assert(len(tup) > 2, updates)
-            query, *updates = tup
-            for update in updates:
-                if isinstance(update, dict):
-                    assert len(update) == 1, 'Wrong format for update'
-                    for k in update:
-                        assert k.startswith('$'), 'Wrong format for update'
-                elif isinstance(update, list):
-                    pass
-                else:
-                    assert False, 'Wrong format for update'
-                self.updates.append((query, update))
-
-    def summarize(self, _):
-        for query, update in self.updates:
-            self.collection.db.update_many(query, update)
-        return True
+    def resolve(self, paragraph: Paragraph):
+        pdict = paragraph.as_dict()
+        query = parser.parse(self.query, context=pdict)
+        updates = parser.parse(self.updates, context=pdict)
+        if not isinstance(updates, list): updates = [updates]
+        for update in updates:
+            self.collection.query(query).update(update)
+            self.logger(query, update)
+        return paragraph
 
 
 class PDFUnlock(PipelineStage):
