@@ -228,6 +228,9 @@ class DBQuery:
         if len(self.query) > 1 and '$raw' in self.query[-1]:
             self.raw = self.query[-1]['$raw']
             self.query = self.query[:-1]
+            
+        if [_ for _ in self.query if isinstance(_, dict) and '$sort' in _]:
+            sort = '$'
 
         self.groups = groups
 
@@ -261,7 +264,7 @@ class DBQuery:
             groupping += f''';
                 gid: ifNull($group_id, concat("id=o'", toString($_id), "'"));
                 images: ifNull($images,[]);
-                groupby(id=$gid{sorting});
+                groupby(id=$gid{sorting},images=1);
                 groupby(id=$_id,count=sum($count),images=1);
             '''
             groupping = parser.parse(groupping)
@@ -269,7 +272,7 @@ class DBQuery:
             self.query += groupping
 
         self.limit = limit
-        self.sort = sort
+        self.sort = sort if sort != '$' else None
         self.skips = {}
         self.skip = skip
 
@@ -298,7 +301,7 @@ class DBQuery:
             agg.append({'$sample': {'size': limit}})
             limit = 0
             skip = 0
-        else:
+        elif sort:
             agg.append(
                 {'$sort': SON(sort)})
         if skip > 0:
