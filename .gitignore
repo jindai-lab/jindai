@@ -1,5 +1,6 @@
 .vscode/
 .DS_*
+PyMongoWrapper
 config*.yaml
 dump*
 temp_*
