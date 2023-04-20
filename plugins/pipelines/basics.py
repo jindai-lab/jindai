@@ -919,11 +919,11 @@ class ConditionalAssignment(PipelineStage):
                 @zhs 要赋值的字段
         """
         super().__init__()
-        self.cond = parser.parse(cond)
+        self.conds = parser.parse(cond)
         self.field = field
 
     def resolve(self, paragraph: Paragraph):
-        for cond, val in self.cond:
+        for cond, val in self.conds:
             if execute_query_expr(cond, paragraph):
                 setattr(paragraph, self.field,
                         execute_query_expr(val, paragraph))

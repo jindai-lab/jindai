@@ -192,7 +192,23 @@ class DBQuery:
             ] + qparsed[1:]
 
         return qparsed + [{'$match': req}]
+    
+    @staticmethod
+    def _find_query(query, keyname):
+        for v in query:
+            if isinstance(v, dict) and keyname in v:
+                return v[keyname]
 
+    @staticmethod
+    def _pop_query(query, keyname):
+        val = None
+        for i, v in enumerate(query):
+            if isinstance(v, dict) and keyname in v:
+                val = v.pop(keyname)
+                if not v:
+                    query.remove(v)
+                return val
+            
     def __init__(self, query, mongocollections='', limit=0, skip=0, sort='',
                  raw=False, groups='none', pmanager=None, wordcutter=None):
 
@@ -229,8 +245,9 @@ class DBQuery:
             self.raw = self.query[-1]['$raw']
             self.query = self.query[:-1]
             
-        if [_ for _ in self.query if isinstance(_, dict) and '$sort' in _]:
-            sort = '$'
+        sort = self._pop_query(self.query, '$sort') or sort
+        if isinstance(sort, SON):
+            sort = ','.join([('-' if v < 0 else '') + k for k, v in sort.items()])
 
         self.groups = groups
 
