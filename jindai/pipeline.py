@@ -197,6 +197,7 @@ class PipelineStage:
 class DataSourceStage(PipelineStage):
     """PipelineStage for data sources
     """
+    mappings = {}
     
     def __init__(self, **params) -> None:
         super().__init__()
@@ -233,10 +234,15 @@ class DataSourceStage(PipelineStage):
         """
 
         args = paragraph.as_dict()
+        
+        for k, mapped in self.mappings.items():
+            if k in args:
+                args[mapped] = args.pop(k)
+        
         for k, v in self.params.items():
             if args.get(k) is None or args[k] == '':
                 args[k] = v
-        
+                
         Pipeline.ensure_args(type(self), args)
         
         instance = type(self)(**args)
