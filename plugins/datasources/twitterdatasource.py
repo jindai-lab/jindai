@@ -70,6 +70,10 @@ class TwitterDataSource(DataSourceStage):
     Load from social network
     @zhs 导入社交网络信息
     """
+    
+    mappings = {
+        'author': 'import_username'
+    }
 
     def apply_params(self,
                      dataset_name='',
