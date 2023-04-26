@@ -126,7 +126,7 @@ parser.functions.update({
     'auto': _auto,
     'term': _term,
     'source': lambda url: (F.source.url == url) | (F.source.file == url),
-    'c': lambda text: F.content.regex(text),
+    'c': lambda text: F.content.regex(text.strip()),
     'setAuthor': _set_author,
 })
 

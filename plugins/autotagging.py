@@ -57,6 +57,33 @@ class ApplyAutoTags(PipelineStage):
     def __init__(self) -> None:
         super().__init__()
         self.ats = list(AutoTag.query({}))
+        
+        from collections import defaultdict
+        
+        referees = defaultdict(int)        
+        dependency = defaultdict(list)
+        
+        for i in self.ats:
+            for j in self.ats:
+                if i._id == j._id: continue
+                if i.tag in j.cond:
+                    # `j` depends on `i`
+                    dependency[i._id].append(j._id)
+                    
+        visited = set()
+                    
+        def _depth(i):
+            if i in visited:
+                return referees[i]
+            visited.add(i)
+            if dependency[i]:
+                referees[i] = max([_depth(j) for j in dependency[i]]) + 1
+            return referees[i]
+        
+        for i in self.ats:
+            _depth(i._id)
+            
+        self.ats = sorted(self.ats, key=lambda x: referees[x._id], reverse=True)
 
     def resolve(self, paragraph):
         for i in self.ats:

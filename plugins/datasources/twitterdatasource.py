@@ -335,3 +335,7 @@ class TwitterDataSource(DataSourceStage):
             yield from self.import_twiimg(args)
         else:
             yield from self.import_timeline()
+            
+    def summarize(self, _):
+        if imported := self.params.get('import_username'):
+            return self.return_redirect('/?q=' + imported)
