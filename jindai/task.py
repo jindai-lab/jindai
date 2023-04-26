@@ -241,6 +241,10 @@ class Task:
 
         return None
 
+    def log_exception(self, info, exc):
+        self.logger(info, type(exc).__name__, exc)
+        self.logger('\n'.join(traceback.format_tb(exc.__traceback__)))
+        
     def run(self, callback = None):
         """Create a daemon thread to execute the task
         """

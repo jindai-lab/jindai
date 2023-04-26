@@ -57,17 +57,6 @@ class Hdf5Manager(StorageManager):
                 self.dprint('OSError while loading from', g)
 
         self._writable_file = None
-
-        if not os.path.exists(self._filename):
-            try:
-                self._writable_file = h5py.File(self._filename, 'w')
-            except:
-                self._filename = tempfile.mktemp('.h5')
-                self._writable_file = h5py.File(self._filename, 'w')
-
-            self._writable_file.close()
-            self._writable_file = None
-
         self._written_size = os.stat(self._filename).st_size
 
     def _next_file(self):
@@ -77,6 +66,16 @@ class Hdf5Manager(StorageManager):
                 self.storage_base, f'blocks{self._num}.h5')
             if os.path.exists(self._filename) and os.stat(self._filename).st_size > self.quota * 0.99:
                 continue
+            if not os.path.exists(self._filename):
+                try:
+                    self._writable_file = h5py.File(self._filename, 'w')
+                except:
+                    self._filename = tempfile.mktemp('.h5')
+                    self._writable_file = h5py.File(self._filename, 'w')
+
+                self._writable_file.close()
+                self._writable_file = None
+
             break
 
     def parse_size(self, size: str) -> int:
