@@ -36,16 +36,22 @@ class AutoTag(db.DbObject):
     
     
 def apply_tag(parsed, tag, paragraph):
+    modified = False
     try:
         if execute_query_expr(parsed, paragraph):
             if tag.startswith('~') and tag[1:] in paragraph.keywords:
                 paragraph.keywords.remove(tag[1:])
-            if tag not in paragraph.keywords:
-                paragraph.keywords.append(tag)
-            if tag.startswith('@'):
-                paragraph.author = tag
+                modified = True
+            else:
+                if tag.startswith('@'):
+                    paragraph.author = tag
+                    modified = True
+                if tag not in paragraph.keywords:
+                    paragraph.keywords.append(tag)
+                    modified = True
     except TypeError:
         pass
+    return modified
     
 
 class ApplyAutoTags(PipelineStage):
@@ -57,38 +63,15 @@ class ApplyAutoTags(PipelineStage):
     def __init__(self) -> None:
         super().__init__()
         self.ats = list(AutoTag.query({}))
-        
-        from collections import defaultdict
-        
-        referees = defaultdict(int)        
-        dependency = defaultdict(list)
-        
-        for i in self.ats:
-            for j in self.ats:
-                if i._id == j._id: continue
-                if i.tag in j.cond:
-                    # `j` depends on `i`
-                    dependency[i._id].append(j._id)
-                    
-        visited = set()
-                    
-        def _depth(i):
-            if i in visited:
-                return referees[i]
-            visited.add(i)
-            if dependency[i]:
-                referees[i] = max([_depth(j) for j in dependency[i]]) + 1
-            return referees[i]
-        
-        for i in self.ats:
-            _depth(i._id)
-            
-        self.ats = sorted(self.ats, key=lambda x: referees[x._id], reverse=True)
 
     def resolve(self, paragraph):
-        for i in self.ats:
-            parsed, tag = i.parsed, i.tag
-            apply_tag(parsed, tag, paragraph)
+        for _ in range(10):
+            flag = False
+            for i in self.ats:
+                parsed, tag = i.parsed, i.tag
+                flag = flag or apply_tag(parsed, tag, paragraph)
+            if not flag:
+                break
         paragraph.save()
         return paragraph
     
