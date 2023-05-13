@@ -337,5 +337,5 @@ class TwitterDataSource(DataSourceStage):
             yield from self.import_timeline()
             
     def summarize(self, _):
-        if self.import_username:
-            return self.return_redirect('/?q=' + self.import_username)
+        if imported := self.params.get('import_username'):
+            return self.return_redirect('/?q=' + imported)

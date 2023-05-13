@@ -1012,3 +1012,43 @@ class PDFUnlock(PipelineStage):
 
     def summarize(self, _):
         return self.data
+
+
+class SetNamedResult(PipelineStage):
+    """Set name for summarization result
+    @zhs 为总结阶段的结果设置名称
+    """
+    
+    def __init__(self, name: str):
+        """
+        :param name: Name
+            @zhs 名称
+        :type name: str
+        """
+        super().__init__()
+        self.name = name
+        
+    def summarize(self, result):
+        self.gctx[self.name] = result
+        return result
+
+
+class LoadNamedResult(PipelineStage):
+    """Get named result
+    @zhs 读取已命名的结果
+    """
+    
+    def __init__(self, name: str):
+        """
+        :param name: Name
+            @zhs 名称
+        :type name: str
+        """
+        super().__init__()
+        self.name = name
+        
+    def summarize(self, _):
+        if self.name == '':
+            return self.gctx
+        return self.gctx.get(self.name)
+    
