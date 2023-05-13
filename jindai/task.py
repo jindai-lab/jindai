@@ -162,7 +162,7 @@ class Task:
         
         self._workers = WorkersPool(1)
          
-    def _thread_execute(self, priority, fc):
+    def _thread_execute(self, priority, fc, gctx):
         input_paragraph, stage = fc
 
         self._pbar.update(1)
@@ -174,7 +174,7 @@ class Task:
         try:
             priority -= 1
             counter = 0
-            for fc in stage.flow(input_paragraph):
+            for fc in stage.flow(input_paragraph, gctx):
                 if fc[1] is None:
                     continue
                 self._queue.put((priority, id(fc[0]), fc))
@@ -195,9 +195,12 @@ class Task:
         :return: Summarized result, or exception in execution
         :rtype: dict
         """
+        
         self._queue = PriorityQueue()
         self._workers = WorkersPool(self.concurrent)
         self._pbar.reset()
+        
+        gctx = {}
         
         try:
             if self.pipeline.stages:
@@ -220,7 +223,7 @@ class Task:
                             time.sleep(0.1)
                         else:
                             priority, _, job = self._queue.get()
-                            self._workers.submit(self._thread_execute, priority, job)
+                            self._workers.submit(self._thread_execute, priority, job, gctx)
             
             if self.alive:
                 return self.pipeline.summarize()

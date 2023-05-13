@@ -19,6 +19,7 @@ class PipelineStage:
     def __init__(self) -> None:
         self._logger = lambda *x: print(*x, file=sys.stderr)
         self.next = None
+        self.ctx = {}
 
     @classmethod
     def get_spec(cls):
@@ -30,7 +31,7 @@ class PipelineStage:
         }
 
     @staticmethod
-    def _spec(stage_cls: Type, method = '__init__'):
+    def _spec(stage_cls: Type, method='__init__'):
         """Get argument info for method of stage_cls
 
         :param stage_cls: a class
@@ -149,11 +150,11 @@ class PipelineStage:
         :type val: Callable
         """
         self._logger = val
-        
+
     def log_exception(self, info, exc):
         self.logger(info, type(exc).__name__, exc)
         self.logger('\n'.join(traceback.format_tb(exc.__traceback__)))
-        
+
     def resolve(self, paragraph: Paragraph) -> Paragraph:
         """Map period, handling paragraph.
 
@@ -176,7 +177,7 @@ class PipelineStage:
         """
         return result
 
-    def flow(self, paragraph: Union[Paragraph, IterableClass]) -> Tuple:
+    def flow(self, paragraph: Union[Paragraph, IterableClass], gctx: Dict) -> Tuple:
         """Flow control
 
         :param paragraph: Paragraph to process
@@ -186,6 +187,7 @@ class PipelineStage:
         :yield: a tuple in form of (<result/iterable multiple results>, next pipeline stage)
         :rtype: Iterator[Tuple]
         """
+        self.gctx = gctx
         results = self.resolve(paragraph)
         if isinstance(results, IterableClass):
             for result in results:
@@ -198,11 +200,11 @@ class DataSourceStage(PipelineStage):
     """PipelineStage for data sources
     """
     mappings = {}
-    
+
     def __init__(self, **params) -> None:
         super().__init__()
         self.params = params
-        
+
     @classmethod
     def get_spec(cls):
         """Overwrite the method for getting specifications
@@ -215,13 +217,13 @@ class DataSourceStage(PipelineStage):
             'doc': (cls.__doc__ or '').strip(),
             'args': PipelineStage._spec(cls, 'apply_params')
         }
-    
+
     def apply_params(self, **params):
         pass
-    
+
     def fetch(self) -> Iterable[Paragraph]:
         yield from []
-    
+
     def resolve(self, paragraph: Paragraph) -> Paragraph:
         """Update the parameters of the data source with
             the input paragraph
@@ -234,22 +236,22 @@ class DataSourceStage(PipelineStage):
         """
 
         args = paragraph.as_dict()
-        
+
         for k, mapped in self.mappings.items():
             if k in args:
                 args[mapped] = args.pop(k)
-        
+
         for k, v in self.params.items():
             if args.get(k) is None or args[k] == '':
                 args[k] = v
-                
+
         Pipeline.ensure_args(type(self), args)
-        
+
         instance = type(self)(**args)
         instance.apply_params(**args)
         instance.logger = self.logger
         yield from instance.fetch()
-        
+
 
 class Pipeline:
     """Pipeline"""
@@ -296,15 +298,16 @@ class Pipeline:
                     if name.startswith('$'):
                         name = name[1:]
                     stage = (name, kwargs)
-                
+
                 if isinstance(stage, (tuple, list)) and len(stage) == 2 and Pipeline.ctx:
                     name, kwargs = stage
-                    if kwargs.pop('disabled', False): continue
-                    
+                    if kwargs.pop('disabled', False):
+                        continue
+
                     stage_type = Pipeline.ctx[name]
                     Pipeline.ensure_args(stage_type, kwargs)
                     stage = stage_type(**kwargs)
-                
+
                 assert isinstance(
                     stage, PipelineStage), f'unknown format for {stage}'
 
