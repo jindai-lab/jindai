@@ -62,7 +62,8 @@ class RepeatWhile(FlowControlStage):
         self.pipeline = Pipeline(pipeline, self.logger)
         super().__init__()
 
-    def flow(self, paragraph):
+    def flow(self, paragraph, gctx):
+        self.gctx = gctx
         if paragraph[self.times_key] is None:
             paragraph[self.times_key] = 0
 
@@ -99,7 +100,8 @@ class Condition(FlowControlStage):
         self.iffalse = Pipeline(iffalse, self.logger)
         super().__init__()
 
-    def flow(self, paragraph):
+    def flow(self, paragraph, gctx):
+        self.gctx = gctx
         pipeline = self.iftrue
         if not execute_query_expr(self.cond, paragraph):
             pipeline = self.iffalse
@@ -156,7 +158,8 @@ class CallTask(FlowControlStage):
 
         super().__init__()
 
-    def flow(self, paragraph):
+    def flow(self, paragraph, gctx):
+        self.gctx = gctx
         if self.pipeline_only and self.pipeline.stages:
             yield paragraph, self.pipeline.stages[0]
         else:
