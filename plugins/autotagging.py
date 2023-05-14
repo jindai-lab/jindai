@@ -43,7 +43,7 @@ def apply_tag(parsed, tag, paragraph):
                 paragraph.keywords.remove(tag[1:])
                 modified = True
             else:
-                if tag.startswith('@'):
+                if tag.startswith('@') and paragraph.author != tag:
                     paragraph.author = tag
                     modified = True
                 if tag not in paragraph.keywords:
@@ -62,13 +62,12 @@ class ApplyAutoTags(PipelineStage):
 
     def __init__(self) -> None:
         super().__init__()
-        self.ats = list(AutoTag.query({}))
+        self.ats = [(a.parsed, a.tag) for a in AutoTag.query({})]
 
     def resolve(self, paragraph):
         for _ in range(10):
             flag = False
-            for i in self.ats:
-                parsed, tag = i.parsed, i.tag
+            for parsed, tag in self.ats:
                 flag = flag or apply_tag(parsed, tag, paragraph)
             if not flag:
                 break
