@@ -661,7 +661,7 @@ def delete_task(task_id):
     """Remove task"""
 
     _id = ObjectId(task_id)
-    return TaskDBO.query(F.id == _id).delete()
+    return TaskDBO.query(F.id == _id).delete().acknowledged
 
 
 @app.route('/api/tasks/<task_id>', methods=['POST'])
