@@ -19,7 +19,7 @@ class PipelineStage:
     def __init__(self) -> None:
         self._logger = lambda *x: print(*x, file=sys.stderr)
         self.next = None
-        self.ctx = {}
+        self.gctx = {}
 
     @classmethod
     def get_spec(cls):
@@ -250,6 +250,7 @@ class DataSourceStage(PipelineStage):
         instance = type(self)(**args)
         instance.apply_params(**args)
         instance.logger = self.logger
+        instance.gctx = self.gctx
         yield from instance.fetch()
 
 
