@@ -45,8 +45,10 @@ class Shortcuts(Plugin):
                      or Meta()).shortcuts or {}
         for key, val in shortcuts.items():
             if key.startswith(':'):
-                print('setting shortcut', key[1:], val)
-                parser.set_shortcut(key[1:], val)
+                try:
+                    parser.set_shortcut(key[1:], val)
+                except:
+                    print('failed to set shortcut', key[1:], val)
         return shortcuts
 
     def css_callback(self):
