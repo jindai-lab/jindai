@@ -161,6 +161,7 @@ class TaskLocalQueue(TaskQueue):
         self.running = True
         self._working_thread = threading.Thread(target=self._working)
         self._working_thread.start()
+        announcer.announce("updated")
 
     def stop(self):
         """Stop handling"""
