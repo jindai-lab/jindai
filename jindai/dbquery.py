@@ -97,10 +97,7 @@ def _term(term):
 
 
 def _set_author(name):
-    if not name.startswith('@'): name = '@' + name
-    return MongoConcating([
-        Fn.addFields(author=name, keywords=Fn.setUnion(Var.keywords, [name]))
-    ])
+    return Fn.addFields(author=name, keywords=Fn.setUnion(Var.keywords, [name]))
 
 
 parser.functions.update({
