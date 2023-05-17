@@ -169,11 +169,11 @@ class MediaImportDataSource(DataSourceStage):
 
         for loc in storage.globs(locs):
             extname = loc.rsplit('.', 1)[-1].lower()
+            dirname = loc.rsplit('/', 1)[0]
             filename = loc.split('#')[0]
             if extname in MediaItem.acceptable_extensions or loc.endswith('.mp4.thumb.jpg'):
                 ftime = int(os.stat(filename).st_mtime) if os.path.exists(filename) else time.time()
-
-                album = albums[filename]
+                album = albums[dirname]
                 if not album.source:
                     album.source = {'url': filename}
                     album.keywords += self.keywords

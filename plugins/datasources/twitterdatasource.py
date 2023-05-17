@@ -2,6 +2,7 @@ import base64
 import datetime
 import re
 import time
+import json
 from typing import List
 
 import tweepy
@@ -247,6 +248,10 @@ class TwitterDataSource(DataSourceStage):
 
         params = dict(count=100, 
                       exclude_replies=True)
+        
+        if user.startswith('@ '):
+            user = '@' + user[2:]
+
         if user and user.startswith('@'):
             def source(max_id):
                 return self.api.user_timeline(
@@ -338,4 +343,5 @@ class TwitterDataSource(DataSourceStage):
             
     def summarize(self, _):
         if imported := self.params.get('import_username'):
+            imported = 'author=in(' + json.dumps(imported.split('\n')) + ')'
             return self.return_redirect('/?q=' + imported)
