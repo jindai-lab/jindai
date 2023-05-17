@@ -15,6 +15,7 @@ class FlowControlStage(PipelineStage):
         self._next = None
         self._pipelines = [getattr(self, a) for a in dir(
             self) if isinstance(getattr(self, a), Pipeline)]
+        self._verbose = False
         super().__init__()
 
     @property
@@ -27,6 +28,17 @@ class FlowControlStage(PipelineStage):
         self._logger = val
         for pipeline in self._pipelines:
             pipeline.logger = val
+            
+    @property
+    def verbose(self):
+        """Print out debug info when verbose is set"""
+        return self._verbose
+    
+    @verbose.setter
+    def verbose(self, val):
+        self._verbose = val
+        for pipeline in self._pipelines:
+            pipeline.verbose = val
 
     @property
     def next(self):

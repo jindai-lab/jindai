@@ -20,6 +20,7 @@ class PipelineStage:
         self._logger = lambda *x: print(*x, file=sys.stderr)
         self.next = None
         self.gctx = {}
+        self.verbose = False
 
     @classmethod
     def get_spec(cls):
@@ -177,17 +178,19 @@ class PipelineStage:
         """
         return result
 
-    def flow(self, paragraph: Union[Paragraph, IterableClass], gctx: Dict) -> Tuple:
+    def flow(self, paragraph: Paragraph, gctx: dict) -> Tuple:
         """Flow control
 
         :param paragraph: Paragraph to process
-        :type paragraph: Union[Paragraph, IterableClass]
+        :type paragraph: Paragraph
         :return: Iterator
         :rtype: Tuple
         :yield: a tuple in form of (<result/iterable multiple results>, next pipeline stage)
         :rtype: Iterator[Tuple]
         """
         self.gctx = gctx
+        if self.verbose:
+            self.logger('Processing')
         results = self.resolve(paragraph)
         if isinstance(results, IterableClass):
             for result in results:
@@ -278,7 +281,7 @@ class Pipeline:
             del args[k]
 
     def __init__(self, stages: List[Union[Tuple[str, Dict], List, Dict, PipelineStage]],
-                 logger: Callable = print):
+                 logger: Callable = print, verbose = False):
         """Initialize the pipeline
 
         :param stages: pipeline stage info in one of the following forms:
@@ -292,6 +295,8 @@ class Pipeline:
 
         self.stages = []
         self.logger = logger
+        self.verbose = verbose
+        
         if stages:
             for stage in stages:
                 if isinstance(stage, dict):
@@ -313,6 +318,7 @@ class Pipeline:
                     stage, PipelineStage), f'unknown format for {stage}'
 
                 stage.logger = self.logger
+                stage.verbose = verbose
 
                 if self.stages:
                     self.stages[-1].next = stage
