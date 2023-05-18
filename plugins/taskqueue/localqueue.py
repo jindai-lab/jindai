@@ -95,7 +95,7 @@ class Job:
             self.logs.append(datetime.datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S ') + ' '.join([str(_) for _ in args]))
 
         self.task = Task.from_dbo(
-            self.task_dbo, logger=_logging)
+            self.task_dbo, logger=_logging, verbose=self._worker.verbose)
         self.status = 'running'
         self.task.run(_callback)
 
@@ -112,8 +112,8 @@ class Job:
 
 class TaskLocalQueue(TaskQueue):
 
-    def __init__(self, n=3):
-        super().__init__(n)
+    def __init__(self, n=3, verbose=False):
+        super().__init__(n, verbose)
         self._queue = deque()
         self._jobs = deque()
         self.running = False
@@ -131,6 +131,7 @@ class TaskLocalQueue(TaskQueue):
         if not self.running:
             self.start()
 
+        announcer.announce("updated")
         return job.key
 
     def _working(self):
@@ -161,7 +162,6 @@ class TaskLocalQueue(TaskQueue):
         self.running = True
         self._working_thread = threading.Thread(target=self._working)
         self._working_thread.start()
-        announcer.announce("updated")
 
     def stop(self):
         """Stop handling"""

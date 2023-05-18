@@ -154,7 +154,7 @@ class Task:
         self.logs = deque()
         self.verbose = verbose
 
-        self.pipeline = Pipeline(stages, self.logger)
+        self.pipeline = Pipeline(stages, self.logger, verbose)
         self.params = params
 
         self._pbar = TqdmFactory.get_tqdm(fake=verbose or not use_tqdm)
