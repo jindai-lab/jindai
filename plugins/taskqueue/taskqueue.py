@@ -18,13 +18,14 @@ class TaskQueue:
     """Handling queue
     """
 
-    def __init__(self, n=3):
+    def __init__(self, n=3, verbose=False):
         """
         Args:
             n (int, optional): maximal concurrent tasks
         """
         self._parallel_n = n
         self._capabilities = list(Pipeline.ctx)
+        self.verbose = verbose
 
     @property
     def parallel_n(self) -> int:

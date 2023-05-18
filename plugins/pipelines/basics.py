@@ -1014,7 +1014,7 @@ class PDFUnlock(PipelineStage):
         return self.data
 
 
-class SetNamedResult(PipelineStage):
+class SetNamedResult(Passthrough):
     """Set name for summarization result
     @zhs 为总结阶段的结果设置名称
     """
