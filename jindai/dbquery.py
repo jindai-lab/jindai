@@ -59,7 +59,7 @@ def _auto(param):
         is_expr = False
         if query.startswith('?'):
             is_expr = True
-        elif re.search(r'[,.~=&|()><\'"`@_*\-%]', query):
+        elif re.search(r'[,.~=&|()><\'"`@_#:\-%]', query):
             is_expr = True
 
         return is_expr
@@ -123,7 +123,7 @@ parser.functions.update({
     'auto': _auto,
     'term': _term,
     'source': lambda url: (F.source.url == url) | (F.source.file == url),
-    'c': lambda text: F.content.regex(text.strip()),
+    'c': lambda text: F.content.regex(text.strip()) | F.caption.regex(text.strip()),
     'setAuthor': _set_author,
 })
 

@@ -192,6 +192,8 @@ class PipelineStage:
         if self.verbose:
             self.logger('Processing')
         results = self.resolve(paragraph)
+        if self.verbose:
+            self.logger('Resolved to', type(results).__name__)
         if isinstance(results, IterableClass):
             for result in results:
                 yield result, self.next

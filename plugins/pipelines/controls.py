@@ -12,10 +12,10 @@ class FlowControlStage(PipelineStage):
     """Base class for flow control pipeline stages"""
 
     def __init__(self) -> None:
+        self._verbose = False
         self._next = None
         self._pipelines = [getattr(self, a) for a in dir(
             self) if isinstance(getattr(self, a), Pipeline)]
-        self._verbose = False
         super().__init__()
 
     @property
