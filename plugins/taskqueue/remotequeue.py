@@ -55,8 +55,8 @@ class JobProxy(DictObject):
 class TaskRemoteQueue(TaskQueue):
     """Remote task queue"""
 
-    def __init__(self, entrypoint) -> None:
-        super().__init__()
+    def __init__(self, entrypoint, verbose=False) -> None:
+        super().__init__(verbose=verbose)
         self._base = entrypoint.rstrip('/') + '/'
         self._config = {}
         self._queue = []
