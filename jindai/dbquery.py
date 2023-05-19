@@ -59,7 +59,7 @@ def _auto(param):
         is_expr = False
         if query.startswith('?'):
             is_expr = True
-        elif re.search(r'[,.~=&|()><\'"`@_*\-%]', query):
+        elif re.search(r'[,.~=&|()><\'"`@_#:\-%]', query):
             is_expr = True
 
         return is_expr
@@ -123,7 +123,7 @@ parser.functions.update({
     'auto': _auto,
     'term': _term,
     'source': lambda url: (F.source.url == url) | (F.source.file == url),
-    'c': lambda text: F.content.regex(text.strip()),
+    'c': lambda text: F.content.regex(text.strip()) | F.caption.regex(text.strip()),
     'setAuthor': _set_author,
 })
 
@@ -253,7 +253,9 @@ class DBQuery:
             if not sort:
                 sort = '-pdate,-id'
         elif groups == 'group':
-            groupping = ''';gid();group_id: $gid;'''
+            groupping = ''';gid();
+            lookup(localField=images,foreignField=_id,from=mediaitem,as=images);
+            addFields(group_id=$gid,images.paragraph_id=$_id);'''
             if not sort:
                 sort = 'group_id,-pdate'
         elif groups == 'source':
