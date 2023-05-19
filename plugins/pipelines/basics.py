@@ -1033,7 +1033,7 @@ class SetNamedResult(Passthrough):
         return result
 
 
-class LoadNamedResult(PipelineStage):
+class LoadNamedResult(Passthrough):
     """Get named result
     @zhs 读取已命名的结果
     """
