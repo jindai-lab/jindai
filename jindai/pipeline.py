@@ -222,6 +222,9 @@ class DataSourceStage(PipelineStage):
             'doc': (cls.__doc__ or '').strip(),
             'args': PipelineStage._spec(cls, 'apply_params')
         }
+    
+    def before_fetch(self, instance):
+        pass
 
     def apply_params(self, **params):
         pass
@@ -256,6 +259,7 @@ class DataSourceStage(PipelineStage):
         instance.apply_params(**args)
         instance.logger = self.logger
         instance.gctx = self.gctx
+        self.before_fetch(instance)
         yield from instance.fetch()
 
 
