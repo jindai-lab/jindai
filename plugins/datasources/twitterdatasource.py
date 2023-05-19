@@ -71,10 +71,14 @@ class TwitterDataSource(DataSourceStage):
     Load from social network
     @zhs 导入社交网络信息
     """
-    
+
     mappings = {
         'author': 'import_username'
     }
+
+    def __init__(self, **params) -> None:
+        super().__init__(**params)
+        self.imported_authors = set()
 
     def apply_params(self,
                      dataset_name='',
@@ -221,14 +225,12 @@ class TwitterDataSource(DataSourceStage):
 
         return para
 
-    def import_twiimg(self, urls: List[str]):
+    def import_twiimg(self, url: str):
         """Import twitter posts from url strings
         Args:
-            ls (List[str]): urls
+            ls (str): urls
         """
-        for url in urls:
-            if 'twitter.com' not in url or '/status/' not in url:
-                continue
+        if 'twitter.com' in url and '/status/' in url:
             self.logger(url)
 
             tweet_id = url.split('/')
@@ -236,19 +238,18 @@ class TwitterDataSource(DataSourceStage):
 
             try:
                 tweet = self.api.get_status(tweet_id)
-            except Exception:
-                continue
-
-            para = self.parse_tweet(tweet, False)
-            if para:
-                yield para
+                para = self.parse_tweet(tweet, False)
+                if para:
+                    yield para
+            except Exception as ex:
+                self.log_exception(f'Failed to import from {url}', ex)
 
     def import_timeline(self, user=''):
         """Import posts of a twitter user, or timeline if blank"""
 
-        params = dict(count=100, 
+        params = dict(count=100,
                       exclude_replies=True)
-        
+
         if user.startswith('@ '):
             user = '@' + user[2:]
 
@@ -309,6 +310,7 @@ class TwitterDataSource(DataSourceStage):
                         para = None
 
                     if para:
+                        self.imported_authors.add(para.author)
                         yield para
                         yielded = True
 
@@ -323,25 +325,30 @@ class TwitterDataSource(DataSourceStage):
         except tweepy.TwitterServerError as ex:
             self.log_exception('twitter exception', ex)
 
+    def before_fetch(self, instance):
+        instance.imported_authors = self.imported_authors
+
     def fetch(self):
         args = self.import_username.split('\n')
         arg = args[0]
-        if arg.startswith('@'):
-            if arg == '@':
-                unames = sorted(
-                    map(lambda x: f'#{x}', tweepy.Cursor(self.api.get_friend_ids).items()))
-                for u in unames:
-                    self.logger(u)
-                    yield from self.import_timeline(u)
-            else:
-                for u in args:
-                    yield from self.import_timeline(u)
-        elif arg.startswith('http://') or arg.startswith('https://'):
-            yield from self.import_twiimg(args)
-        else:
+        if arg == '':
             yield from self.import_timeline()
-            
+        else:
+            for arg in args:
+                if re.search(r'^https://twitter.com/.*/status/.*', arg):
+                    yield from self.import_twiimg(arg)
+                elif arg == '@':
+                    unames = sorted(
+                        map(lambda x: f'#{x}', tweepy.Cursor(self.api.get_friend_ids).items()))
+                    for u in unames:
+                        self.logger(u)
+                        yield from self.import_timeline(u)
+                else:
+                    if arg.startswith('https://twitter.com'):
+                        arg = '@' + u.rstrip('/').rsplit('/', 1)[-1]
+                    yield from self.import_timeline(arg)
+
     def summarize(self, _):
-        if imported := self.params.get('import_username'):
-            imported = 'author=in(' + json.dumps(imported.split('\n')) + ')'
+        if self.imported_authors:
+            imported = 'author=in(' + json.dumps(list(self.imported_authors)) + ')'
             return self.return_redirect('/?q=' + imported)
