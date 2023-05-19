@@ -84,19 +84,22 @@ class AddAutoTag(PipelineStage):
     def __init__(self, cond='false', tag='') -> None:
         """
         Args:
-            cond (str, optional):
-                Condition
-                @zhs 条件
-            tag (str, optional): 
+            cond (QUERY, optional):
+                Condition, n.b. should return a string
+                @zhs 条件表达式，注意应返回字符串
+            tag (QUERY, optional): 
                 Tag
                 @zhs 标签
         """        
         super().__init__()
-        self.cond = cond
-        self.parsed = parser.parse(cond)
-        self.tag = tag
+        self.cond = parser.parse(cond)
+        self.tag = parser.parse(tag)
+
+    def resolve(self, paragraph):
+        cond = execute_query_expr(self.cond, paragraph)
+        tag = execute_query_expr(self.tag, paragraph)
         if not AutoTag.first(F.cond == cond, F.tag == tag):
-            AutoTag(cond=cond, tag=tag).save()
+            AutoTag(cond, tag=tag).save()
 
 
 class AutoTaggingPlugin(Plugin):
