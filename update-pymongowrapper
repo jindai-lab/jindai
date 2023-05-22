@@ -1,2 +1,0 @@
-pip install https://github.com/zhuth/PyMongoWrapper/archive/master.zip --force-reinstall
-touch /app/jindai/api.py

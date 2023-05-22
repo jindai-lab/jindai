@@ -228,7 +228,7 @@ class TwitterDataSource(DataSourceStage):
     def import_twiimg(self, url: str):
         """Import twitter posts from url strings
         Args:
-            ls (str): urls
+            url (str): url
         """
         if 'twitter.com' in url and '/status/' in url:
             self.logger(url)
@@ -330,8 +330,7 @@ class TwitterDataSource(DataSourceStage):
 
     def fetch(self):
         args = self.import_username.split('\n')
-        arg = args[0]
-        if arg == '':
+        if args == ['']:
             yield from self.import_timeline()
         else:
             for arg in args:
@@ -347,7 +346,6 @@ class TwitterDataSource(DataSourceStage):
                     if arg.startswith('https://twitter.com'):
                         arg = '@' + arg.rstrip('/').rsplit('/', 1)[-1]
                     yield from self.import_timeline(arg)
-
     def summarize(self, _):
         if self.imported_authors:
             imported = 'author=in(' + json.dumps(list(self.imported_authors)) + ')'

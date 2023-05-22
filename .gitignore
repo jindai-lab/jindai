@@ -66,3 +66,4 @@ docker-compose.yaml
 *.pickle
 tests/
 update-pymongowrapper
+update-pymongowrapper
