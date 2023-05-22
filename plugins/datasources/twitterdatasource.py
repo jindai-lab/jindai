@@ -347,6 +347,6 @@ class TwitterDataSource(DataSourceStage):
                         arg = '@' + arg.rstrip('/').rsplit('/', 1)[-1]
                     yield from self.import_timeline(arg)
     def summarize(self, _):
-        if self.imported_authors:
-            imported = 'author=in(' + json.dumps(list(self.imported_authors)) + ')'
+        if imported := self.params.get('import_username'):
+            imported = 'author=in(' + json.dumps(imported.split('\n')) + ')'
             return self.return_redirect('/?q=' + imported)
