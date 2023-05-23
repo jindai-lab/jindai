@@ -12,6 +12,9 @@ from jindai.pipeline import DataSourceStage
 from jindai.dbquery import parser, F
 
 
+STOPCHARS = '!@#$%^&*()-_=+[]\\;"\'/?？！％＃＊（）「」『』【】、；‘。’“”，？'
+
+
 def twitter_id_from_timestamp(stamp: float) -> int:
     """Get twitter id from timestamp
 
@@ -216,7 +219,7 @@ class TwitterDataSource(DataSourceStage):
         text = re.sub(r'https?://[^\s]+', '', tweet.text).strip()
         para.keywords += [t.strip().strip('#') for t in re.findall(
             r'@[a-z_A-Z0-9]+', text) + re.findall(r'[#\s][^\s@]{,10}', text)] + [author]
-        para.keywords = [_ for _ in para.keywords if _]
+        para.keywords = [_ for _ in para.keywords if _ and _ not in STOPCHARS]
         para.content = text
         para.save()
 
@@ -310,7 +313,6 @@ class TwitterDataSource(DataSourceStage):
                         para = None
 
                     if para:
-                        self.imported_authors.add(para.author)
                         yield para
                         yielded = True
 
@@ -343,9 +345,12 @@ class TwitterDataSource(DataSourceStage):
                         self.logger(u)
                         yield from self.import_timeline(u)
                 else:
-                    if arg.startswith('https://twitter.com'):
-                        arg = '@' + arg.rstrip('/').rsplit('/', 1)[-1]
+                    if m := re.match(r'^https://twitter.com/([^/]*?)(/media)?', arg):
+                        arg = '@' + m.group(1)
+                        if m.group(2): self.media_only = True
+                    self.imported_authors.add(arg)
                     yield from self.import_timeline(arg)
+    
     def summarize(self, _):
         if imported := self.params.get('import_username'):
             imported = 'author=in(' + json.dumps(imported.split('\n')) + ')'
