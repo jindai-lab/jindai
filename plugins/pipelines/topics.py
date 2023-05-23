@@ -5,11 +5,13 @@
 from collections import defaultdict
 from io import BytesIO
 import re
+from typing import Dict
 import numpy as np
 from jindai import PipelineStage
 from jindai.helpers import safe_import
 from jindai.models import Paragraph
 from .basics import AccumulateParagraphs, Counter
+from threading import Lock
 
 
 many_stop_words = safe_import('many_stop_words')
@@ -425,3 +427,38 @@ class GraphicClustering(PipelineStage):
         import_plt().savefig(buf, format='png')
 
         return PipelineStage.return_file('png', buf.getvalue(), meta=meta)
+
+
+class SentenceTransformer(PipelineStage):
+    """
+    Sentence Transformer
+    """
+    
+    def __init__(self, n=10, model="sentence-transformers/distiluse-base-multilingual-cased-v1"):
+        super().__init__()
+        safe_import('sentence_transformers', 'sentence-transformers')
+        from sentence_transformers import SentenceTransformer
+        self.trans = SentenceTransformer(model)
+        self.buffer = []
+        self.n = n
+        self.lock = Lock()
+
+    def process_buffer(self):
+        """Process buffer"""
+        sentences = [p.content for p in self.buffer]
+        sentence_embeddings = self.trans.encode(sentences)
+        for p, emb in zip(self.buffer, sentence_embeddings):
+            p.embedding = emb.tobytes()
+            p.save()
+        self.buffer.clear()
+
+    def resolve(self, paragraph):
+        with self.lock:
+            self.buffer.append(paragraph)
+            if len(self.buffer) >= self.n:
+                self.process_buffer()
+
+    def summarize(self, result) -> Dict:
+        self.process_buffer()
+        return result
+    
