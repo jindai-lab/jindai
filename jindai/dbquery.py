@@ -100,6 +100,13 @@ def _set_author(name):
     return Fn.addFields(author=name, keywords=Fn.setUnion(Var.keywords, [name]))
 
 
+def _wordmatch(text):
+    text = text.strip()
+    if re.match(r'^[a-zA-Z0-9]+$', text):
+        text = r'\W(' + text + r')\W'
+    return text
+
+
 parser.functions.update({
     'expand': lambda: MongoConcating([
         Fn.unwind('$images'),
@@ -123,7 +130,11 @@ parser.functions.update({
     'auto': _auto,
     'term': _term,
     'source': lambda url: (F.source.url == url) | (F.source.file == url),
-    'c': lambda text: F.content.regex(text.strip()) | F.caption.regex(text.strip()),
+    'c': lambda text: F.content.regex(text.strip()),
+    'cc': lambda text: F.caption.regex(text.strip()),
+    'w': _wordmatch,
+    'cw': lambda text: F.content.regex(_wordmatch(text)),
+    'ccw': lambda text: F.caption.regex(_wordmatch(text)),
     'setAuthor': _set_author,
 })
 
