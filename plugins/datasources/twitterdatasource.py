@@ -12,6 +12,9 @@ from jindai.pipeline import DataSourceStage
 from jindai.dbquery import parser, F
 
 
+STOPCHARS = '!@#$%^&*()-_=+[]\\;"\'/?？！％＃＊（）「」『』【】、；‘。’“”，？'
+
+
 def twitter_id_from_timestamp(stamp: float) -> int:
     """Get twitter id from timestamp
 
@@ -86,6 +89,7 @@ class TwitterDataSource(DataSourceStage):
                      allow_retweet=True,
                      media_only=True,
                      consumer_key='', consumer_secret='', access_token_key='', access_token_secret='',
+                     bearer_token='',
                      import_username='',
                      time_after='', time_before='',
                      skip_existent=True,
@@ -109,6 +113,7 @@ class TwitterDataSource(DataSourceStage):
             consumer_secret (str, optional): API CONSUMER SECRET
             access_token_key (str, optional): API ACCESS TOKEN KEY
             access_token_secret (str, optional): API ACCESS TOKEN SECRET
+            bearer_token (str, optional): Bearer Token
             import_username (LINES, optional):
                 Import source, blank for timeline
                 @zhs 导入的用户名或留空以导入 Timeline
@@ -132,8 +137,10 @@ class TwitterDataSource(DataSourceStage):
         self.import_username = import_username
         self.time_after = _stamp(time_after) or 0
         self.time_before = _stamp(time_before) or time.time()
-        self.api = tweepy.API(tweepy.OAuth1UserHandler(consumer_key, consumer_secret, access_token_key, access_token_secret),
-                              proxy=proxy)
+        self.api = tweepy.API(tweepy.OAuthHandler(consumer_key, consumer_secret, access_token_key, access_token_secret) if not bearer_token \
+                    else tweepy.OAuth2BearerHandler(bearer_token),
+                    wait_on_rate_limit=True,
+                    proxy=proxy)
         self.skip_existent = skip_existent
         self.imported = set()
 
@@ -216,7 +223,7 @@ class TwitterDataSource(DataSourceStage):
         text = re.sub(r'https?://[^\s]+', '', tweet.text).strip()
         para.keywords += [t.strip().strip('#') for t in re.findall(
             r'@[a-z_A-Z0-9]+', text) + re.findall(r'[#\s][^\s@]{,10}', text)] + [author]
-        para.keywords = [_ for _ in para.keywords if _]
+        para.keywords = [_ for _ in para.keywords if _ and _ not in STOPCHARS]
         para.content = text
         para.save()
 
@@ -310,7 +317,6 @@ class TwitterDataSource(DataSourceStage):
                         para = None
 
                     if para:
-                        self.imported_authors.add(para.author)
                         yield para
                         yielded = True
 
@@ -327,6 +333,7 @@ class TwitterDataSource(DataSourceStage):
 
     def before_fetch(self, instance):
         instance.imported_authors = self.imported_authors
+        time.sleep(3)
 
     def fetch(self):
         args = self.import_username.split('\n')
@@ -343,9 +350,13 @@ class TwitterDataSource(DataSourceStage):
                         self.logger(u)
                         yield from self.import_timeline(u)
                 else:
-                    if arg.startswith('https://twitter.com'):
-                        arg = '@' + arg.rstrip('/').rsplit('/', 1)[-1]
+                    if m := re.match(r'^https://twitter.com/([^/]*?)(/media)?', arg):
+                        arg = '@' + m.group(1)
+                        if m.group(2):
+                            self.media_only = True
+                    self.imported_authors.add(arg)
                     yield from self.import_timeline(arg)
+
     def summarize(self, _):
         if imported := self.params.get('import_username'):
             imported = 'author=in(' + json.dumps(imported.split('\n')) + ')'
