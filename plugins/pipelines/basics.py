@@ -407,21 +407,13 @@ class ArrayField(PipelineStage):
                 @zhs 字段名
             push (bool): push or delete
                 @zhs 添加或删除
-            elements (str):
+            elements (LINES):
                 Element to push or delete, use $<field> or constants
                 @zhs 添加或删除的元素，每行一个 $ 开头的字段名或常量
         """
         super().__init__()
         self.field = field
-        self.elements = []
-        try:
-            elements = parser.parse(elements)
-            assert isinstance(elements, list)
-            self.elements = elements
-        except Exception:
-            for ele in elements.split('\n'):
-                ele = parser.parse(ele)
-                self.elements.append(ele)
+        self.elements = elements.split('\n')
         self.push = push
 
     def resolve(self, paragraph: Paragraph) -> Paragraph:
@@ -430,7 +422,8 @@ class ArrayField(PipelineStage):
         if not isinstance(paragraph[self.field], (list, DbObjectCollection)):
             return paragraph
         for ele in self.elements:
-            ele = execute_query_expr(ele, paragraph)
+            if '$' in ele:
+                ele = execute_query_expr(parser.parse(ele), paragraph)
             if self.push:
                 paragraph[self.field].append(ele)
             else:

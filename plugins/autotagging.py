@@ -6,6 +6,7 @@ from PyMongoWrapper import F, Fn, ObjectId, QueryExpressionError, MongoOperand
 from jindai import PipelineStage, Plugin, parser
 from jindai.helpers import rest, execute_query_expr
 from jindai.models import db, Paragraph
+import json
 
 
 class AutoTag(db.DbObject):
@@ -16,6 +17,7 @@ class AutoTag(db.DbObject):
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
+        self.parsed_state = '{"cond": "", "parsed": {}}'
         self._parsed = {}
         self._parsed_cond = ''
 
@@ -26,12 +28,22 @@ class AutoTag(db.DbObject):
         :return: parsed condition
         :rtype: dict
         """
+
+        if self.parsed_state:
+            state = json.loads(self.parsed_state)
+            self._parsed_cond = state['cond']
+            self._parsed = state['parsed']
+
         if self._parsed_cond != self.cond:
             self._parsed_cond = self.cond
             try:
                 self._parsed = parser.parse(self.cond)
             except QueryExpressionError:
                 self._parsed = {'__FALSE__': True}
+            
+            self.parsed_state = json.dumps({'cond': self._parsed_cond, 'parsed': self._parsed})
+            self.save()
+
         return self._parsed
     
     
