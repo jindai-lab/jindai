@@ -20,19 +20,16 @@ class SMBManager(StorageManager):
         self._ttl = 60
         self._opener = urllib.request.build_opener(SMBHandler)
 
-    def _smb_split(self, path):
-        # path in the form of smb://__netloc__/__service__/__path__
-        return path[6:].split('/', 2)
-
     def _get_connection(self, path):
-        netloc, service, path = self._smb_split(path)
-        if netloc not in self._connections or self._last_active.get(netloc, 0) < time.time() - self._ttl:
-            parsed = urllib.parse.urlparse(path)
-            self._connections[netloc] = SMBConnection(
-                parsed.username, parsed.password, '', '')
+        parsed = urllib.parse.urlparse(path)
+        if parsed.netloc not in self._connections or self._last_active.get(parsed.netloc, 0) < time.time() - self._ttl:
+            conn = SMBConnection(parsed.username, parsed.password, '', '')
+            conn.connect(parsed.hostname)
+            self._connections[parsed.netloc] = conn
 
-        self._last_active[netloc] = time.time()
-        return self._connections[netloc], service, path
+        self._last_active[parsed.netloc] = time.time()
+        segs = parsed.path.lstrip('/').split('/', 1)
+        return self._connections[parsed.netloc], segs[0], segs[1]
 
     def statdir(self, path):
         path = path.rstrip('/')

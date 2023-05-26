@@ -257,9 +257,6 @@ class TwitterDataSource(DataSourceStage):
         params = dict(count=100,
                       exclude_replies=True)
 
-        if user.startswith('@ '):
-            user = '@' + user[2:]
-
         if user and user.startswith('@'):
             def source(max_id):
                 return self.api.user_timeline(
@@ -330,6 +327,11 @@ class TwitterDataSource(DataSourceStage):
 
         except tweepy.TwitterServerError as ex:
             self.log_exception('twitter exception', ex)
+
+        if user.startswith('@'):
+            # save import status
+            Paragraph.query(F.keywords == '!imported', F.author == user).delete()
+            Paragraph(keywords=['!imported'], author=user, source={'url': f'https://twitter.com/{user[1:]}/status/---imported---'}).save()
 
     def before_fetch(self, instance):
         instance.imported_authors = self.imported_authors
