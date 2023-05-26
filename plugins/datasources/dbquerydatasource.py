@@ -168,8 +168,9 @@ class MediaImportDataSource(DataSourceStage):
         albums = defaultdict(Paragraph)
 
         for loc in storage.globs(locs):
+            hashed_loc = re.sub(r'://(.+?)(:.+?)?@([\w.]+)/', r'://\1@\3/', loc)
             extname = loc.rsplit('.', 1)[-1].lower()
-            dirname = loc.rsplit('/', 1)[0]
+            dirname = hashed_loc.rsplit('/', 1)[0]
             filename = loc.split('#')[0]
             if extname in MediaItem.acceptable_extensions or loc.endswith('.mp4.thumb.jpg'):
                 ftime = int(os.stat(filename).st_mtime) if os.path.exists(filename) else time.time()
@@ -180,7 +181,7 @@ class MediaImportDataSource(DataSourceStage):
                     album.pdate = datetime.datetime.utcfromtimestamp(ftime)
                     album.dataset = self.dataset
 
-                i = MediaItem.get(loc, item_type=MediaItem.get_type(extname))
+                i = MediaItem.get(hashed_loc, item_type=MediaItem.get_type(extname))
                 i.save()
                 path = storage.default_path(i.id)
                 with storage.open(path, 'wb') as fout:
