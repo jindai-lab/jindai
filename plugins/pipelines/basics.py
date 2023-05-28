@@ -24,6 +24,13 @@ class Passthrough(PipelineStage):
 
     def resolve(self, paragraph: Paragraph) -> Paragraph:
         return paragraph
+    
+
+class FilterOut(PipelineStage):
+    """
+    Filter Out
+    @zhs 截止当前处理的段落
+    """
 
 
 class TradToSimpChinese(PipelineStage):
