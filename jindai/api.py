@@ -599,7 +599,7 @@ def merge_items(pairs):
 
     for rese, dele in pairs.items():
         rese, dele = MediaItem.first(
-            F.id == rese), list(MediaItem.query(F.id.in_([ObjectId(_) for _ in dele])))
+            F.id == ObjectId(rese)), list(MediaItem.query(F.id.in_([ObjectId(_) for _ in dele])))
         if rese and dele:
             Paragraph.merge_by_mediaitems(rese, dele)
 
@@ -614,7 +614,7 @@ def delete_item(para_items: dict):
 
     del_items = set()
     for pid, items in para_items.items():
-        para = Paragraph.first(F.id == pid)
+        para = Paragraph.first(F.id == ObjectId(pid))
         if para is None:
             continue
 
@@ -626,7 +626,7 @@ def delete_item(para_items: dict):
     for i in del_items:
         if Paragraph.first(F.images == i):
             continue
-        image_item = MediaItem.first(F.id == i)
+        image_item = MediaItem.first(F.id == ObjectId(i))
         if image_item:
             image_item.delete()
 
@@ -811,12 +811,14 @@ def set_datasets(action, **j):
 
     dataset = None
     if '_id' in j:
-        dataset = Dataset.first(F.id == j['_id'])
+        dataset = Dataset.first(F.id == ObjectId(j['_id']))
         del j['_id']
 
     if action == 'edit':
         if dataset:
-            dataset.update(Fn.set(**j))
+            for k, v in j.items():
+                dataset[k] = v
+            dataset.save()
         else:
             Dataset(**j).save()
 
@@ -825,7 +827,7 @@ def set_datasets(action, **j):
             jset = {k: v for k, v in dataset.items() if k !=
                     '_id' and v is not None}
             if '_id' in dataset:
-                Dataset.query(F.id == dataset['_id']).update(Fn.set(**jset))
+                Dataset.query(F.id == ObjectId(dataset['_id'])).update(Fn.set(**jset))
             else:
                 Dataset(**jset).save()
 
@@ -870,7 +872,7 @@ def resolve_media_item(coll=None, storage_id=None, ext=None):
     """Serve media item"""
 
     if coll and storage_id and len(storage_id) == 24:
-        para = Paragraph.get_coll(coll).first(F.id == storage_id)
+        para = Paragraph.get_coll(coll).first(F.id == ObjectId(storage_id))
         item = MediaItem(para)
         if item is None:
             return Response('', 404)

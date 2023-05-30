@@ -1,6 +1,5 @@
 """基本操作"""
 
-import json
 import re
 import statistics
 from collections import defaultdict, deque
@@ -9,7 +8,7 @@ from itertools import chain
 from itertools import count as iter_count
 import string
 
-from PyMongoWrapper import F, QueryExprInterpreter, ObjectId
+from PyMongoWrapper import F, QueryExprInterpreter, QueryExprEvaluator
 from PyMongoWrapper.dbo import DbObject, DbObjectCollection
 from jindai import PipelineStage, parser, storage
 from jindai.helpers import JSONEncoder, execute_query_expr, safe_import, WordStemmer as _Stemmer
@@ -31,6 +30,49 @@ class FilterOut(PipelineStage):
     Filter Out
     @zhs 截止当前处理的段落
     """
+
+    def __init__(self, cond='true'):
+        """
+        Arg:
+            cond (QUERY): Condition
+            @zhs 截止条件
+        """
+        self.cond = parser.parse(cond)
+        self.ee = QueryExprEvaluator(parser.shortcuts)
+
+    def resolve(self, paragraph):
+        if self.ee.evaluate(self.cond, paragraph):
+            return
+        return paragraph
+
+
+class ExecuteCode(PipelineStage):
+    """
+    Execute QueryExpr Code
+    @zhs 执行查询表达式代码
+    """
+
+    def __init__(self, code, summarizing):
+        """
+        Args:
+            code (QUERY): Code to execute when resolving paragraph.
+                Use $paragraph to access to the current paragraph,
+                and $ctx to access the global context.
+                @zhs 处理段落时执行的代码
+            summarizing (QUERY): Code to execute when summarizing.
+                @zhs 总结阶段执行的代码
+        """
+        super().__init__()
+        self.code = parser.parse(code)
+        self.summarizing = parser.parse(summarizing)
+        self.ee = QueryExprEvaluator(parser.shortcuts)
+
+    def resolve(self, paragraph):
+        self.ee.execute(self.code, {'paragraph': paragraph, 'ctx': self.gctx})
+        return paragraph
+    
+    def summarize(self, result):
+        return self.ee.execute(self.summarizing, {'result': result, 'ctx': self.gctx})
 
 
 class TradToSimpChinese(PipelineStage):
@@ -327,7 +369,7 @@ class AccumulateParagraphs(PipelineStage):
         self.paragraphs = deque()
 
     def resolve(self, paragraph: Paragraph):
-        self.paragraphs.append(paragraph)
+        self.paragraphs.append(paragraph.as_dict(expand=True))
 
     def summarize(self, *_):
         return list(self.paragraphs)

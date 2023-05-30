@@ -141,7 +141,7 @@ class CallTask(FlowControlStage):
             params (QUERY): Override parameters in the task
                 @zhs 设置任务中各处理流程参数
         """
-        task = TaskDBO.first(F.id == task)
+        task = TaskDBO.first(F.id == ObjectId(task))
         assert task, f'No specified task: {task}'
         if params:
             params = parser.parse(params)
@@ -163,15 +163,17 @@ class CallTask(FlowControlStage):
                 target[sec] = val
 
         self._pipelines = []
-        self.task = Task.from_dbo(task)
-        self.stages = self.task.pipeline.stages[skip:]
+        
+        task = Task.from_dbo(task)
+        self.pipeline = task.pipeline
+        self.pipeline.stages = self.pipeline.stages[skip:]
 
         super().__init__()
 
     def flow(self, paragraph, gctx):
         self.gctx = gctx
-        if self.stages:
-            yield paragraph, self.stages[0]
+        if self.pipeline.stages:
+            yield paragraph, self.pipeline.stages[0]
         else:
             yield paragraph, self.next
 
