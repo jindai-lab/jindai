@@ -630,7 +630,7 @@ def fix_integrity(quiet, offset):
         ), desc='Checking paragraph items'):
         images = set(p['images']).intersection(mediaitems)
         if len(images) != len(p['images']):
-            Paragraph.query(F.id == p['_id']).update(
+            Paragraph.query(F.id == ObjectId(p['_id'])).update(
                 Fn.set(images=list(images)))
     
     for iid, paras in tqdm(itemparas.items(), desc='Clearing repeated items'):
@@ -643,7 +643,7 @@ def fix_integrity(quiet, offset):
         batch_name = 'restored:' + datetime.datetime.now().strftime('%Y%m%d_%H%M%S')
         with BatchSave(performer=Paragraph) as batch:
             for m in tqdm(unlinked, desc='Restoring unlinked media items'):
-                m = MediaItem.first(F.id == m)
+                m = MediaItem.first(F.id == ObjectId(m))
                 if m is None:
                     continue
                 batch.add(Paragraph(dataset='', lang='auto', images=[m], source=m.source,

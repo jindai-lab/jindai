@@ -1,5 +1,6 @@
 from PIL import Image, ImageOps
 from io import BytesIO
+from bson import ObjectId
 from flask import abort, send_file, request
 from PyMongoWrapper import F
 
@@ -17,6 +18,7 @@ class IIIFEndPoints(Plugin):
         def _resolve_identifer(identifier: str):
             classname, identifier = identifier.split('-', 1)
             classname = classname.lower()
+            identifier = ObjectId(identifier)
             if identifier == 'mediaitem':
                 return MediaItem.first(F.id == identifier)
             else:

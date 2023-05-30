@@ -133,7 +133,7 @@ class AutoTaggingPlugin(Plugin):
             elif delete:
                 AutoTag.query(F.id.in_([ObjectId(i) for i in ids])).delete()
             elif apply:
-                a = AutoTag.first(F.id == apply)
+                a = AutoTag.first(F.id == ObjectId(apply))
                 if not a:
                     return '', 404
                 cond = a.parsed

@@ -249,7 +249,7 @@ class TwitterDataSource(DataSourceStage):
                 if para:
                     yield para
             except Exception as ex:
-                self.log_exception(f'Failed to import from {url}', ex)
+                self.log_exception(f'Failed to import from {tweet_id}: {url}', ex)
 
     def import_timeline(self, user=''):
         """Import posts of a twitter user, or timeline if blank"""
@@ -325,8 +325,9 @@ class TwitterDataSource(DataSourceStage):
             if pages >= 50:
                 self.logger(f'Reached max pages count, interrupted. {user}')
 
-        except tweepy.TwitterServerError as ex:
+        except tweepy.TweepyException as ex:
             self.log_exception('twitter exception', ex)
+            Paragraph(keywords=['!imported', 'error'], author=user, source={'url': f'https://twitter.com/{user[1:]}/status/---imported---error--'}, content=str(ex)).save()
 
         if user.startswith('@'):
             # save import status
@@ -343,7 +344,7 @@ class TwitterDataSource(DataSourceStage):
             yield from self.import_timeline()
         else:
             for arg in args:
-                if re.search(r'^https://twitter.com/.*/status/.*', arg):
+                if re.search(r'^https://twitter.com/.*?/status/.*', arg):
                     yield from self.import_twiimg(arg)
                 elif arg == '@':
                     unames = sorted(
