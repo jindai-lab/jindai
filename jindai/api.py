@@ -247,7 +247,7 @@ def list_storage(path='', search='', mkdir=''):
     results = None
     if search:
         # path is a query
-        results = list(storage.search(path, '**' + search))
+        results = [storage.stat(r) for r in storage.search(path, '**' + search)]
     else:
         results = storage.statdir(path)
         if not results and storage.exists(path):
