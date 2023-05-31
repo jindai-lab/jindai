@@ -8,7 +8,7 @@ from itertools import chain
 from itertools import count as iter_count
 import string
 
-from PyMongoWrapper import F, QueryExprInterpreter, QueryExprEvaluator
+from PyMongoWrapper import F, QExprInterpreter, QExprEvaluator
 from PyMongoWrapper.dbo import DbObject, DbObjectCollection
 from jindai import PipelineStage, parser, storage
 from jindai.helpers import JSONEncoder, execute_query_expr, safe_import, WordStemmer as _Stemmer
@@ -38,7 +38,7 @@ class FilterOut(PipelineStage):
             @zhs 截止条件
         """
         self.cond = parser.parse(cond)
-        self.ee = QueryExprEvaluator(parser.shortcuts)
+        self.ee = QExprEvaluator(parser.shortcuts)
 
     def resolve(self, paragraph):
         if self.ee.evaluate(self.cond, paragraph):
@@ -48,7 +48,7 @@ class FilterOut(PipelineStage):
 
 class ExecuteCode(PipelineStage):
     """
-    Execute QueryExpr Code
+    Execute QExpr Code
     @zhs 执行查询表达式代码
     """
 
@@ -65,7 +65,7 @@ class ExecuteCode(PipelineStage):
         super().__init__()
         self.code = parser.parse(code)
         self.summarizing = parser.parse(summarizing)
-        self.ee = QueryExprEvaluator(parser.shortcuts)
+        self.ee = QExprEvaluator(parser.shortcuts)
 
     def resolve(self, paragraph):
         self.ee.execute(self.code, {'paragraph': paragraph, 'ctx': self.gctx})
@@ -749,7 +749,7 @@ class FilterArrayField(PipelineStage):
         """
         super().__init__()
         self.field = field
-        self.cond = QueryExprInterpreter('iter', '=').parse(cond)
+        self.cond = QExprInterpreter('iter', '=').parse(cond)
 
     def resolve(self, paragraph: Paragraph) -> Paragraph:
         vals = getattr(paragraph, self.field, [])

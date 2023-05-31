@@ -725,10 +725,10 @@ def help_langs():
     return language_iso639
 
 
-@app.route('/api/help/queryexpr')
-@app.route('/api2/help/queryexpr')
+@app.route('/api/help/qx')
+@app.route('/api2/help/qx')
 @rest(cache=True)
-def help_queryexpr():
+def help_qx():
     """Provide meta data for query expr"""
     return {
         'function_names': list(parser.functions.keys()) + list(ee.implemented_functions),

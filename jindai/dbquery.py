@@ -4,12 +4,12 @@ import json
 import re
 import jieba
 from bson import SON
-from PyMongoWrapper import MongoOperand, F, Fn, Var, QueryExprInterpreter, QueryExpressionError, MongoConcating
+from PyMongoWrapper import MongoOperand, F, Fn, Var, QExprInterpreter, QExprError, MongoConcating
 
 from .models import Paragraph, Term
 
 
-parser = QueryExprInterpreter(
+parser = QExprInterpreter(
     'keywords', '='
 )
 
@@ -78,10 +78,10 @@ def _auto(param):
 
     try:
         return parser.parse(param) or {}
-    except QueryExpressionError as qe:
+    except QExprError as qe:
         try:
             return parser.parse(param + ';')
-        except QueryExpressionError:
+        except QExprError:
             raise qe
         except:
             pass
