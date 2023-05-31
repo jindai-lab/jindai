@@ -2,7 +2,7 @@
 Auto tagging
 @zhs 自动标签
 """
-from PyMongoWrapper import F, Fn, ObjectId, QueryExpressionError, MongoOperand
+from PyMongoWrapper import F, Fn, ObjectId, QExprError, MongoOperand
 from jindai import PipelineStage, Plugin, parser
 from jindai.helpers import rest, execute_query_expr
 from jindai.models import db, Paragraph
@@ -38,7 +38,7 @@ class AutoTag(db.DbObject):
             self._parsed_cond = self.cond
             try:
                 self._parsed = parser.parse(self.cond)
-            except QueryExpressionError:
+            except QExprError:
                 self._parsed = {'__FALSE__': True}
             
             self.parsed_state = json.dumps({'cond': self._parsed_cond, 'parsed': self._parsed})

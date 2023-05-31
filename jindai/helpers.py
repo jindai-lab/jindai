@@ -20,7 +20,7 @@ import werkzeug.wrappers.response
 from bson import ObjectId
 from flask import Response, jsonify, request, send_file, stream_with_context
 from PIL.Image import Image
-from PyMongoWrapper import MongoOperand, QueryExprEvaluator
+from PyMongoWrapper import MongoOperand, QExprEvaluator
 from PyMongoWrapper.dbo import create_dbo_json_decoder, create_dbo_json_encoder
 
 from .config import instance as config
@@ -29,7 +29,7 @@ from .models import Token
 from .storage import instance as storage
 
 
-ee = QueryExprEvaluator()
+ee = QExprEvaluator()
 
 
 def _me(param=''):
