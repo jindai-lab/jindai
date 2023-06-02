@@ -107,6 +107,13 @@ def _wordmatch(text):
     return text
 
 
+def _source(url):
+    if '/' in url:
+        return (F.source.url == url) | (F.source.file == url)
+    else:
+        return F.source.url.regex(re.escape(url)) | F.source.file.regex(re.escape(url))
+
+
 parser.functions.update({
     'expand': lambda: MongoConcating([
         Fn.unwind('$images'),
@@ -129,7 +136,7 @@ parser.functions.update({
     'groupby': _groupby,
     'auto': _auto,
     'term': _term,
-    'source': lambda url: (F.source.url == url) | (F.source.file == url),
+    'source': _source,
     'c': lambda text: F.content.regex(text.strip()),
     'cc': lambda text: F.caption.regex(text.strip()),
     'w': _wordmatch,
