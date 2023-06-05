@@ -3,9 +3,12 @@ import datetime
 import re
 import time
 import json
-from typing import List
+from collections import defaultdict
+import zipfile, csv
+from dateutil.parser import parse as dtparse
 
 import tweepy
+from jindai import storage
 from jindai.common import DictObject
 from jindai.models import MediaItem, Paragraph
 from jindai.pipeline import DataSourceStage
@@ -250,6 +253,42 @@ class TwitterDataSource(DataSourceStage):
                     yield para
             except Exception as ex:
                 self.log_exception(f'Failed to import from {url}', ex)
+                
+        elif url.endswith('.zip'):
+            posts = defaultdict(Paragraph)
+            items = {}
+            zipped = zipfile.ZipFile(storage.open(url))
+            for fileinfo in zipped.filelist:
+                ext = fileinfo.filename.rsplit('.', 1)[1].lower()
+                if ext == 'csv':
+                    csvdata = zipped.read(fileinfo).decode('utf-8').splitlines()[3:]
+                    csvr = csv.reader(csvdata)
+                    columns, *lines = csvr
+                    # ['Tweet date', 'Action date', 'Display name', 'Username', 'Tweet URL', 'Media type', 'Media URL', 'Saved filename', 'Remarks', 'Tweet content', 'Replies', 'Retweets', 'Likes']
+                    for line in lines:
+                        logged = dict(zip(columns, line))
+                        para = posts[logged['Tweet URL']]
+                        if not para.id:
+                            para.content = logged['Tweet content']
+                            para.pdate = dtparse(logged['Tweet date'])
+                            para.author = logged['Username']
+                            para.dataset = self.dataset_name
+                            para.save()
+                        para.images.append(
+                            MediaItem(source={'url': logged['Media URL']}, zipped_file=logged['Saved filename']).save()
+                        )
+                
+            for para in posts:
+                for i in para.images:
+                    zipped_name = items.get(i.zipped_file)
+                    content = zipped.read(zipped_name)
+                    path = storage.default_path(i.id)
+                    with storage.open(path, 'wb') as output:
+                        output.write(content)
+                        self.logger(i.id, len(content))
+                    i.source['file'] = path
+                    i.save()
+            yield from posts.values()
 
     def import_timeline(self, user=''):
         """Import posts of a twitter user, or timeline if blank"""
@@ -343,6 +382,9 @@ class TwitterDataSource(DataSourceStage):
             for arg in args:
                 if re.search(r'^https://twitter.com/.*/status/.*', arg):
                     yield from self.import_twiimg(arg)
+                elif arg.endswith('.zip'):
+                    for path in storage.globs(arg):
+                        yield from self.import_twiimg(path)
                 elif arg == '@':
                     unames = sorted(
                         map(lambda x: f'#{x}', tweepy.Cursor(self.api.get_friend_ids).items()))
