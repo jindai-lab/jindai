@@ -4,6 +4,7 @@ import json
 import os
 from io import BytesIO
 import queue
+from bson import ObjectId
 
 from flask import Response, jsonify, request, send_file, stream_with_context
 from PyMongoWrapper import F
@@ -65,7 +66,7 @@ class TaskQueue:
                 str: Queued job key
             """
             if task is None:
-                task_dbo = TaskDBO.first(F.id == task_id)
+                task_dbo = TaskDBO.first(F.id == ObjectId(task_id))
             else:
                 task_dbo = TaskDBO().fill_dict(task)
 

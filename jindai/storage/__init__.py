@@ -392,7 +392,7 @@ class Storage:
         """
         return self._query_until('move', src, False, dst=dst)
 
-    def globs(self, patterns: Union[list, str, tuple]):
+    def globs(self, patterns: Union[list, str, tuple], expand_zips=True):
         """Get expanded paths according to wildcards patterns
 
         :param patterns: patterns for looking up files.
@@ -438,7 +438,7 @@ class Storage:
                         continue
                 continue
             
-            if pattern.endswith(('.zip', '.epub')):
+            if expand_zips and pattern.endswith(('.zip', '.epub')):
                 try:
                     with zipfile.ZipFile(self.open(pattern, 'rb')) as zfile:
                         for item in zfile.filelist:

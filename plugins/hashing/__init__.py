@@ -401,7 +401,7 @@ class Hashing(HashingBase):
             return storage.serve_file(open(os.path.join(os.path.dirname(__file__), 'jquery.min.js'), 'rb'))
 
     def handle_filter_check(self, context):
-        image_item = MediaItem.first(F.id == context.iid)
+        image_item = MediaItem.first(F.id == ObjectId(context.iid))
         
         if not image_item.dhash:
             ImageHash().resolve_image(image_item, None)

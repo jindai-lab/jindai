@@ -11,7 +11,7 @@ from typing import Callable
 from flask import Flask, Response
 
 from .config import instance as config
-from .helpers import rest
+from .helpers import rest, parser
 from .storage import instance as storage
 from .pipeline import Pipeline, PipelineStage
 
@@ -67,7 +67,8 @@ class Plugin:
             if isinstance(cls, type) and issubclass(cls, PipelineStage) \
                     and cls is not PipelineStage:
                 Pipeline.ctx[cls.__name__] = cls
-
+                parser.functions[f'PipelineStage{cls.__name__}'] = lambda arg: Pipeline.instantiate(cls.__name__, arg).resolve(arg['paragraph'])
+                
 
 class PluginManager:
     """Plugin manager"""

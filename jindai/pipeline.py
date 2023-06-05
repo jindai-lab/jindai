@@ -286,6 +286,13 @@ class Pipeline:
         for k in toremove:
             del args[k]
 
+    @staticmethod
+    def instantiate(stage_name: str, args: Dict):
+        if args.pop('disabled', False): return
+        stage_type = Pipeline.ctx[stage_name]
+        Pipeline.ensure_args(stage_type, args)
+        return stage_type(**args)
+
     def __init__(self, stages: List[Union[Tuple[str, Dict], List, Dict, PipelineStage]],
                  logger: Callable = print, verbose = False):
         """Initialize the pipeline
@@ -313,12 +320,8 @@ class Pipeline:
 
                 if isinstance(stage, (tuple, list)) and len(stage) == 2 and Pipeline.ctx:
                     name, kwargs = stage
-                    if kwargs.pop('disabled', False):
-                        continue
-
-                    stage_type = Pipeline.ctx[name]
-                    Pipeline.ensure_args(stage_type, kwargs)
-                    stage = stage_type(**kwargs)
+                    stage = Pipeline.instantiate(name, kwargs)
+                    if stage is None: continue
 
                 assert isinstance(
                     stage, PipelineStage), f'unknown format for {stage}'
