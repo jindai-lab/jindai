@@ -125,25 +125,24 @@ class Condition(FlowControlStage):
     def summarize(self, result):
         self.iftrue.summarize(result)
         self.iffalse.summarize(result)
-        
+
 
 class CallTask(FlowControlStage):
     """Call to other task
     @zhs 调用其他任务"""
 
-    def __init__(self, task, pipeline_only=False, params=''):
+    def __init__(self, task, skip=0, params=''):
         """
         Args:
             task (TASK): Task ID
                 @zhs 任务ID
-            pipeline_only (bool): Join the pipeline in the current pipeline 
-                @zhs 仅调用任务中的处理流程，若为 false，则于 summarize 阶段完整调用该任务
+            skip (int): Skip first (n) stages in pipeline
+                @zhs 跳过处理流程中的前 n 个阶段 
             params (QUERY): Override parameters in the task
                 @zhs 设置任务中各处理流程参数
         """
-        task = TaskDBO.first(F.id == task)
+        task = TaskDBO.first(F.id == ObjectId(task))
         assert task, f'No specified task: {task}'
-        self.pipeline_only = pipeline_only
         if params:
             params = parser.parse(params)
             for key, val in params.items():
@@ -164,21 +163,41 @@ class CallTask(FlowControlStage):
                 target[sec] = val
 
         self._pipelines = []
-        self.task = Task.from_dbo(task)
-        if self.pipeline_only:
-            self.pipeline = self.task.pipeline
+        
+        task = Task.from_dbo(task)
+        self.pipeline = task.pipeline
+        self.pipeline.stages = self.pipeline.stages[skip:]
 
         super().__init__()
 
     def flow(self, paragraph, gctx):
         self.gctx = gctx
-        if self.pipeline_only and self.pipeline.stages:
+        if self.pipeline.stages:
             yield paragraph, self.pipeline.stages[0]
         else:
             yield paragraph, self.next
 
     def summarize(self, _):
-        if self.pipeline_only:
-            return self.pipeline.summarize()
-        else:
-            return self.task.execute()
+        return self.pipeline.summarize()
+
+
+class RunTask(CallTask):
+    """Run task at summarization phrase
+    @zhs 在收尾阶段运行任务"""
+
+    def __init__(self, task, params=''):
+        """
+        Args:
+            task (TASK): Task ID
+                @zhs 任务ID
+            params (QUERY): Override parameters in the task
+                @zhs 设置任务中各处理流程参数
+        """
+        super().__init__(task, 0, params)
+
+    def flow(self, paragraph, gctx):
+        self.gctx = gctx
+        yield paragraph, self.next
+
+    def summarize(self, _):
+        return self.task.execute()

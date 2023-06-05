@@ -146,7 +146,7 @@ class TwitterDataSource(DataSourceStage):
                     proxy=proxy)
         self.skip_existent = skip_existent
         self.imported = set()
-
+        
     def parse_tweet(self, tweet, skip_existent=None) -> Paragraph:
         """Parse twitter status
         Args:
@@ -156,81 +156,83 @@ class TwitterDataSource(DataSourceStage):
         """
         if skip_existent is None:
             skip_existent = self.skip_existent
+            
+        if isinstance(tweet, tweepy.Tweet):
+            if tweet.id in self.imported:
+                return
+            
+            # get media entities
+            media_entities = [
+                DictObject(media)
+                for media in getattr(tweet, 'extended_entities', tweet.entities).get('media', [])
+            ]
+            if not media_entities and self.media_only:
+                return                
+            
+            self.imported.add(tweet.id)
 
-        if tweet.id in self.imported:
-            return
-        self.imported.add(tweet.id)
+            tweet_url = f'https://twitter.com/{tweet.user.screen_name}/status/{tweet.id}'
+            # get author info
+            author = '@' + tweet.user.screen_name
+            if not tweet.text:
+                tweet.text = tweet.full_text or ''
 
-        tweet_url = f'https://twitter.com/{tweet.user.screen_name}/status/{tweet.id}'
+            para = Paragraph.get(
+                F.tweet_id == f'{tweet.id}', tweet_id=f'{tweet.id}', author=author, content=tweet.text)
+            para.source = {'url': tweet_url}
 
-        # get author info
-        author = '@' + tweet.user.screen_name
-        if not tweet.text:
-            tweet.text = tweet.full_text or ''
-        if tweet.text.startswith('RT '):
-            author = re.match(r'^RT (@[\w_-]*)', tweet.text)
-            if author:
-                author = author.group(1)
-            else:
-                author = ''
+            self.logger(tweet_url, 'existent' if para.id else '')
 
-        # get media entities
-        media_entities = [
-            DictObject(media)
-            for media in getattr(tweet, 'extended_entities', tweet.entities).get('media', [])
-        ]
-        if not media_entities and self.media_only:
-            return
+            if skip_existent and para.id:
+                return
+        
+            for media in media_entities:
+                if media.video_info:
+                    if not self.allow_video:
+                        continue  # skip videos
+                    url = media.video_info['variants'][-1]['url'].split('?')[
+                        0]
+                    if url.endswith('.m3u8'):
+                        self.logger('found m3u8, pass', url)
+                        continue
+                else:
+                    url = media.media_url_https
 
-        para = Paragraph.get(
-            F.tweet_id == f'{tweet.id}', tweet_id=f'{tweet.id}', author=author)
-        self.logger(tweet_url, 'existent' if para.id else '')
+                if url:
+                    item = MediaItem.get(
+                        url, item_type='video' if media.video_info else 'image')
 
-        if skip_existent and para.id:
-            return
+                    if item.id and self.skip_existent:
+                        continue
 
+                    if not item.id:
+                        item.save()
+                        self.logger('... add new item', url)
+                    para.images.append(item)  
+        
+        if isinstance(tweet, Paragraph):
+            para = tweet
+
+        # update paragraph fields
+        if rt_author := re.match(r'^RT (@[\w_-]*)', para.content):
+            para.author = rt_author.group(1)
+        
+        tweet_id = int(re.search(r'/status/(\d+)$', para.source['url']).group(1))
+        
         para.dataset = self.dataset_name
         para.pdate = datetime.datetime.utcfromtimestamp(
-            timestamp_from_twitter_id(tweet.id))
-        para.source = {'url': tweet_url}
-        para.tweet_id = f'{tweet.id}'
+            timestamp_from_twitter_id(tweet_id))
+        para.tweet_id = f'{tweet_id}'
         para.images = []
 
-        if para.id:
-            self.logger('... matched existent paragraph', para.id)
-
-        for media in media_entities:
-            if media.video_info:
-                if not self.allow_video:
-                    continue  # skip videos
-                url = media.video_info['variants'][-1]['url'].split('?')[
-                    0]
-                if url.endswith('.m3u8'):
-                    self.logger('found m3u8, pass', url)
-                    continue
-            else:
-                url = media.media_url_https
-
-            if url:
-                item = MediaItem.get(
-                    url, item_type='video' if media.video_info else 'image')
-
-                if item.id and self.skip_existent:
-                    continue
-
-                if not item.id:
-                    item.save()
-                    self.logger('... add new item', url)
-                para.images.append(item)
-
-        text = re.sub(r'https?://[^\s]+', '', tweet.text).strip()
+        # wash content and keywords
+        text = re.sub(r'https?://[^\s]+', '', para.content).strip()
         para.keywords += [t.strip().strip('#') for t in re.findall(
-            r'@[a-z_A-Z0-9]+', text) + re.findall(r'[#\s][^\s@]{,10}', text)] + [author]
+            r'@[a-z_A-Z0-9]+', text) + re.findall(r'[#\s][^\s@]{,10}', text)] + [para.author]
         para.keywords = [_ for _ in para.keywords if _ and _ not in STOPCHARS]
         para.content = text
         para.save()
 
-        assert len(para.images) == len(media_entities) or len(para.images) == 0
         self.logger(len(para.images), 'media items')
 
         return para
@@ -252,52 +254,57 @@ class TwitterDataSource(DataSourceStage):
                 if para:
                     yield para
             except Exception as ex:
-                self.log_exception(f'Failed to import from {url}', ex)
+                self.log_exception(f'Failed to import from {tweet_id}: {url}', ex)
                 
         elif url.endswith('.zip'):
-            posts = defaultdict(Paragraph)
-            items = {}
+            posts = {}
             zipped = zipfile.ZipFile(storage.open(url))
             for fileinfo in zipped.filelist:
                 ext = fileinfo.filename.rsplit('.', 1)[1].lower()
                 if ext == 'csv':
-                    csvdata = zipped.read(fileinfo).decode('utf-8').splitlines()[3:]
+                    csvdata = zipped.read(fileinfo).decode('utf-8').splitlines()[5:]
                     csvr = csv.reader(csvdata)
                     columns, *lines = csvr
                     # ['Tweet date', 'Action date', 'Display name', 'Username', 'Tweet URL', 'Media type', 'Media URL', 'Saved filename', 'Remarks', 'Tweet content', 'Replies', 'Retweets', 'Likes']
                     for line in lines:
                         logged = dict(zip(columns, line))
-                        para = posts[logged['Tweet URL']]
+                        url = logged['Tweet URL']
+                        self.logger(url)
+                        if url not in posts:
+                            posts[url] = Paragraph.get(url, dataset=self.dataset_name, author=logged['Username'], content=logged['Tweet content'])
+                        para = posts[url]
                         if not para.id:
-                            para.content = logged['Tweet content']
                             para.pdate = dtparse(logged['Tweet date'])
-                            para.author = logged['Username']
-                            para.dataset = self.dataset_name
+                            self.parse_tweet(para)
                             para.save()
-                        para.images.append(
-                            MediaItem(source={'url': logged['Media URL']}, zipped_file=logged['Saved filename']).save()
-                        )
+                        if logged['Saved filename']:
+                            i = MediaItem.get(logged['Media URL'], zipped_file=logged['Saved filename'], item_type=logged['Media type'].lower())
+                            i.save()
+                            self.logger('......', i.source['url'], i.zipped_file)
+                            para.images.append(i)
                 
-            for para in posts:
+            for para in posts.values():
                 for i in para.images:
-                    zipped_name = items.get(i.zipped_file)
-                    content = zipped.read(zipped_name)
-                    path = storage.default_path(i.id)
-                    with storage.open(path, 'wb') as output:
-                        output.write(content)
-                        self.logger(i.id, len(content))
-                    i.source['file'] = path
+                    if i.source.get('file'):
+                        self.logger(i.id, 'already stored, skip.')
+                        continue
+                    try:
+                        content = zipped.read(i.zipped_file)
+                        path = storage.default_path(i.id)
+                        with storage.open(path, 'wb') as output:
+                            output.write(content)
+                            self.logger(i.id, len(content))
+                        i.source = {'file': path, 'url': i.source['url']}
+                    except KeyError:
+                        self.logger(i.zipped_file, 'not found')
                     i.save()
-            yield from posts.values()
+                yield para
 
     def import_timeline(self, user=''):
         """Import posts of a twitter user, or timeline if blank"""
 
         params = dict(count=100,
                       exclude_replies=True)
-
-        if user.startswith('@ '):
-            user = '@' + user[2:]
 
         if user and user.startswith('@'):
             def source(max_id):
@@ -367,8 +374,14 @@ class TwitterDataSource(DataSourceStage):
             if pages >= 50:
                 self.logger(f'Reached max pages count, interrupted. {user}')
 
-        except tweepy.TwitterServerError as ex:
+        except tweepy.TweepyException as ex:
             self.log_exception('twitter exception', ex)
+            Paragraph(keywords=['!imported', 'error'], author=user, source={'url': f'https://twitter.com/{user[1:]}/status/---imported---error--'}, content=str(ex)).save()
+
+        if user.startswith('@'):
+            # save import status
+            Paragraph.query(F.keywords == '!imported', F.author == user).delete()
+            Paragraph(keywords=['!imported'], author=user, source={'url': f'https://twitter.com/{user[1:]}/status/---imported---'}).save()
 
     def before_fetch(self, instance):
         instance.imported_authors = self.imported_authors
@@ -380,10 +393,12 @@ class TwitterDataSource(DataSourceStage):
             yield from self.import_timeline()
         else:
             for arg in args:
-                if re.search(r'^https://twitter.com/.*/status/.*', arg):
+                if re.search(r'^https://twitter.com/.*?/status/.*', arg):
                     yield from self.import_twiimg(arg)
                 elif arg.endswith('.zip'):
-                    for path in storage.globs(arg):
+                    self.logger('import from zip:', arg)
+                    for path in storage.globs(arg, False):
+                        self.logger('...', path)
                         yield from self.import_twiimg(path)
                 elif arg == '@':
                     unames = sorted(
@@ -392,9 +407,9 @@ class TwitterDataSource(DataSourceStage):
                         self.logger(u)
                         yield from self.import_timeline(u)
                 else:
-                    if m := re.match(r'^https://twitter.com/([^/]*?)(/media)?', arg):
-                        arg = '@' + m.group(1)
-                        if m.group(2):
+                    if matcher := re.match(r'^https://twitter.com/([^/]*?)(/media)?', arg):
+                        arg = '@' + matcher.group(1)
+                        if matcher.group(2):
                             self.media_only = True
                     self.imported_authors.add(arg)
                     yield from self.import_timeline(arg)

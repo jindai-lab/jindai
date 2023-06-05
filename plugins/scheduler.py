@@ -23,7 +23,7 @@ class ScheduledTask:
     """Scheduled task"""
 
     def __init__(self, pmanager, task_id: str):
-        self.task_dbo = TaskDBO.first(F.id == task_id)
+        self.task_dbo = TaskDBO.first(F.id == ObjectId(task_id))
         self.key = ObjectId()
         self.pmanager = pmanager
 

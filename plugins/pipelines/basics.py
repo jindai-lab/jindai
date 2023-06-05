@@ -1,6 +1,5 @@
 """基本操作"""
 
-import json
 import re
 import statistics
 from collections import defaultdict, deque
@@ -9,7 +8,7 @@ from itertools import chain
 from itertools import count as iter_count
 import string
 
-from PyMongoWrapper import F, QueryExprInterpreter, ObjectId
+from PyMongoWrapper import F, QExprInterpreter, QExprEvaluator
 from PyMongoWrapper.dbo import DbObject, DbObjectCollection
 from jindai import PipelineStage, parser, storage
 from jindai.helpers import JSONEncoder, execute_query_expr, safe_import, WordStemmer as _Stemmer
@@ -24,6 +23,56 @@ class Passthrough(PipelineStage):
 
     def resolve(self, paragraph: Paragraph) -> Paragraph:
         return paragraph
+    
+
+class FilterOut(PipelineStage):
+    """
+    Filter Out
+    @zhs 截止当前处理的段落
+    """
+
+    def __init__(self, cond='true'):
+        """
+        Arg:
+            cond (QUERY): Condition
+            @zhs 截止条件
+        """
+        self.cond = parser.parse(cond)
+        self.ee = QExprEvaluator(parser.shortcuts)
+
+    def resolve(self, paragraph):
+        if self.ee.evaluate(self.cond, paragraph):
+            return
+        return paragraph
+
+
+class ExecuteCode(PipelineStage):
+    """
+    Execute QExpr Code
+    @zhs 执行查询表达式代码
+    """
+
+    def __init__(self, code, summarizing):
+        """
+        Args:
+            code (QUERY): Code to execute when resolving paragraph.
+                Use $paragraph to access to the current paragraph,
+                and $ctx to access the global context.
+                @zhs 处理段落时执行的代码
+            summarizing (QUERY): Code to execute when summarizing.
+                @zhs 总结阶段执行的代码
+        """
+        super().__init__()
+        self.code = parser.parse(code)
+        self.summarizing = parser.parse(summarizing)
+        self.ee = QExprEvaluator(parser.shortcuts)
+
+    def resolve(self, paragraph):
+        self.ee.execute(self.code, {'paragraph': paragraph, 'ctx': self.gctx})
+        return paragraph
+    
+    def summarize(self, result):
+        return self.ee.execute(self.summarizing, {'result': result, 'ctx': self.gctx})
 
 
 class TradToSimpChinese(PipelineStage):
@@ -320,7 +369,7 @@ class AccumulateParagraphs(PipelineStage):
         self.paragraphs = deque()
 
     def resolve(self, paragraph: Paragraph):
-        self.paragraphs.append(paragraph)
+        self.paragraphs.append(paragraph.as_dict(expand=True))
 
     def summarize(self, *_):
         return list(self.paragraphs)
@@ -407,21 +456,13 @@ class ArrayField(PipelineStage):
                 @zhs 字段名
             push (bool): push or delete
                 @zhs 添加或删除
-            elements (str):
+            elements (LINES):
                 Element to push or delete, use $<field> or constants
                 @zhs 添加或删除的元素，每行一个 $ 开头的字段名或常量
         """
         super().__init__()
         self.field = field
-        self.elements = []
-        try:
-            elements = parser.parse(elements)
-            assert isinstance(elements, list)
-            self.elements = elements
-        except Exception:
-            for ele in elements.split('\n'):
-                ele = parser.parse(ele)
-                self.elements.append(ele)
+        self.elements = elements.split('\n')
         self.push = push
 
     def resolve(self, paragraph: Paragraph) -> Paragraph:
@@ -430,7 +471,8 @@ class ArrayField(PipelineStage):
         if not isinstance(paragraph[self.field], (list, DbObjectCollection)):
             return paragraph
         for ele in self.elements:
-            ele = execute_query_expr(ele, paragraph)
+            if '$' in ele:
+                ele = execute_query_expr(parser.parse(ele), paragraph)
             if self.push:
                 paragraph[self.field].append(ele)
             else:
@@ -707,7 +749,7 @@ class FilterArrayField(PipelineStage):
         """
         super().__init__()
         self.field = field
-        self.cond = QueryExprInterpreter('iter', '=').parse(cond)
+        self.cond = QExprInterpreter('iter', '=').parse(cond)
 
     def resolve(self, paragraph: Paragraph) -> Paragraph:
         vals = getattr(paragraph, self.field, [])
