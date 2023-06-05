@@ -284,6 +284,7 @@ class TwitterDataSource(DataSourceStage):
                             para.images.append(i)
                 
             for para in posts.values():
+                para.save()
                 for i in para.images:
                     if i.source.get('file'):
                         self.logger(i.id, 'already stored, skip.')
