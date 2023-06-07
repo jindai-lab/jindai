@@ -15,6 +15,7 @@ from tempfile import mktemp
 from typing import Dict, Iterable
 
 import click
+import tabulate
 import h5py
 import numpy as np
 import urllib3
@@ -725,16 +726,8 @@ def call_ipython():
     get_items = _get_items
 
     def q(query_str, model=''):
-        from jindai import Paragraph, parser
-
-        if isinstance(model, str):
-            model = Paragraph.get_coll(model)
-
-        q = parser.parse(query_str)
-        if isinstance(q, list):
-            return model.aggregate(q)
-
-        return model.query(q)
+        from jindai.dbquery import DBQuery
+        return DBQuery('? ' + query_str, model, raw=True).fetch()
 
     def run(task_name):
         dbo = TaskDBO.first(
@@ -761,6 +754,9 @@ def call_ipython():
             for obj in zfile.open(collection):
                 obj = json.loads(obj)
                 yield DictObject(obj)
+                
+    def qv(query):
+        print(tabulate.tabulate(q(query), headers='keys'))
                 
     ns = dict(jindai.__dict__)
     ns.update(**locals())

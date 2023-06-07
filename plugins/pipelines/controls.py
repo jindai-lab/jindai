@@ -4,7 +4,7 @@
 
 from PyMongoWrapper import F
 from jindai import PipelineStage, Pipeline, Task, parser
-from jindai.helpers import execute_query_expr
+from jindai.helpers import evaluateqx
 from jindai.models import TaskDBO
 
 
@@ -79,18 +79,49 @@ class RepeatWhile(FlowControlStage):
         if paragraph[self.times_key] is None:
             paragraph[self.times_key] = 0
 
-        condition_satisfied = execute_query_expr(self.cond, paragraph)
+        condition_satisfied = evaluateqx(self.cond, paragraph)
         paragraph[self.times_key] += 1
 
         if condition_satisfied and self.pipeline.stages:
             self.pipeline.stages[-1].next = self
             yield paragraph, self.pipeline.stages[0]
         else:
-            paragraph[self.times_key] = None
+            del paragraph[self.times_key]
             yield paragraph, self.next
 
     def summarize(self, result):
         return self.pipeline.summarize(result)
+
+
+class ForEach(FlowControlStage):
+    """For loops
+    @zhs 枚举循环"""
+    
+    def __init__(self, pipeline, as_name, input_value) -> None:
+        """
+        Args:
+            pipeline (pipeline): Loop pipeline
+                @zhs 要重复执行的流程
+            as_name (int): Variable name
+                @zhs 枚举的变量名
+            input_value (QUERY): Value to iterate
+                @zhs 要枚举的范围
+        """
+        self.as_name = as_name
+        self.input_value = parser.parse(input_value)
+        self.pipeline = Pipeline(pipeline, self.logger)
+        super().__init__()
+        
+    def flow(self, paragraph, gctx):
+        self.gctx = gctx
+        input_value = evaluateqx(self.input_value, paragraph)
+        
+        for iterval in input_value:
+            paragraph[self.as_name] = iterval
+            yield paragraph, self.pipeline.stages[0]
+        
+        del paragraph[self.as_name]
+        yield paragraph, self.name
 
 
 class Condition(FlowControlStage):
@@ -115,7 +146,7 @@ class Condition(FlowControlStage):
     def flow(self, paragraph, gctx):
         self.gctx = gctx
         pipeline = self.iftrue
-        if not execute_query_expr(self.cond, paragraph):
+        if not evaluateqx(self.cond, paragraph):
             pipeline = self.iffalse
         if pipeline.stages:
             yield paragraph, pipeline.stages[0]

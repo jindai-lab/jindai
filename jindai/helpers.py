@@ -214,7 +214,7 @@ def serve_proxy(server, path):
 RE_DIGITS = re.compile(r'[\+\-]?\d+')
 
 
-def execute_query_expr(expr, obj):
+def evaluateqx(expr, obj):
     """Check according to parsed query expression
 
     :param parsed: Query Expression

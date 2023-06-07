@@ -11,7 +11,7 @@ import string
 from PyMongoWrapper import F, QExprInterpreter, QExprEvaluator
 from PyMongoWrapper.dbo import DbObject, DbObjectCollection
 from jindai import PipelineStage, parser, storage
-from jindai.helpers import JSONEncoder, execute_query_expr, safe_import, WordStemmer as _Stemmer
+from jindai.helpers import JSONEncoder, evaluateqx, safe_import, WordStemmer as _Stemmer
 from jindai.models import Dataset, Paragraph, db
 
 
@@ -472,7 +472,7 @@ class ArrayField(PipelineStage):
             return paragraph
         for ele in self.elements:
             if '$' in ele:
-                ele = execute_query_expr(parser.parse(ele), paragraph)
+                ele = evaluateqx(parser.parse(ele), paragraph)
             if self.push:
                 paragraph[self.field].append(ele)
             else:
@@ -729,7 +729,7 @@ class FieldAssignment(PipelineStage):
         if self.delete_field:
             del paragraph[self.field]
         else:
-            paragraph[self.field] = execute_query_expr(self.value, paragraph)
+            paragraph[self.field] = evaluateqx(self.value, paragraph)
         return paragraph
 
 
@@ -759,7 +759,7 @@ class FilterArrayField(PipelineStage):
         new_vals = []
         for val in vals:
             paragraph.iter = val
-            if execute_query_expr(self.cond, paragraph):
+            if evaluateqx(self.cond, paragraph):
                 new_vals.append(val)
 
         if hasattr(paragraph, 'iter'):
@@ -845,7 +845,7 @@ class FieldIncresement(PipelineStage):
 
     def resolve(self, paragraph: Paragraph):
         val = getattr(paragraph, self.field)
-        val += execute_query_expr(self.inc_value, paragraph)
+        val += evaluateqx(self.inc_value, paragraph)
         setattr(paragraph, val)
         return paragraph
 
@@ -966,9 +966,9 @@ class ConditionalAssignment(PipelineStage):
 
     def resolve(self, paragraph: Paragraph):
         for cond, val in self.conds:
-            if execute_query_expr(cond, paragraph):
+            if evaluateqx(cond, paragraph):
                 setattr(paragraph, self.field,
-                        execute_query_expr(val, paragraph))
+                        evaluateqx(val, paragraph))
                 break
         return paragraph
 

@@ -18,7 +18,7 @@ from PyMongoWrapper import F, ObjectId
 from jindai import *
 from jindai.models import MediaItem, Paragraph
 from jindai.common import DictObject, CacheDict
-from jindai.helpers import execute_query_expr
+from jindai.helpers import evaluateqx
 from plugins.imageproc import MediaItemStage
 
 ImageFile.LOAD_TRUNCATED_IMAGES = True
@@ -434,7 +434,7 @@ class Hashing(HashingBase):
         
         for paragraph in dbq.fetch_all_rs():
             fetched += 1
-            if execute_query_expr(cond, paragraph):
+            if evaluateqx(cond, paragraph):
                 yield from prevs
                 yield paragraph
                 total += len(prevs) + 1
