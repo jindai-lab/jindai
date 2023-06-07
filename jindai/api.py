@@ -945,6 +945,12 @@ def quick_task(query='', pipeline='', raw=False, mongocollection=''):
     return _expand_results(results)
 
 
+@app.route('/api/qx', methods=['POST'])
+@rest()
+def qx_parse(query=''):
+    return parser.parse(query)
+
+
 @app.route('/api/admin/db', methods=['POST'])
 @app.route('/api2/admin/db', methods=['POST'])
 @rest(role='admin')

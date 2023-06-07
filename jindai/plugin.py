@@ -67,7 +67,7 @@ class Plugin:
             if isinstance(cls, type) and issubclass(cls, PipelineStage) \
                     and cls is not PipelineStage:
                 Pipeline.ctx[cls.__name__] = cls
-                parser.functions[f'PipelineStage{cls.__name__}'] = lambda arg: Pipeline.instantiate(cls.__name__, arg).resolve(arg['paragraph'])
+                parser.functions[f'{cls.__name__}_'] = lambda arg: Pipeline.instantiate(cls.__name__, arg).resolve(arg['paragraph'])
                 
 
 class PluginManager:

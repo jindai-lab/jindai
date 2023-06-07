@@ -4,7 +4,7 @@ Auto tagging
 """
 from PyMongoWrapper import F, Fn, ObjectId, QExprError, MongoOperand
 from jindai import PipelineStage, Plugin, parser
-from jindai.helpers import rest, execute_query_expr
+from jindai.helpers import rest, evaluateqx
 from jindai.models import db, Paragraph
 import json
 
@@ -51,7 +51,7 @@ class AutoTag(db.DbObject):
 def apply_tag(parsed, tag, paragraph):
     modified = False
     try:
-        if execute_query_expr(parsed, paragraph):
+        if evaluateqx(parsed, paragraph):
             if tag.startswith('~') and tag[1:] in paragraph.keywords:
                 paragraph.keywords.remove(tag[1:])
                 modified = True
@@ -109,8 +109,8 @@ class AddAutoTag(PipelineStage):
         self.tag = parser.parse(tag)
 
     def resolve(self, paragraph):
-        cond = execute_query_expr(self.cond, paragraph)
-        tag = execute_query_expr(self.tag, paragraph)
+        cond = evaluateqx(self.cond, paragraph)
+        tag = evaluateqx(self.tag, paragraph)
         if not AutoTag.first(F.cond == cond, F.tag == tag):
             AutoTag(cond, tag=tag).save()
 
