@@ -16,11 +16,12 @@ class PipelineStage:
     that process processing stages should be stateless as far as possible.
     """
 
-    def __init__(self) -> None:
+    def __init__(self, name='') -> None:
         self._logger = lambda *x: print(*x, file=sys.stderr)
         self.next = None
         self.gctx = {}
         self.verbose = False
+        self.instance_name = name
 
     @classmethod
     def get_spec(cls):
@@ -141,7 +142,7 @@ class PipelineStage:
         :return: logging method
         :rtype: Callable
         """
-        return lambda *x: self._logger(self.__class__.__name__, '|', *x)
+        return lambda *x: self._logger(self.instance_name or self.__class__.__name__, '|', *x)
 
     @logger.setter
     def logger(self, val: Callable):
@@ -310,6 +311,8 @@ class Pipeline:
         self.logger = logger
         self.verbose = verbose
         
+        counter = defaultdict(int)
+        
         if stages:
             for stage in stages:
                 if isinstance(stage, dict):
@@ -320,8 +323,11 @@ class Pipeline:
 
                 if isinstance(stage, (tuple, list)) and len(stage) == 2 and Pipeline.ctx:
                     name, kwargs = stage
+                    assert name in Pipeline.ctx, f'Unknown stage: {name}'
+                    counter[name] += 1
                     stage = Pipeline.instantiate(name, kwargs)
                     if stage is None: continue
+                    stage.instance_name = f'{name}{counter[name]}'
 
                 assert isinstance(
                     stage, PipelineStage), f'unknown format for {stage}'
