@@ -9,6 +9,7 @@ click
 tqdm
 pdf2image
 pyyaml
+tabulate
 inotify
 requests
 requests-oauthlib
