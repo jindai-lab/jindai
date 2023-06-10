@@ -275,7 +275,10 @@ class TwitterDataSource(DataSourceStage):
                         para = posts[url]
                         if not para.id:
                             para.pdate = dtparse(logged['Tweet date'])
-                            self.parse_tweet(para)
+                            para = self.parse_tweet(para)
+                            if not para:
+                                del posts[url]
+                                continue
                             para.save()
                         if logged['Saved filename']:
                             i = MediaItem.get(logged['Media URL'], zipped_file=logged['Saved filename'], item_type=logged['Media type'].lower())
