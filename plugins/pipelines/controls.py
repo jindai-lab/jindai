@@ -21,19 +21,19 @@ class FlowControlStage(PipelineStage):
     @property
     def logger(self):
         """Logger"""
-        return lambda *x: self._logger(self.__class__.__name__, '|', *x)
+        return lambda *x: self._logger(self.instance_name or self.__class__.__name__, '|', *x)
 
     @logger.setter
     def logger(self, val):
         self._logger = val
         for pipeline in self._pipelines:
             pipeline.logger = val
-            
+
     @property
     def verbose(self):
         """Print out debug info when verbose is set"""
         return self._verbose
-    
+
     @verbose.setter
     def verbose(self, val):
         self._verbose = val
@@ -79,7 +79,12 @@ class RepeatWhile(FlowControlStage):
         if paragraph[self.times_key] is None:
             paragraph[self.times_key] = 0
 
-        condition_satisfied = evaluateqx(self.cond, paragraph)
+        try:
+            condition_satisfied = evaluateqx(self.cond, paragraph)
+        except Exception as ex:
+            self.log_exception('failed to evaluate qx', ex)
+            return
+
         paragraph[self.times_key] += 1
 
         if condition_satisfied and self.pipeline.stages:
@@ -96,7 +101,7 @@ class RepeatWhile(FlowControlStage):
 class ForEach(FlowControlStage):
     """For loops
     @zhs 枚举循环"""
-    
+
     def __init__(self, pipeline, as_name, input_value) -> None:
         """
         Args:
@@ -111,17 +116,21 @@ class ForEach(FlowControlStage):
         self.input_value = parser.parse(input_value)
         self.pipeline = Pipeline(pipeline, self.logger)
         super().__init__()
-        
+
     def flow(self, paragraph, gctx):
         self.gctx = gctx
-        input_value = evaluateqx(self.input_value, paragraph)
-        
+        try:
+            input_value = evaluateqx(self.input_value, paragraph)
+        except Exception as ex:
+            self.log_exception('failed to evaluate qx', ex)
+            return
+
         for iterval in input_value:
             paragraph[self.as_name] = iterval
             yield paragraph, self.pipeline.stages[0]
-        
+
         del paragraph[self.as_name]
-        yield paragraph, self.name
+        yield paragraph, self.next
 
 
 class Condition(FlowControlStage):
@@ -146,13 +155,18 @@ class Condition(FlowControlStage):
     def flow(self, paragraph, gctx):
         self.gctx = gctx
         pipeline = self.iftrue
-        if not evaluateqx(self.cond, paragraph):
-            pipeline = self.iffalse
+        try:
+            if not evaluateqx(self.cond, paragraph):
+                pipeline = self.iffalse
+        except Exception as ex:
+            self.log_exception('failed to evaluate qx', ex)
+            return
+
         if pipeline.stages:
             yield paragraph, pipeline.stages[0]
         else:
             yield paragraph, self.next
-    
+
     def summarize(self, result):
         self.iftrue.summarize(result)
         self.iffalse.summarize(result)
@@ -194,7 +208,7 @@ class CallTask(FlowControlStage):
                 target[sec] = val
 
         self._pipelines = []
-        
+
         task = Task.from_dbo(task)
         self.pipeline = task.pipeline
         self.pipeline.stages = self.pipeline.stages[skip:]
