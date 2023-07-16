@@ -14,29 +14,29 @@ parser = QExprInterpreter(
 )
 
 
-def _groupby(_id='', images=None, count=None, **params):
+def _groupby(_id='', count=None, **params):
     field_name = re.sub(r'[{}"\']', '_', str(_id).strip('$'))
 
-    join_images = False
-    if images == 1:
-        params['images'] = Fn.push('$images')
-        join_images = True
-    elif images is not None:
-        params['images'] = images
+    joins = []
+    for k in params:
+        if params[k] == 1:
+            joins.append(k)
+            params[k] = Fn.push('$' + k)
+
     if count is None:
         params['count'] = Fn.sum(Fn.size('$images'))
-
+        
     stages = [
         Fn.group(orig=Fn.first('$$ROOT'), _id=_id, **params),
         Fn.replaceRoot(newRoot=Fn.mergeObjects(
             '$orig', {'group_id': '$_id'}, {k: f'${k}' for k in params if k != '_id'})),
     ]
 
-    if join_images:
+    for k in joins:
         stages.append(Fn.addFields(
             group_field=field_name,
             images=Fn.reduce(
-                input='$images',
+                input='$' + k,
                 initialValue=[],
                 in_=Fn.concatArrays('$$value', '$$this')
             )
