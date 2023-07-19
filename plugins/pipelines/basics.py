@@ -700,7 +700,30 @@ class RegexFilter(PipelineStage):
         elif self.filter_out:
             return
         return paragraph
-
+    
+    
+class RegexMatches(PipelineStage):
+    """
+    Regex Match
+    @zhs 正则表达式匹配
+    """
+    
+    def __init__(self, regex, field='content'):
+        """
+        Args:
+            field (str): Field name to match from
+                @zhs 要匹配的字段
+            regex (str): Regular Expression
+                @zhs 正则表达式
+        """
+        super().__init__()
+        self.field = field
+        self.regex = regex
+        
+    def resolve(self, paragraph: Paragraph) -> Paragraph:
+        for m in re.findall(self.regex, str(paragraph[self.field])):
+            yield Paragraph(paragraph, **{self.field: m})
+        
 
 class FieldAssignment(PipelineStage):
     """
