@@ -204,8 +204,11 @@ class Storage:
         """
         for mgr in self._get_managers(path):
             try:
+                assert hasattr(mgr, action)
                 val = getattr(mgr, action)(path, **params)
             except OSError:
+                val = None
+            except AssertionError:
                 val = None
             if val:
                 return val

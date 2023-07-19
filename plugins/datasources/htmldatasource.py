@@ -94,7 +94,7 @@ class HTMLDataSource(DataSourceStage):
     def fetch(self):
         for path in self.files:
             self.logger('reading from', path)
-            outline = ''
+            fpath, outline = path, ''
             if '#' in path:
                 fpath, outline = path.split('#', 1)
             yield from self.import_html_src(fpath, storage.open(path, 'rb'), outline)
