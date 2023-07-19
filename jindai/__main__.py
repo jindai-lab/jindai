@@ -582,6 +582,9 @@ def clear_duplicates(limit: int, offset: str, maxdups: int):
 
     try:
         for m in (pbar := tqdm(rs, total=min(limit, rs.count()) if limit else rs.count())):
+            
+            pbar.set_postfix_str(str(m.id))
+                        
             if m.id in cleared:
                 continue
 

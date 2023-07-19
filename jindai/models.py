@@ -350,6 +350,7 @@ class Paragraph(ObjectWithSource):
         
         result = Paragraph.first(F.images == preserved.id) or Paragraph(images=[preserved])
         dup_ids = {x.id for x in dups if x.id != preserved.id}
+        result.images = [i for i in result.images if i.id not in dup_ids]
         references = list(Paragraph.query(F.images.in_(list(dup_ids))))
         
         for para in references:
