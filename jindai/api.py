@@ -691,10 +691,15 @@ def update_task(task_id, **task):
 @rest()
 def list_task(task_id=''):
     """List out tasks"""
+    import re
 
     if task_id:
-        _id = ObjectId(task_id)
-        return TaskDBO.first((F.id == _id) & _task_authorized())
+        if re.match(r'^[0-9a-fA-F]{24}$', task_id):
+            _id = ObjectId(task_id)
+            q = F.id == _id
+        else:
+            q = F.name == task_id
+        return TaskDBO.first(q & _task_authorized())
     else:
         return list(TaskDBO.query(_task_authorized()).sort(-F.last_run, -F.id))
 
