@@ -138,7 +138,7 @@ class LinesDataSource(DataSourceStage):
     @zhs 从直接输入的文本中获得语段，每行一个语段
     """
 
-    def apply_params(self, dataset_name='', lang="auto", content="", params=None):
+    def apply_params(self, dataset_name='', lang="auto", content="", params=None, delimiter='\n'):
         """
         Args:
             dataset_name (DATASET):
@@ -147,16 +147,19 @@ class LinesDataSource(DataSourceStage):
             lang (LANG):
                 Language code
                 @zhs 语言标识
-            content (LINES):
+            content (str):
                 Text contents
                 @zhs 文本内容
             params (object):
                 Other customizable fields
                 @zhs 其他自定义字段
+            delimiter (str):
+                Delimiter
+                @zhs 分隔符，默认为换行符
         """
         self.name = dataset_name
         self.lang = lang
-        self.lines = content.split('\n')
+        self.lines = content.split(delimiter)
         self.params = params or {}
 
     def fetch(self):
