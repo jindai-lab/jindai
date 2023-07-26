@@ -22,6 +22,7 @@ from .helpers import (get_context, logined, rest, language_iso639,
                       serve_proxy, JSONEncoder, JSONDecoder, ee)
 from .models import (Dataset, History, MediaItem, Meta, Paragraph,
                      TaskDBO, Token, User, Term)
+from .oauthserv import config_oauth
 from .storage import instance as storage
 
 
@@ -29,6 +30,7 @@ app = Flask(__name__)
 app.config['SECRET_KEY'] = config.secret_key
 app.json_encoder = JSONEncoder
 app.json_decoder = JSONDecoder
+config_oauth(app)
 
 
 def _task_authorized():

@@ -545,6 +545,8 @@ class Token(db.DbObject):
     expire = float
     _cache = {}
 
+    _TTL = 86400
+
     @staticmethod
     def check(token_string):
         """Check if token is valid
@@ -557,8 +559,8 @@ class Token(db.DbObject):
 
         token = Token._cache.get(token_string)
         if token and token.expire > time.time():
-            if token.expire - time.time() < 86400:
-                token.expire = time.time() + 86400
+            if token.expire - time.time() < Token._TTL:
+                token.expire = time.time() + Token._TTL
                 token.save()
             return token
 
