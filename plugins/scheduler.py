@@ -8,7 +8,7 @@ from threading import Thread
 
 from PyMongoWrapper import ObjectId, F
 from jindai import Plugin
-from jindai.helpers import rest, safe_import
+from jindai.helpers import rest, safe_import, APIResults, APIUpdate
 from jindai.models import TaskDBO, db
 
 schedule = safe_import('schedule')
@@ -137,14 +137,14 @@ class Scheduler(Plugin):
         @app.route('/api/scheduler', methods=['GET'])
         @rest()
         def schedule_list():
-            return self.list_jobs(schedule.jobs)
+            return APIResults(self.list_jobs(schedule.jobs))
 
         @app.route('/api/scheduler', methods=['PUT'])
         @rest()
         def schedule_job(text):
             jobs = self.cron(text)
             self.reload_scheduler()
-            return self.list_jobs(jobs)
+            return APIResults(self.list_jobs(jobs))
 
         @app.route('/api/scheduler/<key>', methods=['DELETE'])
         @rest()
@@ -158,7 +158,7 @@ class Scheduler(Plugin):
             for job in to_del:
                 schedule.jobs.remove(job)
             self.reload_scheduler()
-            return len(to_del) > 0
+            return APIUpdate(len(to_del) > 0)
 
         for j in SchedulerJob.query({}):
             self.cron(j.cron)

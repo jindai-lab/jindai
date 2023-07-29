@@ -343,7 +343,7 @@ def config_oauth(app):
     def split_by_crlf(s):
         return [v for v in s.splitlines() if v]
 
-    @app.route('/api2/oauth', methods=('GET', 'POST'))
+    @app.route('/api/oauth', methods=('GET', 'POST'))
     def home():
         if request.method == 'POST':
             username = request.form.get('username')
@@ -371,7 +371,7 @@ def config_oauth(app):
             'clients': [c.as_dict() for c in clients]
         })
 
-    @app.route('/api2/oauth/logout')
+    @app.route('/api/oauth/logout')
     def logout():
         del session['id']
         return jsonify({
@@ -379,7 +379,7 @@ def config_oauth(app):
         })
 
 
-    @app.route('/api2/oauth/create_client', methods=('GET', 'POST'))
+    @app.route('/api/oauth/create_client', methods=('GET', 'POST'))
     def create_client():
         user = current_user()
         if not user:
@@ -414,7 +414,7 @@ def config_oauth(app):
         return jsonify({'success': True})
 
 
-    @app.route('/api2/oauth/authorize', methods=['GET', 'POST'])
+    @app.route('/api/oauth/authorize', methods=['GET', 'POST'])
     def authorize():
         user = current_user()
         if not user:
@@ -436,11 +436,11 @@ def config_oauth(app):
         return authorization.create_authorization_response(grant_user=grant_user)
 
 
-    @app.route('/api2/oauth/token', methods=['POST'])
+    @app.route('/api/oauth/token', methods=['POST'])
     def issue_token():
         return authorization.create_token_response()
 
 
-    @app.route('/api2/oauth/revoke', methods=['POST'])
+    @app.route('/api/oauth/revoke', methods=['POST'])
     def revoke_token():
         return authorization.create_endpoint_response('revocation')

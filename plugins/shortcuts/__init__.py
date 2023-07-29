@@ -3,7 +3,7 @@ import os
 from PyMongoWrapper import F
 
 from jindai import Plugin, parser, storage
-from jindai.helpers import rest
+from jindai.helpers import rest, APIUpdate,  APIResults
 from jindai.models import Meta
 
 
@@ -21,10 +21,10 @@ class Shortcuts(Plugin):
         def shortcuts(key='', value=''):
             shortcuts = self.read_shortcuts()
             if not key:
-                return [{
+                return APIResults([{
                     'name': key,
                     'expr': val
-                } for key, val in shortcuts.items()]
+                } for key, val in shortcuts.items()])
 
             meta = Meta.first(F.shortcuts.exists(1)) or Meta()
             if value == '':
@@ -34,7 +34,7 @@ class Shortcuts(Plugin):
             shortcuts.pop('', '')
             meta.shortcuts = shortcuts
             meta.save()
-            return True
+            return APIUpdate()
         
         parser.shortcuts = {}
         self.read_shortcuts()

@@ -19,7 +19,8 @@ from .plugin import Plugin, PluginManager
 from .task import Task
 from .config import instance as config
 from .helpers import (get_context, logined, rest, language_iso639,
-                      serve_proxy, JSONEncoder, JSONDecoder, ee)
+                      serve_proxy, JSONEncoder, JSONDecoder, ee,
+                      APIParagraphsUpdate, APIResults, APIUpdate)
 from .models import (Dataset, History, MediaItem, Meta, Paragraph,
                      TaskDBO, Token, User, Term)
 from .oauthserv import config_oauth
@@ -102,11 +103,22 @@ def _lang(inp):
 
 
 def _select_keys(dictionary: dict, keys: list) -> list:
-    return {key: dictionary[key] for key in keys if key in dictionary}
+    if not isinstance(dictionary, dict):
+        dictionary = getattr(dictionary, 'as_dict', lambda: dictionary.__dict__)()
+    if keys:
+        return {key: dictionary[key] for key in keys if key in dictionary}
+    else:
+        return dictionary
+
+
+def _select(from_: list, keys: list) -> dict:
+    return {
+        str(it.id): _select_keys(it, keys)
+        for it in from_
+    }
 
 
 @app.route('/api/authenticate', methods=['POST'])
-@app.route('/api2/authenticate', methods=['POST'])
 @rest(login=False)
 def authenticate(username, password, otp='', **_):
     """Authenticate current user, return new token string if succeeded"""
@@ -116,12 +128,11 @@ def authenticate(username, password, otp='', **_):
         Token.query((F.user == username) & (F.expire < time.time())).delete()
         token = User.encrypt_password(str(time.time()), str(time.time_ns()))
         Token(user=username, token=token, expire=time.time() + 86400).save()
-        return token
+        return APIUpdate(bundle={'token': token})
     raise Exception("Unmatched credentials.")
 
 
 @app.route('/api/authenticate')
-@app.route('/api2/authenticate')
 @rest()
 def whoami():
     """Returns logined user info, or None if not logined"""
@@ -130,23 +141,20 @@ def whoami():
             username=logined(), password='', roles=[])).as_dict()
         del user['password']
         user['otp_secret'] = True if user.get('otp_secret') else False
-        return _select_keys(user, ['username', 'roles'])
-    return None
+        return APIUpdate(bundle=_select_keys(user, ['username', 'roles']))
+    return APIUpdate(False)
 
 
 @app.route('/api/authenticate', methods=['DELETE'])
-@app.route('/api2/authenticate', methods=['DELETE'])
 @rest()
 def log_out():
     """Log out"""
     Token.uncheck(logined())
-    return True
+    return APIUpdate()
 
 
 @app.route('/api/users/')
-@app.route('/api2/users/')
 @app.route('/api/users/<username>', methods=['GET', 'POST'])
-@app.route('/api2/users/<username>', methods=['GET', 'POST'])
 @rest(role='admin')
 def admin_users(username='', password=None, roles=None, datasets=None, **_):
     """
@@ -166,13 +174,12 @@ def admin_users(username='', password=None, roles=None, datasets=None, **_):
         if datasets is not None:
             user.datasets = datasets
         user.save()
-        return True
+        return APIUpdate()
     else:
-        return [_select_keys(u, ['username', 'roles', 'datasets']) for u in User.query({})]
+        return APIResults(_select(User.query({}), ['username', 'roles', 'datasets']).values())
 
 
 @app.route('/api/users/', methods=['PUT'])
-@app.route('/api2/users/', methods=['PUT'])
 @rest(role='admin')
 def admin_users_add(username, password, **_):
     """
@@ -186,12 +193,10 @@ def admin_users_add(username, password, **_):
     user = User(username=username)
     user.set_password(password)
     user.save()
-    user = user.as_dict()
     return _select_keys(user, ['username', 'roles'])
 
 
 @app.route('/api/account/', methods=['POST'])
-@app.route('/api2/account/', methods=['POST'])
 @rest()
 def user_change_password(old_password='', password='', otp=None, **_):
     """
@@ -206,7 +211,7 @@ def user_change_password(old_password='', password='', otp=None, **_):
         assert User.authenticate(logined(), old_password), '原密码错误'
         user.set_password(password)
         user.save()
-        return _select_keys(user.as_dict(), ['username', 'roles'])
+        return _select_keys(user, ['username', 'roles'])
     else:
         if otp:
             user.otp_secret = pyotp.random_base32()
@@ -214,22 +219,19 @@ def user_change_password(old_password='', password='', otp=None, **_):
         else:
             user.otp_secret = ''
             user.save()
-        return _select_keys(user.as_dict(), ['otp_secret'])
+        return _select_keys(user, ['otp_secret'])
 
 
 @app.route('/api/users/<username>', methods=['DELETE'])
-@app.route('/api2/users/<username>', methods=['DELETE'])
 @rest(role='admin')
 def admin_users_del(username):
     """Delete user"""
     User.query(F.username == username).delete()
-    return True
+    return APIUpdate()
 
 
 @app.route('/api/storage/<path:path>', methods=['GET', 'POST'])
-@app.route('/api2/storage/<path:path>', methods=['GET', 'POST'])
 @app.route('/api/storage/', methods=['GET', 'POST'])
-@app.route('/api2/storage/', methods=['GET', 'POST'])
 @rest()
 def list_storage(path='', search='', mkdir=''):
     """
@@ -256,16 +258,14 @@ def list_storage(path='', search='', mkdir=''):
             results = storage.open(path)
 
     if isinstance(results, list):
-        return sorted(results,
-                      key=lambda x: x['ctime'], reverse=True)
+        return APIResults(sorted(results,
+                      key=lambda x: x['ctime'], reverse=True))
     else:
         return send_file(results, download_name=path.split('/')[-1])
 
 
 @app.route('/api/storage/<path:path>', methods=['PUT'])
-@app.route('/api2/storage/<path:path>', methods=['PUT'])
 @app.route('/api/storage/', methods=['PUT'])
-@app.route('/api2/storage/', methods=['PUT'])
 @rest()
 def write_storage(path=''):
     """Write to file storage"""
@@ -277,11 +277,10 @@ def write_storage(path=''):
         with storage.open(save_path, 'wb') as fout:
             uploaded.save(fout)
         sfs.append(storage.stat(save_path))
-    return sfs
+    return APIUpdate(bundle=sfs)
 
 
 @app.route('/api/storage/move', methods=['POST'])
-@app.route('/api2/storage/move', methods=['POST'])
 @rest()
 def move_storage(source, destination, keep_folder=True):
     """Move/Rename file from source to destination"""
@@ -294,20 +293,9 @@ def move_storage(source, destination, keep_folder=True):
     storage.move(source, destination)
     paragraphs.update(
         Fn.set({'source.file': storage.truncate_path(destination)}))
-    return True
+    return APIUpdate()
 
 
-@app.route('/api2/parser/parse', methods=['POST'])
-@rest(login=True)
-def parser_parse(query, literal=False, tokens=False):
-    if literal:
-        return parser.parse_literal(query)
-    elif tokens:
-        return [{'text': token.text, 'type': parser.get_symbol(token.type)} for token in parser.tokenize(query)]
-    return parser.parse(query)
-
-
-@app.route('/api2/collections/<coll>/<pid>', methods=['POST'])
 @app.route('/api/collections/<coll>/<pid>', methods=['POST'])
 @rest()
 def modify_paragraph(coll, pid, **kws):
@@ -337,10 +325,9 @@ def modify_paragraph(coll, pid, **kws):
                 changed.add(field)
         if flag:
             para.save()
-    return {'paragraphs': {str(para.id): _select_keys(para.as_dict(), changed)}}
+    return APIParagraphsUpdate(paragraphs=_select([para], changed))
 
 
-@app.route('/api2/collections/<coll>/<pid>/pagenum', methods=['POST'])
 @app.route('/api/collections/<coll>/<pid>/pagenum', methods=['POST'])
 @rest()
 def modify_pagenum(coll, pid, sequential, new_pagenum, folio=False, **_):
@@ -368,11 +355,10 @@ def modify_pagenum(coll, pid, sequential, new_pagenum, folio=False, **_):
                 Fn.set(pagenum=Fn.concat(
                     "A", Fn.toString(Fn.add(1, "$source.page"))))
             ])
-        return True
-    return False
+        return APIUpdate()
+    return APIUpdate(False)
 
 
-@app.route('/api2/collections/<coll>/batch', methods=["GET", "POST"])
 @app.route('/api/collections/<coll>/batch', methods=["GET", "POST"])
 @rest()
 def batch(coll, ids, **kws):
@@ -404,22 +390,10 @@ def batch(coll, ids, **kws):
                 para[field] = val
         para.save()
 
-    if 'api2' in request.path:
-        return {
-            'paragraphs': {
-                str(p.id): _select_keys(p.as_dict(), changed)
-                for p in paras
-            }
-        }
-    else:
-        return {
-            str(p.id): p.as_dict()
-            for p in paras
-        }
+    return APIParagraphsUpdate(paragraphs=_select(paras, list(changed)))
 
 
 @app.route('/api/collections/<coll>/group', methods=["GET", "POST"])
-@app.route('/api2/collections/<coll>/group', methods=["GET", "POST"])
 @rest()
 def grouping(coll, ids, group='', values=None, ungroup=False, limit=100):
     """Grouping selected paragraphs
@@ -464,19 +438,14 @@ def grouping(coll, ids, group='', values=None, ungroup=False, limit=100):
             if gids:
                 para_query.update(Fn.pull(F.keywords.in_(gids)))
 
-    return {
-        'group_ids': groups,
-        'paragraph_ids': ids,
-        # required by v2
-        'values': groups,
-        'paragraphs': {str(para.id): {} for para in para_query.limit(limit)}
-    }
+    return APIParagraphsUpdate(
+        paragraphs=_select(para_query.limit(limit), ['keywords']),
+       
+    )
 
 
 @app.route('/api/collections/<coll>/split', methods=["GET", "POST"])
 @app.route('/api/collections/<coll>/merge', methods=["GET", "POST"])
-@app.route('/api2/collections/<coll>/split', methods=["GET", "POST"])
-@app.route('/api2/collections/<coll>/merge', methods=["GET", "POST"])
 @rest()
 def splitting(coll, paragraphs):
     """Split or merge selected items/paragraphs into seperate/single paragraph(s)
@@ -501,7 +470,7 @@ def splitting(coll, paragraphs):
             para.delete()
     else:
         if not paras:
-            return False
+            return APIParagraphsUpdate()
 
         selected_ids = list(
             map(ObjectId, itertools.chain(*paragraphs.values())))
@@ -519,20 +488,17 @@ def splitting(coll, paragraphs):
         para0.save()
         retval.append(para0.as_dict(True))
 
-    return {
-        'paragraphs': retval
-    }
+    return APIParagraphsUpdate(paragraphs={str(p['id']): p for p in retval})
 
 
 @app.route('/api/mediaitem/rating', methods=["GET", "POST"])
-@app.route('/api2/mediaitem/rating', methods=["GET", "POST"])
 @rest()
 def set_rating(ids=None, inc=1, val=0, least=0):
     """Increase or decrease the rating of selected items
     """
 
     if not ids:
-        return False
+        return APIParagraphsUpdate()
 
     items = list(MediaItem.query(
         F.id.in_([ObjectId(_) if len(_) == 24 else _ for _ in ids])))
@@ -548,18 +514,10 @@ def set_rating(ids=None, inc=1, val=0, least=0):
         i.rating = min(i.rating, 5)
         i.save()
 
-    if 'api2' in request.path:
-        return {
-            'items': {str(i.id): {'rating': i.rating}
-                      for i in items}
-        }
-    else:
-        return {str(i.id): i.rating
-                for i in items}
+    return APIParagraphsUpdate(items=_select(items, ['rating']))
 
 
 @app.route('/api/mediaitem/reset_storage', methods=["GET", "POST"])
-@app.route('/api2/mediaitem/reset_storage', methods=["GET", "POST"])
 @rest()
 def reset_storage(ids):
     """Reset storage status of selected items
@@ -571,22 +529,14 @@ def reset_storage(ids):
         if 'file' in i.source:
             del i.source['file']
         i.save()
-    if 'api2' in request.path:
-        return {
-            'items': {
-                str(i.id): {'source': {'file': None}}
-                for i in items
-            }
-        }
-    else:
-        return {
-            str(i.id): i.source.get('file')
-            for i in items
-        }
+
+    return APIParagraphsUpdate(items={
+        str(i.id): {'source': {'file': None}}
+        for i in items
+    })
 
 
 @app.route('/api/mediaitem/merge', methods=["POST"])
-@app.route('/api2/mediaitem/merge', methods=["POST"])
 @rest()
 def merge_items(pairs):
     """Process the two specified media items as duplications,
@@ -605,11 +555,10 @@ def merge_items(pairs):
         if rese and dele:
             Paragraph.merge_by_mediaitems(rese, dele)
 
-    return True
+    return APIUpdate()
 
 
 @app.route('/api/mediaitem/delete', methods=["POST"])
-@app.route('/api2/mediaitem/delete', methods=["POST"])
 @rest()
 def delete_item(para_items: dict):
     """Remove Media Item from paragraph"""
@@ -632,11 +581,10 @@ def delete_item(para_items: dict):
         if image_item:
             image_item.delete()
 
-    return True
+    return APIUpdate()
 
 
 @app.route('/api/tasks/', methods=['PUT'])
-@app.route('/api2/tasks/', methods=['PUT'])
 @rest()
 def create_task(**task):
     """Create new task"""
@@ -645,29 +593,26 @@ def create_task(**task):
     task = TaskDBO(**task)
     task.creator = logined()
     task.save()
-    return str(task.id)
+    return APIUpdate(bundle={'task_id': str(task.id)})
 
 
 @app.route('/api/tasks/shortcuts', methods=['GET'])
-@app.route('/api2/tasks/shortcuts', methods=['GET'])
 @rest()
 def list_tasks_shortcuts():
     """List out quick tasks"""
-    return list(TaskDBO.query((F.shortcut_map != {}) & _task_authorized()))
+    return APIResults(TaskDBO.query((F.shortcut_map != {}) & _task_authorized()))
 
 
 @app.route('/api/tasks/<task_id>', methods=['DELETE'])
-@app.route('/api2/tasks/<task_id>', methods=['DELETE'])
 @rest()
 def delete_task(task_id):
     """Remove task"""
 
     _id = ObjectId(task_id)
-    return TaskDBO.query(F.id == _id).delete().acknowledged
+    return APIUpdate(TaskDBO.query(F.id == _id).delete().acknowledged)
 
 
 @app.route('/api/tasks/<task_id>', methods=['POST'])
-@app.route('/api2/tasks/<task_id>', methods=['POST'])
 @rest()
 def update_task(task_id, **task):
     """Update task info"""
@@ -679,17 +624,14 @@ def update_task(task_id, **task):
     executed = TaskDBO.query(
         (F.id == task_id) & _task_authorized()).update(Fn.set(task))
 
-    return {'tasks': {
-        str(task_id): task
-    },
+    return APIUpdate(bundle={
+        'tasks': {str(task_id): task},
         'updated': task
-    }
+    })
 
 
 @app.route('/api/tasks/<task_id>', methods=['GET'])
 @app.route('/api/tasks/', methods=['GET'])
-@app.route('/api2/tasks/', methods=['GET'])
-@app.route('/api2/tasks/<task_id>', methods=['GET'])
 @rest()
 def list_task(task_id=''):
     """List out tasks"""
@@ -703,11 +645,10 @@ def list_task(task_id=''):
             q = F.name == task_id
         return TaskDBO.first(q & _task_authorized())
     else:
-        return list(TaskDBO.query(_task_authorized()).sort(-F.last_run, -F.id))
+        return APIResults(TaskDBO.query(_task_authorized()).sort(-F.last_run, -F.id))
 
 
 @app.route('/api/help/pipelines')
-@app.route('/api2/help/pipelines')
 @rest(cache=True)
 def help_info():
     """Provide help info for pipelines, with respect to preferred language"""
@@ -725,7 +666,6 @@ def help_info():
 
 
 @app.route('/api/help/langs')
-@app.route('/api2/help/langs')
 @rest(cache=True)
 def help_langs():
     """Provide supported language codes"""
@@ -733,45 +673,37 @@ def help_langs():
 
 
 @app.route('/api/help/qx')
-@app.route('/api2/help/qx')
 @rest(cache=True)
 def help_qx():
     """Provide meta data for query expr"""
-    return {
-        'function_names': list(parser.functions.keys()) + list(ee.implemented_functions),
-    }
+    return APIResults(list(parser.functions.keys()) + list(ee.implemented_functions))
 
 
 @app.route('/api/history')
-@app.route('/api2/history')
 @rest()
 def history():
     """History records for the current user"""
 
     History.query(F.created_at < datetime.datetime.utcnow() -
                   datetime.timedelta(days=30)).delete()
-    return list(
+    return APIResults(
         History.query(F.user == logined()).sort(-F.created_at).limit(100))
 
 
 @app.route('/api/search', methods=['POST'])
-@app.route('/api2/search', methods=['POST'])
 @rest()
 def do_search(q='', req='', sort='', limit=100, offset=0,
               mongocollections=None, groups='none', count=False, **_):
     """Search"""
 
     if not req:
-        if count:
-            return 0
-        else:
-            return {'results': [], 'query': ''}
-
+        return APIResults()
+    
     datasource = DBQuery((q, req), mongocollections,
                          limit, offset, sort or 'id', False, groups, app.plugins)
 
     if count:
-        return datasource.count()
+        return APIResults(total=datasource.count())
 
     results = _expand_results(datasource.fetch())
 
@@ -787,10 +719,9 @@ def do_search(q='', req='', sort='', limit=100, offset=0,
     History(user=logined(), queries=[q, req],
             created_at=datetime.datetime.utcnow()).save()
 
-    return {'results': results, 'query': datasource.query}
+    return APIResults(results, -1, datasource.query)
 
 
-@app.route('/api2/datasets')
 @app.route('/api/datasets')
 @rest()
 def get_datasets():
@@ -807,11 +738,10 @@ def get_datasets():
                     filtered_datasets.append(dataset)
                     break
         datasets = filtered_datasets
-    return datasets
+    return APIResults(datasets)
 
 
 @app.route('/api/datasets/<action>', methods=['POST'])
-@app.route('/api2/datasets/<action>', methods=['POST'])
 @rest(role='admin')
 def set_datasets(action, **j):
     """Update dataset info"""
@@ -846,11 +776,10 @@ def set_datasets(action, **j):
         assert dataset, 'dataset not found'
         dataset.update_sources()
 
-    return True
+    return APIUpdate()
 
 
 @app.route("/api/term/<field>", methods=['POST'])
-@app.route("/api2/term/<field>", methods=['POST'])
 @rest()
 def query_terms(field, pattern='', regex=False, scope=''):
     """Query terms"""
@@ -861,19 +790,17 @@ def query_terms(field, pattern='', regex=False, scope=''):
             pattern = {'term': {'$regex': pattern, '$options': 'i'}}
         else:
             pattern = (F.term == pattern) | (F.aliases == pattern)
-        return list(Term.query(F.field == field, pattern).limit(100))
+        return APIResults(Term.query(F.field == field, pattern).limit(100))
     elif scope:
-        return [i['_id'] for i in Paragraph.aggregator.match(
+        return APIResults([i['_id'] for i in Paragraph.aggregator.match(
                 parser.parse(scope)
                 ).sort(_id=-1).limit(1000).unwind('$' + field).group(
                 _id='$' + field, count=Fn.sum(1)
-                ).sort(count=-1).limit(100).perform(raw=True)]
+                ).sort(count=-1).limit(100).perform(raw=True)])
 
 
 @app.route("/api/image/<coll>/<storage_id>.<ext>")
-@app.route("/api2/image/<coll>/<storage_id>.<ext>")
 @app.route("/api/image")
-@app.route("/api2/image")
 @rest(cache=True)
 def resolve_media_item(coll=None, storage_id=None, ext=None):
     """Serve media item"""
@@ -925,7 +852,6 @@ def serve_image(scheme, image_path):
 
 
 @app.route('/api/quicktask', methods=['POST'])
-@app.route('/api2/quicktask', methods=['POST'])
 @rest()
 def quick_task(query='', pipeline='', raw=False, mongocollection=''):
     """Perform quick tasks"""
@@ -949,7 +875,7 @@ def quick_task(query='', pipeline='', raw=False, mongocollection=''):
             ('AccumulateParagraphs', {}),
         ], params={}).execute()
 
-    return _expand_results(results)
+    return APIResults(_expand_results(results))
 
 
 @app.route('/api/qx', methods=['POST'])
@@ -959,7 +885,6 @@ def qx_parse(query=''):
 
 
 @app.route('/api/admin/db', methods=['POST'])
-@app.route('/api2/admin/db', methods=['POST'])
 @rest(role='admin')
 def dbconsole(mongocollection='', query='', operation='', operation_params='', preview=True):
     """Database console for admin"""
@@ -982,32 +907,30 @@ def dbconsole(mongocollection='', query='', operation='', operation_params='', p
             }
 
     if preview:
-        return {
+        return APIUpdate(bundle={
             'mongocollection': mongocollection,
             'query': query,
             'operation': operation,
             'operation_params': operation_params
-        }
+        })
     else:
         result = getattr(mongo, operation)(query, operation_params)
         if operation == 'update_many':
             result = result.modified_count
         elif operation == 'delete_many':
             result = result.deleted_count
-        return result
+        return APIUpdate(bundle=result)
 
 
 @app.route('/api/admin/db/collections', methods=['GET'])
-@app.route('/api2/admin/db/collections', methods=['GET'])
 @rest(role='admin')
 def dbconsole_collections():
     """Get all collections in current MongoDB database"""
 
-    return Paragraph.db.database.list_collection_names()
+    return APIResults(Paragraph.db.database.list_collection_names())
 
 
 @app.route('/api/meta', methods=['GET'])
-@app.route('/api2/meta', methods=['GET'])
 @rest(login=False)
 def get_meta():
     """Get meta settings"""
@@ -1016,7 +939,6 @@ def get_meta():
 
 
 @app.route('/api/meta', methods=['POST'])
-@app.route('/api2/meta', methods=['POST'])
 @rest(role='admin')
 def set_meta(**vals):
     """Update meta settings"""
@@ -1025,16 +947,15 @@ def set_meta(**vals):
     for key, val in vals.items():
         setattr(result, key, val)
     result.save()
-    return True
+    return APIUpdate()
 
 
 @app.route('/api/plugins', methods=['GET'])
-@app.route('/api2/plugins', methods=['GET'])
 @rest()
 def get_plugins():
     """Get plugin names
     """
-    return [type(pl).__name__ for pl in app.plugins]
+    return APIResults([type(pl).__name__ for pl in app.plugins])
 
 
 @app.route('/<path:path>', methods=['GET'])

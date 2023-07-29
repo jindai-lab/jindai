@@ -11,7 +11,7 @@ from typing import Callable
 from flask import Flask, Response
 
 from .config import instance as config
-from .helpers import rest, parser
+from .helpers import rest, parser, APIUpdate, APIResults
 from .storage import instance as storage
 from .pipeline import Pipeline, PipelineStage
 
@@ -95,21 +95,21 @@ class PluginManager:
         def plugin_pages():
             """Returns names for special filters in every plugins
             """
-            return [
+            return APIResults([
                 dict(spec, handler='')
                 for spec in self.filters.values()
-            ]
+            ])
 
         @app.route('/api/plugins')
         @rest(role='admin')
         def plugin_list():
-            return [type(pl).__name__ for pl in self.plugins]
+            return APIResults([type(pl).__name__ for pl in self.plugins])
 
         @app.route('/api/plugins', methods=['POST'])
         @rest(role='admin')
         def plugin_install(url):
             self.install(url)
-            return True
+            return APIUpdate()
 
         # load plugins
 
