@@ -4,7 +4,6 @@ import glob
 import importlib
 import json
 import os
-import pickle
 import re
 import subprocess
 import sys
@@ -12,6 +11,8 @@ import time
 import traceback
 from functools import wraps
 from typing import IO, Dict, Type, Union
+
+from dataclasses import dataclass, is_dataclass, field
 
 import iso639
 import numpy as np
@@ -160,7 +161,7 @@ def rest(login=True, cache=False, role='', mapping=None):
                 if isinstance(result, (tuple, Response, werkzeug.wrappers.response.Response)):
                     return result
 
-                resp = jsonify({'result': result})
+                resp = jsonify(result)
             except Exception as ex:
                 erred = True
                 resp = jsonify(
@@ -304,6 +305,8 @@ class JSONEncoder(json.JSONEncoder):
             return o.isoformat() + "Z"
         if isinstance(o, ObjectId):
             return str(o)
+        if is_dataclass(o):
+            return o.__dict__
 
         return JSONEncoderCls.default(self, o)
 
@@ -316,3 +319,29 @@ language_iso639 = {
     lang.pt1: lang.name for lang in iso639.iter_langs() if lang.pt1 and lang.pt1 != 'zh'
 }
 language_iso639.update(zhs='Chinese Simplified', zht='Chinese Traditional')
+
+# API Response
+@dataclass
+class APIParagraphsUpdate:
+    paragraphs: dict = field(default_factory=dict)
+    items: dict = field(default_factory=dict)
+    
+@dataclass
+class APIUpdate:
+    success: bool = True
+    bundle: dict = field(default_factory=dict)
+
+@dataclass
+class APIResults:
+    results: list
+    total: int
+    query: str
+
+    def __init__(self, results=None, total=-1, query=''):
+        if results is None:
+            results = []
+        elif not isinstance(results, list):
+            results = list(results)
+        self.results = results
+        self.total = total
+        self.query = query

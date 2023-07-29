@@ -4,7 +4,7 @@ Auto tagging
 """
 from PyMongoWrapper import F, Fn, ObjectId, QExprError, MongoOperand
 from jindai import PipelineStage, Plugin, parser
-from jindai.helpers import rest, evaluateqx
+from jindai.helpers import rest, evaluateqx, APIUpdate, APIResults
 from jindai.models import db, Paragraph
 import json
 
@@ -145,5 +145,5 @@ class AutoTaggingPlugin(Plugin):
                         cond = MongoOperand(cond) & (~F.keywords.regex(r'^#'))
                     Paragraph.query(cond).update(Fn.addToSet(keywords=a.tag))
             else:
-                return list(AutoTag.query({}).sort('-_id'))
-            return True
+                return APIResults(AutoTag.query({}).sort('-_id'))
+            return APIUpdate()

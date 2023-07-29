@@ -8,7 +8,7 @@ from bson import ObjectId
 
 from flask import Response, jsonify, request, send_file, stream_with_context
 from PyMongoWrapper import F
-from jindai.helpers import logined, rest
+from jindai.helpers import logined, rest, APIResults, APIUpdate
 from jindai.models import TaskDBO
 from jindai.pipeline import Pipeline
 
@@ -78,7 +78,7 @@ class TaskQueue:
             if not run_by or not logined('admin'):
                 run_by = logined()
 
-            return self.enqueue(task_dbo, run_by=run_by)
+            return APIUpdate(bundle={'job': self.enqueue(task_dbo, run_by=run_by)})
 
         @app.route('/api/queue/config', methods=['GET'])
         @rest()
@@ -131,7 +131,7 @@ class TaskQueue:
             Returns:
                 bool: true if successful
             """
-            return self.remove(key)
+            return APIUpdate(self.remove(key))
         
         @app.route('/api/queue/logs/<path:key>', methods=['GET'])
         @rest()
@@ -166,10 +166,7 @@ class TaskQueue:
                 if limit == 0:
                     limit = len(result)
 
-                return {
-                    'results': result[offset:offset+limit],
-                    'total': len(result)
-                }
+                return APIResults(result[offset:offset+limit], len(result))
 
             elif result_type.startswith('file:'):
                 ext = result_type.split(':')[1]
@@ -179,6 +176,7 @@ class TaskQueue:
                     buf, 'application/octstream',
                     download_name=os.path.basename(f"{key}.{ext}"))
 
+            # Return value of a job is always a dict
             return jsonify(result)
 
         @app.route('/api/queue/', methods=['GET'])
@@ -189,9 +187,9 @@ class TaskQueue:
             Returns:
                 list: queue job statuses
             """
-            return filter_status()
+            return APIResults(filter_status())
 
-        def filter_status():
+        def filter_status() -> list:
             """Generate request-specific status"""
             status = [_.as_dict() for _ in self.jobs]
             if not logined('admin'):
@@ -212,7 +210,7 @@ class TaskQueue:
         """
         return sum([1 for _ in self.jobs if _.status == 'running'])
 
-    def enqueue(self, task_dbo: TaskDBO, run_by: str):
+    def enqueue(self, task_dbo: TaskDBO, run_by: str) -> str:
         """Enqueue a task
 
         Args:
