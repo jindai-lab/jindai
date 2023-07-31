@@ -158,13 +158,7 @@ class OSFileSystemManager(StorageManager):
         return True
 
     def walk(self, base_path, name_pattern=''):
-        base_path = self.join(self.expand_path(base_path))
-        name_pattern = self.join(self.expand_path(
-            name_pattern)) if name_pattern else ''
         yield from super().walk(base_path, name_pattern)
 
     def search(self, base_path, name_pattern=''):
-        base_path = self.join(self.expand_path(base_path))
-        name_pattern = self.join(self.expand_path(
-            name_pattern)) if name_pattern else ''
         yield from super().search(base_path, name_pattern)

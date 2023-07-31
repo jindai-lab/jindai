@@ -237,10 +237,10 @@ def list_storage(path='', search='', mkdir=''):
     """
     List out files in directory or get file at that path
     Returns:
-        list of file names, or the file itself
+        list of file names, or file content
     """
 
-    path = 'file://' + path.split('://')[-1]
+    path = 'file:///' + path
 
     if path.rsplit('.', 1)[-1].lower() in ('py', 'pyc', 'yaml', 'yml', 'sh'):
         return 'Not supported extension name', 400
@@ -250,8 +250,7 @@ def list_storage(path='', search='', mkdir=''):
 
     results = None
     if search:
-        # path is a query
-        results = [storage.stat(r) for r in storage.search(path, '**' + search)]
+        results = [storage.stat(r) for r in storage.search(path, '*' + search + '*')]
     else:
         results = storage.statdir(path)
         if not results and storage.exists(path):
@@ -288,12 +287,13 @@ def move_storage(source, destination, keep_folder=True):
         destination = os.path.basename(destination)
         destination = os.path.join(os.path.dirname(source), destination)
     paragraphs = Paragraph.query(F.source.file == source)
-    source = storage.expand_path(source)
-    destination = storage.expand_path(destination)
-    storage.move(source, destination)
-    paragraphs.update(
-        Fn.set({'source.file': storage.truncate_path(destination)}))
-    return APIUpdate()
+    source = 'file:///' + source.replace('\\', '/')
+    destination = 'file:///' + destination.replace('\\', '/')
+    flag = storage.move(source, destination)
+    if flag:
+        paragraphs.update(
+            Fn.set({'source.file': storage.truncate_path(destination)}))
+    return APIUpdate(flag)
 
 
 @app.route('/api/collections/<coll>/<pid>', methods=['POST'])

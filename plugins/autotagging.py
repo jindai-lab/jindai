@@ -3,6 +3,7 @@ Auto tagging
 @zhs 自动标签
 """
 from PyMongoWrapper import F, Fn, ObjectId, QExprError, MongoOperand
+from flask import request
 from jindai import PipelineStage, Plugin, parser
 from jindai.helpers import rest, evaluateqx, APIUpdate, APIResults
 from jindai.models import db, Paragraph
@@ -124,15 +125,16 @@ class AutoTaggingPlugin(Plugin):
 
         app = self.pmanager.app
 
-        @app.route('/api/plugins/autotags', methods=['POST', 'PUT', 'GET'])
+        @app.route('/api/plugins/autotags/<id>', methods=['POST', 'GET', 'DELETE'])
+        @app.route('/api/plugins/autotags/', methods=['PUT', 'GET'])
         @rest()
-        def autotags_list(tag='', cond='', delete=False, ids=None, apply=None):
+        def autotags_list(tag='', cond='', id=None, apply=None):
             if ids is None:
                 ids = []
             if tag:
                 AutoTag(tag=tag, cond=cond).save()
-            elif delete:
-                AutoTag.query(F.id.in_([ObjectId(i) for i in ids])).delete()
+            elif request.method == 'DELETE':
+                AutoTag.query(F.id == id).delete()
             elif apply:
                 a = AutoTag.first(F.id == ObjectId(apply))
                 if not a:
