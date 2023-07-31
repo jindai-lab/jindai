@@ -125,16 +125,17 @@ class StorageManager:
             Tuple[str, List, List]: Path, folders, files
         """
         base_path = base_path.rstrip('/') + '/'
+        match_pattern = match_pattern.lower()
         pattern_segs = '/'.join(match_pattern.split('/')
                                 [:base_path.count('/')+1])
         dirs, files = [], []
 
         for f in self.listdir(base_path):
             if self.stat(self.join(base_path, f))['type'] == 'folder':
-                if not match_pattern or fnmatch(self.join(base_path, f), pattern_segs):
+                if not match_pattern or fnmatch(self.join(base_path, f).lower(), pattern_segs):
                     dirs.append(f)
             else:
-                if not match_pattern or fnmatch(self.join(base_path, f), match_pattern):
+                if not match_pattern or fnmatch(self.join(base_path, f).lower(), match_pattern):
                     files.append(f)
 
         yield base_path, dirs, files
