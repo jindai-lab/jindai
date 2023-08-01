@@ -349,6 +349,8 @@ class Storage:
             resp = Response(input_file.read(), 200,
                             content_type=mimetype, direct_passthrough=True)
         resp.headers.add('Accept-Ranges', 'bytes')
+        resp.headers.add('Access-Control-Allow-Origin', '*')
+        resp.headers.add('Access-Control-Allow-Headers', 'Accept')
         return resp
 
     def expand_path(self, path):

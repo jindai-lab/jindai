@@ -3,14 +3,15 @@
 import datetime
 import hashlib
 import os
+import re
 import sys
 import itertools
 import time
 from collections import defaultdict
-from urllib.parse import quote
+from PyMongoWrapper.dbo import DbObject
 
 import pyotp
-from flask import Flask, Response, redirect, request, send_file
+from flask import Flask, Response, redirect, request, send_file, abort
 from PyMongoWrapper import F, Fn, MongoOperand, ObjectId
 
 from .dbquery import DBQuery, parser
@@ -18,29 +19,19 @@ from .pipeline import Pipeline
 from .plugin import Plugin, PluginManager
 from .task import Task
 from .config import instance as config
-from .helpers import (get_context, logined, rest, language_iso639,
-                      serve_proxy, JSONEncoder, JSONDecoder, ee,
-                      APIParagraphsUpdate, APIResults, APIUpdate)
-from .models import (Dataset, History, MediaItem, Meta, Paragraph,
-                     TaskDBO, Token, User, Term)
+from .helpers import (get_context, logined, rest, language_iso639, serve_proxy,
+                      JSONEncoder, JSONDecoder, ee, APICrudEndpoint,
+                      APIResults, APIUpdate)
+from .models import (Dataset, History, MediaItem, Meta, Paragraph, TaskDBO,
+                     Token, User, Term)
 from .oauthserv import config_oauth
 from .storage import instance as storage
-
 
 app = Flask(__name__)
 app.config['SECRET_KEY'] = config.secret_key
 app.json_encoder = JSONEncoder
 app.json_decoder = JSONDecoder
 config_oauth(app)
-
-
-def _task_authorized():
-    """Test if task is authorized to current user"""
-
-    if logined('admin'):
-        return MongoOperand({})
-
-    return ((F.creator == logined()) | (F.shared == True))
 
 
 def _expand_results(results):
@@ -56,7 +47,8 @@ def _expand_results(results):
 
         return res
 
-    if not isinstance(results, (str, dict, bytes)) and hasattr(results, '__iter__'):
+    if not isinstance(results,
+                      (str, dict, bytes)) and hasattr(results, '__iter__'):
         return [_patch_mongocollection(r) for r in results]
 
     return results
@@ -64,14 +56,13 @@ def _expand_results(results):
 
 def _hashing(msg):
     """Hashing message with SHA-256 and preserve last 9 hexadecimal digits"""
-    return hashlib.sha256(
-        msg.encode('utf-8')).hexdigest()[-9:]
+    return hashlib.sha256(msg.encode('utf-8')).hexdigest()[-9:]
 
 
 def _lang(inp):
     """Apply language settings of current client"""
-    assert isinstance(inp, (str, list, dict)
-                      ), "Input value must be string or dict"
+    assert isinstance(inp,
+                      (str, list, dict)), "Input value must be string or dict"
     if isinstance(inp, str):
         result = ''
         default_result = ''
@@ -104,18 +95,12 @@ def _lang(inp):
 
 def _select_keys(dictionary: dict, keys: list) -> list:
     if not isinstance(dictionary, dict):
-        dictionary = getattr(dictionary, 'as_dict', lambda: dictionary.__dict__)()
+        dictionary = getattr(dictionary, 'as_dict',
+                             lambda: dictionary.__dict__)()
     if keys:
         return {key: dictionary[key] for key in keys if key in dictionary}
     else:
         return dictionary
-
-
-def _select(from_: list, keys: list) -> dict:
-    return {
-        str(it.id): _select_keys(it, keys)
-        for it in from_
-    }
 
 
 @app.route('/api/authenticate', methods=['POST'])
@@ -137,8 +122,8 @@ def authenticate(username, password, otp='', **_):
 def whoami():
     """Returns logined user info, or None if not logined"""
     if logined():
-        user = (User.first(F.username == logined()) or User(
-            username=logined(), password='', roles=[])).as_dict()
+        user = (User.first(F.username == logined())
+                or User(username=logined(), password='', roles=[])).as_dict()
         del user['password']
         user['otp_secret'] = True if user.get('otp_secret') else False
         return APIUpdate(bundle=_select_keys(user, ['username', 'roles']))
@@ -151,49 +136,6 @@ def log_out():
     """Log out"""
     Token.uncheck(logined())
     return APIUpdate()
-
-
-@app.route('/api/users/')
-@app.route('/api/users/<username>', methods=['GET', 'POST'])
-@rest(role='admin')
-def admin_users(username='', password=None, roles=None, datasets=None, **_):
-    """
-    Change user profile and permissions
-    Returns:
-        a list of AdminUserInfo
-    """
-
-    if username:
-        user = User.first(F.username == username)
-        if not user:
-            return 'No such user.', 404
-        if password is not None:
-            user.set_password(password)
-        if roles is not None:
-            user.roles = roles
-        if datasets is not None:
-            user.datasets = datasets
-        user.save()
-        return APIUpdate()
-    else:
-        return APIResults(_select(User.query({}), ['username', 'roles', 'datasets']).values())
-
-
-@app.route('/api/users/', methods=['PUT'])
-@rest(role='admin')
-def admin_users_add(username, password, **_):
-    """
-    Add new user
-    Returns:
-        UserInfo
-    """
-
-    if User.first(F.username == username):
-        raise Exception('User already exists: ' + str(username))
-    user = User(username=username)
-    user.set_password(password)
-    user.save()
-    return _select_keys(user, ['username', 'roles'])
 
 
 @app.route('/api/account/', methods=['POST'])
@@ -222,12 +164,7 @@ def user_change_password(old_password='', password='', otp=None, **_):
         return _select_keys(user, ['otp_secret'])
 
 
-@app.route('/api/users/<username>', methods=['DELETE'])
-@rest(role='admin')
-def admin_users_del(username):
-    """Delete user"""
-    User.query(F.username == username).delete()
-    return APIUpdate()
+# storage and images
 
 
 @app.route('/api/storage/<path:path>', methods=['GET', 'POST'])
@@ -250,15 +187,17 @@ def list_storage(path='', search='', mkdir=''):
 
     results = None
     if search:
-        results = [storage.stat(r) for r in storage.search(path, '*' + search + '*')]
+        results = [
+            storage.stat(r) for r in storage.search(path, '*' + search + '*')
+        ]
     else:
         results = storage.statdir(path)
         if not results and storage.exists(path):
             results = storage.open(path)
 
     if isinstance(results, list):
-        return APIResults(sorted(results,
-                      key=lambda x: x['ctime'], reverse=True))
+        return APIResults(
+            sorted(results, key=lambda x: x['ctime'], reverse=True))
     else:
         return send_file(results, download_name=path.split('/')[-1])
 
@@ -296,509 +235,6 @@ def move_storage(source, destination, keep_folder=True):
     return APIUpdate(flag)
 
 
-@app.route('/api/collections/<coll>/<pid>', methods=['POST'])
-@rest()
-def modify_paragraph(coll, pid, **kws):
-    """
-    Modify paragraph info
-    Returns: Paragraph with changed fields only
-    """
-
-    pid = ObjectId(pid)
-    para = Paragraph.get_coll(coll).first(F.id == pid)
-    flag = False
-    changed = set()
-    if para:
-        for field, val in kws.items():
-            if field in ('_id', 'matched_content'):
-                continue
-            if field in ('$push', '$pull'):
-                Paragraph.get_coll(coll).query(
-                    F.id == pid).update({field: val})
-                changed.update(val.keys())
-            else:
-                flag = True
-                if val is None and hasattr(para, field):
-                    delattr(para, field)
-                else:
-                    setattr(para, field, val)
-                changed.add(field)
-        if flag:
-            para.save()
-    return APIParagraphsUpdate(paragraphs=_select([para], changed))
-
-
-@app.route('/api/collections/<coll>/<pid>/pagenum', methods=['POST'])
-@rest()
-def modify_pagenum(coll, pid, sequential, new_pagenum, folio=False, **_):
-    """Modify page numbers of the same source"""
-
-    pid = ObjectId(pid)
-    para = Paragraph.get_coll(coll).first(F.id == pid)
-    if para:
-        if sequential == 'solo':
-            para.pagenum = new_pagenum
-            para.save()
-        else:
-            folio = 2 if folio else 1
-            delta = new_pagenum - para.source['page'] * folio
-            source = dict(para.source)
-            assert 'page' in source
-            if sequential == 'all':
-                del source['page']
-            else:  # after
-                source['page'] = {'$gt': source['page']}
-            source = {'source.' + k: w for k, w in source.items()}
-            Paragraph.get_coll(coll).query((F.dataset == para.dataset) & MongoOperand(
-                source)).update([Fn.set(pagenum=Fn.add(Fn.multiply('$source.page', folio), delta))])
-            Paragraph.get_coll(coll).query((F.dataset == para.dataset) & (F.pagenum <= 0)).update([
-                Fn.set(pagenum=Fn.concat(
-                    "A", Fn.toString(Fn.add(1, "$source.page"))))
-            ])
-        return APIUpdate()
-    return APIUpdate(False)
-
-
-@app.route('/api/collections/<coll>/batch', methods=["GET", "POST"])
-@rest()
-def batch(coll, ids, **kws):
-    """Batch edit"""
-
-    paras = list(Paragraph.get_coll(coll).query(
-        F.id.in_([ObjectId(_) if len(_) == 24 else _ for _ in ids])))
-    changed = set()
-    for field, val in kws.items():
-        if field.startswith('$'):
-            changed.update(val.keys())
-        else:
-            changed.add(field)
-    for para in paras:
-        for field, val in kws.items():
-            if field in ('$pull', '$push'):
-                for afield, aval in val.items():
-                    if para[afield] is None:
-                        para[afield] = []
-                    for ele in (aval if isinstance(aval, list) else [aval]):
-                        ele = ele.strip()
-                        if field == '$pull' and ele in para[afield]:
-                            para[afield].remove(ele)
-                        elif field == '$push' and ele not in para[afield]:
-                            para[afield].append(ele)
-                            if afield == 'keywords':
-                                Term.write(ele, 'keywords')
-            elif not field.startswith('$'):
-                para[field] = val
-        para.save()
-
-    return APIParagraphsUpdate(paragraphs=_select(paras, list(changed)))
-
-
-@app.route('/api/collections/<coll>/group', methods=["GET", "POST"])
-@rest()
-def grouping(coll, ids, group='', values=None, ungroup=False, limit=100):
-    """Grouping selected paragraphs
-
-    Returns:
-        Group ID
-    """
-    para_query = Paragraph.get_coll(coll).query(
-        F.id.in_([ObjectId(_) if len(_) == 24 else _ for _ in ids]))
-
-    proposed_groups = group or values
-    if isinstance(proposed_groups, str):
-        proposed_groups = [proposed_groups]
-
-    if ungroup:
-        para_query.update(Fn.pull(F.keywords.regex('^#')))
-        groups = []
-
-    else:
-        paras = list(para_query)
-        if paras:
-            gids = []
-            for para in paras:
-                gids += [_ for _ in para.keywords if _.startswith('#')]
-            named = [_ for _ in gids if not _.startswith('#0')]
-
-            if proposed_groups:
-                groups = ['#' + _ for _ in proposed_groups]
-            elif named:
-                groups = [min(named)]
-            elif gids:
-                groups = [min(gids)]
-            else:
-                groups = [
-                    '#0' + _hashing(min(map(lambda p: str(p.id), paras)))]
-
-            gids = list(set(gids) - set(named) - set(groups))
-            para_query = Paragraph.get_coll(coll).query(F.id.in_(
-                [ObjectId(_) if len(_) == 24 else _ for _ in ids]) | F.keywords.in_(gids))
-            for g in groups:
-                para_query.update(Fn.addToSet(keywords=g))
-            if gids:
-                para_query.update(Fn.pull(F.keywords.in_(gids)))
-
-    return APIParagraphsUpdate(
-        paragraphs=_select(para_query.limit(limit), ['keywords']),
-       
-    )
-
-
-@app.route('/api/collections/<coll>/split', methods=["GET", "POST"])
-@app.route('/api/collections/<coll>/merge', methods=["GET", "POST"])
-@rest()
-def splitting(coll, paragraphs):
-    """Split or merge selected items/paragraphs into seperate/single paragraph(s)
-
-    Returns:
-        bool: True if succeeded
-    """
-    paras = list(Paragraph.get_coll(coll).query(
-        F.id.in_([ObjectId(_) for _ in paragraphs])))
-
-    retval = []
-
-    if request.path.endswith('/split'):
-        for para in paras:
-            para_dict = para.as_dict()
-            del para_dict['_id']
-            del para_dict['images']
-            for i in para.images:
-                pnew = Paragraph(images=[i], **para_dict)
-                pnew.save()
-                retval.append(pnew.as_dict(True))
-            para.delete()
-    else:
-        if not paras:
-            return APIParagraphsUpdate()
-
-        selected_ids = list(
-            map(ObjectId, itertools.chain(*paragraphs.values())))
-        selected = MediaItem.query(F.id.in_(selected_ids))
-
-        para0 = Paragraph(paras[0])
-        para0.id = None
-        para0.images = selected
-
-        for para in paras:
-            para0.keywords += para.keywords
-            para.images = [k for k in para.images if k.id not in selected_ids]
-            para.save()
-
-        para0.save()
-        retval.append(para0.as_dict(True))
-
-    return APIParagraphsUpdate(paragraphs={str(p['id']): p for p in retval})
-
-
-@app.route('/api/mediaitem/rating', methods=["GET", "POST"])
-@rest()
-def set_rating(ids=None, inc=1, val=0, least=0):
-    """Increase or decrease the rating of selected items
-    """
-
-    if not ids:
-        return APIParagraphsUpdate()
-
-    items = list(MediaItem.query(
-        F.id.in_([ObjectId(_) if len(_) == 24 else _ for _ in ids])))
-    for i in items:
-        if i is None:
-            continue
-        if val:
-            i.rating = val
-        elif inc:
-            i.rating = round(2 * (i.rating)) / 2 + inc
-
-        i.rating = max(least, i.rating)
-        i.rating = min(i.rating, 5)
-        i.save()
-
-    return APIParagraphsUpdate(items=_select(items, ['rating']))
-
-
-@app.route('/api/mediaitem/reset_storage', methods=["GET", "POST"])
-@rest()
-def reset_storage(ids):
-    """Reset storage status of selected items
-    """
-
-    items = list(MediaItem.query(
-        F.id.in_([ObjectId(_) if len(_) == 24 else _ for _ in ids])))
-    for i in items:
-        if 'file' in i.source:
-            del i.source['file']
-        i.save()
-
-    return APIParagraphsUpdate(items={
-        str(i.id): {'source': {'file': None}}
-        for i in items
-    })
-
-
-@app.route('/api/mediaitem/merge', methods=["POST"])
-@rest()
-def merge_items(pairs):
-    """Process the two specified media items as duplications,
-       keeping the first one, deleting the second and merging
-       the Paragraphs where they locate
-    """
-    if isinstance(pairs, list):
-        d_pairs = defaultdict(list)
-        for rese, dele in pairs:
-            d_pairs[rese].append(dele)
-        pairs = d_pairs
-
-    for rese, dele in pairs.items():
-        rese, dele = MediaItem.first(
-            F.id == ObjectId(rese)), list(MediaItem.query(F.id.in_([ObjectId(_) for _ in dele])))
-        if rese and dele:
-            Paragraph.merge_by_mediaitems(rese, dele)
-
-    return APIUpdate()
-
-
-@app.route('/api/mediaitem/delete', methods=["POST"])
-@rest()
-def delete_item(para_items: dict):
-    """Remove Media Item from paragraph"""
-
-    del_items = set()
-    for pid, items in para_items.items():
-        para = Paragraph.first(F.id == ObjectId(pid))
-        if para is None:
-            continue
-
-        items = [ObjectId(i) for i in items]
-        para.images.remove(items)
-        para.save()
-        del_items.update(items)
-
-    for i in del_items:
-        if Paragraph.first(F.images == i):
-            continue
-        image_item = MediaItem.first(F.id == ObjectId(i))
-        if image_item:
-            image_item.delete()
-
-    return APIUpdate()
-
-
-@app.route('/api/tasks/', methods=['PUT'])
-@rest()
-def create_task(**task):
-    """Create new task"""
-
-    task.pop('shortcut_map', None)
-    task = TaskDBO(**task)
-    task.creator = logined()
-    task.save()
-    return APIUpdate(bundle={'task_id': str(task.id)})
-
-
-@app.route('/api/tasks/shortcuts', methods=['GET'])
-@rest()
-def list_tasks_shortcuts():
-    """List out quick tasks"""
-    return APIResults(TaskDBO.query((F.shortcut_map != {}) & _task_authorized()))
-
-
-@app.route('/api/tasks/<task_id>', methods=['DELETE'])
-@rest()
-def delete_task(task_id):
-    """Remove task"""
-
-    _id = ObjectId(task_id)
-    return APIUpdate(TaskDBO.query(F.id == _id).delete().acknowledged)
-
-
-@app.route('/api/tasks/<task_id>', methods=['POST'])
-@rest()
-def update_task(task_id, **task):
-    """Update task info"""
-    task_id = ObjectId(task_id)
-
-    if '_id' in task:
-        del task['_id']
-
-    executed = TaskDBO.query(
-        (F.id == task_id) & _task_authorized()).update(Fn.set(task))
-
-    return APIUpdate(bundle={
-        'tasks': {str(task_id): task},
-        'updated': task
-    })
-
-
-@app.route('/api/tasks/<task_id>', methods=['GET'])
-@app.route('/api/tasks/', methods=['GET'])
-@rest()
-def list_task(task_id=''):
-    """List out tasks"""
-    import re
-
-    if task_id:
-        if re.match(r'^[0-9a-fA-F]{24}$', task_id):
-            _id = ObjectId(task_id)
-            q = F.id == _id
-        else:
-            q = F.name == task_id
-        return TaskDBO.first(q & _task_authorized())
-    else:
-        return APIResults(TaskDBO.query(_task_authorized()).sort(-F.last_run, -F.id))
-
-
-@app.route('/api/help/pipelines')
-@rest(cache=True)
-def help_info():
-    """Provide help info for pipelines, with respect to preferred language"""
-
-    ctx = Pipeline.ctx
-    result = defaultdict(dict)
-    for key, val in ctx.items():
-        name = (sys.modules[val.__module__].__doc__ or val.__module__.split(
-            '.')[-1] if hasattr(val, '__module__') else key).strip()
-        if key in ("DataSourceStage", "MediaItemStage"):
-            continue
-        name = _lang(name)
-        result[name][key] = _lang(val.get_spec())
-    return result
-
-
-@app.route('/api/help/langs')
-@rest(cache=True)
-def help_langs():
-    """Provide supported language codes"""
-    return language_iso639
-
-
-@app.route('/api/help/qx')
-@rest(cache=True)
-def help_qx():
-    """Provide meta data for query expr"""
-    return APIResults(list(parser.functions.keys()) + list(ee.implemented_functions))
-
-
-@app.route('/api/history')
-@rest()
-def history():
-    """History records for the current user"""
-
-    History.query(F.created_at < datetime.datetime.utcnow() -
-                  datetime.timedelta(days=30)).delete()
-    return APIResults(
-        History.query(F.user == logined()).sort(-F.created_at).limit(100))
-
-
-@app.route('/api/search', methods=['POST'])
-@rest()
-def do_search(q='', req='', sort='', limit=100, offset=0,
-              mongocollections=None, groups='none', count=False, **_):
-    """Search"""
-
-    if not req:
-        return APIResults()
-    
-    datasource = DBQuery((q, req), mongocollections,
-                         limit, offset, sort or 'id', False, groups, app.plugins)
-
-    if count:
-        return APIResults(total=datasource.count())
-
-    results = _expand_results(datasource.fetch())
-
-    if datasource.groups != 'none':
-        for res in results:
-            group = res.get(datasource.groups)
-            if isinstance(group, dict):
-                group = '(' + ','.join(
-                    [f'{k}={app.json_encoder().encode(v)}' for k, v in group.items()]) + ')'
-            else:
-                group = app.json_encoder().encode(group)
-
-    History(user=logined(), queries=[q, req],
-            created_at=datetime.datetime.utcnow()).save()
-
-    return APIResults(results, -1, datasource.query)
-
-
-@app.route('/api/datasets')
-@rest()
-def get_datasets():
-    """Get accessible datasets for the current user"""
-
-    datasets = list(Dataset.query((F.allowed_users == []) | (
-        F.allowed_users == logined())).sort(F.order_weight, F.name))
-    dataset_patterns = User.first(F.username == logined()).datasets
-    if dataset_patterns:
-        filtered_datasets = []
-        for dataset in datasets:
-            for pattern in dataset_patterns:
-                if dataset.name.startswith(pattern):
-                    filtered_datasets.append(dataset)
-                    break
-        datasets = filtered_datasets
-    return APIResults(datasets)
-
-
-@app.route('/api/datasets/<action>', methods=['POST'])
-@rest(role='admin')
-def set_datasets(action, **j):
-    """Update dataset info"""
-
-    dataset = None
-    if '_id' in j:
-        dataset = Dataset.first(F.id == ObjectId(j['_id']))
-        del j['_id']
-
-    if action == 'edit':
-        if dataset:
-            for k, v in j.items():
-                dataset[k] = v
-            dataset.save()
-        else:
-            Dataset(**j).save()
-
-    elif action == 'batch':
-        for dataset in j:
-            jset = {k: v for k, v in dataset.items() if k !=
-                    '_id' and v is not None}
-            if '_id' in dataset:
-                Dataset.query(F.id == ObjectId(dataset['_id'])).update(Fn.set(**jset))
-            else:
-                Dataset(**jset).save()
-
-    elif action == 'rename':
-        assert dataset and 'to' in j, 'must specify valid dataset id and new name'
-        dataset.rename(j['to'])
-
-    elif action == 'sources':
-        assert dataset, 'dataset not found'
-        dataset.update_sources()
-
-    return APIUpdate()
-
-
-@app.route("/api/term/<field>", methods=['POST'])
-@rest()
-def query_terms(field, pattern='', regex=False, scope=''):
-    """Query terms"""
-
-    if pattern:
-        if regex:
-            pattern = pattern.replace(' ', '.*')
-            pattern = {'term': {'$regex': pattern, '$options': 'i'}}
-        else:
-            pattern = (F.term == pattern) | (F.aliases == pattern)
-        return APIResults(Term.query(F.field == field, pattern).limit(100))
-    elif scope:
-        return APIResults([i['_id'] for i in Paragraph.aggregator.match(
-                parser.parse(scope)
-                ).sort(_id=-1).limit(1000).unwind('$' + field).group(
-                _id='$' + field, count=Fn.sum(1)
-                ).sort(count=-1).limit(100).perform(raw=True)])
-
-
 @app.route("/api/image/<coll>/<storage_id>.<ext>")
 @app.route("/api/image")
 @rest(cache=True)
@@ -832,7 +268,7 @@ def resolve_media_item(coll=None, storage_id=None, ext=None):
 
 
 @app.route("/images/<scheme>/<path:image_path>")
-@rest(cache=True)
+@rest(cache=True, login=False)
 def serve_image(scheme, image_path):
     """Serve images
 
@@ -851,31 +287,443 @@ def serve_image(scheme, image_path):
         return Response('Not found.', 404)
 
 
-@app.route('/api/quicktask', methods=['POST'])
-@rest()
-def quick_task(query='', pipeline='', raw=False, mongocollection=''):
-    """Perform quick tasks"""
+class APICollectionEndpoint(APICrudEndpoint):
 
-    if pipeline:
-        if isinstance(pipeline, str):
-            pipeline = parser.parse(pipeline)
-        assert isinstance(pipeline, (list, tuple)
-                          ), f"Unknown format for pipeline: {pipeline}"
-        args = pipeline[0]
-        if isinstance(args, (list, tuple)):
-            args = args[1]
-        elif isinstance(args, dict):
-            args, = args.values()
-        results = Task(stages=pipeline, params={}).execute()
-    else:
-        params = {'query': query, 'raw': raw,
-                  'mongocollections': mongocollection}
-        results = Task(stages=[
-            ('DBQueryDataSource', params),
-            ('AccumulateParagraphs', {}),
-        ], params={}).execute()
+    def __init__(self) -> None:
+        super().__init__('api', Paragraph, ['matched_content'])
+        self.namespace = '/api/collections/'
+        self.bind_endpoint(self.pagenum)
+        self.bind_endpoint(self.remove_image)
+        self.bind_endpoint(self.merge)
+        self.bind_endpoint(self.split)
+        self.bind_endpoint(self.group)
 
-    return APIResults(_expand_results(results))
+    def get_dbobjs(self,
+                   id=None,
+                   ids=None,
+                   query=None,
+                   limit=0,
+                   offset=0,
+                   sort='id',
+                   mongocollection='',
+                   **data):
+        if ':' in id:
+            mongocollection, id = id.split(':', 1)
+
+        query = self.build_query(id, ids, query, data)
+        results = Paragraph.get_coll(mongocollection).query(query)
+
+        if id:
+            return results.first()
+        else:
+            return self.apply_sorting(results, limit, offset, sort)
+
+    def update_object(self, obj, data):
+        updated = super().update_object(obj, data)
+        if 'keywords' in updated:
+            for ele in updated['keywords']:
+                Term.write(ele, 'keywords')
+        return updated
+
+    def create(self):
+        abort(400)
+
+    def pagenum(self, objs, sequential, new_pagenum, folio, **_):
+        para = objs
+        new_pagenum = int(new_pagenum)
+        if sequential == 'solo':
+            para.pagenum = new_pagenum
+            para.save()
+        else:
+            folio = 2 if folio else 1
+            delta = new_pagenum - para.source['page'] * folio
+            source = dict(para.source)
+            assert 'page' in source
+            if sequential == 'all':
+                del source['page']
+            else:  # after
+                source['page'] = {'$gt': source['page']}
+            source = {'source.' + k: w for k, w in source.items()}
+            coll = type(para)
+            coll.query((F.dataset == para.dataset)
+                       & MongoOperand(source)).update([
+                           Fn.set(pagenum=Fn.add(
+                               Fn.multiply('$source.page', folio), delta))
+                       ])
+            coll.query((F.dataset == para.dataset) & (F.pagenum <= 0)).update([
+                Fn.set(pagenum=Fn.concat(
+                    "A", Fn.toString(Fn.add(1, "$source.page"))))
+            ])
+        return APIUpdate()
+
+    def group(self, objs, values=None, ungroup=False, **data):
+        objs, _ = objs
+        proposed_groups = values
+
+        if isinstance(proposed_groups, str):
+            proposed_groups = [proposed_groups]
+
+        if ungroup:
+            objs.update(Fn.pull(F.keywords.regex('^#')))
+            groups = []
+
+        else:
+            paras = list(objs)
+            if paras:
+                gids = []
+                for para in paras:
+                    gids += [_ for _ in para.keywords if _.startswith('#')]
+                named = [_ for _ in gids if not _.startswith('#0')]
+
+                if proposed_groups:
+                    groups = ['#' + _ for _ in proposed_groups]
+                elif named:
+                    groups = [min(named)]
+                elif gids:
+                    groups = [min(gids)]
+                else:
+                    groups = [
+                        '#0' + _hashing(min(map(lambda p: str(p.id), paras)))
+                    ]
+
+                gids = list(set(gids) - set(named) - set(groups))
+                objs = type(para).query(F.keywords.in_(gids) | objs.mongo_cond)
+                for g in groups:
+                    objs.update(Fn.addToSet(keywords=g))
+                if gids:
+                    objs.update(Fn.pull(F.keywords.in_(gids)))
+
+        return APIUpdate(bundle=groups)
+
+    def split(self, objs):
+        return self.split_or_merge(objs, False)
+
+    def merge(self, objs, pairs=None):
+
+        if isinstance(pairs, list):
+            d_pairs = defaultdict(list)
+            for rese, dele in pairs:
+                d_pairs[rese].append(dele)
+            pairs = d_pairs
+
+        if pairs:
+            for rese, dele in pairs.items():
+                rese, dele = MediaItem.first(F.id == ObjectId(rese)), list(
+                    MediaItem.query(F.id.in_([ObjectId(_) for _ in dele])))
+                if rese and dele:
+                    Paragraph.merge_by_mediaitems(rese, dele)
+            return APIUpdate()
+
+        return self.split_or_merge(objs, True)
+
+    def split_or_merge(self, objs, merge=False, **data):
+        """Split or merge selected items/paragraphs into seperate/single paragraph(s)
+
+        Returns:
+            bool: True if succeeded
+        """
+        objs, _ = objs
+
+        retval = []
+
+        if not merge:
+            for para in objs:
+                para_dict = para.as_dict()
+                del para_dict['_id']
+                del para_dict['images']
+                for i in para.images:
+                    pnew = Paragraph(images=[i], **para_dict)
+                    pnew.save()
+                    retval.append(pnew.as_dict(True))
+                para.delete()
+
+        elif objs:
+            selected_ids = list(map(ObjectId, itertools.chain(*data.values())))
+            selected = MediaItem.query(F.id.in_(selected_ids))
+            paras = list(objs)
+
+            para0 = Paragraph(paras[0])
+            para0.id = None
+            para0.images = selected
+
+            for para in paras:
+                para0.keywords += para.keywords
+                para.images = [
+                    k for k in para.images if k.id not in selected_ids
+                ]
+                para.save()
+
+            para0.save()
+            retval.append(para0.as_dict(True))
+
+        return APIUpdate(bundle={str(p['id']): p for p in retval})
+
+    def remove_image(self, objs, **data):
+        del_items = set()
+
+        for para in objs[0]:
+            items = [ObjectId(i) for i in data[str(para.id)]]
+            para.images.remove(items)
+            para.save()
+            del_items.update(items)
+
+        for i in del_items:
+            if Paragraph.first(F.images == i):
+                continue
+            image_item = MediaItem.first(F.id == ObjectId(i))
+            if image_item:
+                image_item.delete()
+
+        return APIUpdate()
+
+
+APICollectionEndpoint().bind(app)
+
+
+class APIMediaItemEndpoint(APICrudEndpoint):
+
+    def __init__(self,
+                 namespace,
+                 db_cls: DbObject,
+                 filtered_fields=None,
+                 allowed_fields=None) -> None:
+        super().__init__(namespace, db_cls, filtered_fields, allowed_fields)
+        self.bind_endpoint(self.reset_storage)
+        self.bind_endpoint(self.rating)
+
+    def reset_storage(self, objs):
+        retval = {}
+        for i in objs[0]:
+            if 'file' in i.source:
+                del i.source['file']
+                retval[str(i.id)] = {'source': i.source}
+            i.save()
+        return APIUpdate(bundle=retval)
+
+    def rating(self, objs, inc=1, val=0, least=0):
+        """Increase or decrease the rating of selected items
+        """
+        retval = {}
+        for i in objs[0]:
+            if val:
+                i.rating = val
+            elif inc:
+                i.rating = round(2 * (i.rating)) / 2 + inc
+
+            i.rating = max(least, i.rating)
+            i.rating = min(i.rating, 5)
+            i.save()
+            retval[str(i.id)] = {'rating': i.rating}
+
+        return APIUpdate(bundle=retval)
+
+
+APIMediaItemEndpoint('api', MediaItem).bind(app)
+
+
+class APITaskEndpoint(APICrudEndpoint):
+
+    def __init__(self) -> None:
+        super().__init__('api', TaskDBO, ['last_run'])
+        self.namespace = '/api/tasks/'
+        self.bind_endpoint(self.shortcuts)
+
+    def create(self, **data):
+        data.pop('shortcut_map', None)
+        data['creator'] = logined()
+        return super().create(**data)
+
+    def _task_authorized(self):
+        """Test if task is authorized to current user"""
+
+        if logined('admin'):
+            return MongoOperand({})
+
+        return ((F.creator == logined()) | (F.shared == True))
+
+    def build_query(self, id, ids, query, data):
+        query = super().build_query(id, ids, query, data)
+        return query & self._task_authorized()
+
+    def shortcuts(self, objs, **_):
+        """List out quick tasks"""
+        return APIResults(
+            TaskDBO.query((F.shortcut_map != {}) & self._task_authorized()))
+
+
+APITaskEndpoint().bind(app)
+
+
+class APIHistoryEndpoint(APICrudEndpoint):
+
+    def build_query(self, id, ids, query, data):
+        query = super().build_query(id, ids, query, data)
+        return query & (F.user == logined())
+
+    def get_dbobjs(self,
+                   id=None,
+                   ids=None,
+                   query=None,
+                   limit=0,
+                   offset=0,
+                   sort='-created_at',
+                   **data):
+        History.query(F.created_at < datetime.datetime.utcnow() -
+                      datetime.timedelta(days=30)).delete()
+
+        return super().get_dbobjs(id, ids, query, limit, offset, sort, **data)
+
+
+APIHistoryEndpoint('api', History).bind(app)
+
+
+class APIDatasetEndpoint(APICrudEndpoint):
+
+    def __init__(self,
+                 namespace,
+                 db_cls: DbObject,
+                 filtered_fields=None,
+                 allowed_fields=None) -> None:
+        super().__init__(namespace, db_cls, filtered_fields, allowed_fields)
+        self.bind_endpoint(self.rename)
+        self.bind_endpoint(self.sources)
+
+    def test_dataset(self, dataset, dataset_patterns):
+        if not dataset_patterns:
+            return True
+
+        for pattern in dataset_patterns:
+            if dataset.name.startswith(pattern):
+                return True
+
+        return False
+
+    def build_query(self, id, ids, query, data):
+        query = super().build_query(id, ids, query, data)
+        return query & ((F.allowed_users == []) |
+                        (F.allowed_users == logined()))
+
+    def apply_sorting(self, results, limit, offset, sort):
+        sort = 'order_weight,name'
+        return super().apply_sorting(results, limit, offset, sort)
+
+    def get_dbobjs(self,
+                   id=None,
+                   ids=None,
+                   query=None,
+                   limit=0,
+                   offset=0,
+                   sort='id'):
+        dataset_patterns = User.first(F.username == logined()).datasets
+        result = super().get_dbobjs(id, ids, query, limit, offset, sort)
+
+        if isinstance(result, Dataset):
+            if not self.test_dataset(result, dataset_patterns):
+                result = None
+
+        else:
+            objs, total = result
+            filtered_datasets = []
+            for dataset in objs:
+                if self.test_dataset(dataset, dataset_patterns):
+                    filtered_datasets.append(dataset)
+            return filtered_datasets, total
+
+    def rename(self, objs, to, **_):
+        self.check_role('admin')
+        objs.rename(to)
+
+    def sources(self, objs, **_):
+        self.check_role('admin')
+        objs.update_sources()
+
+    def update(self, objs, **data):
+        self.check_role('admin')
+        return super().update(objs, **data)
+
+    def delete(self, objs, **data):
+        self.check_role('admin')
+        return super().delete(objs, **data)
+
+    def create(self, **data):
+        self.check_role('admin')
+        return super().create(**data)
+
+
+APIDatasetEndpoint('api', Dataset).bind(app)
+
+
+class APIUserEndpoint(APICrudEndpoint):
+
+    def update_object(self, obj, data):
+        if 'password' in data:
+            obj.set_password(data.pop('password'))
+        return super().update_object(obj, data)
+
+    def read(self, objs, **data):
+        if isinstance(objs, tuple):
+            return APIResults([
+                self.select_fields(o, ['username', 'roles', 'datasets'])
+                for o in objs[0]
+            ], objs[1])
+        return {}
+
+    def create(self, username, password, **_):
+        if User.first(F.username == username):
+            raise Exception('User already exists: ' + str(username))
+        user = User(username=username)
+        user.set_password(password)
+        user.save()
+        return self.select_fields(user, ['username', 'roles'])
+
+    def build_query(self,
+                    id=None,
+                    ids=None,
+                    query=None,
+                    limit=0,
+                    offset=0,
+                    sort='id'):
+        if id:
+            return F.username == id
+        return super().get_dbobjs(id, query, limit, offset, sort)
+
+
+APIUserEndpoint('api', User).bind(app, role='admin')
+
+# ui & qx helpers
+
+
+@app.route('/api/help/pipelines')
+@rest(cache=True)
+def help_info():
+    """Provide help info for pipelines, with respect to preferred language"""
+
+    ctx = Pipeline.ctx
+    result = defaultdict(dict)
+    for key, val in ctx.items():
+        name = (sys.modules[val.__module__].__doc__
+                or val.__module__.split('.')[-1]
+                if hasattr(val, '__module__') else key).strip()
+        if key in ("DataSourceStage", "MediaItemStage"):
+            continue
+        name = _lang(name)
+        result[name][key] = _lang(val.get_spec())
+    return result
+
+
+@app.route('/api/help/langs')
+@rest(cache=True)
+def help_langs():
+    """Provide supported language codes"""
+    return language_iso639
+
+
+@app.route('/api/help/qx')
+@rest(cache=True)
+def help_qx():
+    """Provide meta data for query expr"""
+    return APIResults(
+        list(parser.functions.keys()) + list(ee.implemented_functions))
 
 
 @app.route('/api/qx', methods=['POST'])
@@ -884,9 +732,109 @@ def qx_parse(query=''):
     return parser.parse(query)
 
 
+@app.route('/api/search', methods=['POST'])
+@rest()
+def do_search(q='',
+              req='',
+              sort='',
+              limit=100,
+              offset=0,
+              mongocollections=None,
+              groups='none',
+              count=False,
+              **_):
+    """Search"""
+
+    if not req:
+        return APIResults()
+
+    datasource = DBQuery((q, req), mongocollections, limit, offset, sort
+                         or 'id', False, groups, app.plugins)
+
+    if count:
+        return APIResults(total=datasource.count())
+
+    results = _expand_results(datasource.fetch())
+
+    if datasource.groups != 'none':
+        for res in results:
+            group = res.get(datasource.groups)
+            if isinstance(group, dict):
+                group = '(' + ','.join([
+                    f'{k}={app.json_encoder().encode(v)}'
+                    for k, v in group.items()
+                ]) + ')'
+            else:
+                group = app.json_encoder().encode(group)
+
+    History(user=logined(),
+            queries=[q, req],
+            created_at=datetime.datetime.utcnow()).save()
+
+    return APIResults(results, -1, datasource.query)
+
+
+@app.route("/api/term/<field>", methods=['POST'])
+@rest()
+def query_terms(field, pattern='', regex=False, scope=''):
+    """Query terms"""
+
+    if pattern:
+        if regex:
+            pattern = pattern.replace(' ', '.*')
+            pattern = {'term': {'$regex': pattern, '$options': 'i'}}
+        else:
+            pattern = (F.term == pattern) | (F.aliases == pattern)
+        return APIResults(Term.query(F.field == field, pattern).limit(100))
+    elif scope:
+        return APIResults([
+            i['_id']
+            for i in Paragraph.aggregator.match(parser.parse(scope)).sort(
+                _id=-1).limit(1000).unwind('$' + field).group(
+                    _id='$' + field, count=Fn.sum(1)).sort(
+                        count=-1).limit(100).perform(raw=True)
+        ])
+
+
+@app.route('/api/quicktask', methods=['POST'])
+@rest()
+def quick_task(query='', pipeline='', raw=False, mongocollection=''):
+    """Perform quick tasks"""
+
+    if pipeline:
+        if isinstance(pipeline, str):
+            pipeline = parser.parse(pipeline)
+        assert isinstance(
+            pipeline,
+            (list, tuple)), f"Unknown format for pipeline: {pipeline}"
+        args = pipeline[0]
+        if isinstance(args, (list, tuple)):
+            args = args[1]
+        elif isinstance(args, dict):
+            args, = args.values()
+        results = Task(stages=pipeline, params={}).execute()
+    else:
+        params = {
+            'query': query,
+            'raw': raw,
+            'mongocollections': mongocollection
+        }
+        results = Task(stages=[
+            ('DBQueryDataSource', params),
+            ('AccumulateParagraphs', {}),
+        ],
+                       params={}).execute()
+
+    return APIResults(_expand_results(results))
+
+
 @app.route('/api/admin/db', methods=['POST'])
 @rest(role='admin')
-def dbconsole(mongocollection='', query='', operation='', operation_params='', preview=True):
+def dbconsole(mongocollection='',
+              query='',
+              operation='',
+              operation_params='',
+              preview=True):
     """Database console for admin"""
 
     mongo = Paragraph.db.database[mongocollection]
@@ -896,23 +844,20 @@ def dbconsole(mongocollection='', query='', operation='', operation_params='', p
     if isinstance(operation_params, dict):
         keys = list(operation_params)
         if len(keys) != 1:
-            operation_params = {
-                '$set': operation_params
-            }
+            operation_params = {'$set': operation_params}
         elif keys[0] in ['keywords', 'images']:
             operation_params = {'$addToSet': operation_params}
         elif not keys[0].startswith('$'):
-            operation_params = {
-                '$set': operation_params
-            }
+            operation_params = {'$set': operation_params}
 
     if preview:
-        return APIUpdate(bundle={
-            'mongocollection': mongocollection,
-            'query': query,
-            'operation': operation,
-            'operation_params': operation_params
-        })
+        return APIUpdate(
+            bundle={
+                'mongocollection': mongocollection,
+                'query': query,
+                'operation': operation,
+                'operation_params': operation_params
+            })
     else:
         result = getattr(mongo, operation)(query, operation_params)
         if operation == 'update_many':
@@ -958,6 +903,9 @@ def get_plugins():
     return APIResults([type(pl).__name__ for pl in app.plugins])
 
 
+# index
+
+
 @app.route('/<path:path>', methods=['GET'])
 @app.route('/', methods=['GET'])
 def index(path='index.html'):
@@ -966,11 +914,7 @@ def index(path='index.html'):
     if path.startswith('api/'):
         return Response('', 404)
     path = path or 'index.html'
-    for file in [
-        path,
-        path + '.html',
-        os.path.join('ui/dist', path)
-    ]:
+    for file in [path, path + '.html', os.path.join('ui/dist', path)]:
         if file.startswith('ui/') and config.ui_proxy:
             return serve_proxy(config.ui_proxy, path=path)
         if os.path.exists(file) and os.path.isfile(file):
