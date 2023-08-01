@@ -19,10 +19,10 @@ import numpy as np
 import requests
 import werkzeug.wrappers.response
 from bson import ObjectId
-from flask import Response, jsonify, request, send_file, stream_with_context
+from flask import Response, jsonify, request, send_file, stream_with_context, abort, Flask
 from PIL.Image import Image
-from PyMongoWrapper import MongoOperand, QExprEvaluator
-from PyMongoWrapper.dbo import create_dbo_json_decoder, create_dbo_json_encoder
+from PyMongoWrapper import MongoOperand, QExprEvaluator, F
+from PyMongoWrapper.dbo import create_dbo_json_decoder, create_dbo_json_encoder, DbObject
 
 from .config import instance as config
 from .dbquery import parser
@@ -151,8 +151,7 @@ def rest(login=True, cache=False, role='', mapping=None):
             try:
                 erred = False
                 if login and not logined(role):
-                    raise Exception(
-                        f'Forbidden. Client: {request.remote_addr}')
+                    return f'Forbidden. Client: {request.remote_addr}', 403
                 if request.content_type == 'application/json' and request.json:
                     for key, val in request.json.items():
                         kwargs[mapping.get(key, key)] = val
@@ -320,12 +319,7 @@ language_iso639 = {
 }
 language_iso639.update(zhs='Chinese Simplified', zht='Chinese Traditional')
 
-# API Response
-@dataclass
-class APIParagraphsUpdate:
-    paragraphs: dict = field(default_factory=dict)
-    items: dict = field(default_factory=dict)
-    
+# API Response    
 @dataclass
 class APIUpdate:
     success: bool = True
@@ -345,3 +339,149 @@ class APIResults:
         self.results = results
         self.total = total
         self.query = query
+
+
+class APICrudEndpoint:
+    '''API CRUD Endpoint Base Class'''
+
+    def __init__(self, namespace, db_cls: DbObject, filtered_fields=None, allowed_fields=None) -> None:
+        self.filtered_fields = filtered_fields
+        self.allowed_fields = allowed_fields
+        self.db_cls = db_cls
+        self.namespace = f'/{namespace.strip("/")}/{self.db_cls.__name__.lower() + "s"}/'
+        self.maps = {}
+
+    def get_operation(self, request):
+        if request.method == 'DELETE':
+            return 'delete'
+        elif request.method == 'PUT':
+            return 'create'
+        elif request.method == 'POST':
+            return 'update'
+        else:
+            return 'read'
+        
+    def can_include(self, field):
+        if self.filtered_fields and field in self.filtered_fields: return False
+        if self.allowed_fields and field not in self.allowed_fields: return False
+        return True
+    
+    def apply_sorting(self, results, limit, offset, sort):
+        results = results.sort(sort)
+        total = results.count()
+        if limit:
+            results = results.skip(offset).limit(limit)
+        return results, total
+    
+    def build_query(self, id, ids, query, data):
+        if isinstance(query, str):
+            query = parser.parse(query)
+        
+        query = MongoOperand(query or {})
+
+        if id:
+            query &= F.id == id if re.match(r'^[0-9a-fA-F]{24}$', id) else F.name == id
+        if data:
+            ids = list(data.keys())
+        if ids:
+            query &= F.id.in_([ObjectId(i) for i in ids if re.match(r'^[0-9a-fA-F]{24}$', i)])
+        
+        return query
+        
+    def get_dbobjs(self, id=None, ids=None, query=None, limit=0, offset=0, sort='id', **data):
+        query = self.build_query(id, ids, query, data)
+
+        if id:
+            return self.db_cls.first(query)
+        
+        results = self.db_cls.query(query)
+        return self.apply_sorting(results, limit, offset, sort)
+    
+    def select_fields(self, obj, selection=None):
+        return {k: w for k, w in obj.as_dict().items() if self.can_include(k) and (not selection or k in selection) or k == '_id'}
+
+    def update_object(self, obj, data):
+        updated_fields = set()
+        for field, newval in data.items():
+            if not self.can_include(field): continue
+            if field == '_id': continue
+
+            updated_fields.add(field)
+
+            if isinstance(newval, dict) and len(newval) == 1 and list(newval)[0] in ('$push', '$pull'):
+                if not hasattr(obj[field], 'append'):
+                    obj[field] = list(obj[field])
+                if '$push' in newval:
+                    vals = newval['$push']
+                    for val in vals:
+                        if val not in obj[field]:
+                            obj[field].append(val)
+                else:
+                    vals = newval['$pull']
+                    for val in vals:
+                        if val in obj[field]:
+                            obj[field].remove(val)
+            elif newval is None and hasattr(obj, field):
+                delattr(obj, field)
+            else:
+                setattr(obj, field, newval)
+        obj.save()
+        return self.select_fields(obj, updated_fields)
+    
+    def check_role(self, role):
+        if not logined(role):
+            abort(403)
+    
+    def create(self, **data):
+        obj = self.db_cls(**data)
+        obj.save()
+        return APIUpdate(bundle=self.select_fields(obj))
+    
+    def update(self, objs, **data):
+        if isinstance(objs, DbObject):
+            result = self.update_object(objs, data)
+        else:
+            result = {}
+            for obj in objs[0]:
+                result[str(obj.id)] = self.update_object(obj, data[str(obj.id)])
+        return APIUpdate(bundle=result)
+    
+    def read(self, objs, **data):
+        if isinstance(objs, DbObject):
+            return self.select_fields(objs)
+        else:
+            return APIResults(*objs)
+
+    def delete(self, objs, **data):
+        objs.delete()
+        return APIUpdate(bundle=str(objs.id))
+    
+    def bind_endpoint(self, func):
+        def wrapped(id=None, ids=None, query=None, limit=0, offset=0, sort='id', **data):
+            objs = self.get_dbobjs(id, ids, query, limit, offset, sort)
+            return func(objs, **data)
+        self.maps[func.__name__] = wrapped
+        return wrapped
+
+    def bind(self, app: Flask, **options):
+        @rest(**options)
+        def do_crud(id=None, limit=0, query=None, offset=0, sort='id', **data):
+            objs = self.get_dbobjs(id, query, limit, offset, sort)
+            operation = self.get_operation(request)
+            
+            if id and objs is None:
+                abort(404)
+
+            if operation == 'create':
+                return self.create(**data)
+            else:           
+                return getattr(self, operation)(objs, **data)
+        
+        endpoint = f"{self.namespace.replace('/', '_')}_crud"
+        app.add_url_rule(f'{self.namespace}', methods=['GET', 'PUT', 'POST'], view_func=do_crud, endpoint=endpoint)
+        app.add_url_rule(f'{self.namespace}<id>', methods=['GET', 'POST', 'DELETE'], view_func=do_crud, endpoint=endpoint)
+
+        for func_name, func in self.maps.items():
+            app.add_url_rule(f'{self.namespace}/{func_name}', methods=['GET', 'POST'], view_func=rest(**options)(func), endpoint=endpoint + '_' + func_name)
+
+        return do_crud
