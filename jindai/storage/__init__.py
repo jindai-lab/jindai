@@ -434,7 +434,7 @@ class Storage:
                     if '*' in seg:
                         parents = segs[:i]
                         break
-                parent = '/'.join(parents)
+                parent = '/'.join(parents) + '/'
                 for mgr in self._get_managers(parent):
                     try:
                         for pattern in mgr.search(parent, pattern):

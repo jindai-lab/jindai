@@ -158,7 +158,11 @@ class OSFileSystemManager(StorageManager):
         return True
 
     def walk(self, base_path, name_pattern=''):
+        if base_path.startswith('file://'):
+            base_path = base_path[7:]
         yield from super().walk(base_path, name_pattern)
 
     def search(self, base_path, name_pattern=''):
+        if base_path.startswith('file://'):
+            base_path = base_path[7:]
         yield from super().search(base_path, name_pattern)
