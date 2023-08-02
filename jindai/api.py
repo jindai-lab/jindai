@@ -325,9 +325,6 @@ class APICollectionEndpoint(APICrudEndpoint):
                 Term.write(ele, 'keywords')
         return updated
 
-    def create(self):
-        abort(400)
-
     def pagenum(self, objs, sequential, new_pagenum, folio, **_):
         para = objs
         new_pagenum = int(new_pagenum)
@@ -529,7 +526,7 @@ class APITaskEndpoint(APICrudEndpoint):
         self.bind_endpoint(self.shortcuts)
 
     def create(self, **data):
-        data.pop('shortcut_map', None)
+        data.pop('shortcut_map')
         data['creator'] = logined()
         return super().create(**data)
 
@@ -542,8 +539,8 @@ class APITaskEndpoint(APICrudEndpoint):
         return ((F.creator == logined()) | (F.shared == True))
 
     def build_query(self, id, ids, query, data):
-        query = super().build_query(id, ids, query, data)
-        return query & self._task_authorized()
+        query = super().build_query(id, ids, query, data) & self._task_authorized()
+        return query
 
     def shortcuts(self, objs, **_):
         """List out quick tasks"""
