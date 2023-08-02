@@ -307,7 +307,7 @@ class APICollectionEndpoint(APICrudEndpoint):
                    sort='id',
                    mongocollection='',
                    **data):
-        if ':' in id:
+        if id and ':' in id:
             mongocollection, id = id.split(':', 1)
 
         query = self.build_query(id, ids, query, data)
@@ -356,9 +356,9 @@ class APICollectionEndpoint(APICrudEndpoint):
             ])
         return APIUpdate()
 
-    def group(self, objs, values=None, ungroup=False, **data):
+    def group(self, objs, group=None, ungroup=False, **data):
         objs, _ = objs
-        proposed_groups = values
+        proposed_groups = [group]
 
         if isinstance(proposed_groups, str):
             proposed_groups = [proposed_groups]
@@ -393,7 +393,7 @@ class APICollectionEndpoint(APICrudEndpoint):
                 if gids:
                     objs.update(Fn.pull(F.keywords.in_(gids)))
 
-        return APIUpdate(bundle=groups)
+        return APIUpdate(bundle={str(i.id): {'keywords': i.keywords} for i in paras})
 
     def split(self, objs):
         return self.split_or_merge(objs, False)
