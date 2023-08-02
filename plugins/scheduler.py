@@ -8,7 +8,7 @@ from threading import Thread
 
 from PyMongoWrapper import ObjectId, F
 from jindai import Plugin
-from jindai.helpers import rest, safe_import, APIResults, APIUpdate
+from jindai.helpers import safe_import, APICrudEndpoint
 from jindai.models import TaskDBO, db
 
 schedule = safe_import('schedule')
@@ -43,6 +43,34 @@ class ScheduledTask:
             'key': self.key,
             'name': self.task_dbo.name
         }
+        
+        
+class SchedulerCrudEndpoint(APICrudEndpoint):
+    
+    def __init__(self, updater) -> None:        
+        super().__init__('api/plugins', SchedulerJob)
+        self.namespace = '/api/plugins/scheduler'
+        self.updater = updater
+    
+    def delete(self, objs, **data):
+        result = super().delete(objs)
+        self.updater()
+        return result
+        
+    def create(self, **data):
+        result = super().create(**data)
+        self.updater()
+        return result
+    
+    def read(self, objs, **data):
+        result = super().read(objs, **data)
+        self.updater()
+        return result
+    
+    def update(self, objs, **data):
+        result = super().update(objs, **data)
+        self.updater()
+        return result
 
 
 class Scheduler(Plugin):
@@ -91,23 +119,13 @@ class Scheduler(Plugin):
 
         return jobs
 
-    def list_jobs(self, jobs):
-        """List out scheduled tasks"""
-        return [
-            dict(getattr(j.job_func.func, 'as_dict', {}),
-                 repr=repr(j).split(' do')[0].lower())
-            for j in jobs
-        ]
-
     def reload_scheduler(self):
         """Reload jobs"""
-        SchedulerJob.query({}).delete()
+        schedule.jobs = []
+        for job in SchedulerJob.query():
+            self.cron(job.cron)
+            
         if schedule.jobs:
-            for j in schedule.jobs:
-                SchedulerJob(
-                    cron=f"{repr(j).split(' do')[0].lower()} do {j.job_func.func.task_dbo.id}"
-                ).save()
-
             self.run_background_thread()
 
     def run_background_thread(self):
@@ -133,34 +151,4 @@ class Scheduler(Plugin):
         self.running = True
 
         app = self.pmanager.app
-
-        @app.route('/api/scheduler', methods=['GET'])
-        @rest()
-        def schedule_list():
-            return APIResults(self.list_jobs(schedule.jobs))
-
-        @app.route('/api/scheduler', methods=['PUT'])
-        @rest()
-        def schedule_job(text):
-            jobs = self.cron(text)
-            self.reload_scheduler()
-            return APIResults(self.list_jobs(jobs))
-
-        @app.route('/api/scheduler/<key>', methods=['DELETE'])
-        @rest()
-        def schedule_delete(key):
-            key = ObjectId(key)
-            to_del = [
-                j
-                for j in schedule.jobs
-                if j.job_func.func.key == key
-            ]
-            for job in to_del:
-                schedule.jobs.remove(job)
-            self.reload_scheduler()
-            return APIUpdate(len(to_del) > 0)
-
-        for j in SchedulerJob.query({}):
-            self.cron(j.cron)
-
-        self.run_background_thread()
+        SchedulerCrudEndpoint(self.reload_scheduler).bind(app, role='admin')

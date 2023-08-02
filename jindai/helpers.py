@@ -405,26 +405,27 @@ class APICrudEndpoint:
         for field, newval in data.items():
             if not self.can_include(field): continue
             if field == '_id': continue
-
+            
             updated_fields.add(field)
-
-            if isinstance(newval, dict) and len(newval) == 1 and list(newval)[0] in ('$push', '$pull'):
-                if not hasattr(obj[field], 'append'):
-                    obj[field] = list(obj[field])
+            if isinstance(newval, dict) and [1 for k in newval if k.startswith('$')]:
+                # handle special assignments
                 if '$push' in newval:
-                    vals = newval['$push']
+                    vals = newval.pop('$push')
                     for val in vals:
                         if val not in obj[field]:
                             obj[field].append(val)
-                else:
-                    vals = newval['$pull']
+                if '$pull' in newval:
+                    vals = newval.pop('$pull')
                     for val in vals:
                         if val in obj[field]:
                             obj[field].remove(val)
+                            
             elif newval is None and hasattr(obj, field):
                 delattr(obj, field)
+                
             else:
                 setattr(obj, field, newval)
+                
         obj.save()
         return self.select_fields(obj, updated_fields)
     
