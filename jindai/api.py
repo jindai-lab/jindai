@@ -668,7 +668,8 @@ class APIUserEndpoint(APICrudEndpoint):
             ], objs[1])
         return {}
 
-    def create(self, username, password, **_):
+    def create(self, username='', password='', **_):
+        assert username and password
         if User.first(F.username == username):
             raise Exception('User already exists: ' + str(username))
         user = User(username=username)
@@ -680,12 +681,10 @@ class APIUserEndpoint(APICrudEndpoint):
                     id=None,
                     ids=None,
                     query=None,
-                    limit=0,
-                    offset=0,
-                    sort='id'):
+                    data=None):
         if id:
             return F.username == id
-        return super().get_dbobjs(id, query, limit, offset, sort)
+        return super().build_query(id, ids, query, data or {})
 
 
 APIUserEndpoint('api', User).bind(app, role='admin')
