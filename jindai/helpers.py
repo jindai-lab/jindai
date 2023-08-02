@@ -19,7 +19,7 @@ import numpy as np
 import requests
 import werkzeug.wrappers.response
 from bson import ObjectId
-from flask import Response, jsonify, request, send_file, stream_with_context, abort, Flask
+from flask import Response, jsonify, request, send_file, stream_with_context, Flask
 from PIL.Image import Image
 from PyMongoWrapper import MongoOperand, QExprEvaluator, F
 from PyMongoWrapper.dbo import create_dbo_json_decoder, create_dbo_json_encoder, DbObject
@@ -351,7 +351,7 @@ class APICrudEndpoint:
         self.namespace = f'/{namespace.strip("/")}/{self.db_cls.__name__.lower() + "s"}/'
         self.maps = {}
 
-    def get_operation(self, request):
+    def get_operation(self):
         if request.method == 'DELETE':
             return 'delete'
         elif request.method == 'PUT':
@@ -380,22 +380,27 @@ class APICrudEndpoint:
         query = MongoOperand(query or {})
 
         if id:
-            query &= F.id == id if re.match(r'^[0-9a-fA-F]{24}$', id) else F.name == id
+            query = F.id == id if re.match(r'^[0-9a-fA-F]{24}$', id) else F.name == id
+
+        if not ids: ids = []
+        
         if data:
-            if not ids: ids = []
             ids += list(data.keys())
+        
+        ids = [ObjectId(i) for i in ids if re.match(r'^[0-9a-fA-F]{24}$', i)]
+        
         if ids:
-            query &= F.id.in_([ObjectId(i) for i in ids if re.match(r'^[0-9a-fA-F]{24}$', i)])
+            query = F.id.in_(ids)
         
         return query
         
     def get_dbobjs(self, id=None, ids=None, query=None, limit=0, offset=0, sort='id', **data):
         query = self.build_query(id, ids, query, data)
+        results = self.db_cls.query(query)
 
         if id:
-            return self.db_cls.first(query)
+            return results.first()
         
-        results = self.db_cls.query(query)
         return self.apply_sorting(results, limit, offset, sort)
     
     def select_fields(self, obj, selection=None):
@@ -432,7 +437,7 @@ class APICrudEndpoint:
     
     def check_role(self, role):
         if not logined(role):
-            abort(403)
+            return f'forbidden: require {role}', 403
     
     def create(self, **data):
         obj = self.db_cls(**data)
@@ -470,10 +475,10 @@ class APICrudEndpoint:
         @rest(**options)
         def do_crud(id=None, ids=None, limit=0, query=None, offset=0, sort='id', **data):
             objs = self.get_dbobjs(id, ids, query, limit, offset, sort, **data)
-            operation = self.get_operation(request)
+            operation = self.get_operation()
             
             if id and objs is None:
-                abort(404)
+                return f'{id} not matched', 404
 
             if operation == 'create':
                 return self.create(**data)
