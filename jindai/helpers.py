@@ -382,7 +382,8 @@ class APICrudEndpoint:
         if id:
             query &= F.id == id if re.match(r'^[0-9a-fA-F]{24}$', id) else F.name == id
         if data:
-            ids = list(data.keys())
+            if not ids: ids = []
+            ids += list(data.keys())
         if ids:
             query &= F.id.in_([ObjectId(i) for i in ids if re.match(r'^[0-9a-fA-F]{24}$', i)])
         
@@ -444,7 +445,7 @@ class APICrudEndpoint:
         else:
             result = {}
             for obj in objs[0]:
-                result[str(obj.id)] = self.update_object(obj, data[str(obj.id)])
+                result[str(obj.id)] = self.update_object(obj, data.get(str(obj.id), data))
         return APIUpdate(bundle=result)
     
     def read(self, objs, **data):
@@ -458,16 +459,17 @@ class APICrudEndpoint:
         return APIUpdate(bundle=str(objs.id))
     
     def bind_endpoint(self, func):
+        @wraps(func)
         def wrapped(id=None, ids=None, query=None, limit=0, offset=0, sort='id', **data):
-            objs = self.get_dbobjs(id, ids, query, limit, offset, sort)
+            objs = self.get_dbobjs(id, ids, query, limit, offset, sort, **data)
             return func(objs, **data)
         self.maps[func.__name__] = wrapped
         return wrapped
 
     def bind(self, app: Flask, **options):
         @rest(**options)
-        def do_crud(id=None, limit=0, query=None, offset=0, sort='id', **data):
-            objs = self.get_dbobjs(id, query, limit, offset, sort)
+        def do_crud(id=None, ids=None, limit=0, query=None, offset=0, sort='id', **data):
+            objs = self.get_dbobjs(id, ids, query, limit, offset, sort, **data)
             operation = self.get_operation(request)
             
             if id and objs is None:
