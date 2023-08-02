@@ -425,7 +425,17 @@ class APICrudEndpoint:
                     for val in vals:
                         if val in obj[field]:
                             obj[field].remove(val)
-                            
+                if '$inc' in newval:
+                    obj[field] += newval.pop('$inc')
+                if '$lowerBound' in newval:
+                    obj[field] = max(newval.pop('$lowerBound'), obj[field])
+                if '$upperBound' in newval:
+                    obj[field] = max(newval.pop('$upperBound'), obj[field])
+                if '$round' in newval:
+                    obj[field] = round(obj[field] / newval['$round']) * newval['$round']
+                    newval.pop('$round')
+                if newval:
+                    obj[field] = ee.evaluate(newval, obj)
             elif newval is None and hasattr(obj, field):
                 delattr(obj, field)
                 
@@ -489,7 +499,15 @@ class APICrudEndpoint:
         app.add_url_rule(f'{self.namespace}', methods=['GET', 'PUT', 'POST'], view_func=do_crud, endpoint=endpoint)
         app.add_url_rule(f'{self.namespace}<id>', methods=['GET', 'POST', 'DELETE'], view_func=do_crud, endpoint=endpoint)
 
+        @rest()
+        def get_scheme():
+            return {
+                k: v.type.__name__ if getattr(v, 'type') else type(v).__name__
+                for k, v in self.db_cls.fields.items()
+            }
+        app.add_url_rule(f'{self.namespace}scheme', methods=['GET'], view_func=get_scheme, endpoint=endpoint + '_scheme')
+
         for func_name, func in self.maps.items():
-            app.add_url_rule(f'{self.namespace}/{func_name}', methods=['GET', 'POST'], view_func=rest(**options)(func), endpoint=endpoint + '_' + func_name)
+            app.add_url_rule(f'{self.namespace}{func_name}', methods=['GET', 'POST'], view_func=rest(**options)(func), endpoint=endpoint + '_' + func_name)
 
         return do_crud
