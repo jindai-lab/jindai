@@ -19,7 +19,7 @@ import numpy as np
 import requests
 import werkzeug.wrappers.response
 from bson import ObjectId
-from flask import Response, jsonify, request, send_file, stream_with_context, abort, Flask
+from flask import Response, jsonify, request, send_file, stream_with_context, Flask
 from PIL.Image import Image
 from PyMongoWrapper import MongoOperand, QExprEvaluator, F
 from PyMongoWrapper.dbo import create_dbo_json_decoder, create_dbo_json_encoder, DbObject
@@ -351,7 +351,7 @@ class APICrudEndpoint:
         self.namespace = f'/{namespace.strip("/")}/{self.db_cls.__name__.lower() + "s"}/'
         self.maps = {}
 
-    def get_operation(self, request):
+    def get_operation(self):
         if request.method == 'DELETE':
             return 'delete'
         elif request.method == 'PUT':
@@ -380,21 +380,27 @@ class APICrudEndpoint:
         query = MongoOperand(query or {})
 
         if id:
-            query &= F.id == id if re.match(r'^[0-9a-fA-F]{24}$', id) else F.name == id
+            query = F.id == id if re.match(r'^[0-9a-fA-F]{24}$', id) else F.name == id
+
+        if not ids: ids = []
+        
         if data:
-            ids = list(data.keys())
+            ids += list(data.keys())
+        
+        ids = [ObjectId(i) for i in ids if re.match(r'^[0-9a-fA-F]{24}$', i)]
+        
         if ids:
-            query &= F.id.in_([ObjectId(i) for i in ids if re.match(r'^[0-9a-fA-F]{24}$', i)])
+            query = F.id.in_(ids)
         
         return query
         
     def get_dbobjs(self, id=None, ids=None, query=None, limit=0, offset=0, sort='id', **data):
         query = self.build_query(id, ids, query, data)
+        results = self.db_cls.query(query)
 
         if id:
-            return self.db_cls.first(query)
+            return results.first()
         
-        results = self.db_cls.query(query)
         return self.apply_sorting(results, limit, offset, sort)
     
     def select_fields(self, obj, selection=None):
@@ -405,32 +411,33 @@ class APICrudEndpoint:
         for field, newval in data.items():
             if not self.can_include(field): continue
             if field == '_id': continue
-
+            
             updated_fields.add(field)
-
-            if isinstance(newval, dict) and len(newval) == 1 and list(newval)[0] in ('$push', '$pull'):
-                if not hasattr(obj[field], 'append'):
-                    obj[field] = list(obj[field])
+            if isinstance(newval, dict) and [1 for k in newval if k.startswith('$')]:
+                # handle special assignments
                 if '$push' in newval:
-                    vals = newval['$push']
+                    vals = newval.pop('$push')
                     for val in vals:
                         if val not in obj[field]:
                             obj[field].append(val)
-                else:
-                    vals = newval['$pull']
+                if '$pull' in newval:
+                    vals = newval.pop('$pull')
                     for val in vals:
                         if val in obj[field]:
                             obj[field].remove(val)
+                            
             elif newval is None and hasattr(obj, field):
                 delattr(obj, field)
+                
             else:
                 setattr(obj, field, newval)
+                
         obj.save()
         return self.select_fields(obj, updated_fields)
     
     def check_role(self, role):
         if not logined(role):
-            abort(403)
+            return f'forbidden: require {role}', 403
     
     def create(self, **data):
         obj = self.db_cls(**data)
@@ -443,7 +450,7 @@ class APICrudEndpoint:
         else:
             result = {}
             for obj in objs[0]:
-                result[str(obj.id)] = self.update_object(obj, data[str(obj.id)])
+                result[str(obj.id)] = self.update_object(obj, data.get(str(obj.id), data))
         return APIUpdate(bundle=result)
     
     def read(self, objs, **data):
@@ -457,20 +464,21 @@ class APICrudEndpoint:
         return APIUpdate(bundle=str(objs.id))
     
     def bind_endpoint(self, func):
+        @wraps(func)
         def wrapped(id=None, ids=None, query=None, limit=0, offset=0, sort='id', **data):
-            objs = self.get_dbobjs(id, ids, query, limit, offset, sort)
+            objs = self.get_dbobjs(id, ids, query, limit, offset, sort, **data)
             return func(objs, **data)
         self.maps[func.__name__] = wrapped
         return wrapped
 
     def bind(self, app: Flask, **options):
         @rest(**options)
-        def do_crud(id=None, limit=0, query=None, offset=0, sort='id', **data):
-            objs = self.get_dbobjs(id, query, limit, offset, sort)
-            operation = self.get_operation(request)
+        def do_crud(id=None, ids=None, limit=0, query=None, offset=0, sort='id', **data):
+            objs = self.get_dbobjs(id, ids, query, limit, offset, sort, **data)
+            operation = self.get_operation()
             
             if id and objs is None:
-                abort(404)
+                return f'{id} not matched', 404
 
             if operation == 'create':
                 return self.create(**data)

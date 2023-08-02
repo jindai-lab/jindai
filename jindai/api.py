@@ -307,7 +307,7 @@ class APICollectionEndpoint(APICrudEndpoint):
                    sort='id',
                    mongocollection='',
                    **data):
-        if ':' in id:
+        if id and ':' in id:
             mongocollection, id = id.split(':', 1)
 
         query = self.build_query(id, ids, query, data)
@@ -324,9 +324,6 @@ class APICollectionEndpoint(APICrudEndpoint):
             for ele in updated['keywords']:
                 Term.write(ele, 'keywords')
         return updated
-
-    def create(self):
-        abort(400)
 
     def pagenum(self, objs, sequential, new_pagenum, folio, **_):
         para = objs
@@ -356,9 +353,9 @@ class APICollectionEndpoint(APICrudEndpoint):
             ])
         return APIUpdate()
 
-    def group(self, objs, values=None, ungroup=False, **data):
+    def group(self, objs, group=None, ungroup=False, **data):
         objs, _ = objs
-        proposed_groups = values
+        proposed_groups = [group]
 
         if isinstance(proposed_groups, str):
             proposed_groups = [proposed_groups]
@@ -393,7 +390,7 @@ class APICollectionEndpoint(APICrudEndpoint):
                 if gids:
                     objs.update(Fn.pull(F.keywords.in_(gids)))
 
-        return APIUpdate(bundle=groups)
+        return APIUpdate(bundle={str(i.id): {'keywords': i.keywords} for i in paras})
 
     def split(self, objs):
         return self.split_or_merge(objs, False)
@@ -529,7 +526,7 @@ class APITaskEndpoint(APICrudEndpoint):
         self.bind_endpoint(self.shortcuts)
 
     def create(self, **data):
-        data.pop('shortcut_map', None)
+        data.pop('shortcut_map')
         data['creator'] = logined()
         return super().create(**data)
 
@@ -542,8 +539,8 @@ class APITaskEndpoint(APICrudEndpoint):
         return ((F.creator == logined()) | (F.shared == True))
 
     def build_query(self, id, ids, query, data):
-        query = super().build_query(id, ids, query, data)
-        return query & self._task_authorized()
+        query = super().build_query(id, ids, query, data) & self._task_authorized()
+        return query
 
     def shortcuts(self, objs, **_):
         """List out quick tasks"""
