@@ -2,30 +2,30 @@
 
 import datetime
 import hashlib
-import os
-import re
-import sys
 import itertools
+import os
+import sys
 import time
 from collections import defaultdict
-from PyMongoWrapper.dbo import DbObject
 
 import pyotp
-from flask import Flask, Response, redirect, request, send_file, abort
-from PyMongoWrapper import F, Fn, MongoOperand, ObjectId
+from flask import Flask, Response, redirect, request, send_file
 
+from PyMongoWrapper import F, Fn, MongoOperand, ObjectId
+from PyMongoWrapper.dbo import DbObject
+
+from .config import instance as config
 from .dbquery import DBQuery, parser
+from .helpers import (APICrudEndpoint, APIResults, APIUpdate,
+                      IterableWithTotal, JSONDecoder, JSONEncoder, ee,
+                      get_context, language_iso639, logined, rest, serve_proxy)
+from .models import (Dataset, History, MediaItem, Meta, Paragraph, TaskDBO,
+                     Term, Token, User)
+from .oauthserv import config_oauth
 from .pipeline import Pipeline
 from .plugin import Plugin, PluginManager
-from .task import Task
-from .config import instance as config
-from .helpers import (get_context, logined, rest, language_iso639, serve_proxy,
-                      JSONEncoder, JSONDecoder, ee, APICrudEndpoint,
-                      APIResults, APIUpdate)
-from .models import (Dataset, History, MediaItem, Meta, Paragraph, TaskDBO,
-                     Token, User, Term)
-from .oauthserv import config_oauth
 from .storage import instance as storage
+from .task import Task
 
 app = Flask(__name__)
 app.config['SECRET_KEY'] = config.secret_key
@@ -238,7 +238,7 @@ def move_storage(source, destination, keep_folder=True):
 @app.route("/api/image/<coll>/<storage_id>.<ext>")
 @app.route("/api/image")
 @rest(cache=True)
-def resolve_media_item(coll=None, storage_id=None, ext=None):
+def resolve_media_item(coll=None, storage_id=None, **_):
     """Serve media item"""
 
     if coll and storage_id and len(storage_id) == 24:
@@ -284,7 +284,7 @@ def serve_image(scheme, image_path):
     try:
         return storage.serve_file(path, ext)
     except OSError:
-        return Response('Not found.', 404)
+        return Response(f'Not found. {path}.{ext}', 404)
 
 
 class APICollectionEndpoint(APICrudEndpoint):
@@ -354,33 +354,29 @@ class APICollectionEndpoint(APICrudEndpoint):
         return APIUpdate()
 
     def group(self, objs, group=None, ungroup=False, **data):
-        objs, _ = objs
-        proposed_groups = [group]
-
-        if isinstance(proposed_groups, str):
-            proposed_groups = [proposed_groups]
+        paras = list(objs)
 
         if ungroup:
             objs.update(Fn.pull(F.keywords.regex('^#')))
             groups = []
 
         else:
-            paras = list(objs)
             if paras:
                 gids = []
                 for para in paras:
                     gids += [_ for _ in para.keywords if _.startswith('#')]
                 named = [_ for _ in gids if not _.startswith('#0')]
 
-                if proposed_groups:
-                    groups = ['#' + _ for _ in proposed_groups]
+                if group:
+                    if isinstance(group, list): group = group[0]
+                    groups = ['#' + group]
                 elif named:
                     groups = [min(named)]
                 elif gids:
                     groups = [min(gids)]
                 else:
                     groups = [
-                        '#0' + _hashing(min(map(lambda p: str(p.id), paras)))
+                        '#0' + _hashing(f'{time.time()}')
                     ]
 
                 gids = list(set(gids) - set(named) - set(groups))
@@ -390,7 +386,7 @@ class APICollectionEndpoint(APICrudEndpoint):
                 if gids:
                     objs.update(Fn.pull(F.keywords.in_(gids)))
 
-        return APIUpdate(bundle={str(i.id): {'keywords': i.keywords} for i in paras})
+        return APIUpdate(bundle={str(i.id): {'keywords': i.keywords} for i in objs})
 
     def split(self, objs):
         return self.split_or_merge(objs, False)
@@ -419,8 +415,6 @@ class APICollectionEndpoint(APICrudEndpoint):
         Returns:
             bool: True if succeeded
         """
-        objs, _ = objs
-
         retval = []
 
         if not merge:
@@ -458,7 +452,7 @@ class APICollectionEndpoint(APICrudEndpoint):
     def remove_image(self, objs, **data):
         del_items = set()
 
-        for para in objs[0]:
+        for para in objs:
             items = [ObjectId(i) for i in data[str(para.id)]]
             para.images.remove(items)
             para.save()
@@ -490,7 +484,7 @@ class APIMediaItemEndpoint(APICrudEndpoint):
 
     def reset_storage(self, objs):
         retval = {}
-        for i in objs[0]:
+        for i in objs:
             if 'file' in i.source:
                 del i.source['file']
                 retval[str(i.id)] = {'source': i.source}
@@ -501,7 +495,7 @@ class APIMediaItemEndpoint(APICrudEndpoint):
         """Increase or decrease the rating of selected items
         """
         retval = {}
-        for i in objs[0]:
+        for i in objs:
             if val:
                 i.rating = val
             elif inc:
@@ -619,12 +613,11 @@ class APIDatasetEndpoint(APICrudEndpoint):
                 result = None
 
         else:
-            objs, total = result
             filtered_datasets = []
-            for dataset in objs:
+            for dataset in result:
                 if self.test_dataset(dataset, dataset_patterns):
                     filtered_datasets.append(dataset)
-            return filtered_datasets, total
+            return IterableWithTotal(filtered_datasets, result.total)
 
     def rename(self, objs, to, **_):
         self.check_role('admin')
@@ -661,7 +654,7 @@ class APIUserEndpoint(APICrudEndpoint):
         if isinstance(objs, tuple):
             return APIResults([
                 self.select_fields(o, ['username', 'roles', 'datasets'])
-                for o in objs[0]
+                for o in objs
             ], objs[1])
         return {}
 

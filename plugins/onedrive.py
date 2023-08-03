@@ -1,6 +1,4 @@
 """OneDrive storage plugin"""
-
-import encodings
 from io import BytesIO
 from jindai import storage, config
 from jindai.helpers import safe_import
@@ -68,9 +66,6 @@ class OneDriveAuthenticator:
         self.save_cache()
         return self.token_claims
         
-        
-oda = OneDriveAuthenticator()
-
 
 class OneDriveManager(StorageManager):
     
@@ -127,6 +122,7 @@ class OneDrivePlugin(Plugin):
 
     def __init__(self, pmanager, **_) -> None:
         super().__init__(pmanager)
+        oda = OneDriveAuthenticator()
         storage.register_scheme('onedrive', lambda *_: OneDriveManager(oda))
         
         @pmanager.app.route('/api/plugins/onedrive/login')

@@ -285,6 +285,7 @@ class Storage:
             str: full schemed path
         """
         path = path.replace('__hash/', '#')
+        if scheme == 'file': path = '/' + path
         path = f'{scheme}://{path}'
         ext = path.rsplit('.', 1)[-1]
         return path, ext.lower() if len(ext) <= 4 else ''
