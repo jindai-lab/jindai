@@ -284,6 +284,7 @@ class Paragraph(ObjectWithSource):
         result = super().as_dict(expand)
         for k in [_ for _ in result if _.startswith('_') and _ != '_id']:
             del result[k]
+        result['mongocollection'] = type(self).db.name
         return result
 
     def save(self):

@@ -7,8 +7,8 @@ from threading import Thread, Lock
 import time
 import traceback
 from queue import PriorityQueue
-from typing import Callable
 import ctypes
+from typing import Callable, Tuple, Union, List
 import nanoid
 
 from .helpers import safe_import
@@ -287,3 +287,15 @@ class Task:
                         **kwargs)
         else:
             return Task({}, [])
+        
+    @staticmethod
+    def from_query(query, raw, mongocollection):
+        params = {
+            'query': query,
+            'raw': raw,
+            'mongocollections': mongocollection
+        }
+        return Task(stages=[
+            ('DBQueryDataSource', params),
+            ('AccumulateParagraphs', {}),
+        ], params={})
