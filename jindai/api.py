@@ -34,26 +34,6 @@ app.json_decoder = JSONDecoder
 config_oauth(app)
 
 
-def _expand_results(results):
-    """Expand results to serializable dicts"""
-
-    def _patch_mongocollection(result):
-        if isinstance(result, Paragraph):
-            res = result.as_dict(True)
-            if 'mongocollection' not in res:
-                res['mongocollection'] = type(result).db.name
-        else:
-            res = result
-
-        return res
-
-    if not isinstance(results,
-                      (str, dict, bytes)) and hasattr(results, '__iter__'):
-        return [_patch_mongocollection(r) for r in results]
-
-    return results
-
-
 def _hashing(msg):
     """Hashing message with SHA-256 and preserve last 9 hexadecimal digits"""
     return hashlib.sha256(msg.encode('utf-8')).hexdigest()[-9:]
@@ -368,7 +348,8 @@ class APICollectionEndpoint(APICrudEndpoint):
                 named = [_ for _ in gids if not _.startswith('#0')]
 
                 if group:
-                    if isinstance(group, list): group = group[0]
+                    if isinstance(group, list):
+                        group = group[0]
                     groups = ['#' + group]
                 elif named:
                     groups = [min(named)]
@@ -536,7 +517,7 @@ class APITaskEndpoint(APICrudEndpoint):
         query = super().build_query(id, ids, query, data) & self._task_authorized()
         return query
 
-    def shortcuts(self, objs, **_):
+    def shortcuts(self, *_, **__):
         """List out quick tasks"""
         return APIResults(
             TaskDBO.query((F.shortcut_map != {}) & self._task_authorized()))
@@ -743,7 +724,7 @@ def do_search(q='',
     if count:
         return APIResults(total=datasource.count())
 
-    results = _expand_results(datasource.fetch())
+    results = datasource.fetch()
 
     if datasource.groups != 'none':
         for res in results:
@@ -789,32 +770,13 @@ def query_terms(field, pattern='', regex=False, scope=''):
 @rest()
 def quick_task(query='', pipeline='', raw=False, mongocollection=''):
     """Perform quick tasks"""
-
-    if pipeline:
-        if isinstance(pipeline, str):
-            pipeline = parser.parse(pipeline)
-        assert isinstance(
-            pipeline,
-            (list, tuple)), f"Unknown format for pipeline: {pipeline}"
-        args = pipeline[0]
-        if isinstance(args, (list, tuple)):
-            args = args[1]
-        elif isinstance(args, dict):
-            args, = args.values()
-        results = Task(stages=pipeline, params={}).execute()
+    if query:
+        task = Task.from_query(query, raw, mongocollection)
     else:
-        params = {
-            'query': query,
-            'raw': raw,
-            'mongocollections': mongocollection
-        }
-        results = Task(stages=[
-            ('DBQueryDataSource', params),
-            ('AccumulateParagraphs', {}),
-        ],
-                       params={}).execute()
+        task = Task(stages=parser.parse(pipeline) if isinstance(
+            pipeline, str) else pipeline, params={})
 
-    return APIResults(_expand_results(results))
+    return APIResults(task.execute())
 
 
 @app.route('/api/admin/db', methods=['POST'])

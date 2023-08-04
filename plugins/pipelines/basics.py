@@ -23,7 +23,7 @@ class Passthrough(PipelineStage):
 
     def resolve(self, paragraph: Paragraph) -> Paragraph:
         return paragraph
-    
+
 
 class FilterOut(PipelineStage):
     """
@@ -70,7 +70,7 @@ class ExecuteCode(PipelineStage):
     def resolve(self, paragraph):
         self.ee.execute(self.code, {'paragraph': paragraph, 'ctx': self.gctx})
         return paragraph
-    
+
     def summarize(self, result):
         return self.ee.execute(self.summarizing, {'result': result, 'ctx': self.gctx})
 
@@ -108,7 +108,7 @@ class LanguageDetect(PipelineStage):
                 paragraph.lang = 'zht'
             elif '-' in paragraph.lang:
                 paragraph.lang = paragraph.lang.split('-')[0]
-        
+
         return paragraph
 
     def detect(self, sentence):
@@ -214,7 +214,7 @@ class WordCut(PipelineStage):
         """
         super().__init__()
         self.for_search = for_search
-        
+
     def resolve(self, paragraph: Paragraph) -> Paragraph:
         paragraph.tokens = []
 
@@ -238,7 +238,7 @@ class WordCut(PipelineStage):
 
         if self.for_search:
             WordCut.trlit.resolve(paragraph)
-            
+
         return paragraph
 
 
@@ -247,12 +247,12 @@ class KeywordsFromTokens(PipelineStage):
     Set tokens as keywords and unset tokens field
     @zhs 将检索词设为分词结果并删除词串字段
     """
-    
+
     def __init__(self, append=False) -> None:
         """
         Args:
             append (bool, optional): 添加到已有的关键词列表之后
-        """        
+        """
         super().__init__()
         self.append = append
 
@@ -261,13 +261,14 @@ class KeywordsFromTokens(PipelineStage):
         unicodedata = safe_import('unicodedata')
         nfkd_form = unicodedata.normalize('NFKD', input_str)
         return u"".join([c for c in nfkd_form if not unicodedata.combining(c)])
-    
-    def resolve(self, paragraph: Paragraph) -> Paragraph:        
+
+    def resolve(self, paragraph: Paragraph) -> Paragraph:
         words = [str(word).strip().strip(string.punctuation)
-                         for word in set(paragraph.tokens) if word and str(word).strip()]
+                 for word in set(paragraph.tokens) if word and str(word).strip()]
         words += [KeywordsFromTokens.remove_accents(word) for word in words]
-        paragraph.keywords = list(set((paragraph.keywords if self.append else []) + words))
-        
+        paragraph.keywords = list(
+            set((paragraph.keywords if self.append else []) + words))
+
         del paragraph.tokens
         return paragraph
 
@@ -403,7 +404,7 @@ class Export(PipelineStage):
 
         def json_dump(val):
             return JSONEncoder().encode(val)
-        
+
         def str_repr(val, strip_brackets=False):
             if isinstance(val, str):
                 return val
@@ -423,8 +424,20 @@ class Export(PipelineStage):
                 return f'<... {len(val)} bytes>'
             else:
                 return str(val)
-            
-        result = [{k: str_repr(v, True) for k, v in (r if isinstance(r, dict) else r.as_dict()).items()} for r in result]
+
+        def flattern_dict(val):
+            result = {}
+            for k, v in val.items():
+                if isinstance(v, dict):
+                    v = flattern_dict(v)
+                    for kp, vp in v.items():
+                        result[f'{k}.{kp}'] = vp
+                else:
+                    result[k] = v
+            return result
+
+        result = [{k: str_repr(v, True) for k, v in (
+            flattern_dict(r if isinstance(r, dict) else r.as_dict())).items()} for r in result]
 
         if self.format == 'json':
             return PipelineStage.return_file('json', json_dump(result).encode('utf-8'))
@@ -719,14 +732,14 @@ class RegexFilter(PipelineStage):
         elif self.filter_out:
             return
         return paragraph
-    
-    
+
+
 class RegexMatches(PipelineStage):
     """
     Regex Match
     @zhs 正则表达式匹配
     """
-    
+
     def __init__(self, regex, field='content'):
         """
         Args:
@@ -738,11 +751,11 @@ class RegexMatches(PipelineStage):
         super().__init__()
         self.field = field
         self.regex = regex
-        
+
     def resolve(self, paragraph: Paragraph) -> Paragraph:
         for m in re.findall(self.regex, str(paragraph[self.field])):
             yield Paragraph(paragraph, **{self.field: m})
-        
+
 
 class FieldAssignment(PipelineStage):
     """
@@ -1070,7 +1083,8 @@ class MongoCollectionBatchOper(PipelineStage):
         pdict = paragraph.as_dict()
         query = parser.parse(self.query, context=pdict)
         updates = parser.parse(self.updates, context=pdict)
-        if not isinstance(updates, list): updates = [updates]
+        if not isinstance(updates, list):
+            updates = [updates]
         for update in updates:
             self.collection.query(query).update(update)
             self.logger(query, update)
@@ -1102,7 +1116,7 @@ class SetNamedResult(Passthrough):
     """Set name for summarization result
     @zhs 为总结阶段的结果设置名称
     """
-    
+
     def __init__(self, name: str):
         """
         :param name: Name
@@ -1111,7 +1125,7 @@ class SetNamedResult(Passthrough):
         """
         super().__init__()
         self.name = name
-        
+
     def summarize(self, result):
         self.gctx[self.name] = result
         return result
@@ -1121,7 +1135,7 @@ class LoadNamedResult(Passthrough):
     """Get named result
     @zhs 读取已命名的结果
     """
-    
+
     def __init__(self, name: str):
         """
         :param name: Name
@@ -1130,9 +1144,8 @@ class LoadNamedResult(Passthrough):
         """
         super().__init__()
         self.name = name
-        
+
     def summarize(self, _):
         if self.name == '':
             return self.gctx
         return self.gctx.get(self.name)
-    
