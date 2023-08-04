@@ -472,7 +472,7 @@ class TaskDBO(db.DbObject):
     resume_next = bool
     last_run = datetime.datetime
     concurrent = DbObjectInitializer(
-        lambda *x: 3 if len(x) == 0 else int(x), int)
+        lambda *x: 3 if len(x) == 0 else int(float(x[0])), int)
     shortcut_map = dict
     creator = str
     shared = bool

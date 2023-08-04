@@ -287,15 +287,3 @@ class Task:
                         **kwargs)
         else:
             return Task({}, [])
-        
-    @staticmethod
-    def from_query(query, raw, mongocollection):
-        params = {
-            'query': query,
-            'raw': raw,
-            'mongocollections': mongocollection
-        }
-        return Task(stages=[
-            ('DBQueryDataSource', params),
-            ('AccumulateParagraphs', {}),
-        ], params={})

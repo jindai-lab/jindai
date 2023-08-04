@@ -141,4 +141,4 @@ class AutoTaggingPlugin(Plugin):
         self.register_pipelines(globals())
 
         app = self.pmanager.app
-        AutoTaggingEndpoint().bind()
+        AutoTaggingEndpoint().bind(app)

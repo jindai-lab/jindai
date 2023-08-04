@@ -130,7 +130,7 @@ parser.functions.update({
         ),
         Fn.unwind(path=Var.gid, preserveNullAndEmptyArrays=True),
         Fn.addFields(gid=Fn.ifNull(
-            Var.gid, Fn.concat('id=', Fn.toString('$_id')))),
+            Var.gid, Fn.concat('id=o"', Fn.toString('$_id'), '"'))),
     ]),
     'begin': lambda prefix: F.keywords.regex(f'^{re.escape(prefix)}'),
     'groupby': _groupby,
@@ -271,9 +271,7 @@ class DBQuery:
             if not sort:
                 sort = '-pdate,-id'
         elif groups == 'group':
-            groupping = ''';gid();
-            lookup(localField=images,foreignField=_id,from=mediaitem,as=images);
-            addFields(group_id=$gid,images.paragraph_id=$_id);'''
+            groupping = ''';gid();groupby($gid)'''
             if not sort:
                 sort = 'group_id,-pdate'
         elif groups == 'source':
@@ -298,8 +296,6 @@ class DBQuery:
             groupping += f''';
                 gid: ifNull($group_id, concat("id=o'", toString($_id), "'"));
                 images: ifNull($images,[]);
-                groupby(id=$gid{sorting},images=1);
-                groupby(id=$_id,count=sum($count),images=1);
             '''
             groupping = parser.parse(groupping)
 
