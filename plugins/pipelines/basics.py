@@ -403,9 +403,28 @@ class Export(PipelineStage):
 
         def json_dump(val):
             return JSONEncoder().encode(val)
+        
+        def str_repr(val, strip_brackets=False):
+            if isinstance(val, str):
+                return val
+            elif isinstance(val, DbObject):
+                return str_repr(val.as_dict())
+            elif isinstance(val, list):
+                val = ', '.join(map(str_repr, val))
+                if not strip_brackets:
+                    val = f'[{val}]'
+                return val
+            elif isinstance(val, dict):
+                val = ', '.join([f'{k}={str_repr(v)}' for k, v in val.items()])
+                if not strip_brackets:
+                    val = f'({val})'
+                return val
+            elif isinstance(val, bytes):
+                return f'<... {len(val)} bytes>'
+            else:
+                return str(val)
             
-        result = [_.as_dict() if isinstance(
-            _, DbObject) else _ for _ in result]
+        result = [{k: str_repr(v, True) for k, v in (r if isinstance(r, dict) else r.as_dict()).items()} for r in result]
 
         if self.format == 'json':
             return PipelineStage.return_file('json', json_dump(result).encode('utf-8'))

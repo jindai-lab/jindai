@@ -79,30 +79,11 @@ class WordStemmer:
             lang).stem(_) for _ in tokens]
         return tokens
 
-    def stem_from_params(self, param=''):
+    def stem_from_params(self, word, lang='en'):
         """Add stem() function for query
-
-        :param param: '<word:lang>', or [word, lang], or {'$and': [{'keywords': word}, {'keywords': lang}]}
-        :type param: str, optional
-        :return: stemmed word
-        :rtype: str
         """
-        param = MongoOperand.literal(param)
-        word, lang = str(param), 'en'
-        if isinstance(param, (tuple, list)) and len(param) == 2:
-            word, lang = param
-        elif isinstance(param, dict) and '$and' in param and len(param['$and']) == 2:
-            word, lang = param['$and']
-            if isinstance(word, dict) and isinstance(lang, dict) and len(word) == 1 and len(lang) == 1:
-                (word,), (lang,) = word.values(), lang.values()
-            else:
-                word, lang = '', ''
-        elif isinstance(param, dict) and len(param) == 2 and 'lang' in param and 'keywords' in param:
-            word, lang = param['keywords'], param['lang']
         assert isinstance(lang, str) and isinstance(
-            word, str), 'Parameter type error for stem function'
-        if len(word) == 2 and len(word) < len(lang):
-            lang, word = word, lang
+            word, str), f'Parameter type error for stem function: got {type(word)} and {type(lang)}'
         return {'keywords': self.stem_tokens(lang, [word])[0]}
 
 
