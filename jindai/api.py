@@ -768,15 +768,16 @@ def query_terms(field, pattern='', regex=False, scope=''):
 
 @app.route('/api/quicktask', methods=['POST'])
 @rest()
-def quick_task(query='', pipeline='', raw=False, mongocollection=''):
+def quick_task(pipeline=''):
     """Perform quick tasks"""
-    if query:
-        task = Task.from_query(query, raw, mongocollection)
+    if isinstance(pipeline, str):
+        pipeline = parser.parse(pipeline)
+    
+    result = Task(stages=pipeline, params={}).execute()
+    if isinstance(result, dict):
+        return result
     else:
-        task = Task(stages=parser.parse(pipeline) if isinstance(
-            pipeline, str) else pipeline, params={})
-
-    return APIResults(task.execute())
+        return APIResults(result)
 
 
 @app.route('/api/admin/db', methods=['POST'])
