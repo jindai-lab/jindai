@@ -520,7 +520,7 @@ class APITaskEndpoint(APICrudEndpoint):
         self.bind_endpoint(self.shortcuts)
 
     def create(self, **data):
-        data.pop('shortcut_map')
+        data.pop('shortcut_map', {})
         data['creator'] = logined()
         return super().create(**data)
 

@@ -120,7 +120,7 @@ class AddAutoTag(PipelineStage):
 class AutoTaggingEndpoint(APICrudEndpoint):
 
     def __init__(self) -> None:
-        super().__init__('/api/plugins/', AutoTag)
+        super().__init__('/api/plugins/', AutoTag, {'apply': ['POST']})
 
     def apply(self, objs, coll='', **_):
         cond = objs.parsed
@@ -141,4 +141,4 @@ class AutoTaggingPlugin(Plugin):
         self.register_pipelines(globals())
 
         app = self.pmanager.app
-        AutoTaggingEndpoint().bind(app, {'apply': ['POST']})
+        AutoTaggingEndpoint().bind()

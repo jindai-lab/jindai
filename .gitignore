@@ -6,6 +6,7 @@ dump*
 temp_*
 _*.sh
 *.h5
+*.xlsx
 *.zip
 
 # Byte-compiled / optimized / DLL files
