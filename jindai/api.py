@@ -585,9 +585,10 @@ class APIDatasetEndpoint(APICrudEndpoint):
                    query=None,
                    limit=0,
                    offset=0,
-                   sort='id'):
+                   sort='id',
+                   **data):
         dataset_patterns = User.first(F.username == logined()).datasets
-        result = super().get_dbobjs(id, ids, query, limit, offset, sort)
+        result = super().get_dbobjs(id, ids, query, limit, offset, sort, **data)
 
         if isinstance(result, Dataset):
             if not self.test_dataset(result, dataset_patterns):

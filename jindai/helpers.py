@@ -19,7 +19,7 @@ import numpy as np
 import requests
 import werkzeug.wrappers.response
 from bson import ObjectId
-from flask import Response, jsonify, request, send_file, stream_with_context, Flask
+from flask import Response, jsonify, request, Flask, abort
 from PIL.Image import Image
 from PyMongoWrapper import MongoOperand, QExprEvaluator, F
 from PyMongoWrapper.dbo import create_dbo_json_decoder, create_dbo_json_encoder, DbObject
@@ -125,7 +125,7 @@ def rest(login=True, cache=False, role='', mapping=None):
 
     def do_rest(func):
         """
-        Decorator to wrap REST calls. Decorated function will check login role and return 403 if user is logged in.
+        Decorator to wrap REST calls. Decorated function will check login role and return 403 if user is not logged in.
 
         @param func - function to be wrapped. This is the function that will be called.
 
@@ -593,7 +593,7 @@ class APICrudEndpoint:
         """
         # require role role. If role is not logged in return forbidden
         if not logined(role):
-            return f'forbidden: require {role}', 403
+            abort(403)
 
     def create(self, **data):
         """
