@@ -726,18 +726,6 @@ def do_search(q='',
         return APIResults(total=datasource.count())
 
     results = datasource.fetch()
-
-    if datasource.groups != 'none':
-        for res in results:
-            group = res.get(datasource.groups)
-            if isinstance(group, dict):
-                group = '(' + ','.join([
-                    f'{k}={app.json_encoder().encode(v)}'
-                    for k, v in group.items()
-                ]) + ')'
-            else:
-                group = app.json_encoder().encode(group)
-
     History(user=logined(),
             queries=[q, req],
             created_at=datetime.datetime.utcnow()).save()

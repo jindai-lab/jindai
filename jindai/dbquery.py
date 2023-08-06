@@ -271,7 +271,7 @@ class DBQuery:
             if not sort:
                 sort = '-pdate,-id'
         elif groups == 'group':
-            groupping = ''';gid();groupby($gid)'''
+            groupping = ''';gid();groupby(id=$gid,count=sum($images),images=1);group_field:=gid,group_id:=$gid;'''
             if not sort:
                 sort = 'group_id,-pdate'
         elif groups == 'source':
@@ -294,8 +294,7 @@ class DBQuery:
             else:
                 sorting = ''
             groupping += f''';
-                gid: ifNull($group_id, concat("id=o'", toString($_id), "'"));
-                images: ifNull($images,[]);
+                gid:=ifNull($group_id, concat("id=o'", toString($_id), "'")),images:=ifNull($images,[]);
             '''
             groupping = parser.parse(groupping)
 
