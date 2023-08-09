@@ -593,6 +593,7 @@ class APIDatasetEndpoint(APICrudEndpoint):
         if isinstance(result, Dataset):
             if not self.test_dataset(result, dataset_patterns):
                 result = None
+            return result
 
         else:
             filtered_datasets = []

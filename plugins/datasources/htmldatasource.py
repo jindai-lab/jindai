@@ -85,6 +85,8 @@ class HTMLDataSource(DataSourceStage):
                         value.append(str(element.attrs[field_attr]))
                 if field_name == 'content':
                     value = '\n'.join(value)
+                else:
+                    value = ' '.join(value)
                 setattr(para, field_name, value)
 
             yield para

@@ -183,7 +183,7 @@ class Task:
                     break
             self._pbar.inc_total(counter)
         except Exception as ex:
-            self.logger('Error while executing', type(ex).__name__, ex)
+            self.log_exception('Error while executing', type(ex).__name__, ex)
             if not self.resume_next:
                 self.alive = False
                 
