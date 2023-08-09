@@ -132,6 +132,9 @@ parser.functions.update({
         Fn.addFields(gid=Fn.ifNull(
             Var.gid, Fn.concat('id=o"', Fn.toString('$_id'), '"'))),
     ]),
+    'years': lambda: Fn.addFields(pdate=Fn.cond(Fn.type(Var.pdate) == 'string',
+                                  Fn.toInt(Fn.substrCP(Var.pdate, 0, 4)),
+                                  Fn.year(Var.pdate))),
     'begin': lambda prefix: F.keywords.regex(f'^{re.escape(prefix)}'),
     'groupby': _groupby,
     'auto': _auto,
