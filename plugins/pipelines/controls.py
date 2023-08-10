@@ -3,6 +3,7 @@
 """
 
 from PyMongoWrapper import F
+from bson import ObjectId
 from jindai import PipelineStage, Pipeline, Task, parser
 from jindai.helpers import evaluateqx
 from jindai.models import TaskDBO
