@@ -570,6 +570,7 @@ class APICrudEndpoint:
             if isinstance(newval, dict) and [1 for k in newval if k.startswith("$")]:
                 # handle special assignments
                 # Pushes the value from newval to the field.
+                newval = dict(newval)
                 if "$push" in newval:
                     vals = newval.pop("$push")
                     # Append the values to the field.
@@ -601,8 +602,8 @@ class APICrudEndpoint:
                 # Set the value of the field to the new value.
                 if newval:
                     obj[field] = ee.evaluate(newval, obj)
-            elif newval is None and hasattr(obj, field):
-                delattr(obj, field)
+            elif newval is None and field in obj:
+                del obj[field]
 
             else:
                 setattr(obj, field, newval)
