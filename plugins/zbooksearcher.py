@@ -13,22 +13,23 @@ class BookSearcherDataSource(DataSourceStage):
     
     """Book Searcher Data Source"""
     
-    def apply_params(self, server, ipfs, title='', author='', 
+    def apply_params(self, server, ipfs, content='', title='', author='', 
                      publisher='', extension='', language='', isbn='',
                      sort=''):
         """
         Args:
             server (str): Server URL
             ipfs (str): IPFS gateway
+            content (str): Query expression
             title (str): Book title
             author (str): Author
             publisher (str): Publisher
             extension (|pdf|epub|azw3|mobi): Extension name, e.g. pdf
-            language (Chinese|English|Other:): Language name, e.g. English
+            language (Chinese|English|German|French|Spanish|Japanese|Other:): Language name, e.g. English
             isbn (str): ISBN
             sort (Default:|Year:year|Title:title|Author:author): Sort by
         """
-        query = ''
+        query = content
         if isbn:
             isbn = isbn.replace('-', '').strip()
 
@@ -49,7 +50,7 @@ class BookSearcherDataSource(DataSourceStage):
         
     def fetch(self):
         self.logger(self.server, self.query)
-        resp = requests.get(self.server + 'search?limit=1000&query=' + quote(self.query))
+        resp = requests.get(self.server + '/search?limit=1000&query=' + quote(self.query))
         books = json.loads(resp.content)['books']
         for j in sorted(books, key=lambda x: id(x) if not self.sort else x[self.sort]):
             yield Paragraph(content=f'''

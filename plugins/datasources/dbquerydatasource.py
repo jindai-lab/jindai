@@ -1,4 +1,6 @@
-"""来自数据库
+"""
+Query Database
+@zhs 来自数据库
 """
 import datetime
 import os
@@ -7,9 +9,7 @@ import time
 from collections import defaultdict
 from typing import Iterable, List
 from urllib.parse import urljoin
-from PIL import Image
 from bson import SON
-from PyMongoWrapper import F
 
 from jindai import storage, parser, DBQuery
 from jindai.models import MediaItem, Paragraph
