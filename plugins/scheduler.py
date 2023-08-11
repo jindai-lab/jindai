@@ -30,7 +30,6 @@ class ScheduledTask:
     def __call__(self):
         dbo = TaskDBO.first(F.id == self.task_dbo.id)
         assert dbo
-        dbo.last_run = datetime.datetime.utcnow()
         self.pmanager.task_queue.enqueue(dbo, run_by='scheduler')
 
     def __repr__(self) -> str:
