@@ -170,7 +170,7 @@ def run_task(task_id, concurrent, verbose, edit, log):
     _init_plugins()
 
     logfile = open(log, 'w', encoding='utf-8') if log else sys.stderr
-
+    
     task = Task.from_dbo(dbo, verbose=verbose,
                          logger=lambda *x: print(*x, file=logfile))
 

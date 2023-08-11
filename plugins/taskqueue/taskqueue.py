@@ -72,9 +72,6 @@ class TaskQueue:
 
             assert task_dbo, 'No such task, or you do not have permission.'
 
-            task_dbo.last_run = datetime.datetime.utcnow()
-            task_dbo.save()
-
             if not run_by or not logined('admin'):
                 run_by = logined()
 

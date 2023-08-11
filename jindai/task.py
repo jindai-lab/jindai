@@ -8,7 +8,8 @@ import time
 import traceback
 from queue import PriorityQueue
 import ctypes
-from typing import Callable, Tuple, Union, List
+from typing import Callable
+import datetime
 import nanoid
 
 from .helpers import safe_import
@@ -271,19 +272,23 @@ class Task:
         self._workers.stop()
 
     @staticmethod
-    def from_dbo(db_object, **kwargs):
+    def from_dbo(dbo, **kwargs):
         """Get task from TaskDBO
 
-        :param db_object: TaskDBO
-        :type db_object: TaskDBO
+        :param dbo: TaskDBO
+        :type dbo: TaskDBO
         :return: task object according to DBO
         :rtype: Task
         """
-        if db_object.pipeline:
+        
+        if dbo.pipeline:
+            dbo.last_run = datetime.datetime.utcnow()
+            dbo.save()
+            
             return Task(params={},
-                        stages=db_object.pipeline,
-                        concurrent=db_object.concurrent,
-                        resume_next=db_object.resume_next,
+                        stages=dbo.pipeline,
+                        concurrent=dbo.concurrent,
+                        resume_next=dbo.resume_next,
                         **kwargs)
         else:
             return Task({}, [])
