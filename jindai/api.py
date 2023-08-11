@@ -527,6 +527,10 @@ APITaskEndpoint().bind(app)
 
 
 class APIHistoryEndpoint(APICrudEndpoint):
+    
+    def __init__(self):
+        super().__init__('api', History)
+        self.namespace = '/api/history/'
 
     def build_query(self, id, ids, query, data):
         query = super().build_query(id, ids, query, data)
@@ -546,7 +550,7 @@ class APIHistoryEndpoint(APICrudEndpoint):
         return super().get_dbobjs(id, ids, query, limit, offset, sort, **data)
 
 
-APIHistoryEndpoint('api', History).bind(app)
+APIHistoryEndpoint().bind(app)
 
 
 class APIDatasetEndpoint(APICrudEndpoint):
