@@ -1,5 +1,5 @@
 jieba
-dataclass
+dataclasses
 bs4
 flask
 pymongo
