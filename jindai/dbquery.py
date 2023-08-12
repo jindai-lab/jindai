@@ -77,14 +77,19 @@ def _auto(param):
         return {}
 
     try:
-        return parser.parse(param) or {}
+        result = parser.parse(param) or {}
     except QExprError as qe:
         try:
-            return parser.parse(param + ';')
+            result = parser.parse(param + ';')
         except QExprError:
             raise qe
         except:
             pass
+    
+    if isinstance(result, list):
+        return MongoConcating(result)
+    else:
+        return result
 
 
 def _term(term):
@@ -179,8 +184,10 @@ class DBQuery:
             # judge type of major query and formulate
             query = _auto(query) or []
 
-        if not isinstance(query, list):
+        if isinstance(query, dict):
             query = [query]
+        else:
+            query = list(query)
 
         if not query:
             return [{'$match': limitations}] if limitations else []
