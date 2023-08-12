@@ -65,7 +65,8 @@ class HTMLDataSource(DataSourceStage):
                 pagenum=1,
                 dataset=self.name,
                 outline=outline,
-                keywords=[]
+                keywords=[],
+                html=str(html_para),
             )
 
             for field_name, field_path in self.fields.items():
