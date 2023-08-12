@@ -84,7 +84,7 @@ def _auto(param):
         except QExprError:
             raise qe
         except:
-            pass
+            result = []
     
     if isinstance(result, list):
         return MongoConcating(result)

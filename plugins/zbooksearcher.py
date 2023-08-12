@@ -1,11 +1,16 @@
 """Book Searcher"""
 
+from typing import Iterable
 import requests
 import json
 from urllib.parse import quote
+from bs4 import BeautifulSoup as B
+from urllib.parse import urljoin
 
+from jindai.models import Paragraph
 from jindai.plugin import Plugin
 from jindai.pipeline import DataSourceStage
+from jindai.helpers import safe_import
 from jindai.models import Paragraph
 
 
@@ -67,9 +72,91 @@ class BookSearcherDataSource(DataSourceStage):
                             pdate=j['year'],
                             title=j['title'],
                             author=j['author'])
+            
+
+class ArchiveOrgSearcherDataSource(DataSourceStage):
+    
+    def __init__(self, **params) -> None:
+        super().__init__(**params)
+        self.ia = safe_import('internetarchive')
+        
+    def apply_params(self, content: str = ''):
+        """
+        Args:
+            content (str): Query string
+                @zhs 查询字符串
+        """
+        self.query = content
+        
+    def fetch(self) -> Iterable[Paragraph]:
+        self.logger(self.query)
+        s = self.ia.get_session()
+        for _, i in zip(range(10), s.search_items(self.query)):
+            ident = i.get('identifier')
+            if ident:
+                item = s.get_item(ident)
+                yield Paragraph(identifier=item.identifier, files=item.files, 
+                                pdate=item.metadata.get('date'),
+                                author=item.metadata.get('creator'),
+                                content=f'''
+                                Title: {item.metadata['title']}<br />
+                                {item.metadata.get('description', '')}<br /><br />
+                                ''' + '<br />'.join([
+                                    f'<a target="blank" href="https://archive.org/download/{item.identifier}/{filedata["name"]}">{filedata["name"]}</a>'
+                                    for filedata in item.files
+                                ]))
+                
+
+class VufindDataSource(DataSourceStage):
+    
+    def apply_params(self, server: str, content: str = ''):
+        """
+        Args:
+            content (str): Query string
+                @zhs 查询字符串
+            server (str): Server
+        """
+        self.query = content
+        self.server = server.rstrip('/')
+        
+    def fetch(self):
+        
+        headers = {
+            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7',
+            'Accept-Language': 'zh-CN,zh;q=0.9,en-US;q=0.8,en;q=0.7,de-DE;q=0.6,de;q=0.5',
+            'Connection': 'keep-alive',
+            'Referer': self.server + '/',
+            'Sec-Fetch-Dest': 'document',
+            'Sec-Fetch-Mode': 'navigate',
+            'Sec-Fetch-Site': 'same-origin',
+            'Sec-Fetch-User': '?1',
+            'Upgrade-Insecure-Requests': '1',
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/115.0.0.0 Safari/537.36',
+            'sec-ch-ua': '"Not/A)Brand";v="99", "Google Chrome";v="115", "Chromium";v="115"',
+            'sec-ch-ua-mobile': '?0',
+            'sec-ch-ua-platform': '"Windows"',
+        }
+
+        params = {
+            'searchtype': 'vague',
+            'lookfor': self.query,
+            'type': 'AllFields',
+            'limit': '20',
+        }
+
+        resp = requests.get(self.server + '/Search/Results', params=params, headers=headers).content
+        b = B(resp, 'lxml')
+        for res in b.select('.media'):
+            for a in res.select('a'):
+                href = a.attrs.get('href')
+                if href:
+                    a.attrs['href'] = urljoin(self.server, href)
+            yield Paragraph(title=res.select_one('.title').text.strip(),
+                            author=res.select_one('.author-data').text.strip(),
+                            content=str(res.select_one('.result-body')))
 
 
-class ZBookSearcherPlugin(Plugin):
+class BookSearcherPlugin(Plugin):
 
     def __init__(self, pm, **config) -> None:
         super().__init__(pm, **config)
