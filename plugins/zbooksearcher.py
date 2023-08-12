@@ -64,7 +64,9 @@ class BookSearcherDataSource(DataSourceStage):
                                href="{self.ipfs}/ipfs/{j["ipfs_cid"]}?filename={j["title"]}.{j["extension"]}">
                                Download</a>
                             ''',
-                            pdate=j['year'])
+                            pdate=j['year'],
+                            title=j['title'],
+                            author=j['author'])
 
 
 class ZBookSearcherPlugin(Plugin):

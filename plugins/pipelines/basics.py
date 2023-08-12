@@ -365,15 +365,41 @@ class AccumulateParagraphs(PipelineStage):
     @zhs 聚集段落遍历结果
     """
 
-    def __init__(self):
+    def __init__(self, sort=''):
+        """
+        Args:
+            sort (str): Sort by field name
+                @zhs 排序字段名
+        """
         super().__init__()
         self.paragraphs = deque()
+        self.sort = [_.strip() for _ in sort.split(',') if _]
 
     def resolve(self, paragraph: Paragraph):
         self.paragraphs.append(paragraph.as_dict(expand=True))
+        
+    def sorter(self, obj):
+        class _Rev:
+            def __init__(self, val):
+                self.val = val
+            
+            def __lt__(self, other):
+                return self.val > other.val
+                        
+        def _rev(val, reversed):
+            if reversed:
+                if isinstance(val, (int, float)):
+                    return -val
+                return _Rev(val)
+            return val
+                    
+        return [_rev(obj.get(k.strip('-'), ''), k.startswith('-')) for k in self.sort]
 
     def summarize(self, *_):
-        return list(self.paragraphs)
+        results = list(self.paragraphs)
+        if self.sort:
+            results = sorted(results, key=self.sorter)
+        return results
 
 
 class Export(PipelineStage):
