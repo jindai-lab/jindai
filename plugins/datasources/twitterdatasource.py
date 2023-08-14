@@ -293,7 +293,7 @@ class TwitterDataSource(DataSourceStage):
 
                 for murl, msaved in logged['images']:
                     i = MediaItem.get(murl, zipped_file=msaved,
-                                      item_type=logged['Media type'].lower())
+                                      item_type={'gif': 'image', 'image': 'image', 'video': 'video'}.get(logged['Media type'].lower(), 'image'))
                     i.save()
                     self.logger('......', i.source['url'], i.zipped_file)
                     para.images.append(i)

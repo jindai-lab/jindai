@@ -36,7 +36,7 @@ class PDFDataSource(DataSourceStage):
     Import paragraphs from PDF
     @zhs 从PDF中导入语段
     """
-    
+
     def apply_params(self, dataset_name='', lang='auto', content='', mongocollection='', skip_existed=True, page_range=''):
         """
         Args:
@@ -82,6 +82,7 @@ class PDFDataSource(DataSourceStage):
             existent = {}
 
         for filepath in self.files:
+            imported_pages = 0
             short_path = storage.truncate_path(filepath)
             stream = storage.open(filepath, 'rb')
             if hasattr(stream, 'name'):
@@ -108,6 +109,8 @@ class PDFDataSource(DataSourceStage):
                     label = ''
                 try:
                     lines = doc[page].get_text()
+                    if len(lines) > 10:
+                        imported_pages += 1
                     yield para_coll(
                         lang=lang, content=lines.encode(
                             'utf-8', errors='ignore').decode('utf-8'),
@@ -117,3 +120,6 @@ class PDFDataSource(DataSourceStage):
                     )
                 except Exception as ex:
                     self.logger(filepath, page+1, ex)
+
+            if not existent.get(short_path) and imported_pages == 0:
+                self.logger(filepath, 'no sufficient texts found.')
