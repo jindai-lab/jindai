@@ -297,10 +297,14 @@ class WebPageListingDataSource(DataSourceStage):
             self.logger(f'Cannot read list from {url}')
             return []
 
+        for a in b.select('a[href]'):
+            a['href'] = urljoin(url, a['href'])
+
         links = {
-            urljoin(url, a['href'].split('#')[0])
+            a['href'].split('#')[0]
             for a in b.select('a[href]')
         }
+        
         self.logger(len(links), 'links')
 
         links = [u for u in links if self.list_link.search(
