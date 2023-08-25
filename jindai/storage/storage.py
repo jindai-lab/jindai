@@ -152,7 +152,7 @@ class StorageManager:
         Yields:
             str: Matched paths
         """
-
+            
         for path, dirs, files in self.walk(base_path, name_pattern):
             for f in dirs + files:
                 fpath = self.join(path, f)

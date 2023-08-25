@@ -178,7 +178,7 @@ class Task:
             for fc in stage.flow(input_paragraph, gctx):
                 if fc[1] is None:
                     continue
-                self._queue.put((priority, id(fc[0]), fc))
+                self._queue.put((priority, (id(fc[0]), id(fc[1])), fc))
                 counter += 1
                 if not self.alive:
                     break

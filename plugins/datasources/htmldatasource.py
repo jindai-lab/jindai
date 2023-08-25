@@ -34,7 +34,7 @@ class TextDataSource(DataSourceStage):
             lang (LANG):
                 Language code
                 @zhs 语言标识
-            content (LINES):
+            content (FILES):
                 Paths
                 @zhs HTML或包含HTML的ZIP压缩包文件列表
         """
@@ -325,7 +325,7 @@ class BiblioDataSource(DataSourceStage):
             lang (LANG):
                 Language code
                 @zhs 语言标识
-            content (LINES):
+            content (FILES):
                 Paths
                 @zhs 文件列表
             format (endnote|other, unsupported):

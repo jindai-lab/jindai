@@ -144,16 +144,19 @@ class VufindDataSource(DataSourceStage):
             'limit': '20',
         }
 
-        resp = requests.get(self.server + '/Search/Results', params=params, headers=headers).content
-        b = B(resp, 'lxml')
-        for res in b.select('.media'):
-            for a in res.select('a'):
-                href = a.attrs.get('href')
-                if href:
-                    a.attrs['href'] = urljoin(self.server, href)
-            yield Paragraph(title=res.select_one('.title').text.strip(),
-                            author=res.select_one('.author-data').text.strip(),
-                            content=str(res.select_one('.result-body')))
+        try:
+            resp = requests.get(self.server + '/Search/Results', params=params, headers=headers).content
+            b = B(resp, 'lxml')
+            for res in b.select('.media'):
+                for a in res.select('a'):
+                    href = a.attrs.get('href')
+                    if href:
+                        a.attrs['href'] = urljoin(self.server, href)
+                yield Paragraph(title=res.select_one('.title').text.strip(),
+                                author=res.select_one('.author-data').text.strip(),
+                                content=str(res.select_one('.result-body')))
+        except Exception as ex:
+            self.log_exception(f'Error while fetching from {self.server}', ex)
 
 
 class BookSearcherPlugin(Plugin):

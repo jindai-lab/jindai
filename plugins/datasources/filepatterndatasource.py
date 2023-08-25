@@ -19,7 +19,7 @@ class FilePatternDataSource(DataSourceStage):
 
         :param content: Patterns
             @zhs 文件名模式
-        :type content: str, optional
+        :type content: FILES
         """
         self.patterns = content
 

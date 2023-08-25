@@ -150,25 +150,42 @@ def user_change_password(old_password='', password='', otp=None, **_):
 @app.route('/api/storage/<path:path>', methods=['GET', 'POST'])
 @app.route('/api/storage/', methods=['GET', 'POST'])
 @rest()
-def list_storage(path='', search='', mkdir=''):
+def list_storage(path='', search='', recursive=True,
+                 mkdir='',
+                 move=False, keep_folder=False, destination='', source=''):
     """
     List out files in directory or get file at that path
     Returns:
         list of file names, or file content
     """
 
-    path = 'file:///' + path
+    if '://' not in path:
+        path = 'file:///' + path.lstrip('/')
 
     if path.rsplit('.', 1)[-1].lower() in ('py', 'pyc', 'yaml', 'yml', 'sh'):
         return 'Not supported extension name', 400
 
     if mkdir:
         storage.mkdir(path, mkdir)
+        return APIUpdate()
+        
+    if move:
+        if keep_folder:
+            destination = os.path.basename(destination)
+            destination = os.path.join(os.path.dirname(source), destination)
+        paragraphs = Paragraph.query(F.source.file == source)
+        source = 'file:///' + source.replace('\\', '/')
+        destination = 'file:///' + destination.replace('\\', '/')
+        flag = storage.move(source, destination)
+        if flag:
+            paragraphs.update(
+                Fn.set({'source.file': storage.truncate_path(destination)}))
+        return APIUpdate(flag)
 
     results = None
     if search:
         results = [
-            storage.stat(r) for r in storage.search(path, '*' + search + '*')
+            storage.stat(r) for r in storage.search(path, search, recursive)
         ]
     else:
         results = storage.statdir(path)
@@ -177,7 +194,7 @@ def list_storage(path='', search='', mkdir=''):
 
     if isinstance(results, list):
         return APIResults(
-            sorted(results, key=lambda x: x['ctime'], reverse=True))
+            sorted(results, key=lambda x: x.get('ctime', 0), reverse=True))
     else:
         return send_file(results, download_name=path.split('/')[-1])
 
@@ -196,23 +213,6 @@ def write_storage(path=''):
             uploaded.save(fout)
         sfs.append(storage.stat(save_path))
     return APIUpdate(bundle=sfs)
-
-
-@app.route('/api/storage/move', methods=['POST'])
-@rest()
-def move_storage(source, destination, keep_folder=True):
-    """Move/Rename file from source to destination"""
-    if keep_folder:
-        destination = os.path.basename(destination)
-        destination = os.path.join(os.path.dirname(source), destination)
-    paragraphs = Paragraph.query(F.source.file == source)
-    source = 'file:///' + source.replace('\\', '/')
-    destination = 'file:///' + destination.replace('\\', '/')
-    flag = storage.move(source, destination)
-    if flag:
-        paragraphs.update(
-            Fn.set({'source.file': storage.truncate_path(destination)}))
-    return APIUpdate(flag)
 
 
 @app.route("/api/image/<coll>/<storage_id>.<ext>")
