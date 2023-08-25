@@ -19,90 +19,6 @@ from jindai.pipeline import DataSourceStage
 from jindai import storage, parser
 
 
-class HTMLDataSource(DataSourceStage):
-    """
-    Read paragraphs from HTML pages, generate one Paragraph per page
-    @zhs 从HTML网页中读取语段，每个网页计作一个语段
-    """
-
-    def apply_params(self, dataset_name='', lang='auto', content='',
-                     fields='content="//text"', paragraph_selector=''):
-        """
-        Args:
-            dataset_name (DATASET):
-                Data name
-                @zhs 数据集名称
-            lang (LANG):
-                Language code
-                @zhs 语言标识
-            content (LINES):
-                Paths
-                @zhs HTML或包含HTML的ZIP压缩包文件列表
-            paragraph_selector (str):
-                CSS selector for paragraph
-                @zhs 确定段落的 CSS 选择器，为空则整个网页作为一个段落
-            fields (str):
-                Mapping element attribute to field, e.g. field=".css-selector//attribute"
-                @zhs 字段与搜索字符串的关系，形如 field=".css-selector//attribute"
-        """
-        self.name = dataset_name
-        self.lang = lang
-        self.files = storage.globs(content)
-        self.fields = parser.parse(fields)
-        self.paragraph_selector = paragraph_selector
-
-    def import_html_src(self, path, html, outline=''):
-        """Generate paragraph from html datasources"""
-
-        b = B(html, 'lxml')
-
-        for html_para in b.select(self.paragraph_selector) if self.paragraph_selector else [b]:
-            para = Paragraph(
-                lang=self.lang, content='',
-                source={
-                    'url' if '://' in path and not path.startswith('file://') else 'file': storage.truncate_path(path)
-                },
-                pagenum=1,
-                dataset=self.name,
-                outline=outline,
-                keywords=[],
-                html=str(html_para),
-            )
-
-            for field_name, field_path in self.fields.items():
-                if '//' in field_path:
-                    field_path, field_attr = field_path.rsplit('//', 1)
-                else:
-                    field_attr = 'text'
-                elements = html_para.select(
-                    field_path) if field_path else [html_para]
-                value = []
-                for element in elements:
-                    if field_attr == 'text':
-                        value.append(str(element.text))
-                    elif field_attr == 'html':
-                        value.append(str(element))
-                    elif field_attr in element.attrs:
-                        value.append(str(element.attrs[field_attr]))
-                if field_name == 'content':
-                    value = '\n'.join(value)
-                else:
-                    value = ' '.join(value)
-                setattr(para, field_name, value)
-
-            yield para
-
-        del b
-
-    def fetch(self):
-        for path in self.files:
-            self.logger('reading from', path)
-            fpath, outline = path, ''
-            if '#' in path:
-                fpath, outline = path.split('#', 1)
-            yield from self.import_html_src(fpath, storage.open(path, 'rb'), outline)
-
-
 class TextDataSource(DataSourceStage):
     """
     Read Paragraphs from text files
@@ -245,7 +161,7 @@ class WebPageListingDataSource(DataSourceStage):
             self.logger('Cannot read from', url)
             html = b''
 
-        b = B(html.decode('utf-8'), 'lxml')
+        b = B(html, 'lxml')
         return b
 
     def get_text(self, element):
@@ -261,8 +177,10 @@ class WebPageListingDataSource(DataSourceStage):
             return
 
         para = Paragraph.get(url, pdate=datetime.datetime.utcnow(),
+                             source={'url': url},
                              dataset=self.dataset, lang=self.lang)
         para.content = self.get_text(b)
+        para.html = str(b)
         para.keywords = self.tags
         para.title = self.get_text(b.find('title'))
 

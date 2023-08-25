@@ -215,8 +215,10 @@ class DBQuery:
                 {'$match':
                     (MongoOperand(first_query['$match']) & MongoOperand(req))()}
             ] + qparsed[1:]
+        elif [1 for _ in qparsed if isinstance(_, dict) and ('$lookup' in _ or '$from' in _)]:
+            return qparsed + [{'$match': req}]
 
-        return qparsed + [{'$match': req}]
+        return [{'$match': req}] + qparsed
     
     @staticmethod
     def _find_query(query, keyname):
