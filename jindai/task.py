@@ -233,7 +233,6 @@ class Task:
         except Exception as ex:
             self.alive = False
             self.log_exception('Error while executing task', ex)
-            traceback.print_exc()
             return {
                 '__exception__': str(ex),
                 '__tracestack__': traceback.format_tb(ex.__traceback__)

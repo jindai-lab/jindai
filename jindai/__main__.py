@@ -295,36 +295,6 @@ def storage_merge(infiles, output):
     print('Total:', total, 'bytes')
 
 
-@cli.command('storage-convert')
-@click.option('--infile', '-i')
-@click.option('--output', '-o')
-@click.option('--format', '-f')
-def stroage_convert(infile, output, format):
-    assert format in ('sqlite',)
-
-    if format == 'sqlite':
-        import sqlite3
-        conn = sqlite3.connect(output)
-        outp = conn.cursor()
-        outp.execute("""
-                     CREATE TABLE IF NOT EXISTS data (id TEXT PRIMARY KEY, bytes BLOB, ctime TIMESTAMP)
-                     """)
-        inp = h5py.File(infile)['data']
-
-        for k in tqdm(inp):
-            buf = inp[k][:].tobytes()
-            try:
-                outp.execute("""
-                            REPLACE INTO data VALUES (?, ?, ?)
-                            """, (k, buf, datetime.datetime.utcnow()))
-            except Exception as ex:
-                print(ex)
-
-        outp.close()
-        conn.commit()
-        conn.close()
-
-
 @cli.command('dump')
 @click.option('--output', default='')
 @click.argument('colls', nargs=-1)
