@@ -72,8 +72,7 @@ class MediaItemStage(PipelineStage):
                     i, paragraph)
                 i.save()
             except Exception as ex:
-                self.logger(i.id, self.__class__.__name__, ex)
-                self.logger(traceback.format_tb(ex.__traceback__))
+                self.log_exception(f'Error while handling media item {i.id}', ex)
         return paragraph
 
     def resolve_item(self, i: MediaItem, paragraph: Paragraph):
@@ -116,7 +115,7 @@ class CheckImage(MediaItemStage):
             i.save()
             return i
         except Exception as ex:
-            self.logger(i.id, type(ex).__name__, ex)
+            self.log_exception('Error while checking image for {i.id}', ex)
         return i
 
 

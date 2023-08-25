@@ -520,7 +520,7 @@ class ArrayField(PipelineStage):
         """
         super().__init__()
         self.field = field
-        self.elements = elements.split('\n')
+        self.elements = [parser.parse(ele) for ele in elements.split('\n')]
         self.push = push
 
     def resolve(self, paragraph: Paragraph) -> Paragraph:
@@ -529,8 +529,7 @@ class ArrayField(PipelineStage):
         if not isinstance(paragraph[self.field], (list, DbObjectCollection)):
             return paragraph
         for ele in self.elements:
-            if '$' in ele:
-                ele = evaluateqx(parser.parse(ele), paragraph)
+            ele = evaluateqx(ele, paragraph)
             if self.push:
                 paragraph[self.field].append(ele)
             else:
