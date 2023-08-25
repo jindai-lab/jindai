@@ -103,7 +103,7 @@ class OSFileSystemManager(StorageManager):
         file_stat = os.stat(path)
         return {
             'name': os.path.basename(path),
-            'fullpath': self.truncate_path(path),
+            'fullpath': 'file:///' + self.truncate_path(path),
             'ctime': file_stat.st_ctime,
             'mtime': file_stat.st_mtime,
             'size': file_stat.st_size,

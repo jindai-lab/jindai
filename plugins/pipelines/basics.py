@@ -1261,21 +1261,3 @@ class LoadNamedResult(Passthrough):
         if self.name == '':
             return self.gctx
         return self.gctx.get(self.name)
-
-
-class AggregateDataSource(PipelineStage):
-    """Aggregate results from multiple pipeline stages
-    @zhs 聚合不同管线模块的结果
-    """
-    
-    def __init__(self, pipeline):
-        """
-        Args:
-            pipeline (pipeline): Pipeline of data sources
-                @zhs 各数据源
-        """
-        self.sources = Pipeline(pipeline, self.logger)
-
-    def resolve(self, para: Paragraph):
-        for source in self.sources.stages:
-            yield from source.resolve(para)

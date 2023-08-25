@@ -32,7 +32,11 @@ class OPDSDataSource(DataSourceStage):
         
     def fetch(self):
         url = self.search.format(searchTerms=urllib.parse.quote(self.query))
-        xr = etree.fromstring(requests.get(url).content).getroottree()
+        try:
+            xr = etree.fromstring(requests.get(url).content).getroottree()
+        except:
+            return
+        
         for entry in xr.findall('//{*}entry'):
             info = {}
             content = '<h3>{title}</h3><p>Author: {author}</p><a href="{href}">Download ({filesize} MB)<a>'
@@ -57,28 +61,10 @@ class OPDSDataSource(DataSourceStage):
             yield Paragraph(content=content, **info)
 
 
-class OPDSPlugin(Plugin):
+class OPDSClientPlugin(Plugin):
     """Auto tagging plugin"""
 
     def __init__(self, pmanager, **_) -> None:
         super().__init__(pmanager)
         self.register_pipelines(globals())
         
-        LIST_PAGE = '/api/plugins/calibre/list'
-        
-        @pmanager.app.route(LIST_PAGE)
-        @rest()
-        def calibre_list():
-            path = request.args.get('path', '')
-            assert path, 'Path should not be empty'
-            stat = storage.stat(path)['type']
-            if stat == 'file':
-                return send_file(storage.open(path), 'application/' + path.rsplit('.', 1)[-1], download_name=path.rsplit('/', 1)[-1])
-            else:
-                files = storage.statdir(path)
-                content = '<html><ul>'
-                for file in files:
-                    content += '<li><a href="{list_page}?path={path}">{file}</a></li>'.format(file=file['name'], path=urllib.parse.quote(file['fullpath']), list_page=LIST_PAGE)
-                content += '</ul></html>'
-                
-                return Response(content, mimetype='text/html; encoding=utf-8')

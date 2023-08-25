@@ -8,6 +8,7 @@ import zipfile
 from io import BytesIO
 from queue import deque
 from typing import IO, Union
+from fnmatch import fnmatch
 
 import requests
 from waitress import serve
@@ -249,10 +250,19 @@ class Storage:
         """
         return self._query_until('stat', path, {})
 
-    def search(self, path: str, name_pattern: str):
+    def search(self, path: str, name_pattern: str, recursive: bool = True):
         """Find a file
+        Args:
+            path (str): Path to search inside
+            name_pattern (str): Name pattern with wilcards
+            recursive (bool): Recursive search
         """
-        return self._query_until('search', path, [], name_pattern=name_pattern)
+        if recursive:
+            return self._query_until('search', path, [], name_pattern=name_pattern)
+        else:
+            for f in self.listdir(path):
+                if fnmatch(f, name_pattern):
+                    yield path.rstrip('/') + '/' + f
 
     def mkdir(self, path: str, new_folder: str):
         """Make directory in path"""

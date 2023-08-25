@@ -27,7 +27,7 @@ class WordDataSource(DataSourceStage):
             lang (LANG):
                 Language code
                 @zhs 语言标识
-            content (LINES):
+            content (FILES):
                 Paths
                 @zhs 文件列表
         """
@@ -72,7 +72,7 @@ class ExcelDataSource(DataSourceStage):
             lang (LANG):
                 Language code
                 @zhs 语言标识
-            content (LINES):
+            content (FILES):
                 Paths
                 @zhs 文件列表
         """

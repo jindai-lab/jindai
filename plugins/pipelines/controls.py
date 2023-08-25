@@ -61,7 +61,7 @@ class RepeatWhile(FlowControlStage):
     def __init__(self, pipeline, times=1, cond=''):
         """
         Args:
-            pipeline (pipeline): Loop pipeline
+            pipeline (PIPELINE): Loop pipeline
                 @zhs 要重复执行的流程
             times (int): Max repeat times
                 @zhs 重复的次数
@@ -106,7 +106,7 @@ class ForEach(FlowControlStage):
     def __init__(self, pipeline, as_name, input_value) -> None:
         """
         Args:
-            pipeline (pipeline): Loop pipeline
+            pipeline (PIPELINE): Loop pipeline
                 @zhs 要重复执行的流程
             as_name (int): Variable name
                 @zhs 枚举的变量名
@@ -143,9 +143,9 @@ class Condition(FlowControlStage):
         Args:
             cond (QUERY): Condition to check
                 @zhs 检查的条件
-            iftrue (pipeline): Pipeline when condition is satisfied
+            iftrue (PIPELINE): Pipeline when condition is satisfied
                 @zhs 条件成立时执行的流程
-            iffalse (pipeline): Pipeline when condition is not satisfied
+            iffalse (PIPELINE): Pipeline when condition is not satisfied
                 @zhs 条件不成立时执行的流程
         """
         self.cond = parser.parse(cond)
@@ -247,3 +247,24 @@ class RunTask(CallTask):
 
     def summarize(self, _):
         return self.task.execute()
+
+
+class AggregateDataSource(FlowControlStage):
+    """Aggregate results from multiple pipeline stages
+    @zhs 聚合不同管线模块的结果
+    """
+    
+    def __init__(self, pipelines):
+        """
+        Args:
+            pipelines (PIPELINES): Pipeline of data sources
+                @zhs 各数据源
+        """
+        super().__init__()
+        self._pipelines = [Pipeline(pipeline, self.logger) for pipeline in pipelines]
+        
+    def flow(self, paragraph, gctx):
+        self.gctx = gctx
+        for pipeline in self._pipelines:
+            if pipeline.stages:
+                yield paragraph, pipeline.stages[0]
