@@ -294,7 +294,7 @@ class Paragraph(ObjectWithSource):
         if 'mongocollection' in self.__dict__:
             del self.mongocollection
 
-        self.keywords = [k for k in set(self.keywords) if k.strip()]
+        self.keywords = [k for k in set(self.keywords) if isinstance(k, str) and k.strip()]
 
         for field in ['keywords', 'author']:
             vals = self[field]
