@@ -228,67 +228,39 @@ class WordCut(PipelineStage):
         self.for_search = for_search
         self.field = field
 
-    def resolve(self, paragraph: Paragraph) -> Paragraph:
-        paragraph[self.field] = []
-
-        if paragraph.lang == 'zht':
-            paragraph.content = WordCut.t2s.convert(paragraph.content)
-
-        if paragraph.lang in ('zhs', 'zht'):
-            paragraph[self.field] = list(WordCut.jieba.cut_for_search(paragraph.content)
-                                    if self.for_search else WordCut.jieba.cut(paragraph.content))
-        elif paragraph.lang == 'ja':
-            paragraph[self.field] = list(set(paragraph.content))
-            for i in WordCut.kks.convert(paragraph.content):
-                paragraph[self.field].append(i['orig'])
-                if self.for_search:
-                    paragraph[self.field].append(i['hepburn'])
-        else:
-            paragraph[self.field] = [_.lower()
-                                for _ in re.split(r'[^\w]', paragraph.content)]
-            if self.for_search:
-                WordCut.stmr.resolve(paragraph)
-
-        if self.for_search:
-            WordCut.trlit.resolve(paragraph)
-
-        return paragraph
-
-
-class KeywordsFromTokens(PipelineStage):
-    """
-    Set tokens as keywords and unset tokens field
-    @zhs 将检索词设为分词结果并删除词串字段
-    """
-
-    def __init__(self, append=False, field='keywords') -> None:
-        """
-        Args:
-            append (bool, optional): 
-                Appending to existing words
-                @zhs 添加到已有的关键词列表之后
-            field (str):
-                Field name to store cutted words
-                @zhs 保存到字段名
-        """
-        super().__init__()
-        self.append = append
-        self.field = field
-
     @staticmethod
     def remove_accents(input_str):
         unicodedata = safe_import('unicodedata')
         nfkd_form = unicodedata.normalize('NFKD', input_str)
         return u"".join([c for c in nfkd_form if not unicodedata.combining(c)])
-
+    
     def resolve(self, paragraph: Paragraph) -> Paragraph:
-        words = [str(word).strip().strip(string.punctuation)
-                 for word in set(paragraph[self.field]) if word and str(word).strip()]
-        words += [KeywordsFromTokens.remove_accents(word) for word in words]
-        paragraph.keywords = list(
-            set((paragraph.keywords if self.append else []) + words))
+        words = []
+        if paragraph.lang == 'zht':
+            content = WordCut.t2s.convert(paragraph.content)
+        else:
+            content = paragraph.content
 
-        del paragraph[self.field]
+        if paragraph.lang in ('zhs', 'zht'):
+            words = list(WordCut.jieba.cut_for_search(content)
+                         if self.for_search else WordCut.jieba.cut(content))
+        elif paragraph.lang == 'ja':
+            words = list(set(content))
+            for i in WordCut.kks.convert(content):
+                words.append(i['orig'])
+                if self.for_search:
+                    words.append(i['hepburn'])
+        else:
+            words = [_.lower().strip().strip(string.punctuation)
+                     for _ in re.split(r'[^\w]', content)]
+            if self.for_search:
+                WordCut.stmr.resolve(paragraph)
+            words += [WordCut.remove_accents(word) for word in words]
+
+        if self.for_search:
+            WordCut.trlit.resolve(paragraph)
+            
+        paragraph[self.field] = words
         return paragraph
 
 
