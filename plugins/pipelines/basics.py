@@ -158,9 +158,12 @@ class WordStemmer(PipelineStage):
         self.append = append
         self.field = field
         self.stemmer = _Stemmer()
+        
+    def stem_words(self, lang, words):
+        return self.stemmer.stem_tokens(lang, words)
 
     def resolve(self, paragraph: Paragraph) -> Paragraph:
-        tokens = self.stemmer.stem_tokens(paragraph.lang, paragraph[self.field])
+        tokens = self.stem_words(paragraph.lang, paragraph[self.field])
         if self.append:
             paragraph[self.field] += tokens
         else:
@@ -190,11 +193,16 @@ class LatinTransliterate(PipelineStage):
         transliterate = safe_import('transliterate')
         self.supported_languages = transliterate.get_available_language_codes()
         self.translit = transliterate.translit
+        
+    def transliterate(self, lang, words):
+        if lang in self.supported_languages:
+            return [self.translit(
+                word, lang, reversed=True).lower() for word in words]
+        else:
+            return []
 
     def resolve(self, paragraph: Paragraph) -> Paragraph:
-        if paragraph.lang in self.supported_languages:
-            tokens = [self.translit(
-                _, paragraph.lang, reversed=True).lower() for _ in paragraph[self.field]]
+        if tokens := self.translit(paragraph.lang, paragraph[self.field] or []):
             if self.append:
                 paragraph[self.field] += tokens
             else:
@@ -211,8 +219,6 @@ class WordCut(PipelineStage):
     t2s = safe_import('opencc', 'opencc-python-reimplementation').OpenCC('t2s')
     kks = safe_import('pykakasi').kakasi()
     jieba = safe_import('jieba')
-    stmr = WordStemmer(append=True)
-    trlit = LatinTransliterate(append=True)
 
     def __init__(self, for_search=False, field='tokens', **_):
         """
@@ -227,6 +233,8 @@ class WordCut(PipelineStage):
         super().__init__()
         self.for_search = for_search
         self.field = field
+        self.stmr = WordStemmer(append=True, field=field)
+        self.trlit = LatinTransliterate(append=True, field=field)
 
     @staticmethod
     def remove_accents(input_str):
@@ -254,11 +262,11 @@ class WordCut(PipelineStage):
             words = [_.lower().strip().strip(string.punctuation)
                      for _ in re.split(r'[^\w]', content)]
             if self.for_search:
-                WordCut.stmr.resolve(paragraph)
+                words += self.stmr.stem_words(paragraph.lang, words)
             words += [WordCut.remove_accents(word) for word in words]
 
         if self.for_search:
-            WordCut.trlit.resolve(paragraph)
+            words += self.trlit.transliterate(paragraph.lang, words)
             
         paragraph[self.field] = words
         return paragraph
