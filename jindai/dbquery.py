@@ -236,7 +236,7 @@ class DBQuery:
                     query.remove(v)
                 return val
             
-    def __init__(self, query, mongocollections='', limit=0, skip=0, sort='',
+    def __init__(self, query, mongocollections=None, limit=0, skip=0, sort='',
                  raw=False, groups='none', pmanager=None, wordcutter=None):
 
         self.query = DBQuery._parse(query, wordcutter)
@@ -255,7 +255,7 @@ class DBQuery:
                 plugin_args[0]), plugin_args[1:]
 
         if not mongocollections:
-            mongocollections = ''
+            mongocollections = ['']
         self.mongocollections = mongocollections.split('\n') if isinstance(
             mongocollections, str) else mongocollections
 

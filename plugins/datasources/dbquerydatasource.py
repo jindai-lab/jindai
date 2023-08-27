@@ -13,7 +13,7 @@ from bson import SON
 
 from jindai import storage, parser, DBQuery
 from jindai.models import MediaItem, Paragraph
-from jindai.pipeline import DataSourceStage
+from jindai.pipeline import DataSourceStage, PipelineStage
 from jindai.storage import instance as storage
 
 
@@ -21,7 +21,7 @@ class DBQueryDataSource(DataSourceStage):
     """Query from Database
     @zhs 从数据库查询
     """
-    
+
     def apply_params(self, query, req='', mongocollections='', limit=0, skip=0, sort='', raw=False, groups='none'):
         """
         Args:
@@ -62,7 +62,7 @@ class MediaDataSource(DataSourceStage):
     Data Source for Media Items
     @zhs 多媒体项目数据源
     """
-    
+
     def apply_params(self, query='', limit=20, offset=0, raw=False, sort_keys='-id'):
         """
         Args:
@@ -85,19 +85,19 @@ class MediaDataSource(DataSourceStage):
         self.query_str = query
         self.query = parser.parse(query)
         self.raw = raw
-        
+
         if not isinstance(self.query, list):
             self.query = [{'$match': self.query or {}}]
-        
+
         if sort_keys == 'random':
             self.sort_keys = []
             self.query.append({'$sample': {'size': limit or 100}})
             limit = 0
         else:
             self.sort_keys = parser.parse_sort(sort_keys)
-        
+
         self.result_set = MediaItem.aggregate(self.query, raw=raw)
-        
+
         if self.sort_keys:
             self.result_set = self.result_set.sort(SON(self.sort_keys))
         if offset:
@@ -114,7 +114,7 @@ class MediaImportDataSource(DataSourceStage):
     Import media from datasource
     @zhs 从本地文件或网址导入图像信息
     """
-    
+
     def apply_params(self, patterns, dataset='', tags='', proxy='', excluding_patterns=''):
         """
         Args:
@@ -134,18 +134,20 @@ class MediaImportDataSource(DataSourceStage):
                 Proxy settings
                 @zhs 代理服务器
         """
-        self.keywords = tags.split('\n')
-
+        self.keywords = PipelineStage.parse_lines(tags)
         weburl = re.compile('^https?://')
-        patterns = patterns.split('\n')
+        patterns = PipelineStage.parse_lines(patterns)
         self.local_locs = [_ for _ in patterns if not weburl.match(_)]
         self.web_locs = [_ for _ in patterns if weburl.match(_)]
         self.proxies = {
             'http': proxy,
             'https': proxy
         } if proxy else {}
-        self.excluding_patterns = [re.compile(
-            pattern) for pattern in excluding_patterns.split('\n') if pattern]
+        self.excluding_patterns = [
+            re.compile(pattern)
+            for pattern in PipelineStage.parse_lines(excluding_patterns)
+            if pattern
+        ]
         self.dataset = dataset
 
     def fetch(self):
@@ -168,12 +170,14 @@ class MediaImportDataSource(DataSourceStage):
         albums = defaultdict(Paragraph)
 
         for loc in storage.globs(locs):
-            hashed_loc = re.sub(r'://(.+?)(:.+?)?@([\w.]+)/', r'://\1@\3/', loc)
+            hashed_loc = re.sub(
+                r'://(.+?)(:.+?)?@([\w.]+)/', r'://\1@\3/', loc)
             extname = loc.rsplit('.', 1)[-1].lower()
             dirname = hashed_loc.rsplit('/', 1)[0]
             filename = loc.split('#')[0]
             if extname in MediaItem.acceptable_extensions or loc.endswith('.mp4.thumb.jpg'):
-                ftime = int(os.stat(filename).st_mtime) if os.path.exists(filename) else time.time()
+                ftime = int(os.stat(filename).st_mtime) if os.path.exists(
+                    filename) else time.time()
                 album = albums[dirname]
                 if not album.source:
                     album.source = {'url': filename}
@@ -181,7 +185,8 @@ class MediaImportDataSource(DataSourceStage):
                     album.pdate = datetime.datetime.utcfromtimestamp(ftime)
                     album.dataset = self.dataset
 
-                i = MediaItem.get(hashed_loc, item_type=MediaItem.get_type(extname))
+                i = MediaItem.get(
+                    hashed_loc, item_type=MediaItem.get_type(extname))
                 i.save()
                 path = storage.default_path(i.id)
                 with storage.open(path, 'wb') as fout:
@@ -209,8 +214,8 @@ class MediaImportDataSource(DataSourceStage):
 
         for url in storage.globs(paths):
             p = Paragraph.get(url,
-                dataset=self.dataset,
-                images=[], pdate=datetime.datetime.utcnow())
+                              dataset=self.dataset,
+                              images=[], pdate=datetime.datetime.utcnow())
             if url.endswith('.jpg'):
                 imgs = [('', url)]
                 title = ''
@@ -237,7 +242,7 @@ class MediaImportDataSource(DataSourceStage):
                     imgs += re.findall(
                         r'(zoomfile|data-original|data-src|src|file|data-echo)=["\'](.*?)["\']', img)
                 imgs += re.findall(r'<a[^>]+(href)="([^"]*?\.jpe?g)"',
-                                    html, flags=re.I)
+                                   html, flags=re.I)
                 self.logger(len(imgs), 'images found.')
 
             for _, img in imgs:
@@ -247,7 +252,8 @@ class MediaImportDataSource(DataSourceStage):
                         continue
                 if imgurl not in imgset:
                     self.logger(imgurl)
-                    i = MediaItem.get(imgurl, item_type=MediaItem.get_type(imgurl))
+                    i = MediaItem.get(
+                        imgurl, item_type=MediaItem.get_type(imgurl))
                     i.save()
                     p.images.append(i)
                     imgset.add(imgurl)

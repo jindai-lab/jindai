@@ -9,7 +9,7 @@ from typing import Iterable
 import pandas as pd
 from jindai import storage
 from jindai.models import Paragraph
-from jindai.pipeline import DataSourceStage
+from jindai.pipeline import DataSourceStage, PipelineStage
 
 
 class WordDataSource(DataSourceStage):
@@ -33,7 +33,7 @@ class WordDataSource(DataSourceStage):
         """
         self.name = dataset_name
         self.lang = lang
-        self.files = storage.globs(content)
+        self.files = PipelineStage.parse_paths(content)
 
     def call_abiword(self, file):
         """Call abiword to extract text from a word document"""
@@ -76,9 +76,10 @@ class ExcelDataSource(DataSourceStage):
                 Paths
                 @zhs 文件列表
         """
-        self.files = storage.globs(content)
+        
         self.dataset = dataset_name
         self.lang = lang
+        self.files = PipelineStage.parse_paths(content)
 
     def fetch(self) -> Iterable[Paragraph]:
         for file in self.files:
