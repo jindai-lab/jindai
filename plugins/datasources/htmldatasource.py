@@ -3,91 +3,47 @@ Import from web or file
 @zhs 来自网页或文本文件
 """
 
-import codecs
-from collections import deque
 import re
 import json
 import datetime
-from concurrent.futures import Future, ThreadPoolExecutor
-import time
+import tempfile
+import os
+from hashlib import sha1
 from urllib.parse import urljoin
 from bs4 import BeautifulSoup as B
 
 from PyMongoWrapper import F, Fn
 from jindai.models import MediaItem, Paragraph
-from jindai.pipeline import DataSourceStage
+from jindai.pipeline import DataSourceStage, PipelineStage
 from jindai import storage, parser
-
-
-class TextDataSource(DataSourceStage):
-    """
-    Read Paragraphs from text files
-    @zhs 从文本文件中读取语段
-    """
-
-    def apply_params(self, dataset_name='', lang='auto', content=''):
-        """
-        Args:
-            dataset_name (DATASET):
-                Data name
-                @zhs 数据集名称
-            lang (LANG):
-                Language code
-                @zhs 语言标识
-            content (FILES):
-                Paths
-                @zhs HTML或包含HTML的ZIP压缩包文件列表
-        """
-        self.name = dataset_name
-        self.lang = lang
-        self.content = content.split('\n')
-
-    def fetch(self):
-        for path in storage.globs(self.content):
-            for i, line in enumerate(storage.open(path)):
-                yield Paragraph(content=codecs.decode(line),
-                                source={
-                                    'url' if '://' in path else 'file': storage.truncate_path(path)},
-                                dataset=self.name, lang=self.lang, outline=f'{i+1:06d}')
-
-
-class LinesDataSource(DataSourceStage):
-    """
-    Import paragraphs from lines
-    @zhs 从直接输入的文本中获得语段，每行一个语段
-    """
-
-    def apply_params(self, dataset_name='', lang="auto", content="", params=None, delimiter='\n'):
-        """
-        Args:
-            dataset_name (DATASET):
-                Data name
-                @zhs 数据集名称
-            lang (LANG):
-                Language code
-                @zhs 语言标识
-            content (str):
-                Text contents
-                @zhs 文本内容
-            params (object):
-                Other customizable fields
-                @zhs 其他自定义字段
-            delimiter (str):
-                Delimiter
-                @zhs 分隔符，默认为换行符
-        """
-        self.name = dataset_name
-        self.lang = lang
-        self.lines = content.split(delimiter)
-        self.params = params or {}
-
-    def fetch(self):
-        return map(lambda x: Paragraph(
-            content=x, lang=self.lang, dataset=self.name, **self.params), self.lines)
 
 
 DEFAULT_IMG_PATTERNS = 'img[src]|[zoomfile]|[data-original]|[data-src]|[file]|[data-echo]'.replace(
     '|', '\n')
+
+
+class CachedWebAccess:
+
+    def __init__(self, base=''):
+        if not base:
+            base = tempfile.mktemp()
+        if not os.path.exists(base):
+            os.mkdir(base)
+        self.base = base
+
+    def _digest(self, url):
+        return os.path.join(self.base, sha1(url.encode('utf-8')).hexdigest())
+    
+    def get(self, url):
+        hashed = self._digest(url)
+        if os.path.exists(hashed):
+            with open(hashed, 'rb') as fi:
+                return fi.read()
+        else:
+            data = storage.open(url, 'rb').read()
+            with open(hashed, 'wb') as fo:
+                fo.write(data)
+            return data
 
 
 class WebPageListingDataSource(DataSourceStage):
@@ -95,12 +51,14 @@ class WebPageListingDataSource(DataSourceStage):
     Import web page listings
     @zhs 从网页列表中导入语段
     """
+    
+    visited = set()
+    cache = CachedWebAccess('/tmp/wpdl')
 
-    def apply_params(self, dataset='', patterns='',
+    def apply_params(self, dataset='', content='', scopes='',
                      mongocollection='', lang='auto', detail_link='',
                      list_link='', proxy='', list_depth=1, tags='',
-                     parallel_n=10,
-                     img_pattern=DEFAULT_IMG_PATTERNS) -> None:
+                     img_pattern='', level=1) -> None:
         """
         Args:
             dataset (DATASET):
@@ -109,9 +67,9 @@ class WebPageListingDataSource(DataSourceStage):
             lang (LANG):
                 Language code
                 @zhs 语言标识
-            patterns (LINES):
-                Patterns for web pages
-                @zhs 列表页面模式
+            content (LINES):
+                Entry URLs
+                @zhs 入口 URL
             list_depth (int):
                 List depth
                 @zhs 列表深度
@@ -130,39 +88,38 @@ class WebPageListingDataSource(DataSourceStage):
             img_pattern (LINES):
                 Image pattern
                 @zhs 图像检索标记
+            scopes (LINES):
+                URL Scopes
+                @zhs 要抓取的 URL 范围
             mongocollection (str):
                 Mongo Collection name
                 @zhs 数据库集合名
-            parallel_n (int):
-                Parallel download threads
-                @zhs 并行下载线程数
         """
         self.proxies = {} if not proxy else {
             'http': proxy,
             'https': proxy
         }
-        self.patterns = patterns.split('\n')
+        self.paths = PipelineStage.parse_paths(content)
+        self.scopes = PipelineStage.parse_paths(scopes)
         self.list_depth = list_depth
         self.detail_link = re.compile(detail_link)
         self.list_link = re.compile(list_link)
-        self.tags = tags.split('\n')
+        self.tags = PipelineStage.parse_lines(tags)
         self.dataset = dataset
         self.lang = lang
-        self.image_patterns = [_ for _ in img_pattern.split('\n') if _] or DEFAULT_IMG_PATTERNS.split('\n')
-        self.mongocollection = mongocollection
-        self.convert = Paragraph.get_converter(mongocollection)
-        self.n = parallel_n
+        self.image_patterns = PipelineStage.parse_lines(img_pattern) or DEFAULT_IMG_PATTERNS.split('\n')
+        self.collection = Paragraph.get_coll(mongocollection)
+        self.level = level
 
-    def read_html(self, url):
+    def get_url(self, url):
         """Read html from url, return BeautifulSoup object"""
+        self.logger('get url', url)
         try:
-            html = storage.open(url, proxies=self.proxies).read()
-        except OSError:
-            self.logger('Cannot read from', url)
-            html = b''
-
-        b = B(html, 'lxml')
-        return b
+            data = WebPageListingDataSource.cache.get(url)
+        except OSError as ose:
+            self.log_exception(f'Error while reading from {url}', ose) 
+            data = ''
+        return self.collection(source={'url':url}, html=data, dataset=self.dataset, lang=self.lang)
 
     def get_text(self, element):
         """Get text of element"""
@@ -170,19 +127,15 @@ class WebPageListingDataSource(DataSourceStage):
             return re.sub(r'\s+', ' ', element.text)
         return ''
 
-    def parse_detail(self, url, b):
+    def parse_detail(self, url, para, b):
         """Parse url as a detail page"""
-
-        if not b:
-            return
-
-        para = Paragraph.get(url, pdate=datetime.datetime.utcnow(),
-                             source={'url': url},
-                             dataset=self.dataset, lang=self.lang)
-        para.content = self.get_text(b)
-        para.html = str(b)
-        para.keywords = self.tags
-        para.title = self.get_text(b.find('title'))
+        para.pdate=datetime.datetime.utcnow()
+        para.source={'url': url}
+        para.dataset=self.dataset
+        para.lang=self.lang
+        para.content=self.get_text(b)
+        para.keywords=self.tags
+        para.title=self.get_text(b.find('title'))
 
         items = set()
 
@@ -199,14 +152,14 @@ class WebPageListingDataSource(DataSourceStage):
                 if upath in items:
                     continue
                 if image.id:
-                    Paragraph.query(F.images == image.id).update(
+                    self.collection.query(F.images == image.id).update(
                         Fn.pull(images=image.id))
                 items.add(upath)
 
                 para.images.append(image)
 
         self.logger(f'Found {len(para.images)} images in {url}')
-        return self.convert(para)
+        return para
 
     def parse_list(self, url, b):
         """Parse url as a list page"""
@@ -215,77 +168,45 @@ class WebPageListingDataSource(DataSourceStage):
             self.logger(f'Cannot read list from {url}')
             return []
 
+        links = set()
         for a in b.select('a[href]'):
-            a['href'] = urljoin(url, a['href'])
+            link_url = a['href'] = urljoin(url, a['href'])
+            link_url = link_url.split('#')[0]
+            # if visited
+            if link_url in WebPageListingDataSource.visited:
+                continue
+            # match scopes
+            for scope in self.scopes:
+                if link_url.startswith(scope):
+                    break
+            else:
+                continue
+            # match link or detail patterns
+            if self.list_link.search(link_url) or self.detail_link.search(link_url):
+                links.add(link_url)
 
-        links = {
-            a['href'].split('#')[0]
-            for a in b.select('a[href]')
-        }
-        
         self.logger(len(links), 'links')
-
-        links = [u for u in links if self.list_link.search(
-            u) or self.detail_link.search(u)]
-        self.logger(len(links), 'matched list or detail pattern')
-
-        return links
+        return list(links)
 
     def fetch(self):
-        queue = deque([(p, 1)
-                       for p in storage.globs(self.patterns)])
-        visited = set()
+        level = self.level or 1
+        for url in self.paths:
+            if url in WebPageListingDataSource.visited:
+                continue
+            WebPageListingDataSource.visited.add(url)
+            
+            para = self.get_url(url)
+            b = B(para.html, 'lxml')
 
-        def _do_parse(url, level):
-            if url in visited:
-                self.logger('found', url, 'visited, skip')
-                return
-            visited.add(url)
-            para = Paragraph.get(url)
-            if para.id:
-                return
-
-            b = self.read_html(url)
-
-            if self.list_link.search(url) or self.detail_link.search(url):
-                self.logger('parse as list', url)
+            if level < self.list_depth and (self.list_link.search(url) or self.detail_link.search(url)):
+                self.logger('parse list', url)
                 for upath in self.parse_list(url, b):
-                    yield upath, level + 1
+                    yield Paragraph(content=upath, level=level+1), self
 
             if self.detail_link.search(url):
-                self.logger('parse as detail', url)
-                para = self.parse_detail(url, b)
-                if para:
-                    yield para, level + 1
-
-        running_futures = set()
-        results = deque()
-
-        def _enqueue(fut: Future):
-            riter = fut.result()
-            running_futures.remove(id(fut))
-            for res, level in riter:
-                if isinstance(res, Paragraph):
-                    results.append(res)
-                elif isinstance(res, str):
-                    if res not in visited and res not in queue and level <= self.list_depth:
-                        self.logger('add', res, 'to queue')
-                        queue.append((res, level))
-
-        tpe = ThreadPoolExecutor(self.n)
-
-        while queue or running_futures or results:
-            if queue:
-                self.logger(f'Queuing {len(queue)} urls')
-                arg = queue.popleft()
-                future = tpe.submit(_do_parse, *arg)
-                running_futures.add(id(future))
-                future.add_done_callback(_enqueue)
-            if running_futures:
-                time.sleep(0.1)
-            while results:
-                yield results.popleft()
-
+                self.logger('parse detail', url)
+                yield self.parse_detail(url, para, b)
+                
 
 class JSONDataSource(DataSourceStage):
     """Parse JSON data to Paragraphs, used to interact with web interface
@@ -310,91 +231,71 @@ class JSONDataSource(DataSourceStage):
             yield Paragraph().fill_dict(paragraph)
 
 
-class BiblioDataSource(DataSourceStage):
+class ExtractHTMLParagraphs(PipelineStage):
     """
-    Import paragraph from EndNote bibliography items
-    @zhs 从 EndNote 文献条目产生语段
+    Extract paragraphs from HTML
+    @zhs 从 HTML 中提取段落
     """
-    
-    def apply_params(self, content='', dataset_name='', lang='zhs', input_format='endnote') -> None:
+
+    def __init__(self, field='html', assignments='', paragraph_selector=''):
         """
         Args:
-            dataset_name (DATASET):
-                Data name
-                @zhs 数据集名称
-            lang (LANG):
-                Language code
-                @zhs 语言标识
-            content (FILES):
-                Paths
-                @zhs 文件列表
-            format (endnote|other, unsupported):
-                Format
-                @zhs 文献条目信息格式
+            field (str): Field to read HTML
+                @zhs 保存有 HTML 的字段名
+            assignments (QUERY):
+                Mapping element attribute to field, e.g. field=".css-selector//attribute"
+                @zhs 字段与搜索字符串的关系，形如 field=".css-selector//attribute"
+            paragraph_selector (str):
+                CSS selector for paragraph
+                @zhs 确定段落的 CSS 选择器，为空则整个网页作为一个段落
         """
-        if not hasattr(self, input_format):
-            raise NotImplementedError()
+        super().__init__()
+        self.field = field
+        self.paragraph_selector = paragraph_selector
+        self.assignments = parser.parse(assignments)
 
-        self.method = getattr(self, input_format)
-        self.files = storage.globs(content)
-        self.dataset = dataset_name
-        self.lang = lang
+    def _get_text(self, bs_ele):
+        if bs_ele and bs_ele.text:
+            return re.sub(r'\s+', ' ', bs_ele.text)
+        return ''
 
-    def endnote(self, lines):
-        """"Parse EndNote format"""
-
-        doc = {
-            'content': '',
-            'authors': []
-        }
-        field = ''
-        for line in lines:
-            if not line.strip():
-                if doc:
-                    yield Paragraph(dataset=self.dataset, lang=self.lang, **doc)
-                doc = {
-                    'content': '',
-                    'authors': []
-                }
+    def _resolve_assignments(self, bs_ele, para: Paragraph):
+        for field_name, field_path in self.assignments.items():
+            if '//' in field_path:
+                field_path, field_attr = field_path.rsplit('//', 1)
             else:
-                line = line.decode('utf-8').strip()
-                if ' ' not in line:
-                    value = line
-                else:
-                    field, value = line.split(' ', 1)
-                    field = {
-                        '%0': 'item_type',
-                        '%A': 'authors',
-                        '%+': 'institutions',
-                        '%J': 'journal',
-                        '%D': 'pdate',
-                        '%T': 'title',
-                        '%N': 'issue',
-                        '%K': 'tags',
-                        '%X': 'content',
-                        '%P': 'pages',
-                        '%@': 'issn',
-                        '%L': 'cn_publishing_number',
-                        '%W': 'catalog'
-                    }.get(field.upper(), 'content')
+                field_attr = 'text'
+            elements = bs_ele.select(field_path) if field_path else [bs_ele]
+            value = []
+            for element in elements:
+                if field_attr == 'text':
+                    value.append(self._get_text(element))
+                elif field_attr == 'html':
+                    value.append(str(element))
+                elif field_attr in element.attrs:
+                    value.append(str(element.attrs[field_attr]))
+            if field_name == 'content':
+                value = '\n'.join(value)
+            elif value != 'keywords':
+                value = ' '.join(value)
+            setattr(para, field_name, value)
 
-                if ';' in value and field != 'content':
-                    value = [_ for _ in value.split(';') if _]
-                if field in doc:
-                    if field == 'content':
-                        doc[field] += value
-                    else:
-                        if not isinstance(doc[field], list):
-                            doc[field] = [doc[field]]
-                        if isinstance(value, list):
-                            doc[field] += value
-                        else:
-                            doc[field].append(value)
-                else:
-                    doc[field] = value
-        if doc:
-            yield Paragraph(dataset=self.dataset, **doc)
+    def resolve(self, paragraph: Paragraph) -> Paragraph:
+        html = paragraph[self.field] or ''
+        b = B(html, 'lxml')
+        self.logger('load html data of length', len(html))
 
-    def fetch(self):
-        for file in self.files:
-            yield from self.method(file)
+        for html_para in b.select(self.paragraph_selector) if self.paragraph_selector else [b]:
+            para = type(paragraph)(
+                lang=paragraph.lang,
+                content='',
+                source=paragraph.source,
+                pagenum=1,
+                dataset=paragraph.dataset,
+                outline=paragraph.outline,
+                keywords=[],
+                html=str(html_para),
+            )
+            self._resolve_assignments(html_para, para)
+            self.logger('Extract para at', para.source['url'])
+            yield para

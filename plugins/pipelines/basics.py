@@ -7,7 +7,6 @@ from io import BytesIO
 from itertools import chain
 from itertools import count as iter_count
 import string
-from bs4 import BeautifulSoup as B
 
 from PyMongoWrapper import F, QExprInterpreter, QExprEvaluator
 from PyMongoWrapper.dbo import DbObject, DbObjectCollection
@@ -286,74 +285,6 @@ class FilterPunctuations(PipelineStage):
             '', paragraph.content.strip(string.punctuation))
         return paragraph
     
-    
-class ExtractHTMLParagraphs(PipelineStage):
-    """
-    Extract paragraphs from HTML
-    @zhs 从 HTML 中提取段落
-    """
-    
-    def __init__(self, field='html', assignments='', paragraph_selector=''):
-        """
-        Args:
-            field (str): Field to read HTML
-                @zhs 保存有 HTML 的字段名
-            assignments (QUERY):
-                Mapping element attribute to field, e.g. field=".css-selector//attribute"
-                @zhs 字段与搜索字符串的关系，形如 field=".css-selector//attribute"
-            paragraph_selector (str):
-                CSS selector for paragraph
-                @zhs 确定段落的 CSS 选择器，为空则整个网页作为一个段落
-        """
-        super().__init__()
-        self.field = field
-        self.paragraph_selector = paragraph_selector
-        self.assignments = parser.parse(assignments)
-        
-    def _get_text(self, bs_ele):
-        if bs_ele and bs_ele.text:
-            return re.sub(r'\s+', ' ', bs_ele.text)
-        return ''
-        
-    def _resolve_assignments(self, bs_ele, para: Paragraph):
-        for field_name, field_path in self.assignments.items():
-            if '//' in field_path:
-                field_path, field_attr = field_path.rsplit('//', 1)
-            else:
-                field_attr = 'text'
-            elements = bs_ele.select(field_path) if field_path else [bs_ele]
-            value = []
-            for element in elements:
-                if field_attr == 'text':
-                    value.append(self._get_text(element))
-                elif field_attr == 'html':
-                    value.append(str(element))
-                elif field_attr in element.attrs:
-                    value.append(str(element.attrs[field_attr]))
-            if field_name == 'content':
-                value = '\n'.join(value)
-            elif value != 'keywords':
-                value = ' '.join(value)
-            setattr(para, field_name, value)
-    
-    def resolve(self, paragraph: Paragraph) -> Paragraph:
-        html = paragraph[self.field]
-        b = B(html, 'lxml')
-
-        for html_para in b.select(self.paragraph_selector) if self.paragraph_selector else [b]:
-            para = Paragraph(
-                lang=paragraph.lang,
-                content='',
-                source=paragraph.source,
-                pagenum=1,
-                dataset=paragraph.dataset,
-                outline=paragraph.outline,
-                keywords=[],
-                html=str(html_para),
-            )
-            self._resolve_assignments(html_para, para)
-            yield para
-
 
 class Reparagraph(PipelineStage):
     """
@@ -587,7 +518,7 @@ class ArrayField(PipelineStage):
         """
         super().__init__()
         self.field = field
-        self.elements = [parser.parse(ele) for ele in elements.split('\n')]
+        self.elements = [parser.parse(ele) for ele in PipelineStage.parse_lines(elements)]
         self.push = push
 
     def resolve(self, paragraph: Paragraph) -> Paragraph:

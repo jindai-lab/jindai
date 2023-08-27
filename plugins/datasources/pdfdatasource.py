@@ -8,7 +8,7 @@ from PyMongoWrapper import F, Fn, Var
 
 from jindai import storage
 from jindai.models import Paragraph
-from jindai.pipeline import DataSourceStage
+from jindai.pipeline import DataSourceStage, PipelineStage
 
 
 def resolve_range(page_range: str):
@@ -61,10 +61,10 @@ class PDFDataSource(DataSourceStage):
         """
         self.name = dataset_name
         self.lang = lang
-        self.files = storage.globs(content)
         self.mongocollection = mongocollection
         self.skip_existed = skip_existed
         self.page_range = sorted(resolve_range(page_range))
+        self.files = PipelineStage.parse_paths(content)
 
     def fetch(self):
         para_coll = Paragraph.get_coll(self.mongocollection)

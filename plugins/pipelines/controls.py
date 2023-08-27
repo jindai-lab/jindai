@@ -75,8 +75,7 @@ class RepeatWhile(FlowControlStage):
         self.pipeline = Pipeline(pipeline, self.logger)
         super().__init__()
 
-    def flow(self, paragraph, gctx):
-        self.gctx = gctx
+    def resolve(self, paragraph):
         if paragraph[self.times_key] is None:
             paragraph[self.times_key] = 0
 
@@ -118,8 +117,7 @@ class ForEach(FlowControlStage):
         self.pipeline = Pipeline(pipeline, self.logger)
         super().__init__()
 
-    def flow(self, paragraph, gctx):
-        self.gctx = gctx
+    def resolve(self, paragraph):
         try:
             input_value = evaluateqx(self.input_value, paragraph)
         except Exception as ex:
@@ -152,9 +150,8 @@ class Condition(FlowControlStage):
         self.iftrue = Pipeline(iftrue, self.logger)
         self.iffalse = Pipeline(iffalse, self.logger)
         super().__init__()
-
-    def flow(self, paragraph, gctx):
-        self.gctx = gctx
+        
+    def resolve(self, paragraph):
         pipeline = self.iftrue
         try:
             if not evaluateqx(self.cond, paragraph):
@@ -216,8 +213,7 @@ class CallTask(FlowControlStage):
 
         super().__init__()
 
-    def flow(self, paragraph, gctx):
-        self.gctx = gctx
+    def resolve(self, paragraph):
         if self.pipeline.stages:
             yield paragraph, self.pipeline.stages[0]
         else:
@@ -263,8 +259,10 @@ class AggregateDataSource(FlowControlStage):
         super().__init__()
         self._pipelines = [Pipeline(pipeline, self.logger) for pipeline in pipelines]
         
-    def flow(self, paragraph, gctx):
-        self.gctx = gctx
-        for pipeline in self._pipelines:
-            if pipeline.stages:
-                yield paragraph, pipeline.stages[0]
+    def resolve(self, paragraph):
+        if self._pipelines:
+            for pipeline in self._pipelines:
+                if pipeline.stages:
+                    yield paragraph, pipeline.stages[0]
+        else:
+            yield paragraph, self.next

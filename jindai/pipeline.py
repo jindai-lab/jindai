@@ -8,6 +8,7 @@ from typing import Dict, Iterable, List, Tuple, Any, Type, Union, Callable
 from collections.abc import Iterable as IterableClass
 from collections import defaultdict
 from .models import Paragraph
+from .helpers import storage
 
 
 class PipelineStage:
@@ -134,6 +135,20 @@ class PipelineStage:
         :rtype: dict
         """
         return {'__redirect__': dest}
+    
+    @staticmethod
+    def parse_lines(val):
+        if isinstance(val, list):
+            return val
+        else:
+            return [ele for ele in str(val).split('\n') if ele]
+        
+    @staticmethod
+    def parse_paths(val):
+        files = []
+        for pattern in PipelineStage.parse_lines(val):
+            files += storage.globs(pattern)
+        return files
 
     @property
     def logger(self):
@@ -197,7 +212,12 @@ class PipelineStage:
             self.logger('Resolved to', type(results).__name__)
         if isinstance(results, IterableClass):
             for result in results:
-                yield result, self.next
+                if isinstance(result, tuple) and \
+                    len(result) == 2 and isinstance(result[0], Paragraph) and \
+                    isinstance(result[1], PipelineStage):
+                    yield result
+                else:
+                    yield result, self.next
         elif results is not None:
             yield results, self.next
 
@@ -258,8 +278,10 @@ class DataSourceStage(PipelineStage):
 
         instance = type(self)(**args)
         instance.apply_params(**args)
+        instance.params = args
         instance.logger = self.logger
         instance.gctx = self.gctx
+        instance.next = self.next
         self.before_fetch(instance)
         yield from instance.fetch()
 
