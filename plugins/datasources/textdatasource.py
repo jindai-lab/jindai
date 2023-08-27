@@ -93,8 +93,9 @@ class LinesDataSource(DataSourceStage):
         self.params = params or {}
 
     def fetch(self):
-        return map(lambda x: Paragraph(
-            content=x, lang=self.lang, dataset=self.name, **self.params), self.lines)
+        self.params.pop('contnet', '')
+        for line in self.lines:
+            yield Paragraph(lang=self.lang, dataset=self.name, content=line)
 
 
 class BiblioDataSource(DataSourceStage):
@@ -102,7 +103,7 @@ class BiblioDataSource(DataSourceStage):
     Import paragraph from EndNote bibliography items
     @zhs 从 EndNote 文献条目产生语段
     """
-    
+
     def apply_params(self, content='', dataset_name='', lang='zhs', input_format='endnote') -> None:
         """
         Args:
