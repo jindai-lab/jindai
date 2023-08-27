@@ -53,6 +53,7 @@ class WebPageListingDataSource(DataSourceStage):
     """
     
     visited = set()
+    queued = set()
     cache = CachedWebAccess('/tmp/wpdl')
 
     def apply_params(self, dataset='', content='', scopes='',
@@ -201,7 +202,9 @@ class WebPageListingDataSource(DataSourceStage):
             if level < self.list_depth and (self.list_link.search(url) or self.detail_link.search(url)):
                 self.logger('parse list', url)
                 for upath in self.parse_list(url, b):
-                    yield Paragraph(content=upath, level=level+1), self
+                    if upath not in WebPageListingDataSource.queued:
+                        WebPageListingDataSource.queued.add(upath)
+                        yield Paragraph(content=upath, level=level+1), self
 
             if self.detail_link.search(url):
                 self.logger('parse detail', url)
