@@ -266,7 +266,7 @@ class TwitterDataSource(DataSourceStage):
                 ext = fileinfo.filename.rsplit('.', 1)[1].lower()
                 if ext == 'csv':
                     csvdata = zipped.read(fileinfo).decode(
-                        'utf-8').splitlines()[5:]
+                        'utf-8', errors='ignore').splitlines()[5:]
                     csvr = csv.reader(csvdata)
                     columns, *lines = csvr
                     # ['Tweet date', 'Action date', 'Display name', 'Username', 'Tweet URL', 'Media type', 'Media URL', 'Saved filename', 'Remarks', 'Tweet content', 'Replies', 'Retweets', 'Likes']
