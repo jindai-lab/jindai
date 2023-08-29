@@ -219,7 +219,7 @@ class WordCut(PipelineStage):
     kks = safe_import('pykakasi').kakasi()
     jieba = safe_import('jieba')
 
-    def __init__(self, for_search=False, field='tokens', **_):
+    def __init__(self, for_search=False, field='keywords', **_):
         """
         Args:
             for_search (bool): 
