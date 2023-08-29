@@ -136,7 +136,7 @@ class MediaItem(ObjectWithSource):
         '3gp',
         'mov'
     ]
-    _SOUND_EXTS = [
+    _AUDIO_EXTS = [
         'wav',
         'mp3',
         'aac',
@@ -153,7 +153,7 @@ class MediaItem(ObjectWithSource):
     def acceptable_extensions(cls) -> list:
         """Get acceptable extension names
         """
-        return MediaItem._IMAGE_EXTS + MediaItem._VIDEO_EXTS + MediaItem._SOUND_EXTS
+        return MediaItem._IMAGE_EXTS + MediaItem._VIDEO_EXTS + MediaItem._AUDIO_EXTS
 
     @staticmethod
     def get_type(extname: str) -> str:
@@ -163,8 +163,8 @@ class MediaItem(ObjectWithSource):
             return 'image'
         if extname in MediaItem._VIDEO_EXTS:
             return 'video'
-        if extname in MediaItem._SOUND_EXTS:
-            return 'sound'
+        if extname in MediaItem._AUDIO_EXTS:
+            return 'audio'
         return ''
 
     @property
@@ -173,7 +173,7 @@ class MediaItem(ObjectWithSource):
         if self.item_type == 'video' and self.thumbnail:
             return Image.open(storage.open(self.thumbnail, 'rb'))
 
-        if self.item_type == 'sound':
+        if self.item_type == 'audio':
             return None
 
         # if image
