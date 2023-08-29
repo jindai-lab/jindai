@@ -198,6 +198,7 @@ class WebPageListingDataSource(DataSourceStage):
             
             para = self.get_url(url)
             b = B(para.html, 'lxml')
+            para.html = str(b)
 
             if level < self.list_depth and (self.list_link.search(url) or self.detail_link.search(url)):
                 self.logger('parse list', url)
@@ -255,7 +256,9 @@ class ExtractHTMLParagraphs(PipelineStage):
         super().__init__()
         self.field = field
         self.paragraph_selector = paragraph_selector
-        self.assignments = parser.parse(assignments)
+        if isinstance(assignments, str):
+            assignments = parser.parse(assignments)
+        self.assignments = assignments or {}
 
     def _get_text(self, bs_ele):
         if bs_ele and bs_ele.text:
