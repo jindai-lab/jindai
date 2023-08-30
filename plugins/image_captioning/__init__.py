@@ -56,7 +56,7 @@ class ImageCaptioning(PipelineStage):
             prompt = ' '.join(self.table.rank(features, top_count=self.topk))
         else:
             prompt = self.ci.interrogate_fast(image)
-        self.logger(prompt)
+        self.log(prompt)
         return prompt
 
 

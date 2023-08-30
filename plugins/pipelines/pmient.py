@@ -50,7 +50,7 @@ class PMILREntropyWordFetcher(NgramCounter):
         candidates = []
         min_p = 2 ** self.min_pmi / self.text_length
         min_freq = int(self.min_freq * self.text_length)
-        self.logger('generating pmient words...')
+        self.log('generating pmient words...')
 
         for word in list(self.ngrams):
             if 1 < len(word) <= self.word_length and self.ngrams[word] > min_freq \
@@ -79,7 +79,7 @@ class PMILREntropyWordFetcher(NgramCounter):
         if 'pmi_words' not in self.result:
             self.pmient()
 
-        self.logger('filtering lr...')
+        self.log('filtering lr...')
         for word in self.result['pmi_words']:
             left_entropy = calculate_entropy(self.ngrams_lefts.get(word, {}))
             right_entropy = calculate_entropy(self.ngrams_rights.get(word, {}))

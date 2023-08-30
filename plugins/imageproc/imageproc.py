@@ -365,7 +365,7 @@ class DownloadMedia(MediaItemStage):
         path = storage.default_path(i.id)
         with storage.open(path, 'wb') as output:
             output.write(content)
-            self.logger(i.id, len(content))
+            self.log(i.id, len(content))
 
         i.source = {'file': path, 'url': i.source['url']}
         i.data = BytesIO(content)
@@ -463,11 +463,11 @@ class VideoFrame(MediaItemStage):
                 fo.write(buf.read())
 
         if not isinstance(read_from, str) or not os.path.exists(read_from):
-            self.logger(f'{read_from} not found')
+            self.log(f'{read_from} not found')
             return
 
         try:
-            self.logger(f'generate frame image from {read_from}')
+            self.log(f'generate frame image from {read_from}')
             cap = cv2.VideoCapture(read_from)
             frame = float(frame)
             frame_num = int(cap.get(cv2.CAP_PROP_FRAME_COUNT) *
@@ -501,10 +501,10 @@ class VideoFrame(MediaItemStage):
                 output.write(pic)
             setattr(i, self.field, thumb)
             i.save()
-            self.logger(
+            self.log(
                 f'wrote {i.id} frame#{self.frame_num} to {thumb}')
         else:
-            self.logger('cannot read from', read_from)
+            self.log('cannot read from', read_from)
 
         return i
 

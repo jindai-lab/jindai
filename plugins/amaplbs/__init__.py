@@ -65,7 +65,7 @@ class AMapPOISearch(DataSourceStage):
 
         while page < total_pages:
             try:
-                self.logger("{}/{}".format(page, total_pages))
+                self.log("{}/{}".format(page, total_pages))
                 j = requests.get(url_template % page).content
                 j = json.loads(j)
                 

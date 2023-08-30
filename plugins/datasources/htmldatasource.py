@@ -114,7 +114,7 @@ class WebPageListingDataSource(DataSourceStage):
 
     def get_url(self, url):
         """Read html from url, return BeautifulSoup object"""
-        self.logger('get url', url)
+        self.log('get url', url)
         try:
             data = WebPageListingDataSource.cache.get(url)
         except OSError as ose:
@@ -159,14 +159,14 @@ class WebPageListingDataSource(DataSourceStage):
 
                 para.images.append(image)
 
-        self.logger(f'Found {len(para.images)} images in {url}')
+        self.log(f'Found {len(para.images)} images in {url}')
         return para
 
     def parse_list(self, url, b):
         """Parse url as a list page"""
 
         if not b:
-            self.logger(f'Cannot read list from {url}')
+            self.log(f'Cannot read list from {url}')
             return []
 
         links = set()
@@ -186,7 +186,7 @@ class WebPageListingDataSource(DataSourceStage):
             if self.list_link.search(link_url) or self.detail_link.search(link_url):
                 links.add(link_url)
 
-        self.logger(len(links), 'links')
+        self.log(len(links), 'links')
         return list(links)
 
     def fetch(self):
@@ -201,14 +201,14 @@ class WebPageListingDataSource(DataSourceStage):
             para.html = str(b)
 
             if level < self.list_depth and (self.list_link.search(url) or self.detail_link.search(url)):
-                self.logger('parse list', url)
+                self.log('parse list', url)
                 for upath in self.parse_list(url, b):
                     if upath not in WebPageListingDataSource.queued:
                         WebPageListingDataSource.queued.add(upath)
                         yield Paragraph(content=upath, level=level+1), self
 
             if self.detail_link.search(url):
-                self.logger('parse detail', url)
+                self.log('parse detail', url)
                 yield self.parse_detail(url, para, b)
                 
 
@@ -289,7 +289,7 @@ class ExtractHTMLParagraphs(PipelineStage):
     def resolve(self, paragraph: Paragraph) -> Paragraph:
         html = paragraph[self.field] or ''
         b = B(html, 'lxml')
-        self.logger('load html data of length', len(html))
+        self.log('load html data of length', len(html))
 
         for html_para in b.select(self.paragraph_selector) if self.paragraph_selector else [b]:
             para = type(paragraph)(
@@ -303,5 +303,5 @@ class ExtractHTMLParagraphs(PipelineStage):
                 html=str(html_para),
             )
             self._resolve_assignments(html_para, para)
-            self.logger('Extract para at', para.source['url'])
+            self.log('Extract para at', para.source['url'])
             yield para

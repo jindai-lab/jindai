@@ -194,7 +194,7 @@ class MediaImportDataSource(DataSourceStage):
 
                 i.source = dict(i.source, file=path)
                 i.save()
-                self.logger('Writing', i.id)
+                self.log('Writing', i.id)
                 album.images.append(i)
 
         albums = albums.values()
@@ -220,7 +220,7 @@ class MediaImportDataSource(DataSourceStage):
                 imgs = [('', url)]
                 title = ''
             else:
-                self.logger(url)
+                self.log(url)
                 html = storage.open(url, proxies=self.proxies).read()
                 assert html, 'Download failed.'
                 try:
@@ -243,7 +243,7 @@ class MediaImportDataSource(DataSourceStage):
                         r'(zoomfile|data-original|data-src|src|file|data-echo)=["\'](.*?)["\']', img)
                 imgs += re.findall(r'<a[^>]+(href)="([^"]*?\.jpe?g)"',
                                    html, flags=re.I)
-                self.logger(len(imgs), 'images found.')
+                self.log(len(imgs), 'images found.')
 
             for _, img in imgs:
                 imgurl = urljoin(url, img)
@@ -251,7 +251,7 @@ class MediaImportDataSource(DataSourceStage):
                     if rep.search(imgurl):
                         continue
                 if imgurl not in imgset:
-                    self.logger(imgurl)
+                    self.log(imgurl)
                     i = MediaItem.get(
                         imgurl, item_type=MediaItem.get_type(imgurl))
                     i.save()

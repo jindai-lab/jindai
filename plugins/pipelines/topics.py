@@ -414,13 +414,13 @@ class GraphicClustering(PipelineStage):
                 if i not in graph.nodes:
                     graph.add_node(i)
             graph.add_edge(node_a, node_b, weight=val)
-            self.logger(node_a, node_b, val)
+            self.log(node_a, node_b, val)
 
         meta = ''
         for i, cluster in enumerate(nx.connected_components(graph)):
             meta += f'{i+1}\t' + '; '.join(cluster) + '\n'
 
-        self.logger(meta)
+        self.log(meta)
 
         nx.draw(graph, with_labels=True)
         buf = BytesIO()

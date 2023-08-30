@@ -212,7 +212,7 @@ class ImageHashDuplications(MediaItemStage):
             return
 
         if not isinstance(i.dhash, bytes):
-            self.logger(type(i).__name__, i.as_dict())
+            self.log(type(i).__name__, i.as_dict())
         d_hash = to_int(i.dhash)
         w_hash = to_int(i.whash)
         image_height, image_width = i.height, i.width
@@ -252,7 +252,7 @@ class ImageHashDuplications(MediaItemStage):
         if dups:
             Paragraph.merge_by_mediaitems(best, dups)
             self._deleted.update({d.id for d in dups})
-            self.logger(
+            self.log(
                 f'delete {" ".join([str(d.id) for d in dups])}, preserving {best.id}')
 
         for j, score in sims:
@@ -266,7 +266,7 @@ class ImageHashDuplications(MediaItemStage):
                 i, j = j, i
 
             result_line = f'{i.id}\t{j.id}\t{score}'
-            self.logger(result_line)
+            self.log(result_line)
             self.results.append(result_line + '\n')
 
         return i
