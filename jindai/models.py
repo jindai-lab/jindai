@@ -243,6 +243,18 @@ class MediaItem(ObjectWithSource):
         cls.ensure_index('rating')
         cls.ensure_index('source')
 
+    def as_dict(self, expand: bool = False):
+        result = super().as_dict(expand)
+        src = self.data_path
+        if '://' not in src: src = 'file/' + src
+        if '://' in src: src = '/'.join(src.split('://', 1))
+        result['src'] = src
+
+    def save(self):
+        if 'src' in self.__dict__:
+            del self.src
+        super().save()
+
     def __lt__(self, another):
         return id(self) < id(another)
     

@@ -54,7 +54,7 @@ class BookSearcherDataSource(DataSourceStage):
         self.sort = sort
         
     def fetch(self):
-        self.logger(self.server, self.query)
+        self.log(self.server, self.query)
         resp = requests.get(self.server + '/search?limit=1000&query=' + quote(self.query))
         books = json.loads(resp.content)['books']
         for j in sorted(books, key=lambda x: id(x) if not self.sort else x[self.sort]):
@@ -89,7 +89,7 @@ class ArchiveOrgSearcherDataSource(DataSourceStage):
         self.query = content
         
     def fetch(self) -> Iterable[Paragraph]:
-        self.logger(self.query)
+        self.log(self.query)
         s = self.ia.get_session()
         for _, i in zip(range(10), s.search_items(self.query)):
             ident = i.get('identifier')

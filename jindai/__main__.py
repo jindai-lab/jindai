@@ -172,7 +172,7 @@ def run_task(task_id, concurrent, verbose, edit, log):
     logfile = open(log, 'w', encoding='utf-8') if log else sys.stderr
     
     task = Task.from_dbo(dbo, verbose=verbose,
-                         logger=lambda *x: print(*x, file=logfile))
+                         log=lambda *x: print(*x, file=logfile))
 
     if concurrent > 0:
         task.concurrent = concurrent

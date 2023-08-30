@@ -891,7 +891,7 @@ class SaveParagraph(PipelineStage):
         return paragraph
 
     def summarize(self, _):
-        self.logger('datasets count:', len(self.datasets))
+        self.log('datasets count:', len(self.datasets))
         for name, data in self.datasets.items():
             coll = Dataset.first(F.name == name) \
                 or Dataset(name=name, sources=[],
@@ -1009,7 +1009,7 @@ class OutlineFilter(PipelineStage):
         outline = self.check_outline(paragraph)
 
         if outline and outline[5] != '-':
-            # self.logger(content[:20], outline)
+            # self.log(content[:20], outline)
             if outline.startswith('book '):
                 nnums = [outline[5:], '00', '00']
             elif outline.startswith('chap '):
@@ -1110,7 +1110,7 @@ class MongoCollectionBatchOper(PipelineStage):
             updates = [updates]
         for update in updates:
             self.collection.query(query).update(update)
-            self.logger(query, update)
+            self.log(query, update)
         return paragraph
 
 
