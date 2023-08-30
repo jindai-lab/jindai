@@ -97,6 +97,34 @@ class ObjectWithSource(db.DbObject):
             source1['file'] = t_file
         return source1
     
+    def as_dict(self, expand: bool = False):
+        result = super().as_dict(expand)
+        src = self.source_path
+        if '://' not in src: src = 'file/' + src
+        if '://' in src: src = '/'.join(src.split('://', 1))
+        result['src'] = '/images/' + src
+        return result
+
+    @property
+    def source_path(self) -> str:
+        """Get full path for data"""
+        if self.source.get('file'):
+            filename = self.source['file']
+            if '://' in filename:
+                return filename.replace('$', str(self.id))
+            elif filename.lower().endswith('.pdf') and 'page' in self.source:
+                return f'{self.source["file"]}#pdf/{self.source["page"]}'
+            else:
+                return storage.expand_path(filename)
+        elif self.source.get('url'):
+            return self.source['url']
+        else:
+            return ''
+
+    def save(self):
+        if 'src' in self.__dict__:
+            del self.src
+        super().save()
     
 class SourceMongoOperand(MongoField):
     
@@ -189,25 +217,11 @@ class MediaItem(ObjectWithSource):
         self._image_flag = True
         
     @property
-    def data_path(self) -> str:
-        """Get full path for data"""
-        if self.source.get('file'):
-            filename = self.source['file']
-            if '://' in filename:
-                return filename.replace('$', str(self.id))
-            elif filename.lower().endswith('.pdf') and 'page' in self.source:
-                return f'{self.source["file"]}#pdf/{self.source["page"]}'
-            else:
-                return storage.expand_path(filename)
-        elif self.source.get('url'):
-            return self.source['url']
-
-    @property
     def data(self) -> BytesIO:
         """Get raw BytesIO for image data"""
         if not self._data:
             try:
-                buf = storage.open(self.data_path, 'rb').read()
+                buf = storage.open(self.source_path, 'rb').read()
                 self._data = BytesIO(buf)
             except OSError:
                 self._data = BytesIO()
@@ -242,18 +256,6 @@ class MediaItem(ObjectWithSource):
         """Initialize indicies"""
         cls.ensure_index('rating')
         cls.ensure_index('source')
-
-    def as_dict(self, expand: bool = False):
-        result = super().as_dict(expand)
-        src = self.data_path
-        if '://' not in src: src = 'file/' + src
-        if '://' in src: src = '/'.join(src.split('://', 1))
-        result['src'] = src
-
-    def save(self):
-        if 'src' in self.__dict__:
-            del self.src
-        super().save()
 
     def __lt__(self, another):
         return id(self) < id(another)
