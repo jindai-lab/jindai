@@ -34,10 +34,12 @@
 | 字段名 | 类型 | 意义 |
 |-------|-----|------|
 |file|str|本地文件路径，可选|
+|page|int|本地文件为 PDF 时的页码，从 0 开始，可选|
 |url|str|网址路径，可选|
 
 - `file` 和 `url` 至少有一项有内容。
-- 注（8/30更新）：使用 `MediaItem` 或 `Dada` 的 `src` 字段获得完整路径。如果为空说明无对应图片。
+- `page` 仅在 `file` 表示的是一个 PDF 文件时存在。
+- （8/30更新）注：使用 `MediaItem` 或 `Dada` 的 `src` 字段获得完整路径。如果为空说明无对应图片。
 
 
 ### `APIUpdate` 更新返回
@@ -52,9 +54,9 @@
 
 | 字段名 | 类型 | 意义 |
 |-------|-----|------|
-|query|str|查询字符串|
+|query|str|查询字符串，若不是查询所得，则为空字符串|
 |results|List[Dada]|查询结果|
-|total|int|查询总数|
+|total|int|查询总数，-1表示不确定（可以通过 `results` 的长度确定）|
 
 
 ## API 调用
@@ -150,14 +152,14 @@ headers: {
 
 注：`assignments`的格式写作 `<field>="<css selector>//<attribute>"`，多个之间用 `,` 分割。如 `title="div.some-class a[href]//text"`，表示获取 `some-class` 类的 `div` 中，具有 `href` 属性的 `a` 标签的 `text` 属性即文本，保存到 `title` 字段中。
 
-返回一个`APIResults`，即抓取结果。如果抓取深度比较大或链接数量比较多，很可能运行非常久的时间，但这个先不管它，测试时务必使用 `depth` 为 1 的情况。
+返回一个 `APIResults`，即抓取结果。如果抓取深度比较大或链接数量比较多，很可能运行非常久的时间，但这个先不管它，测试时务必使用 `depth` 为 1 的情况。
 
 ### 调用语言模型（GPT）
 
 入口：`/api/dada/llm`
 
 参数：`messages`，格式与 GPT-3.5 的 `messages` 相同。
-返回一个`APIResults`，只有一个 `Dada` 数据项，其 `content` 由 GPT 生成的内容填充。
+返回一个 `APIResults`，其中数据项的 `content` 由 GPT 生成的内容填充，而其他字段均为空。
 
 注：该接口不稳定，可能调用失败。
 

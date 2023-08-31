@@ -8,7 +8,7 @@ from typing import Dict, Iterable, List, Tuple, Any, Type, Union, Callable
 from collections.abc import Iterable as IterableClass
 from collections import defaultdict
 from .models import Paragraph
-from .helpers import storage
+from .helpers import storage, config
 
 
 class PipelineStage:
@@ -314,6 +314,10 @@ class Pipeline:
         if args.pop('disabled', False): return
         stage_type = Pipeline.ctx[stage_name]
         Pipeline.ensure_args(stage_type, args)
+        for key, val in args.items():
+            if isinstance(val, str):
+                if m := re.match(r'^CONST:(.+)$', val):
+                    args[key] = config.constants[m.group(1)]
         return stage_type(**args)
 
     def __init__(self, stages: List[Union[Tuple[str, Dict], List, Dict, PipelineStage]],
