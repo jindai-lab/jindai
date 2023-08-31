@@ -1,7 +1,6 @@
 """DB Objects"""
 import datetime
 from typing import Iterable, List, Union
-import unicodedata
 import dateutil
 import time
 from hashlib import sha1
@@ -100,9 +99,12 @@ class ObjectWithSource(db.DbObject):
     def as_dict(self, expand: bool = False):
         result = super().as_dict(expand)
         src = self.source_path
-        if '://' not in src: src = 'file/' + src
-        if '://' in src: src = '/'.join(src.split('://', 1))
-        result['src'] = '/images/' + src.replace('#', '__hash/')
+        if src.startswith('http://') or src.startswith('https://'):
+            result['src'] = src
+        else:
+            if '://' not in src: src = 'file/' + src
+            if '://' in src: src = '/'.join(src.split('://', 1))
+            result['src'] = '/images/' + src.replace('#', '__hash/')
         return result
 
     @property
