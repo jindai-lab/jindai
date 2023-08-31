@@ -63,8 +63,8 @@ class FilterStopWords(PipelineStage):
         super().__init__()
     
     def resolve(self, paragraph):
-        paragraph.tokens = [
-            _ for _ in paragraph.tokens
+        paragraph.keywords = [
+            _ for _ in paragraph.keywords
             if _ not in self.stopwords and \
                 _ not in FilterStopWords.get(paragraph.lang) and \
                 not FilterStopWords._punctuations.match(_)

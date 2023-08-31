@@ -29,7 +29,7 @@ class VideoItemImageDelegate:
         return {'file': self._i.thumbnail}
 
     @property
-    def data_path(self):
+    def source_path(self):
         return self._i.thumbnail
 
     @property
@@ -40,7 +40,7 @@ class VideoItemImageDelegate:
         self._i.save()
 
     def __getattribute__(self, __name: str):
-        if __name not in ('_i', 'source', 'save', 'data', 'data_path'):
+        if __name not in ('_i', 'source', 'save', 'data', 'source_path'):
             return getattr(self._i, __name)
 
         return object.__getattribute__(self, __name)
@@ -48,7 +48,7 @@ class VideoItemImageDelegate:
     def __setattr__(self, __name: str, __value) -> None:
         if __name != '_i':
             setattr(self._i, __name, __value)
-        elif __name not in ('source', 'save', 'data', 'data_path'):
+        elif __name not in ('source', 'save', 'data', 'source_path'):
             object.__setattr__(self, __name, __value)
 
 
@@ -491,10 +491,11 @@ class VideoFrame(MediaItemStage):
         return BytesIO(pic)
 
     def resolve_video(self, i: MediaItem, _):
+        assert i.id and i.source_path, 'id or source_path not known'
         thumb = storage.default_path(f'{i.id}.thumb.jpg')
 
         # generate video thumbnail
-        read_from = i.data_path + f'#videoframe/{self.frame_num}'
+        read_from = f'{i.source_path}#videoframe/{self.frame_num}'
         pic = storage.open(read_from, 'rb').read()
         if pic:
             with storage.open(thumb, 'wb') as output:

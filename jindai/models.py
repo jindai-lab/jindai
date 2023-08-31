@@ -102,7 +102,7 @@ class ObjectWithSource(db.DbObject):
         src = self.source_path
         if '://' not in src: src = 'file/' + src
         if '://' in src: src = '/'.join(src.split('://', 1))
-        result['src'] = '/images/' + src
+        result['src'] = '/images/' + src.replace('#', '__hash/')
         return result
 
     @property
