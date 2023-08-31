@@ -84,8 +84,8 @@ class ApplyAutoTags(PipelineStage):
             flag = False
             for parsed, tag in self.ats:
                 matched = apply_tag(parsed, tag, paragraph)
-                if matched and self.verbose:
-                    print(paragraph.id, 'matches', parsed, ', tagging', tag)
+                if matched:
+                    self.log(paragraph.id, 'matches', parsed, ', tagging', tag)
                 flag = flag or matched
             if not flag:
                 break
