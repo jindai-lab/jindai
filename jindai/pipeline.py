@@ -135,14 +135,14 @@ class PipelineStage:
         :rtype: dict
         """
         return {'__redirect__': dest}
-    
+
     @staticmethod
     def parse_lines(val):
         if isinstance(val, list):
             return val
         else:
             return [ele for ele in str(val).split('\n') if ele]
-        
+
     @staticmethod
     def parse_paths(val):
         files = []
@@ -182,6 +182,7 @@ class PipelineStage:
             or iterable multiple objects for next stage.
         :rtype: Paragraph | Iterable[Paragraph] | None
         """
+        return paragraph
 
     def summarize(self, result) -> Dict:
         """Reduce period, handling result from the last stage
@@ -213,8 +214,8 @@ class PipelineStage:
         if isinstance(results, IterableClass):
             for result in results:
                 if isinstance(result, tuple) and \
-                    len(result) == 2 and isinstance(result[0], Paragraph) and \
-                    isinstance(result[1], PipelineStage):
+                        len(result) == 2 and isinstance(result[0], Paragraph) and \
+                        isinstance(result[1], PipelineStage):
                     yield result
                 else:
                     yield result, self.next
@@ -243,7 +244,7 @@ class DataSourceStage(PipelineStage):
             'doc': (cls.__doc__ or '').strip(),
             'args': PipelineStage._spec(cls, 'apply_params')
         }
-    
+
     def before_fetch(self, instance):
         pass
 
@@ -311,7 +312,8 @@ class Pipeline:
 
     @staticmethod
     def instantiate(stage_name: str, args: Dict):
-        if args.pop('disabled', False): return
+        if args.pop('disabled', False):
+            return PipelineStage()
         stage_type = Pipeline.ctx[stage_name]
         Pipeline.ensure_args(stage_type, args)
         for key, val in args.items():
@@ -321,7 +323,7 @@ class Pipeline:
         return stage_type(**args)
 
     def __init__(self, stages: List[Union[Tuple[str, Dict], List, Dict, PipelineStage]],
-                 log: Callable = print, verbose = False):
+                 log: Callable = print, verbose=False):
         """Initialize the pipeline
 
         :param stages: pipeline stage info in one of the following forms:
@@ -336,9 +338,9 @@ class Pipeline:
         self.stages = []
         self.log = log
         self.verbose = verbose
-        
+
         counter = defaultdict(int)
-        
+
         if stages:
             for stage in stages:
                 if isinstance(stage, dict):
@@ -352,7 +354,8 @@ class Pipeline:
                     assert name in Pipeline.ctx, f'Unknown stage: {name}'
                     counter[name] += 1
                     stage = Pipeline.instantiate(name, kwargs)
-                    if stage is None: continue
+                    if stage is None:
+                        continue
                     stage.instance_name = f'{name}{counter[name]}'
 
                 assert isinstance(

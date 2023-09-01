@@ -211,6 +211,53 @@ class BingMapGeoCode(_GeoCodingStage):
         outp = requests.get(url).json()
         lng, lat = outp['resourceSets'][0]['resources'][0]['point']['coordinates']
         return self.assign_coordinates(paragraph, lat, lng)
+    
+
+class OSMPOISearch(DataSourceStage):
+    """
+    POI Search with OSM (OpenStreetMap)
+    """
+
+    def apply_params(self, content: str = '', tags: str = '', ):
+        """
+        Args:
+            tags (LINES): Tags
+            place (str): City name to search in
+        """
+        self.tags = self.parse_lines(tags)
+        self.ox = safe_import('omnx')
+        #   tags = [
+        # # 'feature descriptions', 'proposed features', 'features/translations', 
+        # 'accommodation', 'addresses', 'agriculture', 'amenities', 
+        # # 'barriers', 'boundaries', 
+        # 'clothes', 'commerce', 'conservation', 'disabilities', 'education', 'emergencies', 'environment',
+        # 'hazards', 'health', 'heritage', 'historic', 'infrastructure', 'leisure',
+        # 'man made', 'meta features', 'micromapping', 'military',
+        # # 'names',
+        # 'offices',
+        # 'places', 
+        # 'police', 'properties', 'religion', 'social facilities', 'sports', 'transport',
+        # # 'water', 'templates for mapping features',
+        # ]
+        self.city = self.ox.geocode_to_gdf(content)
+
+    def guesses(self, tag):
+        yield tag
+        if tag.endswith('s'):
+            tag = tag[:-1]
+            yield tag
+            if tag.endswith('ie'):
+                tag = tag[:-2] + 'y'
+            elif tag.endswith('e'):
+                tag = tag[:-1]
+            yield tag
+    
+    def fetch(self) -> Iterable[Paragraph]:
+        for tag in self.tags:
+            for guess in set(self.guesses(tag)):
+                for p in self.ox.geometries_from_polygon(
+                    self.city['geometry'].all(), tags={guess: True}):
+                    yield Paragraph(**p)
 
 
 class LBSPlugin(Plugin):

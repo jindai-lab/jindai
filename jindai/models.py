@@ -95,16 +95,26 @@ class ObjectWithSource(db.DbObject):
         if not s_file and t_file:
             source1['file'] = t_file
         return source1
+
+    def get_src(self):
+        src = self.source_path
+        if src.startswith('http://') or src.startswith('https://'):
+            return src
+        
+        if src.startswith('hdf5://'):
+            if getattr(self, 'item_type', 'image') == 'image':
+                src += '/image.jpg'
+            elif getattr(self, 'item_type', '') == 'video':
+                src += '/image.mp4'
+        
+        if '://' not in src:
+            src = 'file://' + src
+        
+        return '/images/' + '/'.join(src.split('://', 1)).replace('#', '__hash/')
     
     def as_dict(self, expand: bool = False):
         result = super().as_dict(expand)
-        src = self.source_path
-        if src.startswith('http://') or src.startswith('https://'):
-            result['src'] = src
-        else:
-            if '://' not in src: src = 'file/' + src
-            if '://' in src: src = '/'.join(src.split('://', 1))
-            result['src'] = '/images/' + src.replace('#', '__hash/')
+        result['src'] = self.get_src()
         return result
 
     @property
@@ -115,7 +125,7 @@ class ObjectWithSource(db.DbObject):
             if '://' in filename:
                 return filename.replace('$', str(self.id))
             elif filename.lower().endswith('.pdf') and 'page' in self.source:
-                return f'{self.source["file"]}#pdf/{self.source["page"]}'
+                return f'{self.source["file"]}#pdf/{self.source["page"]}/page.png'
             else:
                 return storage.expand_path(filename)
         elif self.source.get('url'):
