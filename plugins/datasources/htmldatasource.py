@@ -9,6 +9,7 @@ import datetime
 import tempfile
 import os
 from hashlib import sha1
+from typing import Dict
 from urllib.parse import urljoin
 from bs4 import BeautifulSoup as B
 
@@ -52,9 +53,19 @@ class WebPageListingDataSource(DataSourceStage):
     @zhs 从网页列表中导入语段
     """
 
-    visited = set()
-    queued = set()
     cache = CachedWebAccess('/tmp/wpdl')
+
+    @property
+    def visited(self):
+        if 'visited' not in self.gctx:
+            self.gctx['visited'] = set()
+        return self.gctx['visited']
+
+    @property
+    def queued(self):
+        if 'queued' not in self.gctx:
+            self.gctx['queued'] = set()
+        return self.gctx['queued']
 
     def apply_params(self, dataset='', content='', scopes='',
                      mongocollection='', lang='auto', detail_link='',
@@ -101,7 +112,7 @@ class WebPageListingDataSource(DataSourceStage):
             'https': proxy
         }
         self.paths = PipelineStage.parse_paths(content)
-        self.scopes = PipelineStage.parse_paths(scopes)
+        self.scopes = PipelineStage.parse_paths(scopes) or self.paths
         self.list_depth = list_depth
         self.detail_link = re.compile(detail_link)
         self.list_link = re.compile(list_link)
@@ -175,7 +186,7 @@ class WebPageListingDataSource(DataSourceStage):
             link_url = a['href'] = urljoin(url, a['href'])
             link_url = link_url.split('#')[0]
             # if visited
-            if link_url in WebPageListingDataSource.visited:
+            if link_url in self.visited:
                 continue
             # match scopes
             for scope in self.scopes:
@@ -193,24 +204,30 @@ class WebPageListingDataSource(DataSourceStage):
     def fetch(self):
         level = self.level or 1
         for url in self.paths:
-            if url in WebPageListingDataSource.visited:
+            if url in self.visited:
                 continue
-            WebPageListingDataSource.visited.add(url)
+            self.visited.add(url)
 
             para = self.get_url(url)
             b = B(para.html, 'lxml')
             para.html = str(b)
 
-            if level < self.list_depth and (self.list_link.search(url) or self.detail_link.search(url)):
+            if level <= self.list_depth and (self.list_link.search(url) or self.detail_link.search(url)):
                 self.log('parse list', url)
                 for upath in self.parse_list(url, b):
-                    if upath not in WebPageListingDataSource.queued:
-                        WebPageListingDataSource.queued.add(upath)
+                    if upath not in self.queued:
+                        self.queued.add(upath)
                         yield Paragraph(content=upath, level=level+1), self
 
             if self.detail_link.search(url):
                 self.log('parse detail', url)
                 yield self.parse_detail(url, para, b)
+
+    def summarize(self, result) -> Dict:
+        self.log('clear visited & queued urls')
+        self.visited.clear()
+        self.queued.clear()
+        return result
 
 
 class JSONDataSource(DataSourceStage):
@@ -302,6 +319,7 @@ class ExtractHTMLParagraphs(PipelineStage):
                 outline=paragraph.outline,
                 keywords=[],
                 html=str(html_para),
+                images=paragraph.images,
             )
             self._resolve_assignments(html_para, para)
             self.log('Extract para at', para.source['url'])

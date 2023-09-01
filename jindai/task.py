@@ -161,7 +161,7 @@ class Task:
         self._pbar = TqdmFactory.get_tqdm(fake=verbose or not use_tqdm)
         self._queue = None
         
-        self._workers = WorkersPool(1)
+        self._workers = None
          
     def _thread_execute(self, priority, fc, gctx):
         input_paragraph, stage = fc
@@ -268,7 +268,8 @@ class Task:
     def stop(self):
         """Stop task"""
         self.alive = False
-        self._workers.stop()
+        if self._workers: 
+            self._workers.stop()
 
     @staticmethod
     def from_dbo(dbo, **kwargs):

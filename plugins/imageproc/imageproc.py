@@ -318,16 +318,19 @@ class DownloadMedia(MediaItemStage):
     @zhs 下载媒体内容
     """
 
-    def __init__(self, proxy='') -> None:
+    def __init__(self, proxy='', target='') -> None:
         """
         Args:
             proxy (str): Proxy server
                 @zhs 代理服务器
+            target (str): Target path
+                @zhs 目标路径
         """
         super().__init__()
         self.proxies = {
             'http': proxy, 'https': proxy
         } if proxy else {}
+        self.target = target
 
     def resolve_item(self, i: MediaItem, post):
         if not i.id:
@@ -362,7 +365,10 @@ class DownloadMedia(MediaItemStage):
                 ex)
             return
 
-        path = storage.default_path(i.id)
+        if self.target:
+            path = self.target + str(i.id)
+        else:
+            path = storage.default_path(i.id)
         with storage.open(path, 'wb') as output:
             output.write(content)
             self.log(i.id, len(content))
