@@ -8,10 +8,9 @@ import traceback
 import requests
 from io import BytesIO
 from typing import Union
+import urllib.parse
 
 import numpy as np
-import scipy.sparse as spsparse
-
 from jindai import PipelineStage, parser, storage
 from jindai.helpers import safe_import
 from jindai.models import MediaItem, Paragraph
@@ -72,7 +71,8 @@ class MediaItemStage(PipelineStage):
                     i, paragraph)
                 i.save()
             except Exception as ex:
-                self.log_exception(f'Error while handling media item {i.id}', ex)
+                self.log_exception(
+                    f'Error while handling media item {i.id}', ex)
         return paragraph
 
     def resolve_item(self, i: MediaItem, paragraph: Paragraph):
@@ -343,9 +343,10 @@ class DownloadMedia(MediaItemStage):
             return
 
         try:
+            self.log('Download from', i.source.url)
             resp = requests.get(i.source['url'],
                                 headers={
-                'Referer': post.source.get('url', '')
+                'Referer': urllib.parse.quote(post.source.url)
             },
                 verify=False,
                 proxies=self.proxies)
@@ -416,15 +417,17 @@ class DenoiseImage(MediaItemStage):
     def __init__(self) -> None:
         super().__init__()
         self.cv2 = safe_import('cv2', 'opencv-python-headless')
-        
+
     def denoise(self, buf, h=10, template_window=7, search_window=21, *_):
-        h, template_window, search_window = int(h), int(template_window), int(search_window)
+        h, template_window, search_window = int(
+            h), int(template_window), int(search_window)
         img = self.cv2.imdecode(buf.read())
-        dst = self.cv2.fastNlMeanDenoisingColored(img, None, h, h, template_window, search_window)
+        dst = self.cv2.fastNlMeanDenoisingColored(
+            img, None, h, h, template_window, search_window)
         _, npa = self.cv2.imencode('.jpg', dst)
         pic = npa.tobytes()
         return BytesIO(pic)
-        
+
     def resolve_image(self, i: MediaItem, _: Paragraph):
         i.image = Image.open(self.denoise(i.data))
         return i
@@ -520,7 +523,7 @@ storage.register_fragment_handler('videoframe', VideoFrame().get_video_frame)
 
 
 class ColorCorrection(MediaItemStage):
-    
+
     def __init__(self, method='cauchy') -> None:
         '''
         Args:
@@ -532,19 +535,19 @@ class ColorCorrection(MediaItemStage):
     def resolve_image(self, i: MediaItem, _):
         i.image = self.correct(i.data, return_image=True)
         return i
-    
+
     def correct(self, buf, method='cauchy', *_, return_image=False):
         from skimage import img_as_ubyte
         from skimage.exposure import cumulative_distribution
         from scipy.stats import cauchy, logistic
 
         def individual_channel(image, dist, channel):
-            im_channel = img_as_ubyte(image[:,:,channel])
+            im_channel = img_as_ubyte(image[:, :, channel])
             freq, _ = cumulative_distribution(im_channel)
-            new_vals = np.interp(freq, dist.cdf(np.arange(0,256)), 
-                                    np.arange(0,256))
+            new_vals = np.interp(freq, dist.cdf(np.arange(0, 256)),
+                                 np.arange(0, 256))
             return new_vals[im_channel].astype(np.uint8)
-        
+
         def distribution(image, function, mean, std):
             dist = function(mean, std)
             red = individual_channel(image, dist, 0)
@@ -552,22 +555,24 @@ class ColorCorrection(MediaItemStage):
             blue = individual_channel(image, dist, 2)
             image = np.dstack((red, green, blue))
             return image
-            
+
         image = np.array(Image.open(buf))
-        func = {'cauchy': cauchy, 'logistic': logistic}.get(method or self.method, cauchy)
+        func = {'cauchy': cauchy, 'logistic': logistic}.get(
+            method or self.method, cauchy)
         image = distribution(image, func, 90, 30)
         image = Image.fromarray(image)
 
         if return_image:
             return image
-        
+
         buf = BytesIO()
         image.save(buf, 'JPEG')
         buf.seek(0)
         return buf
 
 
-storage.register_fragment_handler('color_correction', ColorCorrection().correct)
+storage.register_fragment_handler(
+    'color_correction', ColorCorrection().correct)
 
 
 def handle_thumbnail(buf, width, height='', *_):
