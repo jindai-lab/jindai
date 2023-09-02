@@ -123,16 +123,18 @@ class AddAutoTag(PipelineStage):
 class AutoTaggingEndpoint(APICrudEndpoint):
 
     def __init__(self) -> None:
-        super().__init__('/api/plugins/', AutoTag, {'apply': ['POST']})
+        super().__init__('/api/plugins/', AutoTag)
+        self.bind_endpoint(self.apply)
 
     def apply(self, objs, coll='', **_):
-        cond = objs.parsed
-        if objs.tag.startswith('~'):
-            Paragraph.get_coll(coll).query(cond).update(Fn.pull(keywords=objs.tag[1:]))
-        else:
-            if objs.tag.startswith('#'):
-                cond = MongoOperand(cond) & (~F.keywords.regex(r'^#'))
-            Paragraph.get_coll(coll).query(cond).update(Fn.addToSet(keywords=objs.tag))
+        for obj in objs:
+            cond = obj.parsed
+            if obj.tag.startswith('~'):
+                Paragraph.get_coll(coll).query(cond).update(Fn.pull(keywords=obj.tag[1:]))
+            else:
+                if obj.tag.startswith('#'):
+                    cond = MongoOperand(cond) & (~F.keywords.regex(r'^#'))
+                Paragraph.get_coll(coll).query(cond).update(Fn.addToSet(keywords=obj.tag))
         return APIUpdate()
 
 
