@@ -25,9 +25,7 @@ DEFAULT_IMG_PATTERNS = 'img[src]|[zoomfile]|[data-original]|[data-src]|[file]|[d
 
 class CachedWebAccess:
 
-    def __init__(self, base=''):
-        if not base:
-            base = tempfile.mktemp()
+    def __init__(self, base):
         if not os.path.exists(base):
             os.mkdir(base)
         self.base = base
@@ -53,7 +51,8 @@ class WebPageListingDataSource(DataSourceStage):
     @zhs 从网页列表中导入语段
     """
 
-    cache = CachedWebAccess('/tmp/wpdl')
+    cache = CachedWebAccess(os.path.join(
+        os.path.dirname(tempfile.mkdtemp()), 'wpdl'))
 
     @property
     def visited(self):
