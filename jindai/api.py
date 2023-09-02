@@ -17,7 +17,7 @@ from PyMongoWrapper.dbo import DbObject
 from .config import instance as config
 from .dbquery import DBQuery, parser
 from .helpers import (APICrudEndpoint, APIResults, APIUpdate,
-                      IterableWithTotal, JSONDecoder, JSONEncoder, ee,
+                      IterableWithTotal, JSONProvider, ee,
                       get_context, language_iso639, logined, rest, serve_proxy)
 from .models import (Dataset, History, MediaItem, Meta, Paragraph, TaskDBO,
                      Term, Token, User)
@@ -29,8 +29,7 @@ from .task import Task
 
 app = Flask(__name__)
 app.config['SECRET_KEY'] = config.secret_key
-app.json_encoder = JSONEncoder
-app.json_decoder = JSONDecoder
+app.json = JSONProvider(app)
 config_oauth(app)
 
 
