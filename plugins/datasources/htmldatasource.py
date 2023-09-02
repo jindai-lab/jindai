@@ -50,11 +50,10 @@ class WebPageListingDataSource(DataSourceStage):
     Import web page listings
     @zhs 从网页列表中导入语段
     """
-    
-    
-    cache = CachedWebAccess(os.path.join(os.path.dirname(tempfile.mkdtemp()), 'wpdl'))
-    
-    
+
+    cache = CachedWebAccess(os.path.join(
+        os.path.dirname(tempfile.mkdtemp()), 'wpdl'))
+
     @property
     def visited(self):
         if 'visited' not in self.gctx:
