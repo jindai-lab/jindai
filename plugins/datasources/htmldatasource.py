@@ -24,9 +24,7 @@ DEFAULT_IMG_PATTERNS = 'img[src]|[zoomfile]|[data-original]|[data-src]|[file]|[d
 
 class CachedWebAccess:
 
-    def __init__(self, base=''):
-        if not base:
-            base = tempfile.mktemp()
+    def __init__(self, base):
         if not os.path.exists(base):
             os.mkdir(base)
         self.base = base
@@ -54,7 +52,7 @@ class WebPageListingDataSource(DataSourceStage):
     
     visited = set()
     queued = set()
-    cache = CachedWebAccess('/tmp/wpdl')
+    cache = CachedWebAccess(os.path.join(os.path.dirname(tempfile.mkdtemp()), 'wpdl'))
 
     def apply_params(self, dataset='', content='', scopes='',
                      mongocollection='', lang='auto', detail_link='',
