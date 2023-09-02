@@ -29,7 +29,7 @@ class VideoItemImageDelegate:
         return {'file': self._i.thumbnail}
 
     @property
-    def data_path(self):
+    def source_path(self):
         return self._i.thumbnail
 
     @property
@@ -40,7 +40,7 @@ class VideoItemImageDelegate:
         self._i.save()
 
     def __getattribute__(self, __name: str):
-        if __name not in ('_i', 'source', 'save', 'data', 'data_path'):
+        if __name not in ('_i', 'source', 'save', 'data', 'source_path'):
             return getattr(self._i, __name)
 
         return object.__getattribute__(self, __name)
@@ -48,7 +48,7 @@ class VideoItemImageDelegate:
     def __setattr__(self, __name: str, __value) -> None:
         if __name != '_i':
             setattr(self._i, __name, __value)
-        elif __name not in ('source', 'save', 'data', 'data_path'):
+        elif __name not in ('source', 'save', 'data', 'source_path'):
             object.__setattr__(self, __name, __value)
 
 
@@ -318,16 +318,19 @@ class DownloadMedia(MediaItemStage):
     @zhs 下载媒体内容
     """
 
-    def __init__(self, proxy='') -> None:
+    def __init__(self, proxy='', target='') -> None:
         """
         Args:
             proxy (str): Proxy server
                 @zhs 代理服务器
+            target (str): Target path
+                @zhs 目标路径
         """
         super().__init__()
         self.proxies = {
             'http': proxy, 'https': proxy
         } if proxy else {}
+        self.target = target
 
     def resolve_item(self, i: MediaItem, post):
         if not i.id:
@@ -362,10 +365,13 @@ class DownloadMedia(MediaItemStage):
                 ex)
             return
 
-        path = storage.default_path(i.id)
+        if self.target:
+            path = self.target + str(i.id)
+        else:
+            path = storage.default_path(i.id)
         with storage.open(path, 'wb') as output:
             output.write(content)
-            self.logger(i.id, len(content))
+            self.log(i.id, len(content))
 
         i.source = {'file': path, 'url': i.source['url']}
         i.data = BytesIO(content)
@@ -463,11 +469,11 @@ class VideoFrame(MediaItemStage):
                 fo.write(buf.read())
 
         if not isinstance(read_from, str) or not os.path.exists(read_from):
-            self.logger(f'{read_from} not found')
+            self.log(f'{read_from} not found')
             return
 
         try:
-            self.logger(f'generate frame image from {read_from}')
+            self.log(f'generate frame image from {read_from}')
             cap = cv2.VideoCapture(read_from)
             frame = float(frame)
             frame_num = int(cap.get(cv2.CAP_PROP_FRAME_COUNT) *
@@ -491,20 +497,21 @@ class VideoFrame(MediaItemStage):
         return BytesIO(pic)
 
     def resolve_video(self, i: MediaItem, _):
+        assert i.id and i.source_path, 'id or source_path not known'
         thumb = storage.default_path(f'{i.id}.thumb.jpg')
 
         # generate video thumbnail
-        read_from = i.data_path + f'#videoframe/{self.frame_num}'
+        read_from = f'{i.source_path}#videoframe/{self.frame_num}'
         pic = storage.open(read_from, 'rb').read()
         if pic:
             with storage.open(thumb, 'wb') as output:
                 output.write(pic)
             setattr(i, self.field, thumb)
             i.save()
-            self.logger(
+            self.log(
                 f'wrote {i.id} frame#{self.frame_num} to {thumb}')
         else:
-            self.logger('cannot read from', read_from)
+            self.log('cannot read from', read_from)
 
         return i
 

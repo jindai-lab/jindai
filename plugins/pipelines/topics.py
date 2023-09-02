@@ -14,9 +14,6 @@ from .basics import AccumulateParagraphs, Counter
 from threading import Lock
 
 
-many_stop_words = safe_import('many_stop_words')
-
-
 def import_plt():
     """safe import matplotlib.pyplot"""
     plt = safe_import('matplotlib.pyplot', 'matplotlib')
@@ -32,44 +29,6 @@ def import_sklearn_kmeans_pca():
     from sklearn.cluster import KMeans
     from sklearn.decomposition import PCA
     return KMeans, PCA
-
-
-class FilterStopWords(PipelineStage):
-    """Filter stop words
-    @zhs 过滤停用词
-    """
-
-    _lang_stopwords = {
-        l: many_stop_words.get_stop_words(l) for l in ['en', 'fr', 'de', 'ru', 'ja', 'zh']
-    }
-    
-    _punctuations = re.compile(r'[\u3000-\u303F\uFF00-\uFFEF\"\'{}\\(\\)\\[\\]\\*&.?!,…:;]')
-    
-    @staticmethod
-    def get(lang):
-        if lang == 'chs':
-            return FilterStopWords._lang_stopwords['zh']
-        elif lang in FilterStopWords._lang_stopwords:
-            return FilterStopWords._lang_stopwords[lang]
-        else:
-            return []
-
-    def __init__(self, stopwords=''):
-        """
-        Args:
-            stopwords (str): 额外的停用词表，用空格分割
-        """
-        self.stopwords = set(stopwords.split())
-        super().__init__()
-    
-    def resolve(self, paragraph):
-        paragraph.tokens = [
-            _ for _ in paragraph.tokens
-            if _ not in self.stopwords and \
-                _ not in FilterStopWords.get(paragraph.lang) and \
-                not FilterStopWords._punctuations.match(_)
-        ]
-        return paragraph
 
 
 class LDA(PipelineStage):
@@ -414,13 +373,13 @@ class GraphicClustering(PipelineStage):
                 if i not in graph.nodes:
                     graph.add_node(i)
             graph.add_edge(node_a, node_b, weight=val)
-            self.logger(node_a, node_b, val)
+            self.log(node_a, node_b, val)
 
         meta = ''
         for i, cluster in enumerate(nx.connected_components(graph)):
             meta += f'{i+1}\t' + '; '.join(cluster) + '\n'
 
-        self.logger(meta)
+        self.log(meta)
 
         nx.draw(graph, with_labels=True)
         buf = BytesIO()

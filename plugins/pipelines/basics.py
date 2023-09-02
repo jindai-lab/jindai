@@ -21,9 +21,6 @@ class Passthrough(PipelineStage):
     @zhs 直接通过
     """
 
-    def resolve(self, paragraph: Paragraph) -> Paragraph:
-        return paragraph
-
 
 class FilterOut(PipelineStage):
     """
@@ -35,7 +32,7 @@ class FilterOut(PipelineStage):
         """
         Arg:
             cond (QUERY): Condition
-            @zhs 截止条件
+                @zhs 截止条件
         """
         self.cond = parser.parse(cond)
         self.ee = QExprEvaluator(parser.shortcuts)
@@ -266,8 +263,10 @@ class WordCut(PipelineStage):
 
         if self.for_search:
             words += self.trlit.transliterate(paragraph.lang, words)
-            
-        paragraph[self.field] = words
+        
+        if not isinstance(paragraph[self.field], list):
+            paragraph[self.field] = []
+        paragraph[self.field] += words
         return paragraph
 
 
@@ -891,7 +890,7 @@ class SaveParagraph(PipelineStage):
         return paragraph
 
     def summarize(self, _):
-        self.logger('datasets count:', len(self.datasets))
+        self.log('datasets count:', len(self.datasets))
         for name, data in self.datasets.items():
             coll = Dataset.first(F.name == name) \
                 or Dataset(name=name, sources=[],
@@ -1009,7 +1008,7 @@ class OutlineFilter(PipelineStage):
         outline = self.check_outline(paragraph)
 
         if outline and outline[5] != '-':
-            # self.logger(content[:20], outline)
+            # self.log(content[:20], outline)
             if outline.startswith('book '):
                 nnums = [outline[5:], '00', '00']
             elif outline.startswith('chap '):
@@ -1110,7 +1109,7 @@ class MongoCollectionBatchOper(PipelineStage):
             updates = [updates]
         for update in updates:
             self.collection.query(query).update(update)
-            self.logger(query, update)
+            self.log(query, update)
         return paragraph
 
 
@@ -1172,3 +1171,41 @@ class LoadNamedResult(Passthrough):
         if self.name == '':
             return self.gctx
         return self.gctx.get(self.name)
+
+
+class FilterStopWords(PipelineStage):
+    """Filter stop words
+    @zhs 过滤停用词
+    """
+    
+    _lang_stopwords = {
+        l: safe_import('many_stop_words').get_stop_words(l) for l in ['en', 'fr', 'de', 'ru', 'ja', 'zh']
+    }
+    
+    _punctuations = re.compile(r'[\u3000-\u303F\uFF00-\uFFEF\"\'{}()\[\]\\*&.?!,…:;@#!]')
+    
+    @staticmethod
+    def get(lang):
+        if lang == 'chs':
+            return FilterStopWords._lang_stopwords['zh']
+        elif lang in FilterStopWords._lang_stopwords:
+            return FilterStopWords._lang_stopwords[lang]
+        else:
+            return []
+
+    def __init__(self, stopwords=''):
+        """
+        Args:
+            stopwords (str): 额外的停用词表，用空格分割
+        """
+        self.stopwords = set(stopwords.split())
+        super().__init__()
+    
+    def resolve(self, paragraph):
+        paragraph.keywords = [
+            _ for _ in paragraph.keywords
+            if _ not in self.stopwords and \
+                _ not in FilterStopWords.get(paragraph.lang) and \
+                not FilterStopWords._punctuations.match(_)
+        ]
+        return paragraph

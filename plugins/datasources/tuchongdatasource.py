@@ -42,7 +42,7 @@ class TuchongDataSource(DataSourceStage):
             yield from self.download(self.term, page)
 
     def download(self, term, page):
-        self.logger(term, page)
+        self.log(term, page)
         try:
             entry = f'https://tuchong.com/rest/tags/{term}/posts?page={page}&count=20'
             json = requests.get(entry, headers=headers, proxies=self.proxy).json()['postList']
@@ -55,7 +55,7 @@ class TuchongDataSource(DataSourceStage):
 
         def _parse_img(paragraph):
             url = paragraph.source.url
-            self.logger('downlaod from', url)
+            self.log('downlaod from', url)
             html = requests.get(url, headers=headers, proxies=self.proxy).content
             images = re.findall(r'\"img_id\"\:(\d+)\,\"user_id\"\:(\d+)', html.decode('utf-8'))
             paragraph.images = [

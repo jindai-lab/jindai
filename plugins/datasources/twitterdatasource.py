@@ -182,7 +182,7 @@ class TwitterDataSource(DataSourceStage):
                 F.tweet_id == f'{tweet.id}', tweet_id=f'{tweet.id}', author=author, content=tweet.text)
             para.source = {'url': tweet_url}
 
-            self.logger(tweet_url, 'existent' if para.id else '')
+            self.log(tweet_url, 'existent' if para.id else '')
 
             if skip_existent and para.id:
                 return
@@ -194,7 +194,7 @@ class TwitterDataSource(DataSourceStage):
                     url = media.video_info['variants'][-1]['url'].split('?')[
                         0]
                     if url.endswith('.m3u8'):
-                        self.logger('found m3u8, pass', url)
+                        self.log('found m3u8, pass', url)
                         continue
                 else:
                     url = media.media_url_https
@@ -208,7 +208,7 @@ class TwitterDataSource(DataSourceStage):
 
                     if not item.id:
                         item.save()
-                        self.logger('... add new item', url)
+                        self.log('... add new item', url)
                     para.images.append(item)
 
         if isinstance(tweet, Paragraph):
@@ -235,7 +235,7 @@ class TwitterDataSource(DataSourceStage):
         para.content = text
         para.save()
 
-        self.logger(len(para.images), 'media items')
+        self.log(len(para.images), 'media items')
 
         return para
 
@@ -245,7 +245,7 @@ class TwitterDataSource(DataSourceStage):
             url (str): url
         """
         if 'twitter.com' in url and '/status/' in url:
-            self.logger(url)
+            self.log(url)
 
             tweet_id = url.split('/')
             tweet_id = tweet_id[tweet_id.index('status') + 1]
@@ -273,7 +273,7 @@ class TwitterDataSource(DataSourceStage):
                     for line in lines:
                         logged = dict(zip(columns, line))
                         url = logged['Tweet URL']
-                        self.logger(url)
+                        self.log(url)
                         if url not in records:
                             records[url] = logged
                             records[url]['images'] = []
@@ -295,21 +295,21 @@ class TwitterDataSource(DataSourceStage):
                     i = MediaItem.get(murl, zipped_file=msaved,
                                       item_type={'gif': 'image', 'image': 'image', 'video': 'video'}.get(logged['Media type'].lower(), 'image'))
                     i.save()
-                    self.logger('......', i.source['url'], i.zipped_file)
+                    self.log('......', i.source['url'], i.zipped_file)
                     para.images.append(i)
 
                     if i.source.get('file'):
-                        self.logger(i.id, 'already stored, skip.')
+                        self.log(i.id, 'already stored, skip.')
                         continue
                     try:
                         content = zipped.read(i.zipped_file)
                         path = storage.default_path(i.id)
                         with storage.open(path, 'wb') as output:
                             output.write(content)
-                            self.logger(i.id, len(content))
+                            self.log(i.id, len(content))
                         i.source = {'file': path, 'url': i.source['url']}
                     except KeyError:
-                        self.logger(i.zipped_file, 'not found')
+                        self.log(i.zipped_file, 'not found')
                     i.save()
 
                 para.save()
@@ -346,7 +346,7 @@ class TwitterDataSource(DataSourceStage):
         max_id = twitter_id_from_timestamp(self.time_before)+1
         before = self.time_before
 
-        self.logger('import timeline', user,
+        self.log('import timeline', user,
                     self.time_before, self.time_after)
 
         try:
@@ -356,7 +356,7 @@ class TwitterDataSource(DataSourceStage):
                 pages += 1
                 yielded = False
                 has_data = False
-                self.logger(max_id, datetime.datetime.fromtimestamp(
+                self.log(max_id, datetime.datetime.fromtimestamp(
                     before), self.time_after)
 
                 timeline = source(max_id)
@@ -387,7 +387,7 @@ class TwitterDataSource(DataSourceStage):
                 time.sleep(1)
 
             if pages >= 50:
-                self.logger(f'Reached max pages count, interrupted. {user}')
+                self.log(f'Reached max pages count, interrupted. {user}')
 
         except tweepy.TweepyException as ex:
             self.log_exception('twitter exception', ex)
@@ -414,15 +414,15 @@ class TwitterDataSource(DataSourceStage):
                 if re.search(r'^https://twitter.com/.*?/status/.*', arg):
                     yield from self.import_twiimg(arg)
                 elif arg.endswith('.zip'):
-                    self.logger('import from zip:', arg)
+                    self.log('import from zip:', arg)
                     for path in storage.globs(arg, False):
-                        self.logger('...', path)
+                        self.log('...', path)
                         yield from self.import_twiimg(path)
                 elif arg == '@':
                     unames = sorted(
                         map(lambda x: f'#{x}', tweepy.Cursor(self.api.get_friend_ids).items()))
                     for u in unames:
-                        self.logger(u)
+                        self.log(u)
                         yield from self.import_timeline(u)
                 else:
                     if matcher := re.match(r'^https://twitter.com/([^/]*?)(/media)?', arg):

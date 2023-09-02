@@ -141,7 +141,7 @@ class TaskQueue:
 
         @app.route('/api/queue/<path:key>', methods=['GET'])
         @rest(cache=True)
-        def fetch_task(key):
+        def fetch_task(key, offset=0, limit=100):
             """Get queued job result
 
             Args:

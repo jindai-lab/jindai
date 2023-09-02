@@ -91,11 +91,11 @@ class Job:
             announcer.announce("updated")
             
         def _logging(*args):
-            announcer.logger(self.key)(*args)
+            announcer.get_log(self.key)(*args)
             self.logs.append(datetime.datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S ') + ' '.join([str(_) for _ in args]))
 
         self.task = Task.from_dbo(
-            self.task_dbo, logger=_logging, verbose=self._worker.verbose)
+            self.task_dbo, log=_logging, verbose=self._worker.verbose)
         self.status = 'running'
         self.task.run(_callback)
 

@@ -9,6 +9,7 @@ import datetime
 import tempfile
 import os
 from hashlib import sha1
+from typing import Dict
 from urllib.parse import urljoin
 from bs4 import BeautifulSoup as B
 
@@ -31,7 +32,7 @@ class CachedWebAccess:
 
     def _digest(self, url):
         return os.path.join(self.base, sha1(url.encode('utf-8')).hexdigest())
-    
+
     def get(self, url):
         hashed = self._digest(url)
         if os.path.exists(hashed):
@@ -50,9 +51,21 @@ class WebPageListingDataSource(DataSourceStage):
     @zhs 从网页列表中导入语段
     """
     
-    visited = set()
-    queued = set()
+    
     cache = CachedWebAccess(os.path.join(os.path.dirname(tempfile.mkdtemp()), 'wpdl'))
+    
+    
+    @property
+    def visited(self):
+        if 'visited' not in self.gctx:
+            self.gctx['visited'] = set()
+        return self.gctx['visited']
+
+    @property
+    def queued(self):
+        if 'queued' not in self.gctx:
+            self.gctx['queued'] = set()
+        return self.gctx['queued']
 
     def apply_params(self, dataset='', content='', scopes='',
                      mongocollection='', lang='auto', detail_link='',
@@ -99,26 +112,27 @@ class WebPageListingDataSource(DataSourceStage):
             'https': proxy
         }
         self.paths = PipelineStage.parse_paths(content)
-        self.scopes = PipelineStage.parse_paths(scopes)
+        self.scopes = PipelineStage.parse_paths(scopes) or self.paths
         self.list_depth = list_depth
         self.detail_link = re.compile(detail_link)
         self.list_link = re.compile(list_link)
         self.tags = PipelineStage.parse_lines(tags)
         self.dataset = dataset
         self.lang = lang
-        self.image_patterns = PipelineStage.parse_lines(img_pattern) or DEFAULT_IMG_PATTERNS.split('\n')
+        self.image_patterns = PipelineStage.parse_lines(
+            img_pattern) or DEFAULT_IMG_PATTERNS.split('\n')
         self.collection = Paragraph.get_coll(mongocollection)
         self.level = level
 
     def get_url(self, url):
         """Read html from url, return BeautifulSoup object"""
-        self.logger('get url', url)
+        self.log('get url', url)
         try:
             data = WebPageListingDataSource.cache.get(url)
         except OSError as ose:
-            self.log_exception(f'Error while reading from {url}', ose) 
+            self.log_exception(f'Error while reading from {url}', ose)
             data = ''
-        return self.collection(source={'url':url}, html=data, dataset=self.dataset, lang=self.lang)
+        return self.collection(source={'url': url}, html=data, dataset=self.dataset, lang=self.lang)
 
     def get_text(self, element):
         """Get text of element"""
@@ -128,13 +142,13 @@ class WebPageListingDataSource(DataSourceStage):
 
     def parse_detail(self, url, para, b):
         """Parse url as a detail page"""
-        para.pdate=datetime.datetime.utcnow()
-        para.source={'url': url}
-        para.dataset=self.dataset
-        para.lang=self.lang
-        para.content=self.get_text(b)
-        para.keywords=self.tags
-        para.title=self.get_text(b.find('title'))
+        para.pdate = datetime.datetime.utcnow()
+        para.source = {'url': url}
+        para.dataset = self.dataset
+        para.lang = self.lang
+        para.content = self.get_text(b)
+        para.keywords = self.tags
+        para.title = self.get_text(b.find('title'))
 
         items = set()
 
@@ -157,14 +171,14 @@ class WebPageListingDataSource(DataSourceStage):
 
                 para.images.append(image)
 
-        self.logger(f'Found {len(para.images)} images in {url}')
+        self.log(f'Found {len(para.images)} images in {url}')
         return para
 
     def parse_list(self, url, b):
         """Parse url as a list page"""
 
         if not b:
-            self.logger(f'Cannot read list from {url}')
+            self.log(f'Cannot read list from {url}')
             return []
 
         links = set()
@@ -172,7 +186,7 @@ class WebPageListingDataSource(DataSourceStage):
             link_url = a['href'] = urljoin(url, a['href'])
             link_url = link_url.split('#')[0]
             # if visited
-            if link_url in WebPageListingDataSource.visited:
+            if link_url in self.visited:
                 continue
             # match scopes
             for scope in self.scopes:
@@ -184,31 +198,37 @@ class WebPageListingDataSource(DataSourceStage):
             if self.list_link.search(link_url) or self.detail_link.search(link_url):
                 links.add(link_url)
 
-        self.logger(len(links), 'links')
+        self.log(len(links), 'links')
         return list(links)
 
     def fetch(self):
         level = self.level or 1
         for url in self.paths:
-            if url in WebPageListingDataSource.visited:
+            if url in self.visited:
                 continue
-            WebPageListingDataSource.visited.add(url)
-            
+            self.visited.add(url)
+
             para = self.get_url(url)
             b = B(para.html, 'lxml')
             para.html = str(b)
 
-            if level < self.list_depth and (self.list_link.search(url) or self.detail_link.search(url)):
-                self.logger('parse list', url)
+            if level <= self.list_depth and (self.list_link.search(url) or self.detail_link.search(url)):
+                self.log('parse list', url)
                 for upath in self.parse_list(url, b):
-                    if upath not in WebPageListingDataSource.queued:
-                        WebPageListingDataSource.queued.add(upath)
+                    if upath not in self.queued:
+                        self.queued.add(upath)
                         yield Paragraph(content=upath, level=level+1), self
 
             if self.detail_link.search(url):
-                self.logger('parse detail', url)
+                self.log('parse detail', url)
                 yield self.parse_detail(url, para, b)
-                
+
+    def summarize(self, result) -> Dict:
+        self.log('clear visited & queued urls')
+        self.visited.clear()
+        self.queued.clear()
+        return result
+
 
 class JSONDataSource(DataSourceStage):
     """Parse JSON data to Paragraphs, used to interact with web interface
@@ -287,7 +307,7 @@ class ExtractHTMLParagraphs(PipelineStage):
     def resolve(self, paragraph: Paragraph) -> Paragraph:
         html = paragraph[self.field] or ''
         b = B(html, 'lxml')
-        self.logger('load html data of length', len(html))
+        self.log('load html data of length', len(html))
 
         for html_para in b.select(self.paragraph_selector) if self.paragraph_selector else [b]:
             para = type(paragraph)(
@@ -299,7 +319,140 @@ class ExtractHTMLParagraphs(PipelineStage):
                 outline=paragraph.outline,
                 keywords=[],
                 html=str(html_para),
+                images=paragraph.images,
             )
             self._resolve_assignments(html_para, para)
-            self.logger('Extract para at', para.source['url'])
+            self.log('Extract para at', para.source['url'])
             yield para
+
+
+if __name__ == '__main__':
+    from collections import deque
+    from concurrent.futures import ThreadPoolExecutor, wait
+    import os
+    import sys
+    import re
+    from urllib.parse import urljoin, unquote
+
+    import requests
+    from bs4 import BeautifulSoup as B
+    from tqdm import tqdm
+
+    from jindai.models import F, Paragraph, Fn
+    from plugins.pipelines.basics import WordCut
+    from PyMongoWrapper.dbo import BatchSave
+
+    Paragraph = Paragraph.get_coll(sys.argv[1])
+    ROOT_URL = sys.argv[2]
+
+    class MultiThreaded:
+
+        def __init__(self, n=10) -> None:
+            self.queue = deque()
+            self.tpe = ThreadPoolExecutor(n)
+            self.pbar = tqdm()
+
+        def enqueue(self, arg):
+            self.queue.append(arg)
+
+        def pbarwrap(self, func):
+            def _wrapped(*args):
+                func(*args)
+                self.pbar.update(1)
+            return _wrapped
+
+        def run(self, handler):
+            handler = self.pbarwrap(handler)
+            if self.queue:
+                handler(self.queue.popleft())
+            while self.queue:
+                futures = []
+                while self.queue and len(futures) < 100:
+                    u = self.queue.popleft()
+                    futures.append(self.tpe.submit(self.pbarwrap(handler), u))
+                    self.pbar.set_description(f'{len(self.queue)}')
+                wait(futures)
+                save_queue()
+
+    visited = {
+        p['_id'] for p in Paragraph.aggregator.match(F.html.exists(0) & F.source.url.regex('^' + re.escape(ROOT_URL))).project(source=1).group(_id=F.source.url)
+    }
+    operator = MultiThreaded()
+    wc = WordCut(True)
+
+    def parse(url: str):
+        html = requests.get(url).content
+        return B(html, 'lxml')
+
+    def links(base_url: str, bs: B):
+        for link in bs.select('a[href]'):
+            href = link.attrs['href'].split('#')[0]
+            yield urljoin(base_url, href)
+
+    def fetch(url: str, selector: str = '.zenoCOMain'):
+        url = url.split('#')[0]
+        if url in visited or not url.startswith(ROOT_URL):
+            return
+        visited.add(url)
+
+        p = Paragraph.first(F.source.url == url, F.html.exists(1))
+        if not p:
+            b = parse(url).select_one(selector)
+            p = Paragraph(
+                dataset='temp', source={'url': url})
+            if not b:
+                return
+            p.content = b.text.strip()
+            p.lang = 'de'
+            p.html = str(b)
+        else:
+            b = B(p.html, 'lxml')
+
+        if not p.date or not p.author or not p.outline:
+            if m := re.search(r'1\d{3}', url):
+                p.pdate = m.group(0)
+            deurl = unquote(url).replace('+', ' ')
+            p.outline = deurl
+            p.save()
+
+        if Paragraph.first(F.source.url == url, F.html.exists(0)) is None:
+            split_paragraph(p, b)
+
+        for link in links(url, b):
+            if link in visited or link in operator.queue:
+                continue
+            operator.enqueue(link)
+
+    def split_paragraph(p, bs):
+        operator.pbar.set_description(f'Split: {p.id}')
+        with BatchSave(performer=Paragraph) as batch:
+            for para in bs.select('p'):
+                a = Paragraph(p)
+                a.id = None
+                del a['html']
+                a.content = para.text.strip()
+                wc.resolve(a)
+                a.keywords = a.tokens
+                del a.tokens
+                batch.add(a)
+                para.extract()
+        p.content = bs.text.strip()
+        p.keywords = ['#html']
+        p.save()
+
+    QUEUE_FILE = 'temp_queue.json'
+
+    def load_queue():
+        if os.path.exists(QUEUE_FILE):
+            with open(QUEUE_FILE, 'r', encoding='utf-8') as fi:
+                return [l.strip() for l in fi.readlines() if l.startswith(ROOT_URL)]
+        else:
+            return [w['source']['url'] for w in Paragraph.aggregator.match(html=Fn.exists(1)).project(source=1).perform(raw=True)]
+
+    def save_queue():
+        with open(QUEUE_FILE, 'w', encoding='utf-8') as fo:
+            fo.write('\n'.join(operator.queue))
+
+    for u in load_queue() or [ROOT_URL]:
+        operator.enqueue(u)
+    operator.run(fetch)

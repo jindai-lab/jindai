@@ -38,8 +38,8 @@ class MessageAnnouncer:
         """Announce log"""
         self.announce(' '.join([str(_) for _ in args]))
 
-    def logger(self, prefix):
-        """Get prefixed logger"""
+    def get_log(self, prefix):
+        """Get prefixed log"""
         return lambda *args: self.log(prefix, '|', *args)
 
 

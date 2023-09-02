@@ -8,7 +8,7 @@ from typing import Dict, Iterable, List, Tuple, Any, Type, Union, Callable
 from collections.abc import Iterable as IterableClass
 from collections import defaultdict
 from .models import Paragraph
-from .helpers import storage
+from .helpers import storage, config
 
 
 class PipelineStage:
@@ -18,7 +18,7 @@ class PipelineStage:
     """
 
     def __init__(self, name='') -> None:
-        self._logger = lambda *x: print(*x, file=sys.stderr)
+        self._log = lambda *x: print(*x, file=sys.stderr)
         self.next = None
         self.gctx = {}
         self.verbose = False
@@ -135,14 +135,14 @@ class PipelineStage:
         :rtype: dict
         """
         return {'__redirect__': dest}
-    
+
     @staticmethod
     def parse_lines(val):
         if isinstance(val, list):
             return val
         else:
             return [ele for ele in str(val).split('\n') if ele]
-        
+
     @staticmethod
     def parse_paths(val):
         files = []
@@ -151,26 +151,26 @@ class PipelineStage:
         return files
 
     @property
-    def logger(self):
+    def log(self):
         """Get logging method
 
         :return: logging method
         :rtype: Callable
         """
-        return lambda *x: self._logger(self.instance_name or self.__class__.__name__, '|', *x)
+        return lambda *x: self._log(self.instance_name or self.__class__.__name__, '|', *x)
 
-    @logger.setter
-    def logger(self, val: Callable):
+    @log.setter
+    def log(self, val: Callable):
         """Setting logging method
 
         :param val: logging method
         :type val: Callable
         """
-        self._logger = val
+        self._log = val
 
     def log_exception(self, info, exc):
-        self.logger(info, type(exc).__name__, exc)
-        self.logger('\n'.join(traceback.format_tb(exc.__traceback__)))
+        self.log(info, type(exc).__name__, exc)
+        self.log('\n'.join(traceback.format_tb(exc.__traceback__)))
 
     def resolve(self, paragraph: Paragraph) -> Paragraph:
         """Map period, handling paragraph.
@@ -182,6 +182,7 @@ class PipelineStage:
             or iterable multiple objects for next stage.
         :rtype: Paragraph | Iterable[Paragraph] | None
         """
+        return paragraph
 
     def summarize(self, result) -> Dict:
         """Reduce period, handling result from the last stage
@@ -206,15 +207,15 @@ class PipelineStage:
         """
         self.gctx = gctx
         if self.verbose:
-            self.logger('Processing')
+            self.log('Processing')
         results = self.resolve(paragraph)
         if self.verbose:
-            self.logger('Resolved to', type(results).__name__)
+            self.log('Resolved to', type(results).__name__)
         if isinstance(results, IterableClass):
             for result in results:
                 if isinstance(result, tuple) and \
-                    len(result) == 2 and isinstance(result[0], Paragraph) and \
-                    isinstance(result[1], PipelineStage):
+                        len(result) == 2 and isinstance(result[0], Paragraph) and \
+                        isinstance(result[1], PipelineStage):
                     yield result
                 else:
                     yield result, self.next
@@ -243,7 +244,7 @@ class DataSourceStage(PipelineStage):
             'doc': (cls.__doc__ or '').strip(),
             'args': PipelineStage._spec(cls, 'apply_params')
         }
-    
+
     def before_fetch(self, instance):
         pass
 
@@ -279,7 +280,7 @@ class DataSourceStage(PipelineStage):
         instance = type(self)(**args)
         instance.apply_params(**args)
         instance.params = args
-        instance.logger = self.logger
+        instance.log = self.log
         instance.gctx = self.gctx
         instance.next = self.next
         self.before_fetch(instance)
@@ -311,13 +312,18 @@ class Pipeline:
 
     @staticmethod
     def instantiate(stage_name: str, args: Dict):
-        if args.pop('disabled', False): return
+        if args.pop('disabled', False):
+            return PipelineStage()
         stage_type = Pipeline.ctx[stage_name]
         Pipeline.ensure_args(stage_type, args)
+        for key, val in args.items():
+            if isinstance(val, str):
+                if m := re.match(r'^CONST:(.+)$', val):
+                    args[key] = config.constants[m.group(1)]
         return stage_type(**args)
 
     def __init__(self, stages: List[Union[Tuple[str, Dict], List, Dict, PipelineStage]],
-                 logger: Callable = print, verbose = False):
+                 log: Callable = print, verbose=False):
         """Initialize the pipeline
 
         :param stages: pipeline stage info in one of the following forms:
@@ -325,16 +331,16 @@ class Pipeline:
                 - List[<PipelineStage name>, <parameters>]
                 - {$<PipelineStage name> : <parameters>}
         :type stages: List[Union[Tuple[str, Dict], List, Dict, PipelineStage]]
-        :param logger: Logging method, defaults to print
-        :type logger: Callable, optional
+        :param log: Logging method, defaults to print
+        :type log: Callable, optional
         """
 
         self.stages = []
-        self.logger = logger
+        self.log = log
         self.verbose = verbose
-        
+
         counter = defaultdict(int)
-        
+
         if stages:
             for stage in stages:
                 if isinstance(stage, dict):
@@ -348,13 +354,14 @@ class Pipeline:
                     assert name in Pipeline.ctx, f'Unknown stage: {name}'
                     counter[name] += 1
                     stage = Pipeline.instantiate(name, kwargs)
-                    if stage is None: continue
+                    if stage is None:
+                        continue
                     stage.instance_name = f'{name}{counter[name]}'
 
                 assert isinstance(
                     stage, PipelineStage), f'unknown format for {stage}'
 
-                stage.logger = self.logger
+                stage.log = self.log
                 stage.verbose = verbose
 
                 if self.stages:

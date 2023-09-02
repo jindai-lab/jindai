@@ -37,7 +37,8 @@ class ConfigObject(DictObject):
             'allowed_ips': {},
             'ui_proxy': '',
             'port': 8370,
-            'debug': False
+            'debug': False,
+            'constants': {}
         }
         filename = filename or os.environ.get('CONFIG_FILE', 'config.yaml')
 
