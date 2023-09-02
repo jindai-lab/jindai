@@ -126,7 +126,7 @@ class TqdmFactory:
 class Task:
     """Task object"""
 
-    def __init__(self, params: dict, stages, concurrent=3, logger: Callable = None,
+    def __init__(self, params: dict, stages, concurrent=3, log: Callable = None,
                  resume_next: bool = False, verbose: bool = False, use_tqdm: bool = True) -> None:
         """Initialize the task object
 
@@ -136,8 +136,8 @@ class Task:
         :type stages: list
         :param concurrent: thread pool size, defaults to 3
         :type concurrent: int, optional
-        :param logger: the method to be called for logging, defaults to print
-        :type logger: Callable, optional
+        :param log: the method to be called for logging, defaults to print
+        :type log: Callable, optional
         :param resume_next: continue execution when encountering errors, defaults to False
         :type resume_next: bool, optional
         :param verbose: logging debug info, defaults to False
@@ -151,24 +151,24 @@ class Task:
         self.resume_next = resume_next
         self.concurrent = concurrent
 
-        self.logger = logger or self.print
+        self.log = log or self.print
         self.logs = deque()
         self.verbose = verbose
 
-        self.pipeline = Pipeline(stages, self.logger, verbose)
+        self.pipeline = Pipeline(stages, self.log, verbose)
         self.params = params
 
         self._pbar = TqdmFactory.get_tqdm(fake=verbose or not use_tqdm)
         self._queue = None
         
-        self._workers = WorkersPool(1)
+        self._workers = None
          
     def _thread_execute(self, priority, fc, gctx):
         input_paragraph, stage = fc
 
         self._pbar.update(1)
         if self.verbose:
-            self.logger(type(stage).__name__, getattr(input_paragraph, 'id', '%x' % id(input_paragraph)))
+            self.log(type(stage).__name__, getattr(input_paragraph, 'id', '%x' % id(input_paragraph)))
         if stage is None:
             return None
 
@@ -245,8 +245,8 @@ class Task:
         return None
 
     def log_exception(self, info, exc):
-        self.logger(info, type(exc).__name__, exc)
-        self.logger('\n'.join(traceback.format_tb(exc.__traceback__)))
+        self.log(info, type(exc).__name__, exc)
+        self.log('\n'.join(traceback.format_tb(exc.__traceback__)))
         
     def run(self, callback = None):
         """Create a daemon thread to execute the task
@@ -255,7 +255,7 @@ class Task:
             try:
                 self.returned = self.execute()
             except Exception as ex:
-                self.logger('Error while running task', type(ex).__name__, ex)
+                self.log('Error while running task', type(ex).__name__, ex)
             self.alive = False
             if callback:
                 callback(self)
@@ -268,7 +268,8 @@ class Task:
     def stop(self):
         """Stop task"""
         self.alive = False
-        self._workers.stop()
+        if self._workers: 
+            self._workers.stop()
 
     @staticmethod
     def from_dbo(dbo, **kwargs):

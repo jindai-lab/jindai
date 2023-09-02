@@ -153,6 +153,10 @@ def rest(login=True, cache=False, role="", mapping=None):
                 if request.content_type == "application/json" and request.json:
                     for key, val in request.json.items():
                         kwargs[mapping.get(key, key)] = val
+                elif request.method == 'GET':
+                    for key, val in request.args.items():
+                        kwargs[mapping.get(key, key)] = val
+
                 request.lang = request.headers.get("X-Preferred-Language", "")
                 result = func(*args, **kwargs)
                 if isinstance(
@@ -466,7 +470,7 @@ class APICrudEndpoint:
         total = results.count()
         # Skips the number of results to skip. limit limit
         if limit:
-            results = results.skip(offset).limit(limit)
+            results = results.skip(int(offset)).limit(int(limit))
         results.total = total
         return results
 

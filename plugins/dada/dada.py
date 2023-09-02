@@ -4,9 +4,10 @@ Database for Digital Arts Backend
 import os
 import requests
 import markdown
+import datetime
 from PyMongoWrapper import QExprInterpreter
 
-from jindai.models import Paragraph
+from jindai.models import Paragraph, MediaItem
 from jindai.plugin import Plugin
 from jindai.helpers import APICrudEndpoint, APIResults, APIUpdate
 from jindai.task import Task
@@ -16,7 +17,15 @@ from plugins.pipelines.basics import AccumulateParagraphs, LanguageDetect, WordC
 
 
 class Dada(Paragraph):
-    pass
+
+    def save(self):
+        return super().save()
+    
+    def as_dict(self, expand: bool = False) -> dict:
+        result = super().as_dict(expand)
+        if isinstance(self.pdate, datetime.datetime):
+            result['pdate'] = self.pdate.strftime('%Y-%m-%d')
+        return result
 
 
 parser = QExprInterpreter('tags')
@@ -38,8 +47,8 @@ class DadaEndpoints(APICrudEndpoint):
             wlds.apply_params('dada', url, scopes, mongocollection='dada', list_depth=depth, **params)
             results = Task({'content': url}, [
                 wlds,
-                LanguageDetect(),
                 ExtractHTMLParagraphs(assignments=assignments),
+                LanguageDetect(),
                 FieldAssignment('tags', '$keywords'),
                 WordCut(True),
                 AccumulateParagraphs()
@@ -49,16 +58,21 @@ class DadaEndpoints(APICrudEndpoint):
         return APIResults(results)
 
     def llm(self, objs, messages=None):
-        if messages:
-            resp = requests.post(self.llm_endpoint, json={'thread': messages}, headers={'Content-Type': 'application/json', 'Agent': 'jindai-mt/1.0'})
-            try:
-                resp = resp.json()
-            except requests.JSONDecodeError:
-                raise ValueError(resp.content)
-            assert resp and resp['success'], f'Failed with response: {resp.content}'
-            response = resp['choices'][0]['message']['content']
-        else:
-            response = ''
+        # TEST
+        enabled = False
+        response = f'''测试文本测试文本---你提交了{len(messages)}条消息，其中第一条的文本长度为{len(messages[0]['content'])}。---\n'''
+        
+        if enabled:
+            if messages:
+                resp = requests.post(self.llm_endpoint, json={'thread': messages}, headers={'Content-Type': 'application/json', 'Agent': 'jindai-mt/1.0'})
+                try:
+                    resp = resp.json()
+                except requests.JSONDecodeError:
+                    raise ValueError(resp.content)
+                assert resp and resp['success'], f'Failed with response: {resp.content}'
+                response = resp['choices'][0]['message']['content']
+            else:
+                response = ''
 
         return APIResults([Dada(content=response, lang='auto', dataset='dada')])
     
@@ -68,6 +82,13 @@ class DadaEndpoints(APICrudEndpoint):
             wc.resolve(obj)
             obj.save()
         return APIUpdate()
+    
+    def update_object(self, obj, data):
+        if 'images' in data:
+            images = data['images']
+            images = [MediaItem.get(i['src']) if 'src' in i and '_id' not in i else i.get('_id') for i in images]
+            data['images'] = images
+        return super().update_object(obj, data)
 
 
 class DadaBackendPlugin(Plugin):

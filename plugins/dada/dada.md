@@ -15,6 +15,7 @@
 |tags|List[str]|标签列表|
 |pdate|Union[str, datetime]|日期或年份（四位数）或yyyy-mm格式的年月信息|
 |source|SourceObject|来源信息|
+|src|str|图片来源的绝对路径|
 
 ### `MediaItem` 多媒体内容
 
@@ -26,16 +27,19 @@
 |item_type|str|多媒体内容类型，图像为 image，视频为 video，音频为 audio|
 |thumbnail|str|缩略图地址，一般为空|
 |source|SourceObject|来源信息|
+|src|str|图片来源的绝对路径|
 
 ### `SourceObject` 来源信息
 
 | 字段名 | 类型 | 意义 |
 |-------|-----|------|
 |file|str|本地文件路径，可选|
+|page|int|本地文件为 PDF 时的页码，从 0 开始，可选|
 |url|str|网址路径，可选|
 
-- `file` 和 `url` 至少有一项有内容
-- 优先使用 `file`，此时从 `/images/file/${source.file}`（注意开头没有 `/api`）获取文件内容
+- `file` 和 `url` 至少有一项有内容。
+- `page` 仅在 `file` 表示的是一个 PDF 文件时存在。
+- （8/30更新）注：使用 `MediaItem` 或 `Dada` 的 `src` 字段获得完整路径。如果为空说明无对应图片。
 
 
 ### `APIUpdate` 更新返回
@@ -50,9 +54,9 @@
 
 | 字段名 | 类型 | 意义 |
 |-------|-----|------|
-|query|str|查询字符串|
+|query|str|查询字符串，若不是查询所得，则为空字符串|
 |results|List[Dada]|查询结果|
-|total|int|查询总数|
+|total|int|查询总数，-1表示不确定（可以通过 `results` 的长度确定）|
 
 
 ## API 调用
@@ -76,7 +80,7 @@ headers: {
 }
 ```
 
-测试期间，不做鉴权要求，所有 `/api/dada` 下的 API 均可直接访问。
+测试期间，不做鉴权要求，所有 `/api/dada` 下的 API 均可直接访问。（8/30更新：做一个简单的登录界面即可。）
 
 
 ### 增删改查操作
@@ -85,7 +89,7 @@ headers: {
 
 - 新增
 
-使用 PUT 方法新增项目。PUT 的请求体为一个 `Dada` 数据项。
+使用 PUT 方法新增项目。PUT 的请求体为一个 `Dada` 数据项，可以不写全字段，不要设置 `_id` 字段。
 返回一个 `APIUpdate`，其中 `bundle` 为新增的完整 `Dada` 数据项。
 
 - 删除
@@ -120,11 +124,11 @@ headers: {
 |offset|int|要跳过的结果数量，默认为0即从头开始|
 |sort|str|排序，默认为按照ID升序|
 
-返回一个 `APIResults`，即查询结果。
+返回一个 `APIResults`，即查询结果。排序时，用 `-` 表示逆序，如 `-pdate` 表示按日期逆序。多个字段排序可以用 `,` 组合起来，如 `_id,-pdate` 表示先按 ID 升序，再按日期降序。
 
 - 按 ID 获取单个项目
 
-使用 GET 方法，路径格式为：`/api/dada/${_id}`。不接受其他参数。
+使用 GET 方法，路径格式为：`/api/dada/${_id}`。不要带任何参数。
 
 返回一个 `Dada` 数据项。
 
@@ -146,17 +150,16 @@ headers: {
 |list_link|str|检验是否需要抓取链接的正则表达式|
 |img_pattern|str|图像检索标记，一般留空|
 
-注：
-其中，元素和属性之间用`//`隔开，如`div.some-class a[href]//text`，表示获取`some-class`类的`div`中，具有`href`属性的`a`标签的`text`属性即文本。
+注：`assignments`的格式写作 `<field>="<css selector>//<attribute>"`，多个之间用 `,` 分割。如 `title="div.some-class a[href]//text"`，表示获取 `some-class` 类的 `div` 中，具有 `href` 属性的 `a` 标签的 `text` 属性即文本，保存到 `title` 字段中。
 
-返回一个`APIResults`，即抓取结果。如果抓取深度比较大或链接数量比较多，很可能运行非常久的时间，但这个先不管它，测试时务必使用 `depth` 为 1 的情况。
+返回一个 `APIResults`，即抓取结果。如果抓取深度比较大或链接数量比较多，很可能运行非常久的时间，但这个先不管它，测试时务必使用 `depth` 为 1 的情况。
 
 ### 调用语言模型（GPT）
 
 入口：`/api/dada/llm`
 
 参数：`messages`，格式与 GPT-3.5 的 `messages` 相同。
-返回一个`APIResults`，只有一个 `Dada` 数据项，其 `content` 由 GPT 生成的内容填充。
+返回一个 `APIResults`，其中数据项的 `content` 由 GPT 生成的内容填充，而其他字段均为空。
 
 注：该接口不稳定，可能调用失败。
 

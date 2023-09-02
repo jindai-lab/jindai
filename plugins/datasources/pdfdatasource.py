@@ -89,12 +89,12 @@ class PDFDataSource(DataSourceStage):
                 doc = fitz.open(stream.name)
             else:
                 doc = fitz.open('pdf', stream)
-            self.logger('importing', short_path)
+            self.log('importing', short_path)
             page_range = self.page_range
             if not page_range:
                 min_page = existent.get(short_path)
                 min_page = 0 if min_page is None else (min_page + 1)
-                self.logger('... from page', min_page)
+                self.log('... from page', min_page)
                 page_range = range(min_page, doc.page_count)
 
             lang = self.lang
@@ -119,7 +119,7 @@ class PDFDataSource(DataSourceStage):
                         dataset=self.name
                     )
                 except Exception as ex:
-                    self.logger(filepath, page+1, ex)
+                    self.log(filepath, page+1, ex)
 
             if not existent.get(short_path) and imported_pages == 0:
-                self.logger(filepath, 'no sufficient texts found.')
+                self.log(filepath, 'no sufficient texts found.')

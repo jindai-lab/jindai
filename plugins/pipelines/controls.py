@@ -20,15 +20,15 @@ class FlowControlStage(PipelineStage):
         super().__init__()
 
     @property
-    def logger(self):
-        """Logger"""
-        return lambda *x: self._logger(self.instance_name or self.__class__.__name__, '|', *x)
+    def log(self):
+        """log"""
+        return lambda *x: self._log(self.instance_name or self.__class__.__name__, '|', *x)
 
-    @logger.setter
-    def logger(self, val):
-        self._logger = val
+    @log.setter
+    def log(self, val):
+        self._log = val
         for pipeline in self._pipelines:
-            pipeline.logger = val
+            pipeline.log = val
 
     @property
     def verbose(self):
@@ -72,7 +72,7 @@ class RepeatWhile(FlowControlStage):
         self.times_key = f'REPEATWHILE_{id(self)}_TIMES_COUNTER'
         self.cond = parser.parse(
             cond if cond else f'{self.times_key} < {times}')
-        self.pipeline = Pipeline(pipeline, self.logger)
+        self.pipeline = Pipeline(pipeline, self.log)
         super().__init__()
 
     def resolve(self, paragraph):
@@ -114,7 +114,7 @@ class ForEach(FlowControlStage):
         """
         self.as_name = as_name
         self.input_value = parser.parse(input_value)
-        self.pipeline = Pipeline(pipeline, self.logger)
+        self.pipeline = Pipeline(pipeline, self.log)
         super().__init__()
 
     def resolve(self, paragraph):
@@ -147,8 +147,8 @@ class Condition(FlowControlStage):
                 @zhs 条件不成立时执行的流程
         """
         self.cond = parser.parse(cond)
-        self.iftrue = Pipeline(iftrue, self.logger)
-        self.iffalse = Pipeline(iffalse, self.logger)
+        self.iftrue = Pipeline(iftrue, self.log)
+        self.iffalse = Pipeline(iffalse, self.log)
         super().__init__()
         
     def resolve(self, paragraph):
@@ -257,7 +257,7 @@ class AggregateDataSource(FlowControlStage):
                 @zhs 各数据源
         """
         super().__init__()
-        self._pipelines = [Pipeline(pipeline, self.logger) for pipeline in pipelines]
+        self._pipelines = [Pipeline(pipeline, self.log) for pipeline in pipelines]
         
     def resolve(self, paragraph):
         if self._pipelines:

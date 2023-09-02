@@ -1,7 +1,6 @@
 """DB Objects"""
 import datetime
 from typing import Iterable, List, Union
-import unicodedata
 import dateutil
 import time
 from hashlib import sha1
@@ -96,7 +95,48 @@ class ObjectWithSource(db.DbObject):
         if not s_file and t_file:
             source1['file'] = t_file
         return source1
+
+    def get_src(self):
+        src = self.source_path
+        if src.startswith('http://') or src.startswith('https://'):
+            return src
+        
+        if src.startswith('hdf5://'):
+            if getattr(self, 'item_type', 'image') == 'image':
+                src += '/image.jpg'
+            elif getattr(self, 'item_type', '') == 'video':
+                src += '/image.mp4'
+        
+        if '://' not in src:
+            src = 'file://' + src
+        
+        return '/images/' + '/'.join(src.split('://', 1)).replace('#', '__hash/')
     
+    def as_dict(self, expand: bool = False):
+        result = super().as_dict(expand)
+        result['src'] = self.get_src()
+        return result
+
+    @property
+    def source_path(self) -> str:
+        """Get full path for data"""
+        if self.source.get('file'):
+            filename = self.source['file']
+            if '://' in filename:
+                return filename.replace('$', str(self.id))
+            elif filename.lower().endswith('.pdf') and 'page' in self.source:
+                return f'{self.source["file"]}#pdf/{self.source["page"]}/page.png'
+            else:
+                return storage.expand_path(filename)
+        elif self.source.get('url'):
+            return self.source['url']
+        else:
+            return ''
+
+    def save(self):
+        if 'src' in self.__dict__:
+            del self.src
+        super().save()
     
 class SourceMongoOperand(MongoField):
     
@@ -189,25 +229,11 @@ class MediaItem(ObjectWithSource):
         self._image_flag = True
         
     @property
-    def data_path(self) -> str:
-        """Get full path for data"""
-        if self.source.get('file'):
-            filename = self.source['file']
-            if '://' in filename:
-                return filename.replace('$', str(self.id))
-            elif filename.lower().endswith('.pdf') and 'page' in self.source:
-                return f'{self.source["file"]}#pdf/{self.source["page"]}'
-            else:
-                return storage.expand_path(filename)
-        elif self.source.get('url'):
-            return self.source['url']
-
-    @property
     def data(self) -> BytesIO:
         """Get raw BytesIO for image data"""
         if not self._data:
             try:
-                buf = storage.open(self.data_path, 'rb').read()
+                buf = storage.open(self.source_path, 'rb').read()
                 self._data = BytesIO(buf)
             except OSError:
                 self._data = BytesIO()

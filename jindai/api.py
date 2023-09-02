@@ -638,12 +638,10 @@ class APIUserEndpoint(APICrudEndpoint):
         return super().update_object(obj, data)
 
     def read(self, objs, **data):
-        if isinstance(objs, tuple):
-            return APIResults([
-                self.select_fields(o, ['username', 'roles', 'datasets'])
-                for o in objs
-            ], objs[1])
-        return {}
+        return APIResults([
+            self.select_fields(o, ['username', 'roles', 'datasets'])
+            for o in objs
+        ], objs.count())
 
     def create(self, username='', password='', **_):
         assert username and password

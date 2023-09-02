@@ -32,6 +32,7 @@ class OPDSDataSource(DataSourceStage):
         
     def fetch(self):
         url = self.search.format(searchTerms=urllib.parse.quote(self.query))
+        self.log(url)
         try:
             xr = etree.fromstring(requests.get(url).content).getroottree()
         except:
