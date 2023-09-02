@@ -21,6 +21,7 @@ import requests
 import werkzeug.wrappers.response
 from bson import ObjectId
 from flask import Response, jsonify, request, Flask, abort
+from flask.json.provider import JSONProvider as JSONProvideBase
 from PIL.Image import Image
 from PyMongoWrapper import MongoOperand, QExprEvaluator, F
 from PyMongoWrapper.dbo import (
@@ -50,6 +51,15 @@ def _me(param=""):
     if param:
         param += ":"
     return param + logined()
+
+
+class JSONProvider(JSONProvideBase):
+
+    def dumps(self, obj, **kwargs):
+        return json.dumps(obj, **kwargs, cls=JSONEncoder)
+    
+    def loads(self, sbuf, **kwargs):
+        return json.loads(sbuf, **kwargs, cls=JSONDecoder)
 
 
 class WordStemmer:
