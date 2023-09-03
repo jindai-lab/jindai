@@ -376,6 +376,9 @@ class Hashing(HashingBase):
         self.register_filter(
             'around', handler=self.handle_filter_around
         )
+        self.register_filter(
+            'noncontinous', handler=self.handle_filter_noncontinous
+        )
         
         self._around_cache = CacheDict()
 
@@ -419,6 +422,14 @@ class Hashing(HashingBase):
         dha1, dhb1 = to_int(i.dhash), to_int(i.whash)
         i.score = bitcount(context.dha ^ dha1) + bitcount(context.dhb ^ dhb1)
         return i
+    
+    def handle_filter_noncontinous(self, dbq, field):
+        last_val = None
+        dbq.limit = 0
+        for paragraph in dbq.fetch_all_rs():
+            if paragraph[field] != last_val:
+                yield paragraph
+                last_val = paragraph[field]
 
     def handle_filter_around(self, dbq, cond, count=1):
         cond = parser.parse(cond)
