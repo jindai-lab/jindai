@@ -1182,7 +1182,7 @@ class FilterStopWords(PipelineStage):
         l: safe_import('many_stop_words').get_stop_words(l) for l in ['en', 'fr', 'de', 'ru', 'ja', 'zh']
     }
     
-    _punctuations = re.compile(r'[\u3000-\u303F\uFF00-\uFFEF\"\'{}()\[\]\\*&.?!,…:;@#!]')
+    _punctuations = re.compile(r'^[\u3000-\u303F\uFF00-\uFFEF\"\'{}()\[\]\\*&.?!,…:;@#!]$')
     
     @staticmethod
     def get(lang):
