@@ -23,6 +23,8 @@ from bson import ObjectId
 from flask import Response, jsonify, request, Flask, abort
 from flask.json.provider import JSONProvider as JSONProvideBase
 from PIL.Image import Image
+from threading import Lock
+
 from PyMongoWrapper import MongoOperand, QExprEvaluator, F
 from PyMongoWrapper.dbo import (
     create_dbo_json_decoder,
@@ -105,6 +107,9 @@ parser.functions["me"] = _me
 parser.functions["stem"] = WordStemmer().stem_from_params
 
 
+_pip_lock = Lock()
+
+
 def safe_import(module_name, package_name=""):
     """
     Import a module and if it's not installed install it.
@@ -117,9 +122,10 @@ def safe_import(module_name, package_name=""):
     try:
         importlib.import_module(module_name)
     except ImportError:
-        subprocess.call(
-            [sys.executable, "-m", "pip", "install", package_name or module_name]
-        )
+        with _pip_lock:
+            subprocess.call(
+                [sys.executable, "-m", "pip", "install", package_name or module_name]
+            )
     return importlib.import_module(module_name)
 
 

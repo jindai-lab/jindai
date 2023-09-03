@@ -4,7 +4,6 @@ Basic processing for multimedia materials
 """
 import os
 import tempfile
-import traceback
 import requests
 from io import BytesIO
 from typing import Union
@@ -14,8 +13,7 @@ import numpy as np
 from jindai import PipelineStage, parser, storage
 from jindai.helpers import safe_import
 from jindai.models import MediaItem, Paragraph
-from PIL import Image, ImageOps
-from PyMongoWrapper import ObjectId
+from PIL import Image, ImageOps, UnidentifiedImageError
 
 
 class VideoItemImageDelegate:
@@ -106,16 +104,14 @@ class CheckImage(MediaItemStage):
     """
 
     def resolve_image(self, i: MediaItem, _):
-        if i.source.get('url', '').split('.')[-1].lower() in ('mp4', 'avi'):
-            return None
         try:
             image = i.image
             i.width, i.height = image.width, image.height
             image.verify()
             i.save()
             return i
-        except Exception as ex:
-            self.log_exception('Error while checking image for {i.id}', ex)
+        except UnidentifiedImageError as ex:
+            self.log_exception(f'Error while checking image for {i.id}', ex)
         return i
 
 
@@ -331,15 +327,14 @@ class DownloadMedia(MediaItemStage):
             'http': proxy, 'https': proxy
         } if proxy else {}
         self.target = target
+        if target and not self.target.endswith('/'):
+            self.target += '/'
 
     def resolve_item(self, i: MediaItem, post):
         if not i.id:
             i.save()
 
-        if i.no_download:
-            return
-
-        if 'file' in i.source:
+        if i.no_download or 'file' in i.source:
             return
 
         try:
@@ -358,16 +353,13 @@ class DownloadMedia(MediaItemStage):
 
             content = resp.content
         except Exception as ex:
-            if isinstance(ex, OSError):
-                i.no_download = True
-                i.save()
             self.log_exception(
                 f'Error while downloading item {i.source.url}',
                 ex)
             return
 
         if self.target:
-            path = self.target + str(i.id)
+            path = f'{self.target}{i.id}'
         else:
             path = storage.default_path(i.id)
         with storage.open(path, 'wb') as output:
@@ -375,8 +367,8 @@ class DownloadMedia(MediaItemStage):
             self.log(i.id, len(content))
 
         i.source = {'file': path, 'url': i.source['url']}
-        i.data = BytesIO(content)
         i.save()
+        i.data = BytesIO(content)
 
 
 class QRCodeScanner(PipelineStage):

@@ -176,7 +176,7 @@ class ImageHash(MediaItemStage):
 
             i.dhash, i.whash = i_dhash, i_whash
         except (IOError, AssertionError) as ex:
-            self.log_exception('Error while hashing image', ex)
+            self.log_exception(f'Error while hashing image {i.id}', ex)
 
         i.save()
         return i
