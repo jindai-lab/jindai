@@ -245,7 +245,9 @@ class DBQuery:
         # test plugin pages
         if pmanager and len(self.query) > 0 and '$plugin' in self.query[-1]:
             self.query, plugin_args = self.query[:-1], \
-                self.query[-1]['$plugin'].split('/')
+                self.query[-1]['$plugin']
+            if isinstance(plugin_args, str):
+                plugin_args = [plugin_args]
         else:
             plugin_args = []
 

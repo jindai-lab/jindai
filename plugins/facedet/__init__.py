@@ -71,7 +71,7 @@ class FaceDetPlugin(HashingBase):
         self.det = FaceDet()
         self.register_pipelines([FaceDet])
         self.register_filter(
-            'face', 'e', 'face/{mediaitem._id}', 'mdi-emoticon-outline', self.handle_filter)
+            'face', 'e', 'face,o"{mediaitem._id}"', 'mdi-emoticon-outline', self.handle_filter)
         MediaItem.set_field('faces', DbObjectCollection(bytes))
 
     def handle_filter_check(self, context):
