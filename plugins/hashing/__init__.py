@@ -371,13 +371,13 @@ class Hashing(HashingBase):
         MediaItem.set_field('whash', bytes)
         self.register_pipelines([ImageHashDuplications, ImageHash])
         self.register_filter(
-            'sim', keybind='s', format_string='sim/{mediaitem._id}', icon='mdi-image',
+            'sim', keybind='s', format_string='sim,o"{mediaitem._id}"', icon='mdi-image',
             handler=self.handle_filter)
         self.register_filter(
             'around', handler=self.handle_filter_around
         )
         self.register_filter(
-            'noncontinous', handler=self.handle_filter_noncontinous
+            'combine', handler=self.handle_filter_combine
         )
         
         self._around_cache = CacheDict()
@@ -423,14 +423,19 @@ class Hashing(HashingBase):
         i.score = bitcount(context.dha ^ dha1) + bitcount(context.dhb ^ dhb1)
         return i
     
-    def handle_filter_noncontinous(self, dbq, field):
+    def handle_filter_combine(self, dbq, field):
         last_val = None
-        dbq.limit = 0
+        last_paragraph = None
+        dbq.limit = 1000
         for paragraph in dbq.fetch_all_rs():
-            if paragraph[field] != last_val:
-                yield paragraph
+            if paragraph[field] == last_val:
+                last_paragraph.images += paragraph.images
+            else:
+                if last_paragraph: yield last_paragraph
                 last_val = paragraph[field]
-
+                last_paragraph = paragraph
+        if last_paragraph: yield last_paragraph
+        
     def handle_filter_around(self, dbq, cond, count=1):
         cond = parser.parse(cond)
         prevs = []
