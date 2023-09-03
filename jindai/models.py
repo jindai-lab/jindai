@@ -1,6 +1,7 @@
 """DB Objects"""
 import datetime
 from typing import Iterable, List, Union
+import urllib.parse
 import dateutil
 import time
 from hashlib import sha1
@@ -101,12 +102,19 @@ class ObjectWithSource(db.DbObject):
         if src.startswith('http://') or src.startswith('https://'):
             return src
         
+        def _get_ext(source):
+            filename = source.get('url', source.get('file', '')).split('/')[-1]
+            if '.' in filename:
+                return filename.rsplit('.', 1)[1].split('?')[0]
+            elif '?' in filename:
+                fmtarg = urllib.parse.parse_qs(filename.split('?', 1)[1]).get('format') or []
+                if fmtarg:
+                    return fmtarg[0]
+            return 'data'
+
         if src.startswith('hdf5://'):
-            if getattr(self, 'item_type', 'image') == 'image':
-                src += '/image.jpg'
-            elif getattr(self, 'item_type', '') == 'video':
-                src += '/image.mp4'
-        
+            src += '/image.' + _get_ext(self.source)
+            
         if '://' not in src:
             src = 'file://' + src
         
