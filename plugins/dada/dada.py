@@ -64,24 +64,19 @@ class DadaEndpoints(APICrudEndpoint):
         return APIResults(results)
 
     def llm(self, objs, messages=None):
-        # TEST
-        enabled = False
-        response = f'''测试文本测试文本---你提交了{len(messages)}条消息，其中最后一条的文本长度为{len(messages[-1]['content'])}。---\n'''
 
-        if enabled:
-            if messages:
-                resp = requests.post(self.llm_endpoint, json={'thread': messages}, headers={
-                                     'Content-Type': 'application/json', 'Agent': 'jindai-mt/1.0'})
-                try:
-                    resp = resp.json()
-                except requests.JSONDecodeError:
-                    raise ValueError(resp.content)
+        if messages:
+            resp = requests.post(self.llm_endpoint, json={'thread': messages}, headers={
+                                    'Content-Type': 'application/json', 'Agent': 'jindai-mt/1.0'})
+            try:
+                resp = resp.json()
                 assert resp and resp['success'], f'Failed with response: {resp.content}'
                 response = resp['choices'][0]['message']['content']
-            else:
-                response = ''
-
-        return APIResults([Dada(content=response, lang='auto', dataset='dada')])
+                return APIResults([Dada(content=response, lang='auto', dataset='dada')])
+            except requests.JSONDecodeError:
+                raise ValueError(resp.content)
+        else:
+            response = ''
     
     def prompts(self, objs, action='', prompt=''):
         prompts_obj = Meta.first(F.prompts.exists(1)) or Meta(prompts=[])
