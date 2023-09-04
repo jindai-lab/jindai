@@ -32,6 +32,7 @@ class CachedWebAccess:
         if not os.path.exists(base):
             os.mkdir(base)
         self.base = base
+        self.browser = None
 
     def _digest(self, url):
         return os.path.join(self.base, sha1(url.encode('utf-8')).hexdigest())
@@ -40,14 +41,20 @@ class CachedWebAccess:
         result = {}
 
         async def fetch():
-            browser = await pyppeteer.launcher.connect(
-                browserWSEndpoint=config.browserless
-            )
-            page = await browser.newPage()
+            
+            def _clear():
+                self.browser = None
+            
+            if not self.browser:
+                self.browser = await pyppeteer.launcher.connect(
+                    browserWSEndpoint=config.browserless
+                )
+                self.browser.on("disconnected", _clear)
+                
+            page = await self.browser.newPage()
             await page.goto(url)
             values = await page.evaluate('''() => document.documentElement.outerHTML''')
             result['data'] = values.encode('utf-8')
-            await browser.close()
         
         asyncio.run(fetch())
         return result.get('data')

@@ -7,10 +7,6 @@ from jindai.pipeline import PipelineStage
 from jindai.models import MediaItem, Paragraph
 from jindai.helpers import safe_import
 
-safe_import('clip_interrogator')
-
-Paragraph.ensure_index('caption')
-
 
 class ImageCaptioning(PipelineStage):
     """Image Captioning
@@ -24,6 +20,7 @@ class ImageCaptioning(PipelineStage):
             topk (int): top results
         '''
         super().__init__()
+        safe_import('clip_interrogator')
         from clip_interrogator import Config, Interrogator, LabelTable
         ci = Interrogator(Config(caption_model_name='blip-base'))
         if labels:
@@ -66,4 +63,5 @@ class ImageCaptioningPlugin(Plugin):
 
     def __init__(self, pmanager, **conf) -> None:
         super().__init__(pmanager, **conf)
+        Paragraph.ensure_index('caption')
         self.register_pipelines([ImageCaptioning])
