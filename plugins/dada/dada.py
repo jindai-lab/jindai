@@ -5,9 +5,9 @@ import os
 import requests
 import markdown
 import datetime
-from PyMongoWrapper import QExprInterpreter
+from PyMongoWrapper import QExprInterpreter, F
 
-from jindai.models import Paragraph, MediaItem
+from jindai.models import Paragraph, MediaItem, Meta
 from jindai.plugin import Plugin
 from jindai.helpers import APICrudEndpoint, APIResults, APIUpdate
 from jindai.task import Task
@@ -42,6 +42,7 @@ class DadaEndpoints(APICrudEndpoint):
         self.llm_endpoint = llm_endpoint
         self.bind_endpoint(self.llm)
         self.bind_endpoint(self.fetch)
+        self.bind_endpoint(self.prompts)
         self.bind_endpoint(self.keywords)
 
     def fetch(self, objs, url, depth=1, assignments=None, selector='body', scopes='', **params):
@@ -65,7 +66,7 @@ class DadaEndpoints(APICrudEndpoint):
     def llm(self, objs, messages=None):
         # TEST
         enabled = False
-        response = f'''测试文本测试文本---你提交了{len(messages)}条消息，其中第一条的文本长度为{len(messages[0]['content'])}。---\n'''
+        response = f'''测试文本测试文本---你提交了{len(messages)}条消息，其中最后一条的文本长度为{len(messages[-1]['content'])}。---\n'''
 
         if enabled:
             if messages:
@@ -81,6 +82,20 @@ class DadaEndpoints(APICrudEndpoint):
                 response = ''
 
         return APIResults([Dada(content=response, lang='auto', dataset='dada')])
+    
+    def prompts(self, objs, action='', prompt=''):
+        prompts_obj = Meta.first(F.prompts.exists(1)) or Meta(prompts=[])
+        if action == 'create' and prompt:
+            prompts_obj.prompts.append(prompt)
+            prompts_obj.save()
+            return APIResults(bundle=prompt)
+        elif action == 'delete' and prompt:
+            if prompt in prompts_obj.prompts:
+                prompts_obj.prompts.remove(prompt)
+            prompts_obj.save()
+            return APIResults(bundle=prompt)
+        else:
+            return APIResults(prompts_obj.prompts)
 
     def keywords(self, objs):
         wc = WordCut(for_search=True, field='keywords')
