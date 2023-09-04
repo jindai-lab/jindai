@@ -25,16 +25,16 @@ class PipelineStage:
         self.instance_name = name
 
     @classmethod
-    def get_spec(cls):
+    def get_spec(cls, undocumented=False):
         """Get specification info of the current stage"""
         return {
             'name': cls.__name__,
             'doc': (cls.__doc__ or '').strip(),
-            'args': PipelineStage._spec(cls)
+            'args': PipelineStage._spec(cls, undocumented)
         }
 
     @staticmethod
-    def _spec(stage_cls: Type, method='__init__'):
+    def _spec(stage_cls: Type, method='__init__', undocumented=False):
         """Get argument info for method of stage_cls
 
         :param stage_cls: a class
@@ -98,14 +98,24 @@ class PipelineStage:
                 args_docs[arg]['default'] = json.dumps(
                     args_defaults[arg], ensure_ascii=False)
 
-        return [
-            {
-                'name': key,
-                'type': val.get('type'),
-                'description': val.get('description'),
-                'default': val.get('default')
-            } for key, val in args_docs.items() if 'type' in val
-        ]
+        if undocumented:
+            return [
+                {
+                    'name': key,
+                    'type': type(val).__name__,
+                    'description': '',
+                    'default': val
+                } for key, val in args_defaults.items()
+            ]
+        else:
+            return [
+                {
+                    'name': key,
+                    'type': val.get('type'),
+                    'description': val.get('description'),
+                    'default': val.get('default')
+                } for key, val in args_docs.items() if 'type' in val
+            ]
 
     @staticmethod
     def return_file(ext: str, data: bytes, **kwargs):
@@ -233,7 +243,7 @@ class DataSourceStage(PipelineStage):
         self.params = params
 
     @classmethod
-    def get_spec(cls):
+    def get_spec(cls, undocumented=False):
         """Overwrite the method for getting specifications
 
         :return: Name, docstring and argument info
@@ -242,7 +252,7 @@ class DataSourceStage(PipelineStage):
         return {
             'name': cls.__name__,
             'doc': (cls.__doc__ or '').strip(),
-            'args': PipelineStage._spec(cls, 'apply_params')
+            'args': PipelineStage._spec(cls, 'apply_params', undocumented)
         }
 
     def before_fetch(self, instance):
@@ -301,7 +311,7 @@ class Pipeline:
         :param args: a dictionary containing arguments
         :type args: Dict
         """
-        argnames = [_['name'] for _ in stage_type.get_spec()['args']]
+        argnames = [_['name'] for _ in stage_type.get_spec(undocumented=True)['args']]
 
         toremove = []
         for k in args:

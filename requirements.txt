@@ -38,3 +38,5 @@ pymupdf
 antlr4-python3-runtime==4.12
 nanoid
 authlib
+pyppeteer
+asyncio

@@ -764,7 +764,13 @@ class APICrudEndpoint:
 
             # Returns the object for the operation.
             if operation == "create":
-                return self.create(**data)
+                if data.get('objects') and isinstance(data['objects'], list):
+                    ids = []
+                    for obj in data['objects']:
+                        ids.append(self.create(**obj).bundle)
+                    return APIUpdate(bundle=ids)
+                else:
+                    return self.create(**data)
             else:
                 return getattr(self, operation)(objs, **data)
 

@@ -346,8 +346,8 @@ class Paragraph(ObjectWithSource):
 
         super().save()
 
-    @staticmethod
-    def get_coll(coll):
+    @classmethod
+    def get_coll(cls, coll):
         """Get subclass of Paragraph pointing to specific collection
 
         :param coll: collection name in MongoDB
@@ -357,11 +357,11 @@ class Paragraph(ObjectWithSource):
         """
 
         if coll and coll not in ('null', 'default', 'undefined', 'paragraph'):
-            class _Temp(Paragraph):
+            class _Temp(cls):
                 _collection = coll
             return _Temp
 
-        return Paragraph
+        return cls
 
     @staticmethod
     def get_converter(coll):
