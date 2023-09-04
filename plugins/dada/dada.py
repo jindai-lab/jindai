@@ -13,14 +13,17 @@ from jindai.helpers import APICrudEndpoint, APIResults, APIUpdate
 from jindai.task import Task
 
 from plugins.datasources.htmldatasource import WebPageListingDataSource, ExtractHTMLParagraphs
-from plugins.pipelines.basics import AccumulateParagraphs, LanguageDetect, WordCut, FieldAssignment
+from plugins.pipelines.basics import AccumulateParagraphs, LanguageDetect, WordCut, FieldAssignment, FilterStopWords
 
 
 class Dada(Paragraph):
 
+    tags = list
+
     def save(self):
+        self.tags = list(set(self.tags))
         return super().save()
-    
+
     def as_dict(self, expand: bool = False) -> dict:
         result = super().as_dict(expand)
         if isinstance(self.pdate, datetime.datetime):
@@ -41,16 +44,18 @@ class DadaEndpoints(APICrudEndpoint):
         self.bind_endpoint(self.fetch)
         self.bind_endpoint(self.keywords)
 
-    def fetch(self, objs, url, depth=1, assignments=None, scopes='', **params):
+    def fetch(self, objs, url, depth=1, assignments=None, selector='body', scopes='', **params):
         if url:
-            wlds = WebPageListingDataSource()
-            wlds.apply_params('dada', url, scopes, mongocollection='dada', list_depth=depth, **params)
+            wlds = WebPageListingDataSource(base_cls=Dada, dataset='dada', scopes=scopes,
+                                            content=url, mongocollection='dada', list_depth=int(depth), **params)
             results = Task({'content': url}, [
                 wlds,
-                ExtractHTMLParagraphs(assignments=assignments),
+                ExtractHTMLParagraphs(
+                    paragraph_selector=selector, assignments=assignments),
                 LanguageDetect(),
-                FieldAssignment('tags', '$keywords'),
+                FieldAssignment('tags', '[]'),
                 WordCut(True),
+                FilterStopWords(),
                 AccumulateParagraphs()
             ], resume_next=True).execute()
         else:
@@ -61,10 +66,11 @@ class DadaEndpoints(APICrudEndpoint):
         # TEST
         enabled = False
         response = f'''测试文本测试文本---你提交了{len(messages)}条消息，其中第一条的文本长度为{len(messages[0]['content'])}。---\n'''
-        
+
         if enabled:
             if messages:
-                resp = requests.post(self.llm_endpoint, json={'thread': messages}, headers={'Content-Type': 'application/json', 'Agent': 'jindai-mt/1.0'})
+                resp = requests.post(self.llm_endpoint, json={'thread': messages}, headers={
+                                     'Content-Type': 'application/json', 'Agent': 'jindai-mt/1.0'})
                 try:
                     resp = resp.json()
                 except requests.JSONDecodeError:
@@ -75,18 +81,19 @@ class DadaEndpoints(APICrudEndpoint):
                 response = ''
 
         return APIResults([Dada(content=response, lang='auto', dataset='dada')])
-    
+
     def keywords(self, objs):
         wc = WordCut(for_search=True, field='keywords')
         for obj in objs:
             wc.resolve(obj)
             obj.save()
         return APIUpdate()
-    
+
     def update_object(self, obj, data):
         if 'images' in data:
             images = data['images']
-            images = [MediaItem.get(i['src']) if 'src' in i and '_id' not in i else i.get('_id') for i in images]
+            images = [MediaItem.get(i['src']) if 'src' in i and '_id' not in i else i.get(
+                '_id') for i in images]
             data['images'] = images
         return super().update_object(obj, data)
 

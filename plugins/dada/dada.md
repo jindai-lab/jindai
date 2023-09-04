@@ -144,6 +144,7 @@ headers: {
 |可选参数：|
 |depth|str|抓取深度，默认为1|
 |assignments|Dict[str, str]|字段名和元素、属性对照表（注）|
+|selector|str|指定结果所在的 css selector，默认为 body 标签|
 |scopes|List[str]|允许的网址范围，即检查 URL 是否以这些字符串打头|
 |tags|List[str]|额外添加的标签|
 |detail_link|str|检验是否需要抓取详情的正则表达式|

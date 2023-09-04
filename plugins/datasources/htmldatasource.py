@@ -12,8 +12,11 @@ from hashlib import sha1
 from typing import Dict
 from urllib.parse import urljoin
 from bs4 import BeautifulSoup as B
+import pyppeteer
+import asyncio
 
 from PyMongoWrapper import F, Fn
+from jindai.helpers import config
 from jindai.models import MediaItem, Paragraph
 from jindai.pipeline import DataSourceStage, PipelineStage
 from jindai import storage, parser
@@ -32,6 +35,22 @@ class CachedWebAccess:
 
     def _digest(self, url):
         return os.path.join(self.base, sha1(url.encode('utf-8')).hexdigest())
+    
+    def request(self, url):
+        result = {}
+
+        async def fetch():
+            browser = await pyppeteer.launcher.connect(
+                browserWSEndpoint=config.browserless
+            )
+            page = await browser.newPage()
+            await page.goto(url)
+            values = await page.evaluate('''() => document.documentElement.outerHTML''')
+            result['data'] = values.encode('utf-8')
+            await browser.close()
+        
+        asyncio.run(fetch())
+        return result.get('data')
 
     def get(self, url):
         hashed = self._digest(url)
@@ -39,9 +58,13 @@ class CachedWebAccess:
             with open(hashed, 'rb') as fi:
                 return fi.read()
         else:
-            data = storage.open(url, 'rb').read()
-            with open(hashed, 'wb') as fo:
-                fo.write(data)
+            if url.split('://')[0] in ('http', 'https'):
+                data = self.request(url)
+            else:
+                data = storage.open(url, 'rb').read()
+            if data:
+                with open(hashed, 'wb') as fo:
+                    fo.write(data)
             return data
 
 
@@ -50,7 +73,7 @@ class WebPageListingDataSource(DataSourceStage):
     Import web page listings
     @zhs 从网页列表中导入语段
     """
-
+    
     cache = CachedWebAccess(os.path.join(
         os.path.dirname(tempfile.mkdtemp()), 'wpdl'))
 
@@ -69,7 +92,7 @@ class WebPageListingDataSource(DataSourceStage):
     def apply_params(self, dataset='', content='', scopes='',
                      mongocollection='', lang='auto', detail_link='',
                      list_link='', proxy='', list_depth=1, tags='',
-                     img_pattern='', level=1) -> None:
+                     img_pattern='', level=1, base_cls=None) -> None:
         """
         Args:
             dataset (DATASET):
@@ -106,6 +129,7 @@ class WebPageListingDataSource(DataSourceStage):
                 Mongo Collection name
                 @zhs 数据库集合名
         """
+        self.base_cls = base_cls or Paragraph
         self.proxies = {} if not proxy else {
             'http': proxy,
             'https': proxy
@@ -120,7 +144,7 @@ class WebPageListingDataSource(DataSourceStage):
         self.lang = lang
         self.image_patterns = PipelineStage.parse_lines(
             img_pattern) or DEFAULT_IMG_PATTERNS.split('\n')
-        self.collection = Paragraph.get_coll(mongocollection)
+        self.collection = self.base_cls.get_coll(mongocollection)
         self.level = level
 
     def get_url(self, url):
@@ -148,7 +172,7 @@ class WebPageListingDataSource(DataSourceStage):
         para.content = self.get_text(b)
         para.keywords = self.tags
         para.title = self.get_text(b.find('title'))
-
+        
         items = set()
 
         for imgp in self.image_patterns:
@@ -212,11 +236,11 @@ class WebPageListingDataSource(DataSourceStage):
             para.html = str(b)
 
             if level <= self.list_depth and (self.list_link.search(url) or self.detail_link.search(url)):
-                self.log('parse list', url)
+                self.log('parse list', url, 'level', level) 
                 for upath in self.parse_list(url, b):
                     if upath not in self.queued:
                         self.queued.add(upath)
-                        yield Paragraph(content=upath, level=level+1), self
+                        yield self.collection(content=upath, level=level+1), self
 
             if self.detail_link.search(url):
                 self.log('parse detail', url)
@@ -275,7 +299,7 @@ class ExtractHTMLParagraphs(PipelineStage):
         self.paragraph_selector = paragraph_selector
         if isinstance(assignments, str):
             assignments = parser.parse(assignments)
-        self.assignments = assignments or {}
+        self.assignments = assignments or {'content': '//text'}
 
     def _get_text(self, bs_ele):
         if bs_ele and bs_ele.text:
