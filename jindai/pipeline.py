@@ -26,7 +26,6 @@ class PipelineStage:
 
     @classmethod
     def get_spec(cls):
-    def get_spec(cls):
         """Get specification info of the current stage"""
         return {
             'name': cls.__name__,
