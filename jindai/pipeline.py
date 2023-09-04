@@ -26,6 +26,7 @@ class PipelineStage:
 
     @classmethod
     def get_spec(cls):
+    def get_spec(cls):
         """Get specification info of the current stage"""
         return {
             'name': cls.__name__,
@@ -97,6 +98,14 @@ class PipelineStage:
             if arg in args_defaults:
                 args_docs[arg]['default'] = repr(args_defaults[arg])
 
+        return [
+            {
+                'name': key,
+                'type': val.get('type'),
+                'description': val.get('description'),
+                'default': val.get('default')
+            } for key, val in args_docs.items() if 'type' in val
+        ]
         return [
             {
                 'name': key,
