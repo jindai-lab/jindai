@@ -30,7 +30,7 @@ class PipelineStage:
         return {
             'name': cls.__name__,
             'doc': (cls.__doc__ or '').strip(),
-            'args': PipelineStage._spec(cls, undocumented)
+            'args': PipelineStage._spec(cls, undocumented=undocumented)
         }
 
     @staticmethod
