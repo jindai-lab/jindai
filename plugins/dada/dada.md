@@ -175,7 +175,7 @@ headers: {
 |action|str|新建（create）或删除（delete），为空时表示查询|
 |prompt|str|要新建或删除的提示语|
 
-当 `action` 非空时，返回一个 `APIUpdate`，其中 `bundle` 为提示语内容。否则返回一个 `APIResults`，其中 `results` 列出了所有可选的提示语。
+返回一个 `APIResults`，其中 `results` 列出了所有可选的提示语。
 
 
 ### 生成全文关键字索引

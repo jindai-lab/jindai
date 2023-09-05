@@ -16,10 +16,16 @@ import pyppeteer
 import asyncio
 
 from PyMongoWrapper import F, Fn
-from jindai.helpers import config
+from jindai.helpers import config, safe_import
 from jindai.models import MediaItem, Paragraph
 from jindai.pipeline import DataSourceStage, PipelineStage
 from jindai import storage, parser
+
+
+trafilatura = safe_import('trafilatura')
+from trafilatura.settings import use_config
+trafcfg = use_config()
+trafcfg.set("DEFAULT", "EXTRACTION_TIMEOUT", "0")
 
 
 DEFAULT_IMG_PATTERNS = 'img[src]|[zoomfile]|[data-original]|[data-src]|[file]|[data-echo]'.replace(
@@ -289,7 +295,7 @@ class ExtractHTMLParagraphs(PipelineStage):
     @zhs 从 HTML 中提取段落
     """
 
-    def __init__(self, field='html', assignments='', paragraph_selector=''):
+    def __init__(self, field='html', autoextract=False, assignments='', paragraph_selector=''):
         """
         Args:
             field (str): Field to read HTML
@@ -300,6 +306,9 @@ class ExtractHTMLParagraphs(PipelineStage):
             paragraph_selector (str):
                 CSS selector for paragraph
                 @zhs 确定段落的 CSS 选择器，为空则整个网页作为一个段落
+            autoextract (bool):
+                Auto extract content
+                @zhs 自动提取内容
         """
         super().__init__()
         self.field = field
@@ -307,6 +316,7 @@ class ExtractHTMLParagraphs(PipelineStage):
         if isinstance(assignments, str):
             assignments = parser.parse(assignments)
         self.assignments = assignments or {'content': '//text'}
+        self.autoextract = autoextract
 
     def _get_text(self, bs_ele):
         if bs_ele and bs_ele.text:
@@ -333,6 +343,12 @@ class ExtractHTMLParagraphs(PipelineStage):
             elif value != 'keywords':
                 value = ' '.join(value)
             setattr(para, field_name, value)
+        if self.autoextract:
+            para.content = self.extract(str(bs_ele))
+    
+    def extract(self, html):
+        text = trafilatura.extract(html, config=trafcfg)
+        return text
 
     def resolve(self, paragraph: Paragraph) -> Paragraph:
         html = paragraph[self.field] or ''

@@ -105,14 +105,6 @@ class PipelineStage:
                 'default': val.get('default')
             } for key, val in args_docs.items() if 'type' in val
         ]
-        return [
-            {
-                'name': key,
-                'type': val.get('type'),
-                'description': val.get('description'),
-                'default': val.get('default')
-            } for key, val in args_docs.items() if 'type' in val
-        ]
 
     @staticmethod
     def return_file(ext: str, data: bytes, **kwargs):
