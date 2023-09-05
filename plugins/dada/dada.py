@@ -83,12 +83,12 @@ class DadaEndpoints(APICrudEndpoint):
         if action == 'create' and prompt:
             prompts_obj.prompts.append(prompt)
             prompts_obj.save()
-            return APIResults(bundle=prompt)
+            return APIUpdate(bundle=prompt)
         elif action == 'delete' and prompt:
             if prompt in prompts_obj.prompts:
                 prompts_obj.prompts.remove(prompt)
             prompts_obj.save()
-            return APIResults(bundle=prompt)
+            return APIUpdate(bundle=prompt)
         else:
             return APIResults(prompts_obj.prompts)
 
