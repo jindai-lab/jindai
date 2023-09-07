@@ -15,6 +15,7 @@ class FlowControlStage(PipelineStage):
     def __init__(self) -> None:
         self._verbose = False
         self._next = None
+        self._gctx = {}
         self._pipelines = [getattr(self, a) for a in dir(
             self) if isinstance(getattr(self, a), Pipeline)]
         super().__init__()
@@ -29,6 +30,16 @@ class FlowControlStage(PipelineStage):
         self._log = val
         for pipeline in self._pipelines:
             pipeline.log = val
+
+    @property
+    def gctx(self):
+        return self._gctx
+    
+    @gctx.setter
+    def gctx(self, val):
+        self._gctx = val
+        for pipeline in self._pipelines:
+            pipeline.gctx = val
 
     @property
     def verbose(self):

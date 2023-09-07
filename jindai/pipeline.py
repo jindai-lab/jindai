@@ -194,7 +194,7 @@ class PipelineStage:
         """
         return result
 
-    def flow(self, paragraph: Paragraph, gctx: dict) -> Tuple:
+    def flow(self, paragraph: Paragraph) -> Tuple:
         """Flow control
 
         :param paragraph: Paragraph to process
@@ -204,7 +204,6 @@ class PipelineStage:
         :yield: a tuple in form of (<result/iterable multiple results>, next pipeline stage)
         :rtype: Iterator[Tuple]
         """
-        self.gctx = gctx
         if self.verbose:
             self.log('Processing')
         results = self.resolve(paragraph)
@@ -337,6 +336,7 @@ class Pipeline:
         self.stages = []
         self.log = log
         self.verbose = verbose
+        self._gctx = {}
 
         counter = defaultdict(int)
 
@@ -367,6 +367,16 @@ class Pipeline:
                     self.stages[-1].next = stage
                 stage.next = None
                 self.stages.append(stage)
+
+    @property
+    def gctx(self):
+        return self._gctx
+    
+    @gctx.setter
+    def gctx(self, val):
+        self._gctx = val
+        for stage in self.stages:
+            stage.gctx = val
 
     def summarize(self, result=None):
         """Reduce period

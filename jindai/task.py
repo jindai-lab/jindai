@@ -163,7 +163,7 @@ class Task:
         
         self._workers = None
          
-    def _thread_execute(self, priority, fc, gctx):
+    def _thread_execute(self, priority, fc):
         input_paragraph, stage = fc
 
         self._pbar.update(1)
@@ -175,7 +175,7 @@ class Task:
         try:
             priority -= 1
             counter = 0
-            for fc in stage.flow(input_paragraph, gctx):
+            for fc in stage.flow(input_paragraph):
                 if fc[1] is None:
                     continue
                 self._queue.put((priority, (id(fc[0]), id(fc[1])), fc))
@@ -201,7 +201,7 @@ class Task:
         self._workers = WorkersPool(self.concurrent)
         self._pbar.reset()
         
-        gctx = {}
+        self.pipeline.gctx = {}
         
         try:
             if self.pipeline.stages:
@@ -224,7 +224,7 @@ class Task:
                             time.sleep(0.1)
                         else:
                             priority, _, job = self._queue.get()
-                            self._workers.submit(self._thread_execute, priority, job, gctx)
+                            self._workers.submit(self._thread_execute, priority, job)
             
             if self.alive:
                 return self.pipeline.summarize()

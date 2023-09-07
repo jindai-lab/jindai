@@ -38,41 +38,37 @@ class CachedWebAccess:
         if not os.path.exists(base):
             os.mkdir(base)
         self.base = base
-        self.browser = None
-
+        
     def _digest(self, url):
         return os.path.join(self.base, sha1(url.encode('utf-8')).hexdigest())
     
-    def request(self, url):
+    def request(self, url, wait_for=''):
         result = {}
 
         async def fetch():
-            
-            def _clear():
-                self.browser = None
-            
-            if not self.browser:
-                self.browser = await pyppeteer.launcher.connect(
-                    browserWSEndpoint=config.browserless
-                )
-                self.browser.on("disconnected", _clear)
-                
-            page = await self.browser.newPage()
+            browser = await pyppeteer.launcher.connect(
+                browserWSEndpoint=config.browserless
+            )
+            page = await browser.newPage()
             await page.goto(url)
+            if wait_for:
+                await page.waitForSelector(wait_for)
+            
             values = await page.evaluate('''() => document.documentElement.outerHTML''')
             result['data'] = values.encode('utf-8')
+            await browser.close()
         
         asyncio.run(fetch())
         return result.get('data')
 
-    def get(self, url):
+    def get(self, url, wait_for=''):
         hashed = self._digest(url)
         if os.path.exists(hashed):
             with open(hashed, 'rb') as fi:
                 return fi.read()
         else:
             if url.split('://')[0] in ('http', 'https'):
-                data = self.request(url)
+                data = self.request(url, wait_for)
             else:
                 data = storage.open(url, 'rb').read()
             if data:
@@ -105,7 +101,8 @@ class WebPageListingDataSource(DataSourceStage):
     def apply_params(self, dataset='', content='', scopes='',
                      mongocollection='', lang='auto', detail_link='',
                      list_link='', proxy='', list_depth=1, tags='',
-                     img_pattern='', level=1, base_cls=None) -> None:
+                     img_pattern='', level=1, wait_for='',
+                     base_cls=None) -> None:
         """
         Args:
             dataset (DATASET):
@@ -141,6 +138,9 @@ class WebPageListingDataSource(DataSourceStage):
             mongocollection (str):
                 Mongo Collection name
                 @zhs 数据库集合名
+            wait_for (str):
+                Wait for element
+                @zhs 等待加载完成的元素
         """
         self.base_cls = base_cls or Paragraph
         self.proxies = {} if not proxy else {
@@ -159,12 +159,13 @@ class WebPageListingDataSource(DataSourceStage):
             img_pattern) or DEFAULT_IMG_PATTERNS.split('\n')
         self.collection = self.base_cls.get_coll(mongocollection)
         self.level = level
+        self.wait_for = wait_for
 
     def get_url(self, url):
         """Read html from url, return BeautifulSoup object"""
         self.log('get url', url)
         try:
-            data = WebPageListingDataSource.cache.get(url)
+            data = WebPageListingDataSource.cache.get(url, self.wait_for)
         except OSError as ose:
             self.log_exception(f'Error while reading from {url}', ose)
             data = ''
