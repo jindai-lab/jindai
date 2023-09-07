@@ -6,7 +6,7 @@ from bson import ObjectId
 import requests
 import markdown
 import datetime
-from PyMongoWrapper import QExprInterpreter, F
+from PyMongoWrapper import QExprInterpreter, F, Fn
 
 from jindai.models import Paragraph, MediaItem, Meta
 from jindai.plugin import Plugin
@@ -45,6 +45,7 @@ class DadaEndpoints(APICrudEndpoint):
         self.bind_endpoint(self.fetch)
         self.bind_endpoint(self.prompts)
         self.bind_endpoint(self.keywords)
+        self.bind_endpoint(self.counts)
 
     def build_query(self, id, ids, query, data):
         if query:
@@ -74,7 +75,7 @@ class DadaEndpoints(APICrudEndpoint):
 
         if messages:
             resp = requests.post(self.llm_endpoint, json={'thread': messages}, headers={
-                                    'Content-Type': 'application/json', 'Agent': 'jindai-mt/1.0'})
+                'Content-Type': 'application/json', 'Agent': 'jindai-mt/1.0'})
             try:
                 resp = resp.json()
                 assert resp and resp['success'], f'Failed with response: {resp.content}'
@@ -84,7 +85,7 @@ class DadaEndpoints(APICrudEndpoint):
                 raise ValueError(resp.content)
         else:
             response = ''
-    
+
     def prompts(self, objs, action='', prompt=''):
         prompts_obj = Meta.first(F.prompts.exists(1)) or Meta(prompts=[])
         if action == 'create' and prompt:
@@ -97,6 +98,13 @@ class DadaEndpoints(APICrudEndpoint):
                 prompts_obj.prompts.remove(prompt)
                 prompts_obj.save()
         return APIResults(prompts_obj.prompts)
+
+    def counts(self, objs, field):
+        return APIResults(Dada.aggregator.project(
+                {field: 1}
+            ).unwind('$' + field).group(
+                id='$' + field, count=Fn.sum(1)
+            ).sort({'count': -1}).limit(200).perform(raw=True))
 
     def keywords(self, objs):
         wc = WordCut(for_search=True, field='keywords')
