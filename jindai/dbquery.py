@@ -229,12 +229,13 @@ class DBQuery:
     @staticmethod
     def _pop_query(query, keyname):
         val = None
-        for i, v in enumerate(query):
-            if isinstance(v, dict) and keyname in v:
-                val = v.pop(keyname)
-                if not v:
-                    query.remove(v)
-                return val
+        # for i, v in enumerate(query):
+        v = query[-1]
+        if isinstance(v, dict) and keyname in v:
+            val = v.pop(keyname)
+            if not v:
+                query.remove(v)
+            return val
             
     def __init__(self, query, mongocollections=None, limit=0, skip=0, sort='',
                  raw=False, groups='none', pmanager=None, wordcutter=None):
