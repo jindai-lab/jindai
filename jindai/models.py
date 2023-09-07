@@ -99,7 +99,7 @@ class ObjectWithSource(db.DbObject):
 
     def get_src(self):
         src = self.source_path
-        if src.startswith('http://') or src.startswith('https://'):
+        if src.startswith(('http://', 'https://', 'data:')):
             return src
         
         def _get_ext(source):
@@ -118,7 +118,7 @@ class ObjectWithSource(db.DbObject):
         if '://' not in src:
             src = 'file://' + src
         
-        return '/images/' + '/'.join(src.split('://', 1)).replace('#', '__hash/')
+        return '/images/' + '/'.join(src.split('://', 1)).replace('//', '/').replace('#', '__hash/')
     
     def as_dict(self, expand: bool = False):
         result = super().as_dict(expand)

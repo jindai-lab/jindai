@@ -264,7 +264,7 @@ class WordCut(PipelineStage):
         if self.for_search:
             words += self.trlit.transliterate(paragraph.lang, words)
         
-        if not isinstance(paragraph[self.field], list):
+        if not paragraph[self.field]:
             paragraph[self.field] = []
         paragraph[self.field] += words
         return paragraph
