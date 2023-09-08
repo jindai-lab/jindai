@@ -771,6 +771,9 @@ class APICrudEndpoint:
                     return APIUpdate(bundle=ids)
                 else:
                     return self.create(**data)
+            elif operation == 'update':
+                assert query or id or ids, "Must specify update scope first"
+                return self.update(objs, **data)
             else:
                 return getattr(self, operation)(objs, **data)
 
