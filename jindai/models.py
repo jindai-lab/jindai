@@ -103,7 +103,8 @@ class ObjectWithSource(db.DbObject):
             return src
         
         def _get_ext(source):
-            filename = source.get('url', source.get('file', '')).split('/')[-1]
+            filename = source.get('url', source.get('file', '')) or ''
+            filename = filename.split('/')[-1]
             if '.' in filename:
                 return filename.rsplit('.', 1)[1].split('?')[0]
             elif '?' in filename:

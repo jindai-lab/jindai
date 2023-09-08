@@ -318,7 +318,10 @@ class Pipeline:
             if isinstance(val, str):
                 if m := re.match(r'^CONST:(.+)$', val):
                     args[key] = config.constants[m.group(1)]
-        return stage_type(**args)
+        try:
+            return stage_type(**args)
+        except TypeError as ex:
+            raise ValueError(f'Error while instantiating {stage_name} with {args}')
 
     def __init__(self, stages: List[Union[Tuple[str, Dict], List, Dict, PipelineStage]],
                  log: Callable = print, verbose=False):

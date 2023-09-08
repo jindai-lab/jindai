@@ -3,6 +3,8 @@
 from typing import Iterable
 import requests
 import json
+import sqlite3
+import os
 from urllib.parse import quote
 from bs4 import BeautifulSoup as B
 from urllib.parse import urljoin
@@ -54,7 +56,6 @@ class BookSearcherDataSource(DataSourceStage):
         self.sort = sort
         
     def fetch(self):
-        self.log(self.server, self.query)
         resp = requests.get(self.server + '/search?limit=1000&query=' + quote(self.query))
         books = json.loads(resp.content)['books']
         for j in sorted(books, key=lambda x: id(x) if not self.sort else x[self.sort]):
@@ -89,7 +90,6 @@ class ArchiveOrgSearcherDataSource(DataSourceStage):
         self.query = content
         
     def fetch(self) -> Iterable[Paragraph]:
-        self.log(self.query)
         s = self.ia.get_session()
         for _, i in zip(range(10), s.search_items(self.query)):
             ident = i.get('identifier')
@@ -157,11 +157,59 @@ class VufindDataSource(DataSourceStage):
                                 content=str(res.select_one('.result-body')))
         except Exception as ex:
             self.log_exception(f'Error while fetching from {self.server}', ex)
+            
+            
+class LibgenDataSource(DataSourceStage):
+    
+    db_file = os.path.join(os.path.dirname(__file__), 'libgen.db')
+    
+    @staticmethod
+    def create_connection():
+        def dict_factory(cursor, row):
+            d = {}
+            for idx, col in enumerate(cursor.description):
+                d[col[0].lower()] = row[idx]
+            return d
+        
+        conn = sqlite3.connect('file:' + LibgenDataSource.db_file + '?mode=ro')
+        conn.row_factory = dict_factory
+        return conn
+    
+    def apply_params(self, content: str = ''):
+        """
+        Args:
+            content (str): Query string
+                @zhs 查询
+        """
+        self.query = content.strip()
+    
+    def fetch(self) -> Iterable[Paragraph]:
+        if not self.query:
+            return []
+        
+        with self.create_connection() as conn:
+            cursor = conn.cursor()
+            conds, args = [], []
+            
+            for word in self.query.split():
+                word = f"%{word}%"
+                conds.append('(title like ? or authors like ?)')
+                args.extend([word, word])
+                        
+            sql = f'select * from non_fiction where {" and ".join(conds)} limit 1000'
+                        
+            for row in cursor.execute(sql, args):
+                row['link'] = f'<a href="http://library.lol/main/{row["md5hash"]}" target="_blank">Download</a>'
+                p = Paragraph().fill_dict(row)
+                p.content = '<br/>'.join((f'{key}: {val}' for key, val in row.items()))
+                yield p
 
 
 class BookSearcherPlugin(Plugin):
 
-    def __init__(self, pm, **config) -> None:
+    def __init__(self, pm, libgen_db='', **config) -> None:
         super().__init__(pm, **config)
+        if libgen_db:
+            LibgenDataSource.db_file = libgen_db
         self.register_pipelines(globals())
         
