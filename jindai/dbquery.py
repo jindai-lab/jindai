@@ -35,11 +35,11 @@ def _groupby(_id='', count=None, **params):
     for k in joins:
         stages.append(Fn.addFields(
             group_field=field_name,
-            images=Fn.reduce(
+            **{k: Fn.reduce(
                 input='$' + k,
                 initialValue=[],
                 in_=Fn.concatArrays('$$value', '$$this')
-            )
+            )}
         ))
     else:
         stages.append(
