@@ -134,7 +134,8 @@ def export(query, output_file):
 @click.option('-n', '--concurrent', type=int, default=0)
 @click.option('-v', '--verbose', type=bool, flag_value=True)
 @click.option('-e', '--edit', type=bool, flag_value=True)
-def run_task(task_id, concurrent, verbose, edit, log):
+@click.option('-o', '--output', type=click.File('w', 'utf-8', 'ignore'), default=None)
+def run_task(task_id, concurrent, verbose, edit, log, output):
     """Run task according to id or name"""
     dbo = TaskDBO.first((F.id == task_id) if re.match(
         r'[0-9a-f]{24}', task_id) else (F.name == task_id))
@@ -181,6 +182,10 @@ def run_task(task_id, concurrent, verbose, edit, log):
 
     print()
     print(result)
+
+    if output:
+        output.write(json.dumps(result, ensure_ascii=False, indent=2))
+        output.close()
 
     if log:
         print(result, file=logfile)

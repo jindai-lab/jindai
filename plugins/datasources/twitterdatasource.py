@@ -85,7 +85,6 @@ class TwitterDataSource(DataSourceStage):
 
     def __init__(self, **params) -> None:
         super().__init__(**params)
-        self.imported_authors = set()
 
     def apply_params(self,
                      dataset_name='',
@@ -146,7 +145,9 @@ class TwitterDataSource(DataSourceStage):
                               wait_on_rate_limit=True,
                               proxy=proxy)
         self.skip_existent = skip_existent
-        self.imported = set()
+        if 'twi_imported' not in self.gctx:
+            self.gctx['twi_imported'] = set()
+        self.imported = self.gctx['twi_imported']
 
     def parse_tweet(self, tweet, skip_existent=None) -> Paragraph:
         """Parse twitter status
@@ -402,7 +403,6 @@ class TwitterDataSource(DataSourceStage):
                       'url': f'https://twitter.com/{user[1:]}/status/---imported---'}).save()
 
     def before_fetch(self, instance):
-        instance.imported_authors = self.imported_authors
         time.sleep(3)
 
     def fetch(self):
@@ -418,6 +418,7 @@ class TwitterDataSource(DataSourceStage):
                     for path in storage.globs(arg, False):
                         self.log('...', path)
                         yield from self.import_twiimg(path)
+                        self.imported.add(path)
                 elif arg == '@':
                     unames = sorted(
                         map(lambda x: f'#{x}', tweepy.Cursor(self.api.get_friend_ids).items()))
@@ -429,10 +430,7 @@ class TwitterDataSource(DataSourceStage):
                         arg = '@' + matcher.group(1)
                         if matcher.group(2):
                             self.media_only = True
-                    self.imported_authors.add(arg)
                     yield from self.import_timeline(arg)
 
     def summarize(self, _):
-        if imported := self.params.get('import_username'):
-            imported = 'author=in(' + json.dumps(imported.split('\n')) + ')'
-            return self.return_redirect('/?q=' + imported)
+        return {'imported': list(self.gctx.get('twi_imported', []))}
