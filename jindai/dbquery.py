@@ -32,14 +32,14 @@ def _groupby(_id='', count=None, **params):
             '$orig', {'group_id': '$_id'}, {k: f'${k}' for k in params if k != '_id'})),
     ]
 
-    for k in joins:
+    if joins:
         stages.append(Fn.addFields(
             group_field=field_name,
             **{k: Fn.reduce(
                 input='$' + k,
                 initialValue=[],
                 in_=Fn.concatArrays('$$value', '$$this')
-            )}
+            ) for k in joins}
         ))
     else:
         stages.append(
@@ -286,7 +286,7 @@ class DBQuery:
             if not sort:
                 sort = '-pdate,-id'
         elif groups == 'group':
-            groupping = ''';gid();groupby(id=$gid,count=sum($images),images=1);group_field:=gid,group_id:=$gid;'''
+            groupping = ''';gid();groupby(id=$gid,count=sum($images),images=1);'''
             if not sort:
                 sort = 'group_id,-pdate'
         elif groups == 'source':
