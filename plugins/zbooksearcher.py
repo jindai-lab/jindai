@@ -201,7 +201,7 @@ class LibgenDataSource(DataSourceStage):
             for row in cursor.execute(sql, args):
                 row['link'] = f'<a href="http://library.lol/main/{row["md5hash"]}" target="_blank">Download</a>'
                 p = Paragraph().fill_dict(row)
-                p.content = '<br/>'.join((f'{key}: {val}' for key, val in row.items()))
+                p.content = '<br/>'.join((f'{key}: {val}' for key, val in row.items() if val))
                 yield p
 
 

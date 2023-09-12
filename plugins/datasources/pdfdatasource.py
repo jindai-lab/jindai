@@ -4,6 +4,7 @@
 
 import re
 import fitz
+import requests
 from PyMongoWrapper import F, Fn, Var
 
 from jindai import storage
@@ -37,7 +38,7 @@ class PDFDataSource(DataSourceStage):
     @zhs 从PDF中导入语段
     """
 
-    def apply_params(self, dataset_name='', lang='auto', content='', mongocollection='', skip_existed=True, page_range=''):
+    def apply_params(self, dataset_name='', lang='auto', content='', mongocollection='', skip_existed=True, page_range='', nougat_endpoint=''):
         """
         Args:
             dataset_name (DATASET):
@@ -58,6 +59,8 @@ class PDFDataSource(DataSourceStage):
             page_range (str):
                 Page range, e.g. 1-3
                 @zhs 页码范围，例如 1-3
+            nougat_endpoint (str):
+                Nougat OCR API Endpoint
         """
         self.name = dataset_name
         self.lang = lang
@@ -65,6 +68,7 @@ class PDFDataSource(DataSourceStage):
         self.skip_existed = skip_existed
         self.page_range = sorted(resolve_range(page_range))
         self.files = PipelineStage.parse_paths(content)
+        self.nougat_endpoint = nougat_endpoint
 
     def fetch(self):
         para_coll = Paragraph.get_coll(self.mongocollection)
@@ -107,19 +111,36 @@ class PDFDataSource(DataSourceStage):
                     label = doc[page].get_label()
                 except RuntimeError:
                     label = ''
-                try:
-                    lines = doc[page].get_text()
-                    if len(lines) > 10:
-                        imported_pages += 1
-                    yield para_coll(
-                        lang=lang, content=lines.encode(
-                            'utf-8', errors='ignore').decode('utf-8'),
-                        source={'file': short_path, 'page': page},
-                        pagenum=label or (page+1),
-                        dataset=self.name
-                    )
-                except Exception as ex:
-                    self.log(filepath, page+1, ex)
+
+                if self.nougat_endpoint:
+                    from plugins.pdfpnghandler import extract_pdf_page
+                    buf = extract_pdf_page(stream, page)
+                    resp = requests.post(self.nougat_endpoint, headers={
+                        'accept': 'application/json',
+                    }, files={
+                        'file': ('page.pdf', buf, 'application/pdf'),
+                    })
+                    try:
+                        lines = re.split(r'^+++.*\n', resp.json())
+                    except Exception as ex:
+                        self.log_exception(ex)
+
+                else:
+                    try:
+                        lines = doc[page].get_text().encode(
+                            'utf-8', errors='ignore').decode('utf-8')
+                    except Exception as ex:
+                        self.log(filepath, page+1, ex)
+
+                if len(lines) > 10:
+                    imported_pages += 1
+
+                yield para_coll(
+                    lang=lang, content=lines,
+                    source={'file': short_path, 'page': page},
+                    pagenum=label or (page+1),
+                    dataset=self.name
+                )
 
             if not existent.get(short_path) and imported_pages == 0:
                 self.log(filepath, 'no sufficient texts found.')
