@@ -371,7 +371,7 @@ class APICollectionEndpoint(APICrudEndpoint):
     def split(self, objs):
         return self.split_or_merge(objs, False)
 
-    def merge(self, objs, pairs=None):
+    def merge(self, objs, pairs=None, **_):
 
         if isinstance(pairs, list):
             d_pairs = defaultdict(list)
