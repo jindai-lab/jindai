@@ -52,7 +52,7 @@ class DadaEndpoints(APICrudEndpoint):
             query = parser.parse(query)
         return super().build_query(id, ids, query, data)
 
-    def fetch(self, objs, url, depth=1, autoextract=False, assignments=None, selector='body', scopes='', **params):
+    def fetch(self, objs, url, depth=1, assignments=None, selector='body', scopes='', **params):
         if url:
             wlds = WebPageListingDataSource(base_cls=Dada, dataset='dada', scopes=scopes,
                                             content=url, mongocollection='dada', list_depth=int(depth), **params)
@@ -60,7 +60,7 @@ class DadaEndpoints(APICrudEndpoint):
                 wlds,
                 ExtractHTMLParagraphs(
                     paragraph_selector=selector, assignments=assignments,
-                    autoextract=autoextract),
+                    autoextract=True),
                 LanguageDetect(),
                 FieldAssignment('tags', '[]'),
                 WordCut(True),

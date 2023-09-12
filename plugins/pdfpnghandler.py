@@ -5,6 +5,19 @@ from io import BytesIO
 from jindai import storage
 from jindai.helpers import safe_import
 
+
+def extract_pdf_page(buf, page):
+    safe_import('PyPDF2')
+    from PyPDF2 import PdfReader, PdfWriter
+    pdf_reader = PdfReader(buf)
+    pdf_writer = PdfWriter()
+    pdf_writer.add_page(pdf_reader.pages[page])
+    output = BytesIO()
+    pdf_writer.write(output)
+    output.seek(0)
+    return output
+
+
 def handle_pdf(buf, page, *args):
     """Get PNG data from PDF
 
@@ -48,14 +61,7 @@ def handle_pdf(buf, page, *args):
         if temp:
             os.unlink(filename)
     else:
-        safe_import('PyPDF2')
-        from PyPDF2 import PdfReader, PdfWriter
-        pdf_reader = PdfReader(buf)
-        pdf_writer = PdfWriter()
-        pdf_writer.add_page(pdf_reader.pages[page])
-        output = BytesIO()
-        pdf_writer.write(output)
-        output.seek(0)
+        return extract_pdf_page(buf)
 
     return output
 
