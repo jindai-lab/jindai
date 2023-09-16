@@ -7,6 +7,7 @@ import re
 import json
 import datetime
 import tempfile
+import requests
 import os
 from hashlib import sha1
 from typing import Dict
@@ -42,7 +43,11 @@ class CachedWebAccess:
     def _digest(self, url):
         return os.path.join(self.base, sha1(url.encode('utf-8')).hexdigest())
     
-    def request(self, url, wait_for=''):
+    def request(self, url):
+        return requests.get(url, headers={'User-Agent': 'Mozilla/5.0', 
+                                          'Referer': url}).content
+    
+    def request_browserless(self, url, wait_for=''):
         result = {}
 
         async def fetch():
@@ -61,14 +66,17 @@ class CachedWebAccess:
         asyncio.run(fetch())
         return result.get('data')
 
-    def get(self, url, wait_for=''):
+    def get(self, url, with_chrome=False, wait_for=''):
         hashed = self._digest(url)
         if os.path.exists(hashed):
             with open(hashed, 'rb') as fi:
                 return fi.read()
         else:
             if url.split('://')[0] in ('http', 'https'):
-                data = self.request(url, wait_for)
+                if with_chrome or wait_for:
+                    data = self.request_browserless(url, wait_for)
+                else:
+                    data = self.request(url)
             else:
                 data = storage.open(url, 'rb').read()
             if data:
@@ -102,6 +110,7 @@ class WebPageListingDataSource(DataSourceStage):
                      mongocollection='', lang='auto', detail_link='',
                      list_link='', proxy='', list_depth=1, tags='',
                      img_pattern='', level=1, wait_for='',
+                     with_chrome=False,
                      base_cls=None) -> None:
         """
         Args:
@@ -141,6 +150,9 @@ class WebPageListingDataSource(DataSourceStage):
             wait_for (str):
                 Wait for element
                 @zhs 等待加载完成的元素
+            with_chrome (bool):
+                Fetch with browserless (Chrome)
+                @zhs 使用 Browserless 抓取
         """
         self.base_cls = base_cls or Paragraph
         self.proxies = {} if not proxy else {
@@ -159,13 +171,14 @@ class WebPageListingDataSource(DataSourceStage):
             img_pattern) or DEFAULT_IMG_PATTERNS.split('\n')
         self.collection = self.base_cls.get_coll(mongocollection)
         self.level = level
+        self.with_chrome = with_chrome
         self.wait_for = wait_for
 
     def get_url(self, url):
         """Read html from url, return BeautifulSoup object"""
         self.log('get url', url)
         try:
-            data = WebPageListingDataSource.cache.get(url, self.wait_for)
+            data = WebPageListingDataSource.cache.get(url, self.with_chrome, self.wait_for)
         except OSError as ose:
             self.log_exception(f'Error while reading from {url}', ose)
             data = ''

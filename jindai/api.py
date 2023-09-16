@@ -4,6 +4,7 @@ import datetime
 import hashlib
 import itertools
 import os
+import re
 import sys
 import time
 from collections import defaultdict
@@ -296,13 +297,60 @@ class APICollectionEndpoint(APICrudEndpoint):
             return results.first()
         else:
             return self.apply_sorting(results, limit, offset, sort)
+        
+    def parse_images(data):        
+        images = data.pop('images', None)
+        if images is not None:
+            data['images'] = []
+            for image in images:
+                if isinstance(image, str) and '://' in image: # url
+                    i = MediaItem.get(image)
+                    if not i.id:
+                        i.save()
+                    image = i.id
+                elif isinstance(image, str) and re.match('^[0-9a-f]{24}$', image.lower()): # objectId
+                    image = ObjectId(image)
+                elif isinstance(image, dict):
+                    if '_id' in image:
+                        image = ObjectId(image['_id'])
+                    elif 'src' in image:
+                        i = MediaItem.get(image['src'])
+                        if not i.id:
+                            i.save()
+                        image = i.id
+                    elif 'source' in image and isinstance(image['source'], dict):
+                        source = image['source']
+                        if 'url' in source:
+                            i = MediaItem.get(source['url'])
+                            if not i.id:
+                                i.save()
+                            image = i.id
+                        elif 'file' in source:
+                            i = MediaItem.get(F.source == source)
+                            if not i.id:
+                                i = MediaItem(**image)
+                                i.save()
+                            image = i.id
+                        else:
+                            image = ''
+                    else:
+                        image = ''
+                else:
+                    image = ''
+                if image:
+                    data['images'].append(image)
 
     def update_object(self, obj, data):
+        self.parse_images(data)
         updated = super().update_object(obj, data)
         if 'keywords' in updated:
             for ele in updated['keywords']:
                 Term.write(ele, 'keywords')
         return updated
+    
+    def create(self, **data):
+        self.parse_images(data)
+        return super().create(**data)
 
     def pagenum(self, objs, sequential, new_pagenum, folio, **_):
         para = objs
