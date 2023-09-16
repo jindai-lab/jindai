@@ -298,7 +298,7 @@ class APICollectionEndpoint(APICrudEndpoint):
         else:
             return self.apply_sorting(results, limit, offset, sort)
         
-    def parse_images(data):        
+    def parse_images(self, data):        
         images = data.pop('images', None)
         if images is not None:
             data['images'] = []
