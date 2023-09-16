@@ -2,6 +2,7 @@
 @zhs 从 PDF 导入
 """
 
+from io import BytesIO
 import re
 import fitz
 import requests
@@ -112,31 +113,28 @@ class PDFDataSource(DataSourceStage):
                 except RuntimeError:
                     label = ''
 
-                if self.nougat_endpoint:
-                    from plugins.pdfpnghandler import extract_pdf_page
-                    buf = extract_pdf_page(stream, page)
+                try:
+                    content = doc[page].get_text().encode(
+                        'utf-8', errors='ignore').decode('utf-8')
+                except Exception as ex:
+                    self.log(filepath, page+1, ex)
+
+                if len(content) > 10:
+                    imported_pages += 1
+                elif self.nougat_endpoint:
+                    buf = doc[page].get_pixmap().tobytes('png')
                     resp = requests.post(self.nougat_endpoint, headers={
                         'accept': 'application/json',
                     }, files={
-                        'file': ('page.pdf', buf, 'application/pdf'),
+                        'file': ('page.png', BytesIO(buf), 'application/png'),
                     })
                     try:
-                        lines = re.split(r'^+++.*\n', resp.json())
+                        content = re.sub(r'^+++.*\n', '', resp.json())
                     except Exception as ex:
                         self.log_exception(ex)
 
-                else:
-                    try:
-                        lines = doc[page].get_text().encode(
-                            'utf-8', errors='ignore').decode('utf-8')
-                    except Exception as ex:
-                        self.log(filepath, page+1, ex)
-
-                if len(lines) > 10:
-                    imported_pages += 1
-
                 yield para_coll(
-                    lang=lang, content=lines,
+                    lang=lang, content=content,
                     source={'file': short_path, 'page': page},
                     pagenum=label or (page+1),
                     dataset=self.name

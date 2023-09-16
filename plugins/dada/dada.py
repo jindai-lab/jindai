@@ -52,9 +52,9 @@ class DadaEndpoints(APICrudEndpoint):
             query = parser.parse(query)
         return super().build_query(id, ids, query, data)
 
-    def fetch(self, objs, url, depth=1, assignments=None, selector='body', scopes='', **params):
+    def fetch(self, objs, url, depth=1, assignments=None, selector='body', scopes='', with_chrome=False, **params):
         if url:
-            wlds = WebPageListingDataSource(base_cls=Dada, dataset='dada', scopes=scopes,
+            wlds = WebPageListingDataSource(base_cls=Dada, dataset='dada', scopes=scopes, with_chrome=with_chrome,
                                             content=url, mongocollection='dada', list_depth=int(depth), **params)
             results = Task({'content': url}, [
                 wlds,
