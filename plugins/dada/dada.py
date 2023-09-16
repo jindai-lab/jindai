@@ -113,24 +113,6 @@ class DadaEndpoints(APICrudEndpoint):
             obj.save()
         return APIUpdate()
 
-    def update_object(self, obj, data):
-        if 'images' in data:
-            images = data['images']
-            data['images'] = []
-            for i in images:
-                if isinstance(i, dict):
-                    if '_id' in i:
-                        data['images'].append(ObjectId(i['_id']))
-                    elif 'source' in i:
-                        m = MediaItem(**i)
-                        m.save()
-                        data['images'].append(m.id)
-                    elif 'src' in i:
-                        m = MediaItem.get(i['src'])
-                        m.save()
-                        data['images'].append(m.id)
-        return super().update_object(obj, data)
-
 
 class DadaBackendPlugin(Plugin):
 
