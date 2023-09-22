@@ -8,7 +8,7 @@ import markdown
 import datetime
 from PyMongoWrapper import QExprInterpreter, F, Fn
 
-from jindai.models import Paragraph, MediaItem, Meta
+from jindai.models import Paragraph, Meta
 from jindai.plugin import Plugin
 from jindai.helpers import APICrudEndpoint, APIResults, APIUpdate
 from jindai.task import Task
@@ -101,10 +101,10 @@ class DadaEndpoints(APICrudEndpoint):
 
     def counts(self, objs, field):
         return APIResults(Dada.aggregator.project(
-                {field: 1}
-            ).unwind('$' + field).group(
-                id='$' + field, count=Fn.sum(1)
-            ).sort({'count': -1}).limit(200).perform(raw=True))
+            {field: 1}
+        ).unwind('$' + field).group(
+            id='$' + field, count=Fn.sum(1)
+        ).sort({'count': -1}).limit(200).perform(raw=True))
 
     def keywords(self, objs):
         wc = WordCut(for_search=True, field='keywords')

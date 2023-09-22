@@ -61,7 +61,7 @@ def handle_pdf(buf, page, *args):
         if temp:
             os.unlink(filename)
     else:
-        return extract_pdf_page(buf)
+        return extract_pdf_page(buf, page)
 
     return output
 
