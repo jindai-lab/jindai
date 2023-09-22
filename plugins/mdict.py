@@ -1,5 +1,6 @@
 from jindai.pipeline import DataSourceStage
 from jindai.helpers import safe_import
+from jindai.plugin import Plugin
 from jindai.models import Paragraph, F
 from plugins.pipelines.basics import WordCut
 from PyMongoWrapper.dbo import BatchSave
@@ -44,6 +45,15 @@ class MDictDataSource(DataSourceStage):
         
     def fetch(self):
         return MDictEntry.query(self.query)
+
+
+class MDictPlugin(Plugin):
+    """Plugin for machin translations
+    """
+
+    def __init__(self, pmanager, **config):
+        super().__init__(pmanager, **config)
+        self.register_pipelines(globals())
 
 
 if __name__ == '__main__':
