@@ -1,11 +1,12 @@
 from jindai.pipeline import DataSourceStage
-from jindai.helpers import safe_import, rest, APIResults
+from jindai.helpers import safe_import, rest, APIResults, storage
 from jindai.plugin import Plugin
 from jindai.models import Paragraph, F
 from plugins.pipelines.basics import WordCut
 from PyMongoWrapper.dbo import BatchSave
 
 from flask import request, render_template_string, Response
+from urllib.parse import urljoin
 import click
 import re
 from bs4 import BeautifulSoup as B
@@ -61,6 +62,9 @@ class MDictDataSource(DataSourceStage):
                     if a['href'].startswith('entry://'):
                         entry = a['href'].split('://')[1]
                         a['href'] = f'/api/plugins/mdict?entry={entry}&source={p.source.file}'
+                for attr in ('src', 'href'):
+                    for ele in b.select(f'[{attr}]'):
+                        ele[attr] = '/images/file/' + urljoin(p.source.file, ele[attr]).lstrip('/')
                 p.content = str(b)
                 yield p
 
@@ -87,14 +91,6 @@ class MDictPlugin(Plugin):
             submit = SubmitField('Search')
 
         bootstrap = Bootstrap5(pmanager.app)
-
-        @pmanager.app.route('/api/plugins/mdict/sources', methods=['GET'])
-        @rest(cache=True)
-        def mdict_sources():
-            return APIResults([
-                _['_id']
-                for _ in MDictEntry.aggregator.project(
-                    F.source.file == 1).group(_id='$source.file').perform(raw=True)])
 
         @pmanager.app.route('/api/plugins/mdict/', methods=['GET'])
         @rest()
@@ -139,6 +135,14 @@ $.get('sources').then(data => {
                 selected_source=source,
                 form=SearchEntryForm(entry=entry, source=source),
                 entries=ds.fetch()))
+
+        @pmanager.app.route('/api/plugins/mdict/sources', methods=['GET'])
+        @rest(cache=True)
+        def mdict_sources():
+            return APIResults([
+                _['_id']
+                for _ in MDictEntry.aggregator.project(
+                    F.source.file == 1).group(_id='$source.file').perform(raw=True)])
 
 
 if __name__ == '__main__':
