@@ -7,6 +7,7 @@ import random
 import re
 import time
 import uuid
+import urllib
 from hashlib import md5
 
 import requests
@@ -370,9 +371,92 @@ class GPTTranslation(PipelineStage):
         return Paragraph(paragraph, content=text)
 
 
+class GoogleTranslation(PipelineStage):
+    """Google Translation"""
+
+    def __init__(self, to_lang) -> None:
+        """
+        Args:
+            to_lang (LANG):
+                Target language
+                @zhs 目标语言标识
+        """
+        self.to_lang = to_lang
+        super().__init__()
+
+    def translate(self, lang_from, lang_to, text):
+        def TL(a):
+            k = ""
+            b = 406644
+            b1 = 3293161072
+            jd = "."
+            sb = "+-a^+6"
+            Zb = "+-3^+b+-f"
+            e, f, g = [], 0, 0
+            while g < len(a):
+                m = ord(a[g])
+                if m < 128:
+                    e.append(m)
+                    f += 1
+                else:
+                    if m < 2048:
+                        e.append((m >> 6) | 192)
+                    else:
+                        if m & 64512 == 55296 and g + 1 < len(a) and a[g + 1].charCodeAt(0) & 64512 == 56320:
+                            m = 65536 + ((m & 1023) << 10) + (a[g + 1].charCodeAt(0) & 1023)
+                            e.append((m >> 18) | 240)
+                            e.append(((m >> 12) & 63) | 128)
+                            g += 1
+                        else:
+                            e.append((m >> 12) | 224)
+                            e.append(((m >> 6) & 63) | 128)
+                    e.append((m & 63) | 128)
+                g += 1
+            a = b
+            f = 0
+            while f < len(e):
+                a += e[f]
+                a = RL(a, sb)
+                f += 1
+            a = RL(a, Zb)
+            a ^= b1 or 0
+            if a < 0:
+                a = (a & 2147483647) + 2147483648
+            a %= 1000000
+            return str(a) + jd + str(a ^ b)
+
+        def RL(a, b):
+            t = "a"
+            Yb = "+"
+            c = 0
+            while c < len(b) - 2:
+                d = b[c + 2]
+                d = ord(d) - 87 if d >= t else int(d)
+                d = a >> d if b[c + 1] == Yb else a << d
+                a = (a + d) & 4294967295 if b[c] == Yb else a ^ d
+                c += 3
+            return a
+        
+        param = f"sl={lang_from}&tl={lang_to}"
+        resp = requests.get(f"https://translate.google.com/translate_a/single?client=gtx&{param}&hl=zh-CN&dt=at&dt=bd&dt=ex&dt=ld&dt=md&dt=qca&dt=rw&dt=rm&dt=ss&dt=t&source=bh&ssel=0&tsel=0&kc=1&tk={TL(text)}&q={urllib.parse.quote(text)}", params=param, headers={ "responseType": "json" })
+        if resp.status_code != 200:
+            raise Exception(f"Request error: {resp.status_code}")
+        tgt = ""
+        results = resp.json()
+        print(results)
+        for result in results:
+            if isinstance(result, list) and len(result) == 1 and result[0]:
+                tgt += result[0]
+        return tgt
+    
+    def resolve(self, paragraph: Paragraph) -> str:
+        paragraph.content = self.translate(paragraph.content, paragraph.lang[:2], self.to_lang)
+        return paragraph
+
+
 class MachineTranslation(PipelineStage):
-    """Machine Translation
-    @zhs 机器翻译"""
+    """Machine Translation on Local Machine
+    @zhs 本地机器翻译"""
 
     def __init__(self, to_lang='zhs', model='opus-mt') -> None:
         """
