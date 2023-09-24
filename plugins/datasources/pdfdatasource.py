@@ -9,6 +9,7 @@ import requests
 from PyMongoWrapper import F, Fn, Var
 
 from jindai import storage
+from jindai.helpers import safe_import
 from jindai.models import Paragraph
 from jindai.pipeline import DataSourceStage, PipelineStage
 
@@ -31,15 +32,16 @@ def resolve_range(page_range: str):
                 pass
         elif rng and re.match(r'\d+', rng):
             yield int(rng)-1
-
+            
 
 class PDFDataSource(DataSourceStage):
     """
     Import paragraphs from PDF
-    @zhs 从PDF中导入语段
+    @zhs 从 PDF 中导入语段
     """
 
-    def apply_params(self, dataset_name='', lang='auto', content='', mongocollection='', skip_existed=True, page_range='', nougat_endpoint=''):
+    def apply_params(self, dataset_name='', lang='auto', content='', mongocollection='',
+                     skip_existed=True, page_range='', nougat_endpoint='', rapid_ocr=False):
         """
         Args:
             dataset_name (DATASET):
@@ -62,6 +64,9 @@ class PDFDataSource(DataSourceStage):
                 @zhs 页码范围，例如 1-3
             nougat_endpoint (str):
                 Nougat OCR API Endpoint
+            rapid_ocr (bool):
+                Use RapidOCR
+                @zhs 使用 RapidOCR 识别（优先级低于 Nougat）
         """
         self.name = dataset_name
         self.lang = lang
@@ -70,9 +75,12 @@ class PDFDataSource(DataSourceStage):
         self.page_range = sorted(resolve_range(page_range))
         self.files = PipelineStage.parse_paths(content)
         self.nougat_endpoint = nougat_endpoint
+        self.rapid_ocr = safe_import('rapid_ocr', 'rapidocr_pdf[onnxruntime]').PDFExtractor() if rapid_ocr else None
 
     def fetch(self):
         para_coll = Paragraph.get_coll(self.mongocollection)
+        lang = self.lang
+        
         if self.skip_existed:
             existent = {
                 a['_id']: a['pages']
@@ -89,20 +97,20 @@ class PDFDataSource(DataSourceStage):
         for filepath in self.files:
             imported_pages = 0
             short_path = storage.truncate_path(filepath)
+            self.log('importing', short_path)
+            
             stream = storage.open(filepath, 'rb')
             if hasattr(stream, 'name'):
                 doc = fitz.open(stream.name)
             else:
                 doc = fitz.open('pdf', stream)
-            self.log('importing', short_path)
+            
             page_range = self.page_range
             if not page_range:
                 min_page = existent.get(short_path)
                 min_page = 0 if min_page is None else (min_page + 1)
                 self.log('... from page', min_page)
                 page_range = range(min_page, doc.page_count)
-
-            lang = self.lang
 
             for page in page_range:
                 if page >= doc.page_count:
@@ -118,6 +126,7 @@ class PDFDataSource(DataSourceStage):
                         'utf-8', errors='ignore').decode('utf-8')
                 except Exception as ex:
                     self.log(filepath, page+1, ex)
+                    content = ''
 
                 if len(content) > 10:
                     imported_pages += 1
@@ -132,6 +141,9 @@ class PDFDataSource(DataSourceStage):
                         content = re.sub(r'^+++.*\n', '', resp.json())
                     except Exception as ex:
                         self.log_exception(ex)
+                elif self.rapid_ocr:
+                    buf = doc[page].get_pixmap().tobytes('png')
+                    _, content, __ = self.ocr.pdf_extractor(buf)
 
                 yield para_coll(
                     lang=lang, content=content,
