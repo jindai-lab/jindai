@@ -65,7 +65,7 @@ class Plugin:
 
         for cls in pipeline_classes:
             if isinstance(cls, type) and issubclass(cls, PipelineStage) \
-                    and cls is not PipelineStage:
+                    and cls is not PipelineStage and not cls.__name__.startswith('_'):
                 Pipeline.ctx[cls.__name__] = cls
                 parser.functions[f'{cls.__name__}_'] = lambda arg: Pipeline.instantiate(cls.__name__, arg).resolve(arg['paragraph'])
                 
