@@ -43,7 +43,7 @@ class FaceDet(MediaItemStage):
                 yield image.crop((x, y, x+w, y+h))
         elif self.method == 'retinaface':
             for im in self.face_classifier(np.array(image)):
-                yield Image.fromarray(im)
+                yield Image.fromarray(im).convert('L')
 
     def resolve_image(self, i: MediaItem, _):
         """Resolve image"""
