@@ -8,7 +8,7 @@ import markdown
 import datetime
 from PyMongoWrapper import QExprInterpreter, F, Fn
 
-from jindai.models import Paragraph, MediaItem, Meta
+from jindai.models import Paragraph, Meta
 from jindai.plugin import Plugin
 from jindai.helpers import APICrudEndpoint, APIResults, APIUpdate
 from jindai.task import Task
@@ -101,10 +101,10 @@ class DadaEndpoints(APICrudEndpoint):
 
     def counts(self, objs, field):
         return APIResults(Dada.aggregator.project(
-                {field: 1}
-            ).unwind('$' + field).group(
-                id='$' + field, count=Fn.sum(1)
-            ).sort({'count': -1}).limit(200).perform(raw=True))
+            {field: 1}
+        ).unwind('$' + field).group(
+            id='$' + field, count=Fn.sum(1)
+        ).sort({'count': -1}).limit(200).perform(raw=True))
 
     def keywords(self, objs):
         wc = WordCut(for_search=True, field='keywords')
@@ -112,24 +112,6 @@ class DadaEndpoints(APICrudEndpoint):
             wc.resolve(obj)
             obj.save()
         return APIUpdate()
-
-    def update_object(self, obj, data):
-        if 'images' in data:
-            images = data['images']
-            data['images'] = []
-            for i in images:
-                if isinstance(i, dict):
-                    if '_id' in i:
-                        data['images'].append(ObjectId(i['_id']))
-                    elif 'source' in i:
-                        m = MediaItem(**i)
-                        m.save()
-                        data['images'].append(m.id)
-                    elif 'src' in i:
-                        m = MediaItem.get(i['src'])
-                        m.save()
-                        data['images'].append(m.id)
-        return super().update_object(obj, data)
 
 
 class DadaBackendPlugin(Plugin):
