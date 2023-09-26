@@ -51,14 +51,14 @@ class BookSearcherDataSource(DataSourceStage):
 
         self.query = query
 
-        self.server = server
+        self.server = server.rstrip('/')
         self.ipfs = ipfs
         self.sort = sort
         
     def fetch(self):
-        resp = requests.get(self.server + '/search?limit=1000&query=' + quote(self.query))
+        resp = requests.get(self.server + '/search?limit=100&query=' + quote(self.query))
         books = json.loads(resp.content)['books']
-        for j in sorted(books, key=lambda x: id(x) if not self.sort else x[self.sort]):
+        for j in sorted(books, key=lambda x: x[self.sort]) if self.sort else books:
             yield Paragraph(content=f'''
                             Title: {j["title"]}<br/>
                             Author: {j["author"]}<br/>
