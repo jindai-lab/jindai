@@ -15,6 +15,7 @@ from jindai.task import Task
 
 from plugins.datasources.htmldatasource import WebPageListingDataSource, ExtractHTMLParagraphs
 from plugins.pipelines.basics import AccumulateParagraphs, LanguageDetect, WordCut, FieldAssignment, FilterStopWords
+from plugins.pipelines.dtextract import TimeExtractor
 
 
 class Dada(Paragraph):
@@ -65,6 +66,7 @@ class DadaEndpoints(APICrudEndpoint):
                 FieldAssignment('tags', '[]'),
                 WordCut(True),
                 FilterStopWords(),
+                TimeExtractor(),
                 AccumulateParagraphs()
             ], resume_next=False).execute()
         else:
