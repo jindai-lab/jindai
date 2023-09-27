@@ -738,8 +738,10 @@ class APICrudEndpoint:
 
         @return The application passed in as ` ` app ` `
         """
-
-        @rest(mapping={'_id': 'id'}, **options)
+        if 'mapping' not in options: options['mapping'] = {}
+        options['mapping']['_id'] = 'id'
+        
+        @rest(**options)
         def do_crud(
             id=None, ids=None, limit=0, query=None, offset=0, sort="id", **data
         ):

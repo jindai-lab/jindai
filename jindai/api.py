@@ -656,10 +656,12 @@ class APIDatasetEndpoint(APICrudEndpoint):
     def rename(self, objs, to, **_):
         self.check_role('admin')
         objs.rename(to)
+        return APIUpdate()
 
     def sources(self, objs, **_):
         self.check_role('admin')
         objs.update_sources()
+        return APIUpdate()
 
     def update(self, objs, **data):
         self.check_role('admin')
