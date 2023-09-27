@@ -11,5 +11,5 @@ class PipelinesPlugin(Plugin):
 
     def __init__(self, pmanager, **config) -> None:
         super().__init__(pmanager, **config)
-        ctx = get_context(os.path.dirname(__file__), PipelineStage)
+        ctx = get_context(os.path.relpath(os.path.dirname(__file__), os.path.realpath('.')), PipelineStage)
         self.register_pipelines(ctx)
