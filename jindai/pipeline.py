@@ -1,14 +1,14 @@
 """Pipeline"""
 import inspect
-import json
-import sys
 import re
+import sys
 import traceback
-from typing import Dict, Iterable, List, Tuple, Any, Type, Union, Callable
-from collections.abc import Iterable as IterableClass
 from collections import defaultdict
+from collections.abc import Iterable as IterableClass
+from typing import Any, Callable, Dict, Iterable, List, Tuple, Type, Union
+
+from .helpers import config, storage
 from .models import Paragraph
-from .helpers import storage, config
 
 
 class PipelineStage:
@@ -100,7 +100,7 @@ class PipelineStage:
         return [
             {
                 'name': key,
-                'type': val.get('type'),
+                'type': val.get('type', '').strip(),
                 'description': val.get('description'),
                 'default': val.get('default')
             } for key, val in args_docs.items() if 'type' in val
@@ -299,12 +299,23 @@ class Pipeline:
         :param args: a dictionary containing arguments
         :type args: Dict
         """
-        argnames = [_['name'] for _ in stage_type.get_spec()['args']]
+        argnames = {_['name']: _['type']
+                    for _ in stage_type.get_spec()['args']}
 
         toremove = []
         for k in args:
             if k not in argnames or args[k] is None:
                 toremove.append(k)
+            atype = argnames[k]
+            if atype == 'int' and not isinstance(args[k], int):
+                args[k] = int(args[k])
+            elif atype == 'float' and not isinstance(args[k], float):
+                args[k] = float(args[k])
+            elif atype in ('FILES', 'LINES') and isinstance(args[k], list):
+                args[k] = [_ for _ in [line.get('text', '') if isinstance(
+                    line, dict) else str(line) for line in args[k]] if _]
+            elif isinstance(args[k], str) and args[k].startswith('CONST:'):
+                args[k] = config.constants.get(args[k][6:], '')
         for k in toremove:
             del args[k]
 
@@ -314,14 +325,11 @@ class Pipeline:
             return PipelineStage()
         stage_type = Pipeline.ctx[stage_name]
         Pipeline.ensure_args(stage_type, args)
-        for key, val in args.items():
-            if isinstance(val, str):
-                if m := re.match(r'^CONST:(.+)$', val):
-                    args[key] = config.constants[m.group(1)]
         try:
             return stage_type(**args)
         except TypeError as ex:
-            raise ValueError(f'Error while instantiating {stage_name} with {args}')
+            raise ValueError(
+                f'Error while instantiating {stage_name} with {args}')
 
     def __init__(self, stages: List[Union[Tuple[str, Dict], List, Dict, PipelineStage]],
                  log: Callable = print, verbose=False):
@@ -374,7 +382,7 @@ class Pipeline:
     @property
     def gctx(self):
         return self._gctx
-    
+
     @gctx.setter
     def gctx(self, val):
         self._gctx = val
