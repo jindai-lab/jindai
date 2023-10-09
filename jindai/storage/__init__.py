@@ -169,6 +169,7 @@ class Storage:
         parsed = urllib.parse.urlparse(path)
         buf = None
         exc = None
+        print(parsed)
         
         for mgr in self._get_managers(parsed.scheme):
             try:
@@ -295,7 +296,7 @@ class Storage:
             str: full schemed path
         """
         path = path.replace('__hash/', '#')
-        if scheme == 'file': path = '/' + path
+        if scheme == 'file': path = '/' + path.lstrip('/')
         path = f'{scheme}://{path}'
         ext = path.rsplit('.', 1)[-1]
         return path, ext.lower() if len(ext) <= 4 else ''
@@ -311,14 +312,17 @@ class Storage:
         Returns:
             Response: a flask response object
         """
-        if isinstance(path_or_io, str):
-            input_file = self.open(path_or_io, 'rb')
-            ext = path_or_io.rsplit('.', 1)[-1]
-            file_size = self.stat(path_or_io)['size']
-        else:
-            input_file = path_or_io
-            ext = getattr(input_file, 'name', '').rsplit(
-                '.', 1)[-1][:4].lower()
+        try:
+            if isinstance(path_or_io, str):
+                input_file = self.open(path_or_io, 'rb')
+                ext = path_or_io.rsplit('.', 1)[-1]
+                file_size = self.stat(path_or_io)['size']
+            else:
+                input_file = path_or_io
+                ext = getattr(input_file, 'name', '').rsplit(
+                    '.', 1)[-1][:4].lower()
+        except OSError as ose:
+            return Response(str(ose), 404)
 
         mimetype = self.get_mimetype(ext)
 
@@ -499,6 +503,7 @@ class Storage:
         @storage_app.route('/<scheme>/<path:path>', methods=['GET'])
         @storage_app.route('/<scheme>', methods=['GET'])
         def get_item(scheme, path='/'):
+            path = request.args.get('path', path)
             if scheme == 'file':
                 path = '/' + path.lstrip('/')
             path, ext = Storage.get_schemed_path(scheme, path)

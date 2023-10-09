@@ -74,8 +74,11 @@ class ObjectWithSource(db.DbObject):
     def get(cls, url_or_cond: Union[str, MongoOperand, dict], **kwargs):
         source = kwargs.pop('source', DictObject())
         if isinstance(url_or_cond, str):
-            source['url'] = url_or_cond
-            cond = F.source.url == url_or_cond
+            if url_or_cond.startswith('file://') or not '://' in url_or_cond:
+                source['file'] = url_or_cond
+            else:
+                source['url'] = url_or_cond
+            cond = F.source == source
         else:
             cond = url_or_cond
 
