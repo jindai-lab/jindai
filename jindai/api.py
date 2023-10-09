@@ -263,8 +263,8 @@ def serve_image(scheme, image_path):
 
     try:
         return storage.serve_file(path, ext)
-    except OSError:
-        return Response(f'Not found. {path}, ext={ext}.', 404)
+    except OSError as ose:
+        return Response(f'Not found. {path}, ext={ext}, error={ose}.', 404)
 
 
 class APICollectionEndpoint(APICrudEndpoint):
