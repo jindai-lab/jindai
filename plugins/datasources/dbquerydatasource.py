@@ -188,13 +188,14 @@ class MediaImportDataSource(DataSourceStage):
                 i = MediaItem.get(
                     hashed_loc, item_type=MediaItem.get_type(extname))
                 i.save()
-                path = storage.default_path(i.id)
-                with storage.open(path, 'wb') as fout:
-                    fout.write(storage.open(loc, 'rb').read())
-
-                i.source = dict(i.source, file=path)
-                i.save()
-                self.log('Writing', i.id)
+                
+                # do not write local file path
+                # path = storage.default_path(i.id)
+                # with storage.open(path, 'wb') as fout:
+                #     fout.write(storage.open(loc, 'rb').read())
+                # i.source = dict(i.source, file=path)
+                # i.save()
+                # self.log('Writing', i.id)
                 album.images.append(i)
 
         albums = albums.values()
