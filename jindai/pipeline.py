@@ -306,16 +306,20 @@ class Pipeline:
         for k in args:
             if k not in argnames or args[k] is None:
                 toremove.append(k)
-            atype = argnames[k]
-            if atype == 'int' and not isinstance(args[k], int):
-                args[k] = int(args[k])
-            elif atype == 'float' and not isinstance(args[k], float):
-                args[k] = float(args[k])
-            elif atype in ('FILES', 'LINES') and isinstance(args[k], list):
-                args[k] = [_ for _ in [line.get('text', '') if isinstance(
-                    line, dict) else str(line) for line in args[k]] if _]
-            elif isinstance(args[k], str) and args[k].startswith('CONST:'):
+            
+            if isinstance(args[k], str) and args[k].startswith('CONST:'):
                 args[k] = config.constants.get(args[k][6:], '')
+            
+            if k in argnames:
+                atype = argnames[k]
+                if atype == 'int' and not isinstance(args[k], int):
+                    args[k] = int(args[k])
+                elif atype == 'float' and not isinstance(args[k], float):
+                    args[k] = float(args[k])
+                elif atype in ('FILES', 'LINES') and isinstance(args[k], list):
+                    args[k] = [_ for _ in [line.get('text', '') if isinstance(
+                        line, dict) else str(line) for line in args[k]] if _]
+
         for k in toremove:
             del args[k]
 
@@ -382,7 +386,7 @@ class Pipeline:
     @property
     def gctx(self):
         return self._gctx
-
+    
     @gctx.setter
     def gctx(self, val):
         self._gctx = val
