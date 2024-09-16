@@ -306,6 +306,7 @@ class Pipeline:
         for k in args:
             if k not in argnames or args[k] is None:
                 toremove.append(k)
+                continue
             
             if isinstance(args[k], str) and args[k].startswith('CONST:'):
                 args[k] = config.constants.get(args[k][6:], '')

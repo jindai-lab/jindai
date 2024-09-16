@@ -40,3 +40,5 @@ nanoid
 authlib
 pyppeteer
 asyncio
+chardet
+markdown

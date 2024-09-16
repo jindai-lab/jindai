@@ -48,7 +48,6 @@ class CachedWebAccess:
                                           'Referer': url}).content
     
     def request_browserless(self, url, wait_for=''):
-        result = {}
 
         async def fetch():
             browser = await pyppeteer.launcher.connect(
@@ -60,11 +59,11 @@ class CachedWebAccess:
                 await page.waitForSelector(wait_for)
             
             values = await page.evaluate('''() => document.documentElement.outerHTML''')
-            result['data'] = values.encode('utf-8')
-            await browser.close()
+            
+            browser.close()
+            return values.encode('utf-8')
         
-        asyncio.run(fetch())
-        return result.get('data')
+        return asyncio.run(fetch())
 
     def get(self, url, with_chrome=False, wait_for=''):
         hashed = self._digest(url)
@@ -449,7 +448,7 @@ if __name__ == '__main__':
             href = link.attrs['href'].split('#')[0]
             yield urljoin(base_url, href)
 
-    def fetch(url: str, selector: str = '.zenoCOMain'):
+    def fetch(url: str, selector: str):
         url = url.split('#')[0]
         if url in visited or not url.startswith(ROOT_URL):
             return
