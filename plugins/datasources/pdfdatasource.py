@@ -118,7 +118,7 @@ class PDFDataSource(DataSourceStage):
 
                 try:
                     label = doc[page].get_label()
-                except RuntimeError:
+                except (RuntimeError, TypeError):
                     label = ''
 
                 try:
