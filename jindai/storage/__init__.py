@@ -259,7 +259,13 @@ class Storage:
             recursive (bool): Recursive search
         """
         if recursive:
-            return self._query_until('search', path, [], name_pattern=name_pattern)
+            all_paths = [path.rstrip('/')]
+            while all_paths:
+                curr = all_paths.pop(0)
+                if fnmatch(curr, path.rstrip('/') + '/' + name_pattern):
+                    yield curr
+                else:
+                    all_paths += [curr + '/' + f for f in self.listdir(curr)]
         else:
             for f in self.listdir(path):
                 if fnmatch(f, name_pattern):
@@ -447,15 +453,12 @@ class Storage:
                 segs = pattern.split('/')
                 for i, seg in enumerate(segs):
                     if '*' in seg:
-                        parents = segs[:i]
+                        parent = '/'.join(segs[:i]) + '/'
+                        pattern = '/'.join(segs[i:])
+                        yield from self.search(parent, pattern)
                         break
-                parent = '/'.join(parents) + '/'
-                for mgr in self._get_managers(parent):
-                    try:
-                        for pattern in mgr.search(parent, pattern):
-                            patterns.append(pattern)
-                    except OSError:
-                        continue
+                else:
+                    yield pattern
                 continue
             
             if expand_zips and pattern.endswith(('.zip', '.epub')):
