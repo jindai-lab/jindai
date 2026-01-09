@@ -6,15 +6,14 @@ import re
 import time
 from threading import Thread
 
-from PyMongoWrapper import ObjectId, F
 from jindai import Plugin
 from jindai.helpers import safe_import, APICrudEndpoint
-from jindai.models import TaskDBO, db
+from jindai.models import TaskDBO, Base, SessionLocal
 
 schedule = safe_import('schedule')
 
 
-class SchedulerJob(db.DbObject):
+class SchedulerJob(Base):
     """DB object for scheduler jobs"""
     cron = str
 
@@ -47,7 +46,7 @@ class ScheduledTask:
 class SchedulerCrudEndpoint(APICrudEndpoint):
     
     def __init__(self, updater) -> None:        
-        super().__init__('api/plugins', SchedulerJob)
+        super().__init__('api/plugins', SessionLocal, SchedulerJob)
         self.namespace = '/api/plugins/scheduler'
         self.updater = updater
     

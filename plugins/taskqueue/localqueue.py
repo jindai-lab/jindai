@@ -3,7 +3,7 @@
 import threading
 from queue import deque
 import datetime
-import nanoid
+from uuid import UUID
 import time
 import traceback
 
@@ -20,7 +20,7 @@ class Job:
         self.task_dbo = task_dbo
         self.run_by = run_by
         self.queued_at = datetime.datetime.now()
-        self.unique_id = nanoid.generate()
+        self.unique_id = UUID()
         self.task = None
         self.status = 'pending'
         self.exception = {}

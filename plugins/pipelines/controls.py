@@ -2,10 +2,8 @@
 @zhs 工作流程控制
 """
 
-from PyMongoWrapper import F
-from bson import ObjectId
-from jindai import PipelineStage, Pipeline, Task, parser
-from jindai.helpers import evaluateqx
+from uuid import UUID
+from jindai import PipelineStage, Pipeline, Task
 from jindai.models import TaskDBO
 
 
@@ -195,7 +193,8 @@ class CallTask(FlowControlStage):
             params (QUERY): Override parameters in the task
                 @zhs 设置任务中各处理流程参数
         """
-        task = TaskDBO.first(F.id == ObjectId(task))
+        with SessionLocal() as session:
+            task = session.query(TaskDBO).first(TaskDBO.id == UUID(task))
         assert task, f'No specified task: {task}'
         if params:
             params = parser.parse(params)

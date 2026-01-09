@@ -1,7 +1,4 @@
 """Shortcut plugin"""
-import os
-from PyMongoWrapper import F
-
 from jindai import Plugin, parser, storage
 from jindai.helpers import rest, APIUpdate,  APIResults
 from jindai.models import Meta

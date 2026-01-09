@@ -6,7 +6,6 @@ from io import BytesIO
 import re
 import fitz
 import requests
-from PyMongoWrapper import F, Fn, Var
 
 from jindai import storage
 from jindai.helpers import safe_import

@@ -1,6 +1,5 @@
 """Plugin platform for jindai"""
 import glob
-from distutils.dir_util import copy_tree
 import shutil
 import os
 import tempfile
@@ -11,7 +10,7 @@ from typing import Callable
 from flask import Flask, Response
 
 from .config import instance as config
-from .helpers import rest, parser, APIUpdate, APIResults
+from .helpers import rest
 from .storage import instance as storage
 from .pipeline import Pipeline, PipelineStage
 
@@ -32,8 +31,7 @@ class Plugin:
         :type name: str
         :param keybind: keybind for ui
         :type keybind: str
-        :param format_string: format string,
-            use {mediaitem} and {paragraph} for the selected items and paragraphs
+        :param format_string: format string
         :type format_string: str
         :param icon: mdi icon for ui button
         :type icon: str
@@ -67,7 +65,6 @@ class Plugin:
             if isinstance(cls, type) and issubclass(cls, PipelineStage) \
                     and cls is not PipelineStage and not cls.__name__.startswith('_'):
                 Pipeline.ctx[cls.__name__] = cls
-                parser.functions[f'{cls.__name__}_'] = lambda arg: Pipeline.instantiate(cls.__name__, arg).resolve(arg['paragraph'])
                 
 
 class PluginManager:
@@ -95,21 +92,21 @@ class PluginManager:
         def plugin_pages():
             """Returns names for special filters in every plugins
             """
-            return APIResults([
+            return [
                 dict(spec, handler='')
                 for spec in self.filters.values()
-            ])
+            ]
 
         @app.route('/api/plugins')
         @rest(role='admin')
         def plugin_list():
-            return APIResults([type(pl).__name__ for pl in self.plugins])
+            return [type(pl).__name__ for pl in self.plugins]
 
         @app.route('/api/plugins', methods=['POST'])
         @rest(role='admin')
         def plugin_install(url):
             self.install(url)
-            return APIUpdate()
+            return True
 
         # load plugins
 
@@ -177,6 +174,6 @@ class PluginManager:
             else:
                 target = os.path.join(config.rootpath, dirname)
 
-            copy_tree(source, target)
+            shutil.copytree(source, target)
 
         shutil.rmtree(tmpdir)

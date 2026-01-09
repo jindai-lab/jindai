@@ -6,7 +6,6 @@ import threading
 import time
 
 import requests
-from PyMongoWrapper.dbo import create_dbo_json_encoder
 from jindai.common import DictObject
 from jindai.helpers import safe_import
 from jindai.models import TaskDBO

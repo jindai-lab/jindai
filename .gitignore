@@ -1,64 +1,18 @@
 .vscode/
 .DS_*
-PyMongoWrapper
+.venv
 config*.yaml
 dump*
-temp_*
 _*.sh
 *.h5
 *.xlsx
 *.zip
-
+*-secrets.json
 # Byte-compiled / optimized / DLL files
 __pycache__/
 cache/
 *.py[cod]
 *$py.class
-
-# C extensions
-*.so
-
-# Distribution / packaging
-.Python
-build/
-develop-eggs/
-dist/
-downloads/
-eggs/
-.eggs/
-lib/
-lib64/
-parts/
-sdist/
-var/
-wheels/
-*.egg-info/
-.installed.cfg
-*.egg
-MANIFEST
-
-# Sphinx documentation
-docs/_build/
-
-# Jupyter Notebook
-.ipynb_checkpoints
-
-sources*
-
-plugins/jiayan
-plugins/autocompletion
-plugins/libgen
-plugins/nima
-plugins/image_captioning
-plugins/hanzi
-plugins/facedet
-plugins/autorating
-plugins/onedrive_token_cache
-plugins/mt.py
-plugins/ner.py
-plugins/sentiment.py
-plugins/calibre.py
-
 core
 ._*
 *.swp
@@ -66,5 +20,3 @@ docker-compose.yaml
 *.db
 *.pickle
 tests/
-update-pymongowrapper
-update-pymongowrapper

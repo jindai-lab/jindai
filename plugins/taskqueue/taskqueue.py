@@ -1,15 +1,13 @@
 """Task Queue"""
-import datetime
+from uuid import UUID
 import json
 import os
 from io import BytesIO
 import queue
-from bson import ObjectId
 
 from flask import Response, jsonify, request, send_file, stream_with_context
-from PyMongoWrapper import F
 from jindai.helpers import logined, rest, APIResults, APIUpdate
-from jindai.models import TaskDBO
+from jindai.models import TaskDBO, SessionLocal
 from jindai.pipeline import Pipeline
 
 from .announcer import announcer
@@ -65,10 +63,11 @@ class TaskQueue:
             Returns:
                 str: Queued job key
             """
-            if task is None:
-                task_dbo = TaskDBO.first(F.id == ObjectId(task_id))
-            else:
-                task_dbo = TaskDBO().fill_dict(task)
+            with SessionLocal() as session:    
+                if task is None:
+                    task_dbo = session.query(TaskDBO).first(TaskDBO.id == UUID(task_id))
+                else:
+                    task_dbo = TaskDBO(**task)
 
             assert task_dbo, 'No such task, or you do not have permission.'
 

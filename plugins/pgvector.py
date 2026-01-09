@@ -9,7 +9,6 @@ from psycopg2 import sql
 from sentence_transformers import SentenceTransformer
 from bson import ObjectId
 import uuid
-from PyMongoWrapper import F
 
 psycopg2.extras.register_uuid()
 

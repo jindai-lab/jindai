@@ -54,15 +54,6 @@ class ConfigObject(DictObject):
             orig['rootpath'] = str(
                 Path(os.path.abspath(__file__)).parent.parent.absolute())
 
-        if isinstance(orig['storage'], str):
-            orig['storage'] = [orig['storage']]
-        if isinstance(orig['storage'], list):
-            orig['storage'] = {'file': orig['storage']}
-        if not 'default' in orig['storage']:
-            orig['storage']['default'] = 'file'
-        orig['storage']['file'] = [base[6:] if base.startswith(
-            'local:') else base for base in orig['storage'].get('file', [])]
-
         super().__init__(orig)
 
     def save(self, filename: str = '') -> None:
@@ -73,3 +64,4 @@ class ConfigObject(DictObject):
 
 
 instance = ConfigObject()
+print(instance)
