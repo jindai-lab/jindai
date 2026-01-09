@@ -1,16 +1,15 @@
+from uuid import UUID
 from collections import defaultdict
 import threading
 import time
-from typing import Any
-from bson import ObjectId
-
+from typing import Any, Dict
 
 class DictObject(dict):
 
-    def __init__(self, data : dict = None):
+    def __init__(self, data : Dict | None = None):
         super().__init__(data or {})
         if '_id' in self:
-            self['_id'] = ObjectId(self['_id'])
+            self['_id'] = UUID(self['id'])
         
     def __getattr__(self, name: str):
         if name in self:
@@ -22,9 +21,7 @@ class DictObject(dict):
         
     def __setattr__(self, name: str, value: Any) -> None:
         if name == 'id':
-            name = '_id'
-        if name == '_id':
-            value = ObjectId(value)
+            value = UUID(value)
         self[name] = value
         
         

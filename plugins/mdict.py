@@ -3,7 +3,6 @@ from jindai.helpers import safe_import, rest, APIResults, storage
 from jindai.plugin import Plugin
 from jindai.models import Paragraph, F
 from plugins.pipelines.basics import WordCut
-from PyMongoWrapper.dbo import BatchSave
 
 from flask import request, render_template_string, Response
 from urllib.parse import urljoin
@@ -64,7 +63,7 @@ class MDictDataSource(DataSourceStage):
                         a['href'] = f'/api/plugins/mdict?entry={entry}&source={p.source.file}'
                 for attr in ('src', 'href'):
                     for ele in b.select(f'[{attr}]'):
-                        ele[attr] = '/images/file/' + urljoin(p.source.file, ele[attr]).lstrip('/')
+                        ele[attr] = '/api/files/' + urljoin(p.source.file, ele[attr]).lstrip('/')
                 p.content = str(b)
                 yield p
 

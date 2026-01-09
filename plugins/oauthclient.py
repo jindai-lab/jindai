@@ -1,20 +1,17 @@
 """OAuth2 Client"""
-import time
+import json
 from flask import redirect, request, make_response
 
 from jindai.plugin import Plugin
 from jindai.helpers import safe_import
-from jindai.models import User, Token
-from PyMongoWrapper import F
-
-safe_import('authlib')
+from jindai.models import UserInfo, SessionLocal
+from authlib.integrations.flask_client import OAuth
 
 
 class OAuthClientPlugin(Plugin):
 
-    def __init__(self, pmanager, client_id, client_secret, metadata, redirect_logins=False, **_) -> None:
+    def __init__(self, pmanager, client_id, client_secret, metadata, redirect_logins=True, **_) -> None:
         super().__init__(pmanager)
-        from authlib.integrations.flask_client import OAuth
         oauth = OAuth(pmanager.app)
         oauth.register(
             'openid',
@@ -37,12 +34,17 @@ class OAuthClientPlugin(Plugin):
         def authorize_callback():
             token = oauth.openid.authorize_access_token()
             username = token['userinfo']['preferred_username']
-            user = User.first(F.username == username)
-            if user:
-                Token.query((F.user == username) & (F.expire < time.time())).delete()
-                token = User.encrypt_password(str(time.time()), str(time.time_ns()))
-                Token(user=username, token=token, expire=time.time() + 86400).save()
-                resp = make_response(f'<html><head><script>localStorage.token = "{token}"; location.href = "/";</script></head></html>')
-                resp.set_cookie('token', token)
-                return resp
+            atoken = token['access_token']
+            
+            with SessionLocal() as session:
+                user = session.query(UserInfo).filter(UserInfo.username == username).first()
+                if user:
+                    user.token = atoken
+                    session.commit()
+                    print(user.username, 'logged in via oauth', atoken[:10])
+                    resp = make_response(f'<html><head><script>localStorage.token = {json.dumps(atoken)}; location.href = "/";</script></head></html>')
+                    resp.set_cookie('token', atoken)
+                    return resp
             return '', 403
+        
+        print('oauth registered')

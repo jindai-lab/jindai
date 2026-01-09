@@ -8,10 +8,8 @@ from itertools import chain
 from itertools import count as iter_count
 import string
 
-from PyMongoWrapper import F, QExprInterpreter, QExprEvaluator
-from PyMongoWrapper.dbo import DbObject, DbObjectCollection
-from jindai import Pipeline, PipelineStage, parser, storage
-from jindai.helpers import JSONEncoder, evaluateqx, safe_import, WordStemmer as _Stemmer
+from jindai import Pipeline, PipelineStage, storage
+from jindai.helpers import JSONEncoder, safe_import, WordStemmer as _Stemmer
 from jindai.models import Dataset, Paragraph, db
 
 
@@ -431,8 +429,6 @@ class Export(PipelineStage):
         def str_repr(val, strip_brackets=False):
             if isinstance(val, str):
                 return val
-            elif isinstance(val, DbObject):
-                return str_repr(val.as_dict())
             elif isinstance(val, list):
                 val = ', '.join(map(str_repr, val))
                 if not strip_brackets:
