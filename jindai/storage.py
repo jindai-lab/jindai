@@ -7,7 +7,7 @@ from flask import Response, send_file, abort, request
 from flask_restful import Resource, reqparse
 from datetime import datetime
 
-from .app import ResponseTuple, api, config, db
+from .app import ResponseTuple, api, config, db, assert_admin
 from .models import Paragraph
 
 
@@ -294,6 +294,8 @@ class FileManagerResource(Resource):
         - 删除文件/空目录
         - 如需删除非空目录，需额外确认
         """
+        assert_admin()
+        
         target_path = safe_join(FILE_STORAGE_ROOT, file_path)
         if not os.path.exists(target_path):
             return {"error": "文件/目录不存在"}, 404

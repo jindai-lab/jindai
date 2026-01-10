@@ -14,27 +14,16 @@ from threading import Lock
 from typing import IO, Dict, List, Type
 from uuid import UUID
 
-import iso639
 import numpy as np
 import requests
 import werkzeug.wrappers.response
 from flask import Flask, Response, abort, jsonify, request
-from flask.json.provider import JSONProvider as JSONProvideBase
 from PIL.Image import Image
 from werkzeug.exceptions import HTTPException
 
 from .config import instance as config
 from .models import UserInfo
 from .storage import instance as storage
-
-
-class JSONProvider(JSONProvideBase):
-
-    def dumps(self, obj, **kwargs):
-        return json.dumps(obj, **kwargs, cls=JSONEncoder)
-    
-    def loads(self, sbuf, **kwargs):
-        return json.loads(sbuf, **kwargs)
 
 
 class WordStemmer:
@@ -181,14 +170,9 @@ def logined(role="", detailed=False):
 
     @return User object or None if not logged in or token
     """
-    token = request.headers.get(
-            "X-Authentication-Token",
-            request.cookies.get("token", request.args.get("_token", "")),
-        )
-
+    
     # Returns the user who owns the token.
-    with SessionLocal() as session:
-        user = session.query(UserInfo).filter(UserInfo.token == token).first()
+    user = UserInfo.query.filter(UserInfo.token == token).first()
     if user:
         if role == "" or role in user.roles:
             return user.username if not detailed else user
@@ -265,43 +249,3 @@ def get_context(directory: str, parent_class: Type, *sub_dirs: str) -> Dict:
             print("Error while importing", module_name, ":", exception)
 
     return ctx
-
-
-JSONEncoderCls = json.JSONEncoder
-
-
-class JSONEncoder(json.JSONEncoder):
-    """JSONEncoder for api use"""
-
-    def __init__(self, **kwargs):
-        """Initialize the JSON Encoder"""
-        kwargs["ensure_ascii"] = False
-        super().__init__(**kwargs)
-
-    def default(self, o):
-        """Encode the object o
-
-        :param o: the object
-        :type o: Any
-        :return: str or JSON-compatible objects
-        :rtype: Any
-        """
-        if isinstance(o, np.ndarray):
-            return o.tolist()
-        if isinstance(o, np.int32):
-            return o.tolist()
-        if isinstance(o, Image):
-            return str(o)
-        if isinstance(o, datetime.datetime):
-            return o.isoformat() + "Z"
-        if isinstance(o, UUID):
-            return str(o)
-        
-        return JSONEncoderCls.default(self, o)
-
-
-# ISO639 language codes
-language_iso639 = {
-    lang.part1: lang.name for lang in iso639.ALL_LANGUAGES if lang.part1 and lang.part1 != "zh"
-}
-language_iso639.update(zhs="Chinese Simplified", zht="Chinese Traditional")
