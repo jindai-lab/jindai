@@ -7,9 +7,10 @@ from io import BytesIO
 from itertools import chain
 from itertools import count as iter_count
 import string
+import json
 
 from jindai import Pipeline, PipelineStage, storage
-from jindai.helpers import JSONEncoder, safe_import, WordStemmer as _Stemmer
+from jindai.helpers import safe_import, WordStemmer as _Stemmer
 from jindai.models import Dataset, Paragraph, db
 
 
@@ -424,7 +425,7 @@ class Export(PipelineStage):
         pandas = safe_import('pandas')
 
         def json_dump(val):
-            return JSONEncoder().encode(val)
+            return json.dumps(val)
 
         def str_repr(val, strip_brackets=False):
             if isinstance(val, str):

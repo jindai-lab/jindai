@@ -86,8 +86,7 @@ class TaskRemoteQueue(TaskQueue):
         try:
             headers = {}
             if isinstance(data, dict):
-                data = json.dumps(cls=create_dbo_json_encoder(
-                    json.JSONEncoder), obj=data)
+                data = json.dumps(data)
                 headers['content-type'] = 'application/json'
             resp = requests.request(method, self._base + api_name,
                                     data=data, headers=headers, timeout=30)

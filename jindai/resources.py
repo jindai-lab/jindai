@@ -1,21 +1,26 @@
 from typing import Type
 
 import jieba
+import re
 from sqlalchemy import or_
-from sqlalchemy.sql import func, text
 from sqlalchemy.dialects.postgresql import insert
+from sqlalchemy.sql import func, text
 
-from .app import UUID, Resource, api, db, request, oidc, app
+from .app import UUID, Resource, api, app, db, oidc, request, assert_admin
 from .models import (
     Base,
     Dataset,
     History,
     Paragraph,
     TaskDBO,
+    Terms,
     TextEmbeddings,
     UserInfo,
-    Terms,
 )
+
+
+def is_uuid_literal(val: str):
+    return re.match(r'^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$', val.lower()) is not None
 
 
 class JindaiResource(Resource):
@@ -35,10 +40,13 @@ class JindaiResource(Resource):
         if data["results"]:
             data["total"] = stmt.count()
         return data
-
+    
+    def get_object_by_id(self, resource_id):
+        return self.model.query.get(UUID(resource_id))
+    
     def get(self, resource_id=None):
         if resource_id:
-            result = self.model.query.get(UUID(resource_id))
+            result = self.get_object_by_id(resource_id)
             if not result:
                 return {
                     "error": f"No resource of {self.model.__name__} with id {resource_id}"
@@ -61,15 +69,15 @@ class JindaiResource(Resource):
             db.session.rollback()
             return {"error": str(e)}, 500
 
-    def put(self):
+    def put(self, resource_id=""):
         data = request.json
-        item = self.model.query.get(id=UUID(data.get("id")))
+        item = self.get_object_by_id(resource_id)
         if not item:
             return {
                 "error": f"No existing resource of {self.model.__name__} with id {data.get('id')}"
             }, 404
-        del data["id"]
-        for k, v in data.item():
+        data.pop("id", "")
+        for k, v in data.items():
             setattr(item, k, v)
         self._on_create_or_update(item)
         try:
@@ -80,7 +88,7 @@ class JindaiResource(Resource):
             return {"error": str(e)}, 500
 
     def delete(self, resource_id):
-        item = self.model.query.get(UUID(resource_id))
+        item = self.get_object_by_id(resource_id)
         if not item:
             return {
                 "error": f"No existing resource of {self.model.__name__} with id {resource_id}"
@@ -112,18 +120,29 @@ class DatasetResource(JindaiResource):
     def __init__(self) -> None:
         super().__init__(Dataset)
         
+    def get_object_by_id(self, resource_id):
+        if not is_uuid_literal(resource_id):
+            ds = Dataset.query.filter(Dataset.name==resource_id).first()
+            if ds is None:
+                ds = Dataset(name=resource_id)
+                db.session.add(ds)
+                db.session.commit()
+                return ds
+            return ds
+        return super().get_object_by_id(resource_id)
+
     def get(self, resource_id=None):
-        
+
         def _dataset_sort_key(ds: Dataset):
-            return len(ds.name.split('--')), ds.order_weight, ds.name
-        
+            return len(ds.name.split("--")), ds.order_weight, ds.name
+
         if not resource_id:
             datasets = Dataset.query.all()
             sorted_datasets = sorted(datasets, key=_dataset_sort_key)
             hierarchy = []
             for dataset in sorted_datasets:
                 current_level = hierarchy
-                parts = dataset.name.split('--')
+                parts = dataset.name.split("--")
                 for parti, part in enumerate(parts):
                     found = False
                     for item in current_level:
@@ -132,12 +151,32 @@ class DatasetResource(JindaiResource):
                             found = True
                             break
                     if not found:
-                        new_item = {"title": part, "children": [], "value": '--'.join(parts[:parti+1])}
+                        new_item = {
+                            "title": part,
+                            "children": [],
+                            "order_weight": dataset.order_weight,
+                            "record_id": (
+                                str(dataset.id) if parti == len(parts) - 1 else None
+                            ),
+                            "value": "--".join(parts[: parti + 1]),
+                        }
                         current_level.append(new_item)
                         current_level = new_item["children"]
             return {"results": hierarchy, "count": len(datasets)}, 200
         
         return super().get(resource_id)
+    
+    def post(self):
+        assert_admin()
+        return super().post()
+    
+    def delete(self, resource_id):
+        assert_admin()
+        return super().delete(resource_id)
+    
+    def put(self, resource_id=""):
+        assert_admin()
+        return super().put(resource_id)
 
 
 class TaskDBOResource(JindaiResource):
@@ -148,20 +187,20 @@ class TaskDBOResource(JindaiResource):
 class ParagraphResource(JindaiResource):
     def __init__(self) -> None:
         super().__init__(Paragraph)
-        
+
     def get_embedding(self, text: str):
         raise NotImplementedError("Embedding service not implemented")
 
     def post(self):
         data = request.json
         if search := data.get("search"):
-            if search.startswith('?'):
+            if search.startswith("?"):
                 param = text(search[1:])
-            elif search.startswith('*'):
+            elif search.startswith("*"):
                 param = Paragraph.content.ilike(f"%{search.strip('*')}%")
-            elif search.startswith(':'):
-                embedding = self.get_embedding(search.strip(':'))
-                param = TextEmbeddings.embedding.op('<=>')(embedding) < 0.3
+            elif search.startswith(":"):
+                embedding = self.get_embedding(search.strip(":"))
+                param = TextEmbeddings.embedding.op("<=>")(embedding) < 0.3
             else:
                 param = Paragraph.keywords.contains(
                     [_.strip().lower() for _ in jieba.cut(search) if _.strip()]
@@ -170,9 +209,16 @@ class ParagraphResource(JindaiResource):
                 dataset_filters = [Dataset.name.in_(datasets)]
                 for dataset_prefix in datasets:
                     dataset_filters.append(Dataset.name.ilike(f"{dataset_prefix}--%"))
-                param &= Paragraph.dataset.in_(Dataset.query.filter(or_(*dataset_filters)).with_entities(Dataset.id))
+                param &= Paragraph.dataset.in_(
+                    Dataset.query.filter(or_(*dataset_filters)).with_entities(
+                        Dataset.id
+                    )
+                )
             if sources := data.get("sources"):
-                param &= Paragraph.source_url.in_(sources)
+                source_filters = [Paragraph.source_url.in_(sources)]
+                for source in sources:
+                    source_filters.append(Paragraph.source_url.ilike(f"{source}%"))
+                param &= or_(*source_filters)
             query = Paragraph.query.filter(param)
             return self.paginate(query), 200
         else:
@@ -191,9 +237,10 @@ class ParagraphResource(JindaiResource):
 class TextEmbeddingsResource(JindaiResource):
     def __init__(self) -> None:
         super().__init__(TextEmbeddings)
-        
-        
+
+
 class OIDCUserInfoResource(Resource):
+    
     def get(self):
         if oidc.user_loggedin:
             info = oidc.user_getinfo(
@@ -207,7 +254,10 @@ class OIDCUserInfoResource(Resource):
             )
             return info, 200
         else:
-            return {"error": "User not logged in", "redirect": oidc.redirect_to_auth_server(request.url).location}, 401
+            return {
+                "error": "User not logged in",
+                "redirect": oidc.redirect_to_auth_server(request.url).location,
+            }, 401
 
 
 def apply_resources():

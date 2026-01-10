@@ -52,11 +52,11 @@ def index(path="index.html"):
     if path.startswith("api/"):
         return Response("", 404)
     path = path or "index.html"
-    for file in [path, path + ".html", os.path.join("ui/dist", path)]:
+    for file in [path, path + ".html"]:
         if os.path.exists(file) and os.path.isfile(file):
             return send_file(open(file, "rb"))
 
-    return send_file(open("ui/dist/index.html", "rb"))
+    return 'Not found for ' + path, 404
 
 
 def prepare_plugins():
