@@ -9,8 +9,8 @@ import jieba
 from pgvector.sqlalchemy import Vector
 from sentence_transformers import SentenceTransformer
 from sqlalchemy import (Boolean, DateTime, ForeignKey, Index, Integer, String,
-                        Text, UniqueConstraint, create_engine, exists, or_,
-                        text)
+                        Text, UniqueConstraint, create_engine, delete, exists, or_,
+                        text, update)
 from sqlalchemy.dialects.postgresql import ARRAY, JSONB, UUID
 from sqlalchemy.orm import (Mapped, declarative_base, mapped_column,
                             relationship, scoped_session, sessionmaker)
@@ -82,6 +82,30 @@ class Dataset(Base):
     paragraphs: Mapped[List["Paragraph"]] = relationship(
         "Paragraph", back_populates="dataset_obj", cascade="all, delete-orphan"
     )
+    
+    @staticmethod
+    def get_by_name(name, strict=False):
+        ds = db_session.query(Dataset).filter(Dataset.name == name).first()
+        if ds is None and not strict:
+            ds = Dataset(name=name)
+            db_session.add(ds)
+            db_session.commit()
+        return ds
+
+    def rename_dataset(self, new_name):
+        if self.name == new_name:
+            return
+        ds = Dataset.get_by_name(new_name)
+        if ds:
+            stmt = update(Paragraph).where(Paragraph.dataset == self.id).values({
+                'dataset': ds.id
+            })
+            db_session.execute(stmt)
+            db_session.delete(self)
+        else:
+            self.name = new_name
+        db_session.commit()
+        return self.id
 
 
 class UserInfo(Base):

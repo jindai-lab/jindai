@@ -109,13 +109,7 @@ class DatasetResource(JindaiResource):
         
     def get_object_by_id(self, resource_id):
         if not is_uuid_literal(resource_id):
-            ds = db_session.query(Dataset).filter(Dataset.name==resource_id).first()
-            if ds is None:
-                ds = Dataset(name=resource_id)
-                db_session.add(ds)
-                db_session.commit()
-                return ds
-            return ds
+            return Dataset.get_by_name(resource_id, True)
         return super().get_object_by_id(resource_id)
 
     def get(self, resource_id=None):
@@ -163,7 +157,10 @@ class DatasetResource(JindaiResource):
     
     def put(self, resource_id=""):
         assert_admin()
-        return super().put(resource_id)
+        ds = self.get_object_by_id(resource_id)
+        if ds is None:
+            return 'Not Found', 404
+        return ds.rename_dataset(request.json['name'])
 
 
 class TaskDBOResource(JindaiResource):
@@ -273,5 +270,3 @@ def apply_resources(api):
 @app.teardown_appcontext
 def shutdown_session(exception=None):
     db_session.remove()  # 关键：防止连接泄露
-
-
