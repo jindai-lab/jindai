@@ -167,7 +167,6 @@ class WebPageListingDataSource(DataSourceStage):
         self.lang = lang
         self.image_patterns = PipelineStage.parse_lines(
             img_pattern) or DEFAULT_IMG_PATTERNS.split('\n')
-        self.collection = self.base_cls.get_coll(mongocollection)
         self.level = level
         self.with_chrome = with_chrome
         self.wait_for = wait_for
@@ -180,7 +179,7 @@ class WebPageListingDataSource(DataSourceStage):
         except OSError as ose:
             self.log_exception(f'Error while reading from {url}', ose)
             data = ''
-        return self.collection(source={'url': url}, html=data, dataset=self.dataset, lang=self.lang)
+        return Paragraph(source_url=url, extdata={'html': data}, dataset=self.dataset, lang=self.lang)
 
     def get_text(self, element):
         """Get text of element"""
@@ -190,8 +189,8 @@ class WebPageListingDataSource(DataSourceStage):
 
     def parse_detail(self, url, para, b):
         """Parse url as a detail page"""
-        para.pdate = datetime.datetime.utcnow()
-        para.source = {'url': url}
+        para.pdate = datetime.datetime.now()
+        para.source_url = url
         para.dataset = self.dataset
         para.lang = self.lang
         para.content = self.get_text(b)
@@ -341,22 +340,21 @@ class ExtractHTMLParagraphs(PipelineStage):
         return text
 
     def resolve(self, paragraph: Paragraph) -> Paragraph:
-        html = paragraph[self.field] or ''
+        html = paragraph.extdata.get(self.field) or ''
         b = B(html, 'lxml')
         self.log('load html data of length', len(html))
 
         for html_para in b.select(self.paragraph_selector) if self.paragraph_selector else [b]:
-            para = type(paragraph)(
+            para = Paragraph(
                 lang=paragraph.lang,
                 content='',
-                source=paragraph.source,
+                source_url=paragraph.source_url,
                 pagenum=1,
                 dataset=paragraph.dataset,
                 outline=paragraph.outline,
                 keywords=[],
-                html=str(html_para),
-                images=paragraph.images,
+                extdata={'html': str(html_para)},
             )
             self._resolve_assignments(html_para, para)
-            self.log('Extract para at', para.source['url'])
+            self.log('Extract para at', para.source_url)
             yield para

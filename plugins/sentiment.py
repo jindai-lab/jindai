@@ -16,7 +16,7 @@ class AutoSentimentAnalysis(PipelineStage):
 
     def resolve(self, paragraph: Paragraph) -> Paragraph:
         snow = safe_import('snownlp').SnowNLP
-        paragraph.otherdata['sentiment'] = (snow(paragraph.content).sentiments-0.5) * 2
+        paragraph.extdata['sentiment'] = (snow(paragraph.content).sentiments-0.5) * 2
         return paragraph
 
 

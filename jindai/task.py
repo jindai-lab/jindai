@@ -1,20 +1,26 @@
 """Task processing module"""
 
-from collections import deque
+import ctypes
+import datetime
+import json
 import os
 import sys
-from threading import Thread, Lock
 import time
 import traceback
+from collections import deque
 from queue import PriorityQueue
-import ctypes
+from threading import Lock, Thread
 from typing import Callable
-import datetime
 from uuid import UUID
 
-from .helpers import safe_import
+import redis
+from tqdm import tqdm
+
+from .app import config
 from .models import Paragraph
 from .pipeline import Pipeline
+
+redis_client = redis.Redis(**config.redis)
 
 
 class WorkersPool:
@@ -68,61 +74,6 @@ class WorkersPool:
         print(' ', '\n  '.join(map(str, self._threads.keys())))
         
 
-class TqdmFactory:
-
-    class _TqdmProxy:
-        """Proxy for tqdm"""
-
-        def __init__(self):
-            self.pbar = safe_import('tqdm').tqdm()
-            self._lock = Lock()
-
-        def update(self, inc: int):
-            """Update pbar value
-
-            :param inc: inc value
-            :type inc: int
-            """
-            self.pbar.update(inc)
-
-        def reset(self):
-            """Reset count and total"""
-            self.pbar.n = 0
-            self.pbar.total = None
-
-        def inc_total(self, inc: int):
-            """Thread-safe incresement for pbar.total
-
-            :param inc: inc value
-            :type inc: int
-            """
-            with self._lock:
-                if self.pbar.total is None:
-                    self.pbar.total = inc
-                else:
-                    self.pbar.total += inc
-
-    class _FakeTqdm:
-        def update(self, _):
-            """Stub update"""
-
-        def inc_total(self, _):
-            """Stub inc_total"""
-
-        def reset(self):
-            """Stub reset"""
-            
-    @staticmethod
-    def get_tqdm(fake=False):
-        if not os.isatty(sys.stdout.fileno()):
-            fake = True
-            
-        if fake:
-            return TqdmFactory._FakeTqdm()
-        
-        return TqdmFactory._TqdmProxy()
-
-
 class Task:
     """Task object"""
 
@@ -158,8 +109,8 @@ class Task:
         self.pipeline = Pipeline(stages, self.log, verbose)
         self.params = params
 
-        self._pbar = TqdmFactory.get_tqdm(fake=verbose or not use_tqdm)
-        self._queue = None
+        self._pbar = tqdm()
+        self._queue = PriorityQueue()
         
         self._workers = None
          
@@ -182,7 +133,7 @@ class Task:
                 counter += 1
                 if not self.alive:
                     break
-            self._pbar.inc_total(counter)
+            self._pbar.n = (self._pbar.n or 0) + 1
         except Exception as ex:
             self.log_exception('Error while executing', ex)
             if not self.resume_next:
@@ -207,7 +158,7 @@ class Task:
             if self.pipeline.stages:
                 self._queue.put((0, 0, (Paragraph(**self.params),
                                   self.pipeline.stages[0])))
-                self._pbar.inc_total(1)
+                self._pbar.n += 1
 
                 while self.alive:
                     while self.logs:
@@ -248,23 +199,6 @@ class Task:
         self.log(info, type(exc).__name__, exc)
         self.log('\n'.join(traceback.format_tb(exc.__traceback__)))
         
-    def run(self, callback = None):
-        """Create a daemon thread to execute the task
-        """
-        def _run():
-            try:
-                self.returned = self.execute()
-            except Exception as ex:
-                self.log('Error while running task', type(ex).__name__, ex)
-            self.alive = False
-            if callback:
-                callback(self)
-
-        self.alive = True
-        thr = Thread(target=_run)
-        thr.start()
-        return thr
-
     def stop(self):
         """Stop task"""
         self.alive = False
@@ -282,7 +216,7 @@ class Task:
         """
         
         if dbo.pipeline:
-            dbo.last_run = datetime.datetime.utcnow()
+            dbo.last_run = datetime.datetime.now()
             dbo.save()
             
             return Task(params={},

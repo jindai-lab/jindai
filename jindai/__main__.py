@@ -19,10 +19,9 @@ from flask import Flask
 from tqdm import tqdm
 
 from . import Plugin, PluginManager, Task, config, storage
-from .app import db
 from .api import prepare_plugins, run_service
 from .helpers import get_context, safe_import
-from .models import Dataset, Paragraph, TaskDBO, UserInfo
+from .models import Dataset, Paragraph, TaskDBO, UserInfo, db_session
 
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
@@ -39,11 +38,11 @@ def cli():
 
 @cli.command("init")
 def first_run():
-    u = UserInfo.query.first()
+    u = db_session.query(UserInfo).first()
     if not u:
         u = UserInfo(username="admin", roles=["admin"])
-        db.session.add(u)
-        db.session.commit()
+        db_session.add(u)
+        db_session.commit()
         print("Created user: admin; dataset: Default")
 
 
@@ -68,6 +67,12 @@ def export(query, output_file):
         output_file.write(xlsx)
 
 
+@cli.command("worker")
+def run_worker():
+    from .worker import worker
+    worker()
+
+
 @cli.command("task")
 @click.argument("task_id")
 @click.option("-l", "--log", type=str, default="")
@@ -77,7 +82,7 @@ def export(query, output_file):
 @click.option("-o", "--output", type=click.File("w", "utf-8", "ignore"), default=None)
 def run_task(task_id, concurrent, verbose, edit, log, output):
     """Run task according to id or name"""
-    dbo = TaskDBO.query.filter((TaskDBO.id == task_id) | (TaskDBO.name == task_id)).first()
+    dbo = db_session.query(TaskDBO).filter((TaskDBO.id == task_id) | (TaskDBO.name == task_id)).first()
     
     if not dbo:
         print(f"Task {task_id} not found")

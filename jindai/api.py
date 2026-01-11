@@ -6,16 +6,16 @@ from collections import defaultdict
 
 from flask import Flask, Response, redirect, request, send_file
 
-from .app import app, config
+from .app import app, config, api
 from .helpers import get_context, rest
-from .resources import apply_resources
 from .pipeline import Pipeline
 from .plugin import Plugin, PluginManager
 from .storage import instance as storage
 from .task import Task
+from .resources import apply_resources
 
 
-apply_resources()
+apply_resources(api)
 
 
 @app.route("/api/pipelines")
@@ -56,7 +56,7 @@ def index(path="index.html"):
         if os.path.exists(file) and os.path.isfile(file):
             return send_file(open(file, "rb"))
 
-    return 'Not found for ' + path, 404
+    return "Not found for " + path, 404
 
 
 def prepare_plugins():
