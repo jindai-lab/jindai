@@ -61,11 +61,6 @@ class PDFDataSource(DataSourceStage):
             page_range (str):
                 Page range, e.g. 1-3
                 @zhs 页码范围，例如 1-3
-            nougat_endpoint (str):
-                Nougat OCR API Endpoint
-            rapid_ocr (bool):
-                Use RapidOCR
-                @zhs 使用 RapidOCR 识别（优先级低于 Nougat）
         """
         self.name = dataset_name
         self.lang = lang
@@ -73,9 +68,7 @@ class PDFDataSource(DataSourceStage):
         self.skip_existed = skip_existed
         self.page_range = sorted(resolve_range(page_range))
         self.files = PipelineStage.parse_paths(content)
-        self.nougat_endpoint = nougat_endpoint
-        self.rapid_ocr = safe_import('rapid_ocr', 'rapidocr_pdf[onnxruntime]').PDFExtractor() if rapid_ocr else None
-
+    
     def fetch(self):
         para_coll = Paragraph.get_coll(self.mongocollection)
         lang = self.lang
@@ -129,21 +122,7 @@ class PDFDataSource(DataSourceStage):
 
                 if len(content) > 10:
                     imported_pages += 1
-                elif self.nougat_endpoint:
-                    buf = doc[page].get_pixmap().tobytes('png')
-                    resp = requests.post(self.nougat_endpoint, headers={
-                        'accept': 'application/json',
-                    }, files={
-                        'file': ('page.png', BytesIO(buf), 'application/png'),
-                    })
-                    try:
-                        content = re.sub(r'^+++.*\n', '', resp.json())
-                    except Exception as ex:
-                        self.log_exception(ex)
-                elif self.rapid_ocr:
-                    buf = doc[page].get_pixmap().tobytes('png')
-                    _, content, __ = self.ocr.pdf_extractor(buf)
-
+                
                 yield para_coll(
                     lang=lang, content=content,
                     source={'file': short_path, 'page': page},

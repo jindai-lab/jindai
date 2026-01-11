@@ -1,28 +1,30 @@
 """DB Objects"""
 
+import re
 import uuid
 from datetime import datetime
 from typing import Any, Dict, List
 
+import jieba
 from pgvector.sqlalchemy import Vector
-from sqlalchemy import (
-    Boolean,
-    DateTime,
-    ForeignKey,
-    Index,
-    Integer,
-    String,
-    Text,
-    UniqueConstraint,
-)
-from sqlalchemy.dialects.postgresql import JSONB, ARRAY, UUID
-from sqlalchemy.orm import Mapped, mapped_column, relationship
+from sentence_transformers import SentenceTransformer
+from sqlalchemy import (Boolean, DateTime, ForeignKey, Index, Integer, String,
+                        Text, UniqueConstraint, create_engine, exists, or_,
+                        text)
+from sqlalchemy.dialects.postgresql import ARRAY, JSONB, UUID
+from sqlalchemy.orm import (Mapped, declarative_base, mapped_column,
+                            relationship, scoped_session, sessionmaker)
 from sqlalchemy.sql import func
 
-from .app import db
+from .config import instance as config
+
+engine = create_engine(config.database)
+session_factory = sessionmaker(bind=engine)
+db_session = scoped_session(session_factory)
+MBase = declarative_base()
 
 
-class Base(db.Model):
+class Base(MBase):
     """所有 ORM 模型的基类"""
 
     # 为所有表添加默认的 created_at 字段（如果表中没有则自动忽略）
@@ -57,7 +59,6 @@ class Base(db.Model):
                 data[column.name] = value
             else:
                 data[column.name] = f'<{value} of {column.type}>'
-        print(data)
         return data
 
 
@@ -94,13 +95,12 @@ class UserInfo(Base):
 
     username: Mapped[str] = mapped_column(String(64), nullable=False, comment="用户名")
     roles: Mapped[List[str]] = mapped_column(
-        JSONB, default=list, nullable=False, comment="用户角色列表（JSON）"
+        ARRAY(Text), default=list, nullable=False, comment="用户角色列表"
     )
     datasets: Mapped[List[UUID] | None] = mapped_column(
-        JSONB, default=dict, comment="有权限的数据集列表（JSON）"
+        ARRAY(Text), default=list, comment="有权限的数据集列表"
     )
-    token: Mapped[str | None] = mapped_column(Text, comment="用户令牌")
-
+    
     # 关联关系：一个用户对应多个操作历史/令牌
     histories: Mapped[List["History"]] = relationship(
         "History", back_populates="user", cascade="all, delete-orphan"
@@ -183,8 +183,59 @@ class Paragraph(Base):
         data = super().as_dict()
         data['dataset'] = self.dataset_obj.name
         return data
-
-
+    
+    def __getattr__(self, key):
+        if key in self.extdata:
+            return self.extdata[key]
+        return super().__getattr__(key)
+    
+    @staticmethod
+    def build_query(query_data):
+        query = db_session.query(Paragraph)
+        
+        search = query_data['search']
+        
+        if datasets := query_data.get("datasets"):
+            dataset_filters = [Dataset.name.in_(datasets)]
+            for dataset_prefix in datasets:
+                dataset_filters.append(Dataset.name.ilike(f"{dataset_prefix}--%"))
+            query = query.filter(Paragraph.dataset.in_(
+                db_session.query(Dataset).filter(or_(*dataset_filters)).with_entities(
+                    Dataset.id
+                )
+            ))
+        
+        if sources := query_data.get("sources"):
+            source_filters = [Paragraph.source_url.in_(sources)]
+            for source in sources:
+                source_filters.append(Paragraph.source_url.ilike(f"{source}%"))
+            query = query.filter(or_(*source_filters))
+            
+        if "embeddings" in query_data:
+            param = exists().where(TextEmbeddings.id == Paragraph.id)
+            if not query_data["embeddings"]:
+                param = ~param
+            query = query.filter(param)
+            
+        if search.startswith("?"):
+            param = text(search[1:])
+            query = query.filter(param)
+        elif search.startswith("*"):
+            param = Paragraph.content.ilike(f"%{search.strip('*')}%")
+            query = query.filter(param)
+        elif search.startswith(":"):
+            query_embedding = TextEmbeddings.get_embedding(search.strip(":"))
+            query = query.join(TextEmbeddings, TextEmbeddings.id == Paragraph.id).order_by(TextEmbeddings.embedding.cosine_distance(query_embedding))
+            print(query)
+        else:
+            param = Paragraph.keywords.contains(
+                [_.strip().lower() for _ in jieba.cut(search) if _.strip()]
+            )
+            query = query.filter(param)
+            
+        return query
+    
+    
 class Terms(Base):
     __tablename__ = "terms"
     __table_args__ = {
@@ -219,6 +270,8 @@ class TaskDBO(Base):
 
 
 class TextEmbeddings(Base):
+    embedding_model = None
+    
     __tablename__ = "text_embeddings"
     __table_args__ = (
         Index(
@@ -239,15 +292,39 @@ class TextEmbeddings(Base):
         primary_key=True,
         comment="段落ID",
     )
-
-    collection: Mapped[str] = mapped_column(
-        String(255), nullable=False, comment="嵌入集合名称"
-    )
+    
     embedding: Mapped[Vector] = mapped_column(
-        Vector(384), nullable=False, comment="文本嵌入向量"  # 384 维向量
+        Vector(config.embedding_dims), nullable=False, comment="文本嵌入向量"
     )
 
     paragraph: Mapped["Paragraph"] = relationship(
         "Paragraph", back_populates="text_embeddings"
     )
 
+    @staticmethod
+    def get_embedding(text: str):
+        """
+        将多语言文本转换为embedding向量
+
+        Args:
+            text: 输入的多语言文本（支持中文、英文、日文等100+种语言）
+
+        Returns:
+            np.ndarray: 生成的embedding向量（维度为384）
+
+        Raises:
+            ValueError: 输入文本为空时抛出异常
+        """
+        if TextEmbeddings.embedding_model is None:
+            TextEmbeddings.embedding_model = SentenceTransformer(config.embedding_model)
+        embedding = TextEmbeddings.embedding_model.encode(
+            text.strip(),
+            convert_to_numpy=True,  # 返回numpy数组，方便后续处理
+            normalize_embeddings=True,  # 归一化向量，提升检索效果
+        )
+        
+        return embedding.tolist()
+
+
+def is_uuid_literal(val: str):
+    return re.match(r'^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$', val.lower()) is not None

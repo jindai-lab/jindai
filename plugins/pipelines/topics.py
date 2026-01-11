@@ -12,6 +12,7 @@ from jindai.helpers import safe_import
 from jindai.models import Paragraph
 from .basics import AccumulateParagraphs, Counter
 from threading import Lock
+import sentence_transformers
 
 
 def import_plt():
@@ -321,7 +322,6 @@ class GenerateCooccurance(PipelineStage):
             @zhs 权重方式，vec_cos 表示*语段间*向量余弦相似度，token 表示语段内各词的共现次数
         """
         super().__init__()
-        safe_import('sentence_transformers')
         self.method = weighted_by
         self.counter = Counter()
 

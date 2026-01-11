@@ -5,8 +5,10 @@ Named Entity Recognition
 import re
 
 from jindai import PipelineStage, Plugin
-from jindai.helpers import safe_import
 from jindai.models import Paragraph
+
+import hanlp
+import spacy
 
 
 class HanLPModel(PipelineStage):
@@ -23,7 +25,6 @@ class HanLPModel(PipelineStage):
             pretrained (ZH|JA|OT): Pretained model
                 @zhs 预训练模型
         """
-        hanlp = safe_import('hanlp')
         self.result = result
         pretrained = {
             'ZH': 'CLOSE_TOK_POS_NER_SRL_DEP_SDP_CON_ELECTRA_BASE_ZH',
@@ -49,7 +50,6 @@ class HanlpNerZh(PipelineStage):
         """ 提取的结果格式为 [名称, 类型]
         """
         super().__init__()
-        hanlp = safe_import('hanlp')
         self.model = hanlp.load(
             hanlp.pretrained.mtl.CLOSE_TOK_POS_NER_SRL_DEP_SDP_CON_ELECTRA_BASE_ZH)
 
@@ -67,7 +67,6 @@ class HanlpNerJa(PipelineStage):
 
     def __init__(self) -> None:
         super().__init__()
-        hanlp = safe_import('hanlp')
         self.model = hanlp.load(
             hanlp.pretrained.mtl.hanlp.pretrained.mtl.NPCMJ_UD_KYOTO_TOK_POS_CON_BERT_BASE_CHAR_JA)
 
@@ -89,7 +88,6 @@ class SpaCyNER(PipelineStage):
             lang (LANG): language
             @zhs 语言
         """
-        spacy = safe_import('spacy')
         model = {
             'en': 'en_core_web_sm',
             'zhs': 'zh_core_web_sm',

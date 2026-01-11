@@ -36,8 +36,8 @@ class WordStemmer:
     @staticmethod
     def get_stemmer(lang):
         """Get stemmer for language"""
-        safe_import("nltk")
-        stemmer = safe_import("nltk.stem.snowball").SnowballStemmer
+        import nltk.stem.snowball
+        stemmer = nltk.stem.snowball.SnowballStemmer
         if lang not in WordStemmer._language_stemmers:
             lang = language_iso639.get(lang, lang).lower()
             if lang not in stemmer.languages:
@@ -172,7 +172,7 @@ def logined(role="", detailed=False):
     """
     
     # Returns the user who owns the token.
-    user = UserInfo.query.filter(UserInfo.token == token).first()
+    user = db_session.query(UserInfo).filter(UserInfo.token == token).first()
     if user:
         if role == "" or role in user.roles:
             return user.username if not detailed else user

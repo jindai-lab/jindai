@@ -1,26 +1,13 @@
 from typing import Type
 
-import jieba
-import re
-from sqlalchemy import or_
+from sqlalchemy import exists, or_
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.sql import func, text
 
-from .app import UUID, Resource, api, app, db, oidc, request, assert_admin
-from .models import (
-    Base,
-    Dataset,
-    History,
-    Paragraph,
-    TaskDBO,
-    Terms,
-    TextEmbeddings,
-    UserInfo,
-)
-
-
-def is_uuid_literal(val: str):
-    return re.match(r'^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$', val.lower()) is not None
+from .app import UUID, Resource, app, assert_admin, oidc, request
+from .models import (Base, Dataset, History, Paragraph, TaskDBO, Terms,
+                     TextEmbeddings, UserInfo, db_session, is_uuid_literal)
+from .worker import add_task, get_task_stats, get_task_result, delete_task
 
 
 class JindaiResource(Resource):
@@ -42,7 +29,7 @@ class JindaiResource(Resource):
         return data
     
     def get_object_by_id(self, resource_id):
-        return self.model.query.get(UUID(resource_id))
+        return db_session.query(self.model).get(UUID(resource_id))
     
     def get(self, resource_id=None):
         if resource_id:
@@ -56,17 +43,17 @@ class JindaiResource(Resource):
             results = self.model.query
             return {"results": self.paginate(results), "count": results.count()}, 200
 
-    def post(self):
+    def post(self, resource_id=""):
         data = request.json
         new_item = self.model(**data)
 
         try:
             self._on_create_or_update(new_item)
-            db.session.add(new_item)
-            db.session.commit()
+            db_session.add(new_item)
+            db_session.commit()
             return new_item.as_dict(), 201
         except Exception as e:
-            db.session.rollback()
+            db_session.rollback()
             return {"error": str(e)}, 500
 
     def put(self, resource_id=""):
@@ -81,10 +68,10 @@ class JindaiResource(Resource):
             setattr(item, k, v)
         self._on_create_or_update(item)
         try:
-            db.session.commit()
+            db_session.commit()
             return item.as_dict(), 200
         except Exception as e:
-            db.session.rollback()
+            db_session.rollback()
             return {"error": str(e)}, 500
 
     def delete(self, resource_id):
@@ -95,11 +82,11 @@ class JindaiResource(Resource):
             }, 404
 
         try:
-            db.session.delete(item)
-            db.session.commit()
+            db_session.delete(item)
+            db_session.commit()
             return {"message": "Deletion succeeded"}, 200
         except Exception as e:
-            db.session.rollback()
+            db_session.rollback()
             return {"error": str(e)}, 500
 
     def _on_create_or_update(self, item):
@@ -122,11 +109,11 @@ class DatasetResource(JindaiResource):
         
     def get_object_by_id(self, resource_id):
         if not is_uuid_literal(resource_id):
-            ds = Dataset.query.filter(Dataset.name==resource_id).first()
+            ds = db_session.query(Dataset).filter(Dataset.name==resource_id).first()
             if ds is None:
                 ds = Dataset(name=resource_id)
-                db.session.add(ds)
-                db.session.commit()
+                db_session.add(ds)
+                db_session.commit()
                 return ds
             return ds
         return super().get_object_by_id(resource_id)
@@ -137,7 +124,7 @@ class DatasetResource(JindaiResource):
             return len(ds.name.split("--")), ds.order_weight, ds.name
 
         if not resource_id:
-            datasets = Dataset.query.all()
+            datasets = db_session.query(Dataset).all()
             sorted_datasets = sorted(datasets, key=_dataset_sort_key)
             hierarchy = []
             for dataset in sorted_datasets:
@@ -166,9 +153,9 @@ class DatasetResource(JindaiResource):
         
         return super().get(resource_id)
     
-    def post(self):
+    def post(self, resource_id):
         assert_admin()
-        return super().post()
+        return super().post(resource_id)
     
     def delete(self, resource_id):
         assert_admin()
@@ -187,57 +174,45 @@ class TaskDBOResource(JindaiResource):
 class ParagraphResource(JindaiResource):
     def __init__(self) -> None:
         super().__init__(Paragraph)
-
-    def get_embedding(self, text: str):
-        raise NotImplementedError("Embedding service not implemented")
-
+        
     def post(self):
         data = request.json
-        if search := data.get("search"):
-            if search.startswith("?"):
-                param = text(search[1:])
-            elif search.startswith("*"):
-                param = Paragraph.content.ilike(f"%{search.strip('*')}%")
-            elif search.startswith(":"):
-                embedding = self.get_embedding(search.strip(":"))
-                param = TextEmbeddings.embedding.op("<=>")(embedding) < 0.3
-            else:
-                param = Paragraph.keywords.contains(
-                    [_.strip().lower() for _ in jieba.cut(search) if _.strip()]
-                )
-            if datasets := data.get("datasets"):
-                dataset_filters = [Dataset.name.in_(datasets)]
-                for dataset_prefix in datasets:
-                    dataset_filters.append(Dataset.name.ilike(f"{dataset_prefix}--%"))
-                param &= Paragraph.dataset.in_(
-                    Dataset.query.filter(or_(*dataset_filters)).with_entities(
-                        Dataset.id
-                    )
-                )
-            if sources := data.get("sources"):
-                source_filters = [Paragraph.source_url.in_(sources)]
-                for source in sources:
-                    source_filters.append(Paragraph.source_url.ilike(f"{source}%"))
-                param &= or_(*source_filters)
-            query = Paragraph.query.filter(param)
+        if data.get("search"):
+            query = Paragraph.build_query(data)
             return self.paginate(query), 200
         else:
             return super().post()
 
     def _on_create_or_update(self, item: Paragraph):
         if item.keywords:
-            db.session.execute(
+            db_session.execute(
                 insert(Terms)
                 .values([{"term": kw} for kw in item.keywords])
                 .on_conflict_do_nothing()
             )
-            db.session.commit()
+            db_session.commit()
 
 
 class TextEmbeddingsResource(JindaiResource):
     def __init__(self) -> None:
         super().__init__(TextEmbeddings)
-
+        
+    def post(self, resource_id=""):
+        paragraph = db_session.query(Paragraph).get(resource_id)
+        if paragraph:
+            embedding = TextEmbeddings.get_embedding(paragraph.content)
+            te = self.get_object_by_id(resource_id)
+            if te:
+                te.embedding = embedding
+            else:
+                te = TextEmbeddings(id=resource_id, embedding=embedding)
+                db_session.add(te)
+            db_session.commit()
+        return {'id': resource_id}, 201
+            
+    def put(self, resource_id=""):
+        return self.post(resource_id)[0], 200
+        
 
 class OIDCUserInfoResource(Resource):
     
@@ -258,9 +233,23 @@ class OIDCUserInfoResource(Resource):
                 "error": "User not logged in",
                 "redirect": oidc.redirect_to_auth_server(request.url).location,
             }, 401
+            
 
+class WorkerResource(Resource):
+    def get(self, task_id=""):
+        if not task_id:
+            return get_task_stats()
+        else:
+            return get_task_result(task_id)
+    
+    def post(self):
+        add_task(**request.json)
+        
+    def delete(self, task_id=""):
+        delete_task(task_id)
+        
 
-def apply_resources():
+def apply_resources(api):
     api.add_resource(
         DatasetResource, "/api/datasets", "/api/datasets/<string:resource_id>"
     )
@@ -278,3 +267,11 @@ def apply_resources():
         "/api/embeddings/<string:resource_id>",
     )
     api.add_resource(OIDCUserInfoResource, "/api/user")
+    api.add_resource(WorkerResource, "/api/worker", "/api/worker/<string:task_id>")
+
+
+@app.teardown_appcontext
+def shutdown_session(exception=None):
+    db_session.remove()  # 关键：防止连接泄露
+
+

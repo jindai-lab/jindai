@@ -17,11 +17,11 @@ class HanziChaizi(PipelineStage):
         super().__init__()
 
     def resolve(self, paragraph: Paragraph) -> Paragraph:
-        paragraph.chaizi = []
+        paragraph.extdata['chaizi'] = []
         for c in paragraph.content:
             c = self.dict.get(c)
             if c:
-                paragraph.chaizi.append(c)
+                paragraph.extdata['chaizi'].append(c)
         return paragraph
 
 

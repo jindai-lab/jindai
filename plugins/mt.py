@@ -443,7 +443,6 @@ class GoogleTranslation(PipelineStage):
             raise Exception(f"Request error: {resp.status_code}")
         tgt = ""
         results = resp.json()
-        print(results)
         for result in results:
             if isinstance(result, list) and len(result) == 1 and result[0]:
                 tgt += result[0]

@@ -64,4 +64,3 @@ class ConfigObject(DictObject):
 
 
 instance = ConfigObject()
-print(instance)

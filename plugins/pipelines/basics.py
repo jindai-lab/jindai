@@ -8,10 +8,11 @@ from itertools import chain
 from itertools import count as iter_count
 import string
 import json
+import pandas
 
 from jindai import Pipeline, PipelineStage, storage
 from jindai.helpers import safe_import, WordStemmer as _Stemmer
-from jindai.models import Dataset, Paragraph, db
+from jindai.models import Dataset, Paragraph, db_session
 
 
 class Passthrough(PipelineStage):
@@ -77,8 +78,8 @@ class TradToSimpChinese(PipelineStage):
     @zhs 繁体中文转为简体中文
     @zht 繁體中文轉爲簡體中文
     """
-
-    t2s = safe_import('opencc', 'opencc-python-reimplementation').OpenCC('t2s')
+    import opencc
+    t2s = opencc.OpenCC('t2s')
 
     def resolve(self, paragraph: Paragraph) -> Paragraph:
         paragraph.content = TradToSimpChinese.t2s.convert(paragraph.content)
@@ -391,7 +392,7 @@ class AccumulateParagraphs(PipelineStage):
                     
         return [_rev(obj.get(k.strip('-'), ''), k.startswith('-')) for k in self.sort]
 
-    def summarize(self, *_):
+    def summarize(self, _):
         results = list(self.paragraphs)
         if self.sort:
             results = sorted(results, key=self.sorter)
@@ -421,9 +422,7 @@ class Export(PipelineStage):
         self.limit = limit
 
     def summarize(self, result):
-        safe_import('xlsxwriter')  # as required for pandas to export xlsx file
-        pandas = safe_import('pandas')
-
+        
         def json_dump(val):
             return json.dumps(val)
 
@@ -739,7 +738,7 @@ class RegexFilter(PipelineStage):
         self.continuous = continuous
         self.filter_out = filter_out
 
-    def resolve(self, paragraph: Paragraph) -> Paragraph:
+    def resolve(self, paragraph: Paragraph) -> Paragraph | None:
         match = self.regexp.search(str(getattr(paragraph, self.source, '')))
         if match:
             val = self.match.format(match.group(
@@ -772,8 +771,9 @@ class RegexMatches(PipelineStage):
         self.regex = regex
 
     def resolve(self, paragraph: Paragraph) -> Paragraph:
-        for m in re.findall(self.regex, str(paragraph[self.field])):
-            yield Paragraph(paragraph, **{self.field: m})
+        for m in re.findall(self.regex, str(getattr(paragraph, self.field))):
+            paragraph.extdata[self.field] = m
+            yield paragraph
 
 
 class FieldAssignment(PipelineStage):
@@ -849,12 +849,10 @@ class DeleteParagraph(PipelineStage):
 
     def resolve(self, paragraph: Paragraph):
         if paragraph.id:
-            paragraph.delete()
-        if paragraph.images:
-            for i in paragraph.images:
-                if Paragraph.query(F.images == i.id).count() == 0:
-                    i.delete()
-        return  # no yielding paragraph anymore
+            db_session.delete(paragraph)
+            
+    def summarize(self, _):
+        db_session.commit()
 
 
 class SaveParagraph(PipelineStage):
@@ -871,32 +869,18 @@ class SaveParagraph(PipelineStage):
         super().__init__()
         self.mongocollection = mongocollection
         self.datasets = {}
-        self.convert = Paragraph.get_converter(
-            mongocollection) if mongocollection else lambda x: x
 
     def resolve(self, paragraph: Paragraph):
-        self.convert(paragraph).save()
+        db_session.add(paragraph)
         if paragraph.dataset and paragraph.dataset not in self.datasets:
             self.datasets[paragraph.dataset] = {
                 'mongocollection': getattr(paragraph, '_collection', ''),
                 'sources': set()
             }
-        if 'file' in paragraph.source and paragraph.dataset:
-            self.datasets[paragraph.dataset]['sources'].add(
-                paragraph.source['file'])
         return paragraph
-
-    def summarize(self, _):
-        self.log('datasets count:', len(self.datasets))
-        for name, data in self.datasets.items():
-            coll = Dataset.first(F.name == name) \
-                or Dataset(name=name, sources=[],
-                           mongocollection=data['mongocollection'],
-                           order_weight=999)
-            for source in data['sources']:
-                if source not in coll.sources:
-                    coll.sources.append(source)
-            coll.save()
+    
+    def sumamrize(self, _):
+        db_session.commit()
 
 
 class FieldIncresement(PipelineStage):
@@ -1122,7 +1106,7 @@ class PDFUnlock(PipelineStage):
         :type file: file:pdf
         """
         super().__init__()
-        pike = safe_import('pikepdf')
+        pike = safe_import('')
         buf = BytesIO()
         pike.open(storage.open(file, 'rb')).save(buf)
         self.data = PipelineStage.return_file('pdf', buf.getvalue())

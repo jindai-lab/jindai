@@ -7,8 +7,8 @@ from flask import Response, send_file, abort, request
 from flask_restful import Resource, reqparse
 from datetime import datetime
 
-from .app import ResponseTuple, api, config, db, assert_admin
-from .models import Paragraph
+from .app import ResponseTuple, api, config, assert_admin
+from .models import Paragraph, db_session
 
 
 # 文件存储根目录（必须配置，确保有读写权限）
@@ -274,7 +274,7 @@ class FileManagerResource(Resource):
         else:
             pattern = os.path.relpath(old_path, FILE_STORAGE_ROOT) + '/%'
         
-        db.session.query(Paragraph).filter(Paragraph.source_url.like(pattern)).update(
+        db_session.query(Paragraph).filter(Paragraph.source_url.like(pattern)).update(
             {
                 Paragraph.source_url: db.func.replace(
                     Paragraph.source_url,
@@ -284,7 +284,7 @@ class FileManagerResource(Resource):
             },
             synchronize_session=False
         )
-        db.session.commit()
+        db_session.commit()
         
         return file_info, 200
 
