@@ -2,14 +2,12 @@
 @zhs 从 PDF 导入
 """
 
-from io import BytesIO
 import re
 import fitz
-import requests
+from sqlalchemy import func, select
 
-from jindai import storage
-from jindai.helpers import safe_import
-from jindai.models import Paragraph
+from jindai.app import storage
+from jindai.models import Paragraph, db_session
 from jindai.pipeline import DataSourceStage, PipelineStage
 
 
@@ -21,17 +19,17 @@ def resolve_range(page_range: str):
     :return: range
     :rtype: Iterable, or None when error
     """
-    ranges = (page_range or '').split(',')
+    ranges = (page_range or "").split(",")
     for rng in ranges:
-        if '-' in rng:
+        if "-" in rng:
             try:
-                start, end = map(int, rng.split('-', 1))
-                yield from range(start-1, end)
+                start, end = map(int, rng.split("-", 1))
+                yield from range(start - 1, end)
             except ValueError:
                 pass
-        elif rng and re.match(r'\d+', rng):
-            yield int(rng)-1
-            
+        elif rng and re.match(r"\d+", rng):
+            yield int(rng) - 1
+
 
 class PDFDataSource(DataSourceStage):
     """
@@ -39,8 +37,14 @@ class PDFDataSource(DataSourceStage):
     @zhs 从 PDF 中导入语段
     """
 
-    def apply_params(self, dataset_name='', lang='auto', content='', mongocollection='',
-                     skip_existed=True, page_range='', nougat_endpoint='', rapid_ocr=False):
+    def apply_params(
+        self,
+        dataset_name="",
+        lang="auto",
+        content="",
+        skip_existed=True,
+        page_range=""
+    ):
         """
         Args:
             dataset_name (DATASET):
@@ -52,9 +56,6 @@ class PDFDataSource(DataSourceStage):
             content (FILES):
                 Paths
                 @zhs PDF文件列表
-            mongocollection (str):
-                MongoDB collection name
-                @zhs 数据库集合名
             skip_existed (bool):
                 Skip existed pages and files
                 @zhs 直接跳过已存在于数据集中的文件
@@ -64,44 +65,42 @@ class PDFDataSource(DataSourceStage):
         """
         self.name = dataset_name
         self.lang = lang
-        self.mongocollection = mongocollection
         self.skip_existed = skip_existed
         self.page_range = sorted(resolve_range(page_range))
         self.files = PipelineStage.parse_paths(content)
-    
+
     def fetch(self):
-        para_coll = Paragraph.get_coll(self.mongocollection)
         lang = self.lang
-        
+
         if self.skip_existed:
             existent = {
-                a['_id']: a['pages']
-                for a in para_coll.aggregator.match(
-                    F.dataset == self.name
-                ).group(
-                    _id=Var['source.file'], pages=Fn.max(
-                        Var['source.page'])
-                )
+                d["source_file"]: d["max_page"]
+                for d in db_session.execute(
+                    select(
+                        Paragraph.source_url,
+                        func.max(Paragraph.source_page).label("max_page"),
+                    ).where(Paragraph.source_url.in_(self.files)).group_by(Paragraph.source_url)
+                ).mappings()
             }
         else:
             existent = {}
 
         for filepath in self.files:
             imported_pages = 0
-            short_path = storage.truncate_path(filepath)
-            self.log('importing', short_path)
-            
-            stream = storage.open(filepath, 'rb')
-            if hasattr(stream, 'name'):
+            short_path = storage.relative_path(filepath)
+            self.log("importing", short_path)
+
+            stream = storage.open(filepath, "rb")
+            if hasattr(stream, "name"):
                 doc = fitz.open(stream.name)
             else:
-                doc = fitz.open('pdf', stream)
-            
+                doc = fitz.open("pdf", stream)
+
             page_range = self.page_range
             if not page_range:
                 min_page = existent.get(short_path)
                 min_page = 0 if min_page is None else (min_page + 1)
-                self.log('... from page', min_page)
+                self.log("... from page", min_page)
                 page_range = range(min_page, doc.page_count)
 
             for page in page_range:
@@ -111,24 +110,29 @@ class PDFDataSource(DataSourceStage):
                 try:
                     label = doc[page].get_label()
                 except (RuntimeError, TypeError):
-                    label = ''
+                    label = ""
 
                 try:
-                    content = doc[page].get_text().encode(
-                        'utf-8', errors='ignore').decode('utf-8')
+                    content = (
+                        doc[page]
+                        .get_text()
+                        .encode("utf-8", errors="ignore")
+                        .decode("utf-8")
+                    )
                 except Exception as ex:
-                    self.log(filepath, page+1, ex)
-                    content = ''
+                    self.log(filepath, page + 1, ex)
+                    content = ""
 
                 if len(content) > 10:
                     imported_pages += 1
-                
-                yield para_coll(
-                    lang=lang, content=content,
-                    source={'file': short_path, 'page': page},
-                    pagenum=label or (page+1),
-                    dataset=self.name
+
+                yield Paragraph(
+                    lang=lang,
+                    content=content,
+                    source={"file": short_path, "page": page},
+                    pagenum=label or (page + 1),
+                    dataset=self.name,
                 )
 
             if not existent.get(short_path) and imported_pages == 0:
-                self.log(filepath, 'no sufficient texts found.')
+                self.log(filepath, "no sufficient texts found.")

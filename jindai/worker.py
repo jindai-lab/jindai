@@ -44,20 +44,22 @@ def clear_tasks(status=''):
     cursor = 0
     pattern = "task:results:*"
     
-    deleted_count = 0
-    for key in r.scan_iter(pattern):
-        # 如果指定了状态，需要先检查状态
-        if status != '':
-            current_status = r.hget(key, "status")
-            if current_status == status:
+    if not status:
+        return r.flushall()
+    else:
+        deleted_count = 0
+        for key in r.scan_iter(pattern):
+            # 如果指定了状态，需要先检查状态
+            if status != '':
+                current_status = r.hget(key, "status")
+                if current_status == status:
+                    r.delete(key)
+                    deleted_count += 1
+            else:
+                # 如果 status 为空字符串，删除所有任务记录
                 r.delete(key)
                 deleted_count += 1
-        else:
-            # 如果 status 为空字符串，删除所有任务记录
-            r.delete(key)
-            deleted_count += 1
-    
-    print(f"清理完成。状态为 [{status if status else 'ALL'}] 的任务记录已删除，共计: {deleted_count} 条。")
+        return deleted_count
 
 
 def get_task_stats():
@@ -73,11 +75,11 @@ def get_task_stats():
     # 扫描所有结果 Key
     for key in r.scan_iter("task:results:*"):
         status = r.hget(key, "status")
-        if status == "processing":
+        if status == b"processing":
             processing_count += 1
-        elif status == "completed":
+        elif status == b"completed":
             completed_count += 1
-        elif status == "failed":
+        elif status == b"failed":
             failed_count += 1
             
     stats = {

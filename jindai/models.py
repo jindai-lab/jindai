@@ -9,8 +9,8 @@ import jieba
 from pgvector.sqlalchemy import Vector
 from sentence_transformers import SentenceTransformer
 from sqlalchemy import (Boolean, DateTime, ForeignKey, Index, Integer, String,
-                        Text, UniqueConstraint, create_engine, delete, exists, or_,
-                        text, update)
+                        Text, UniqueConstraint, asc, create_engine, delete,
+                        desc, exists, or_, text, update)
 from sqlalchemy.dialects.postgresql import ARRAY, JSONB, UUID
 from sqlalchemy.orm import (Mapped, declarative_base, mapped_column,
                             relationship, scoped_session, sessionmaker)
@@ -250,12 +250,45 @@ class Paragraph(Base):
         elif search.startswith(":"):
             query_embedding = TextEmbeddings.get_embedding(search.strip(":"))
             query = query.join(TextEmbeddings, TextEmbeddings.id == Paragraph.id).order_by(TextEmbeddings.embedding.cosine_distance(query_embedding))
-            print(query)
         else:
             param = Paragraph.keywords.contains(
                 [_.strip().lower() for _ in jieba.cut(search) if _.strip()]
             )
             query = query.filter(param)
+            
+        if sort_string := query_data.get('sort', ''):
+            assert isinstance(sort_string, (list, str)), 'Sort must be list of strings or a string seperated by commas'
+            if isinstance(sort_string, list): sort_string = ','.join(sort_string)
+
+            order_params = []
+            # 1. 拆分字符串
+            parts = sort_string.split(',')
+            
+            for part in parts:
+                part = part.strip()
+                if not part:
+                    continue
+                    
+                # 2. 判断排序方向
+                if part.startswith('-'):
+                    column_name = part[1:]
+                    sort_func = desc
+                else:
+                    column_name = part
+                    sort_func = asc
+                    
+                # 3. 获取模型属性并生成排序对象
+                column = getattr(Paragraph, column_name, None)
+                if column is not None:
+                    order_params.append(sort_func(column))
+                    
+            query = query.order_by(*order_params)
+            
+        if offset := query_data.get('offset', 0):
+            query = query.offset(offset)
+            
+        if limit := query_data.get('limit', 0):
+            query = query.limit(limit)
             
         return query
     

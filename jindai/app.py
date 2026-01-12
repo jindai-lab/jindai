@@ -7,6 +7,7 @@ from flask_oidc import OpenIDConnect
 from flask_restful import Api, Resource
 
 from .config import instance as config
+from .storage import instance as storage
 
 ResponseTuple = Tuple[Dict[str, Any], int]
 
