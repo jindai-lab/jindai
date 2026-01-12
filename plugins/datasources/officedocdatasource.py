@@ -31,7 +31,7 @@ class WordDataSource(DataSourceStage):
                 Paths
                 @zhs 文件列表
         """
-        self.dataset = Dataset.get_by_name(dataset_name)
+        self.dataset = Dataset.get(dataset_name)
         self.lang = lang
         self.files = PipelineStage.parse_paths(content)
 
@@ -79,7 +79,7 @@ class ExcelDataSource(DataSourceStage):
                 @zhs 文件列表
         """
         
-        self.dataset = Dataset.get_by_name(dataset_name)
+        self.dataset = Dataset.get(dataset_name)
         self.lang = lang
         self.files = PipelineStage.parse_paths(content)
 

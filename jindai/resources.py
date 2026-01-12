@@ -112,7 +112,7 @@ class DatasetResource(JindaiResource):
 
     def get_object_by_id(self, resource_id):
         if not is_uuid_literal(resource_id):
-            return Dataset.get_by_name(resource_id, True)
+            return Dataset.get(resource_id, True)
         return super().get_object_by_id(resource_id)
 
     def get(self, resource_id=None):
@@ -212,6 +212,9 @@ class TextEmbeddingsResource(JindaiResource):
 
     def put(self, resource_id=""):
         return self.post(resource_id)[0], 200
+    
+    def get(self):
+        return db_session.query(TextEmbeddings).count()
 
 
 class OIDCUserInfoResource(Resource):

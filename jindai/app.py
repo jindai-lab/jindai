@@ -24,7 +24,7 @@ api = Api(app, decorators=[oidc.accept_token()])
 
 
 def assert_admin():
-    from .models import UserInfo
+    from .models import UserInfo, db_session
     name = g.authlib_server_oauth2_token['preferred_username']
     user = db_session.query(UserInfo).filter(UserInfo.username == name, UserInfo.roles.contains(['admin'])).first()
     assert user, f'Must be admin. You logged in as: {name}'

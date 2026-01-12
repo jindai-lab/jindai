@@ -48,9 +48,9 @@ def index(path="index.html"):
     if path.startswith("api/"):
         return Response("", 404)
     path = path or "index.html"
-    for file in [path, path + ".html"]:
+    for file in [path, path + ".html", (config.ui_dist or './dist/') + path]:
         if os.path.exists(file) and os.path.isfile(file):
-            return send_file(open(file, "rb"))
+            return send_file(file)
 
     return "Not found for " + path, 404
 

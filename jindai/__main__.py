@@ -6,17 +6,13 @@ import os
 import re
 import subprocess
 import sys
-import zipfile
 import tempfile
-from typing import Dict, Iterable
+import zipfile
 
 import click
-import dateutil.parser
-import numpy as np
 import urllib3
 import yaml
 from flask import Flask
-from tqdm import tqdm
 
 from . import Plugin, PluginManager, Task, config, storage
 from .api import prepare_plugins, run_service
@@ -144,23 +140,21 @@ def run_task(task_id, concurrent, verbose, edit, log, output):
 def user_manage(add, delete, setrole, roles):
     """User management"""
     if add:
-        print("Password: ", end="")
-        password = input()
-        if not User.first(F.username == add):
+        user = db_session(UserInfo).query(UserInfo.username == add).first()
+        if not user:
             user = User(username=add)
-            user.set_password(password)
-            user.save()
+            db_session.add(user)
         else:
             print("User already exists.")
     elif delete:
-        User.query(F.username == delete).delete()
+        user = db_session(UserInfo).query(UserInfo.username == delete).first()
+        if user:
+            db_session.delete(user)
     elif setrole:
-        user = User.first(F.username == setrole)
-        if not user:
-            print("User", setrole, "does not exist.")
-            exit()
-        user.roles = roles
-        user.save()
+        user = db_session(UserInfo).query(UserInfo.username == setrole).first()
+        if user:
+            user.roles.extend(roles)
+    db_session.commit()
 
 
 @cli.command("plugin-install")
@@ -268,9 +262,7 @@ def call_ipython():
     import sys
     from concurrent.futures import ThreadPoolExecutor
     from uuid import UUID
-
     from tqdm import tqdm
-
     import jindai
 
     tpe = ThreadPoolExecutor(os.cpu_count())
@@ -278,15 +270,11 @@ def call_ipython():
     from .app import app
     app.app_context().push()
 
-    def q(query_str, model=""):
-        from jindai.dbquery import DBQuery
-
-        return DBQuery("? " + query_str, model, raw=True).fetch()
+    def q(query_str):
+        return Paragraph.build_query({'search': query_str})
 
     def run(task_name):
-        dbo = TaskDBO.first(
-            (F.id if re.match("^[0-9a-fA-F]{24}$", task_name) else F.name) == task_name
-        )
+        dbo = TaskDBO.get(task_name)
         if dbo:
             task = Task.from_dbo(dbo)
             return task.execute()

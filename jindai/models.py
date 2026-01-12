@@ -84,9 +84,9 @@ class Dataset(Base):
     )
     
     @staticmethod
-    def get_by_name(name, strict=False):
+    def get(name, auto_create=True):
         ds = db_session.query(Dataset).filter(Dataset.name == name).first()
-        if ds is None and not strict:
+        if ds is None and auto_create:
             ds = Dataset(name=name)
             db_session.add(ds)
             db_session.commit()
@@ -95,7 +95,7 @@ class Dataset(Base):
     def rename_dataset(self, new_name):
         if self.name == new_name:
             return
-        ds = Dataset.get_by_name(new_name)
+        ds = Dataset.get(new_name)
         if ds:
             stmt = update(Paragraph).where(Paragraph.dataset == self.id).values({
                 'dataset': ds.id
@@ -236,7 +236,7 @@ class Paragraph(Base):
             query = query.filter(or_(*source_filters))
             
         if "embeddings" in query_data:
-            param = exists().where(TextEmbeddings.id == Paragraph.id)
+            param = exists().where(TextEmbeddings.id == Paragraph.id).correlate(TextEmbeddings)
             if not query_data["embeddings"]:
                 param = ~param
             query = query.filter(param)
@@ -247,7 +247,7 @@ class Paragraph(Base):
         elif search.startswith("*"):
             param = Paragraph.content.ilike(f"%{search.strip('*')}%")
             query = query.filter(param)
-        elif search.startswith(":"):
+        elif search.startswith(":") or query_data.get('embeddings'):
             query_embedding = TextEmbeddings.get_embedding(search.strip(":"))
             query = query.join(TextEmbeddings, TextEmbeddings.id == Paragraph.id).order_by(TextEmbeddings.embedding.cosine_distance(query_embedding))
         else:
@@ -324,6 +324,14 @@ class TaskDBO(Base):
         String(64), nullable=False, comment="创建者用户名"
     )
     shared: Mapped[bool] = mapped_column(Boolean, default=False, comment="是否共享")
+    
+    @staticmethod
+    def get(id_or_name):
+        query = db_session.query(TaskDBO)
+        if is_uuid_literal(id_or_name):
+            return query.get(uuid.UUID(id_or_name))
+        else:
+            return query.filter(TaskDBO.name.contains(id_or_name)).first()
 
 
 class TextEmbeddings(Base):
