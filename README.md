@@ -24,16 +24,10 @@ wget https://github.com/jindai-lab/jindai-ui/releases/download/v0.2.0/dist.tgz
 mkdir ui && tar xzf dist.tgz -C ui && rm dist.tgz
 ```
 
-### Install with Docker
-```bash
-docker build . -t jindai
-docker compose up -d
-```
-
 ### Install on local machine
 ```bash
-pip install -r requirements.txt
-python3 -m jindai web-service
+uv sync
+uv run -m jindai web-service
 ```
 
 ### Run init script
@@ -42,3 +36,4 @@ docker exec -it -w /app jindai python3 -m jindai init
 ```
 
 ☕ [Buy me a coffee](https://www.buymeacoffee.com/zhuth90)
+
