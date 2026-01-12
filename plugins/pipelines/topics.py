@@ -12,7 +12,7 @@ from jindai.helpers import safe_import
 from jindai.models import Paragraph
 from .basics import AccumulateParagraphs, Counter
 from threading import Lock
-import sentence_transformers
+from sentence_transformers import SentenceTransformer, util
 
 
 def import_plt():
@@ -202,7 +202,6 @@ class CosSimClustering(AccumulateParagraphs):
         self.threshold = threshold
         self.vecs = []
         self.label_field = label_field
-        safe_import('sentence_transformers')
 
     def resolve(self, paragraph):
         super().resolve(paragraph)
@@ -210,7 +209,6 @@ class CosSimClustering(AccumulateParagraphs):
         return paragraph
 
     def summarize(self, *_):
-        util = safe_import('sentence_transformers.util')
         vecs = np.array(self.vecs)
         clusters = util.community_detection(
             vecs, min_community_size=self.min_community_size, threshold=self.threshold)
@@ -395,8 +393,6 @@ class SentenceTransformer(PipelineStage):
     
     def __init__(self, n=10, model="sentence-transformers/distiluse-base-multilingual-cased-v1"):
         super().__init__()
-        safe_import('sentence_transformers', 'sentence-transformers')
-        from sentence_transformers import SentenceTransformer
         self.trans = SentenceTransformer(model)
         self.buffer = []
         self.n = n

@@ -57,8 +57,7 @@ class TextDataSource(DataSourceStage):
         for path in self.files:
             for i, line in enumerate(storage.open(path)):
                 yield Paragraph(content=codecs.decode(line),
-                                source={
-                                    'url' if '://' in path else 'file': storage.truncate_path(path)},
+                                source_url=path if '://' in path else storage.relative_path(path),
                                 dataset=self.name, lang=self.lang, outline=f'{i+1:06d}')
 
 

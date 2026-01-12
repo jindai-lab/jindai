@@ -4,14 +4,12 @@ import os
 import sys
 from collections import defaultdict
 
-from flask import Flask, Response, redirect, request, send_file
+from flask import Response, send_file, jsonify
 
 from .app import app, config, api
-from .helpers import get_context, rest
+from .helpers import get_context
 from .pipeline import Pipeline
 from .plugin import Plugin, PluginManager
-from .storage import instance as storage
-from .task import Task
 from .resources import apply_resources
 
 
@@ -19,7 +17,6 @@ apply_resources(api)
 
 
 @app.route("/api/pipelines")
-@rest(cache=True)
 def help_info():
     """Provide help info for pipelines, with respect to preferred language"""
 
@@ -34,14 +31,13 @@ def help_info():
         if key in ("DataSourceStage", "MediaItemStage"):
             continue
         result[name][key] = val.get_spec()
-    return result
+    return jsonify(result)
 
 
 @app.route("/api/plugins", methods=["GET"])
-@rest()
 def get_plugins():
     """Get plugin names"""
-    return [type(pl).__name__ for pl in app.plugins]
+    return jsonify([type(pl).__name__ for pl in app.plugins])
 
 
 @app.route("/<path:path>", methods=["GET"])

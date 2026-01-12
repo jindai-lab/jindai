@@ -105,7 +105,7 @@ class WebPageListingDataSource(DataSourceStage):
         return self.gctx['queued']
 
     def apply_params(self, dataset='', content='', scopes='',
-                     mongocollection='', lang='auto', detail_link='',
+                     lang='auto', detail_link='',
                      list_link='', proxy='', list_depth=1, tags='',
                      img_pattern='', level=1, wait_for='',
                      with_chrome=False,
@@ -142,9 +142,6 @@ class WebPageListingDataSource(DataSourceStage):
             scopes (LINES):
                 URL Scopes
                 @zhs 要抓取的 URL 范围
-            mongocollection (str):
-                Mongo Collection name
-                @zhs 数据库集合名
             wait_for (str):
                 Wait for element
                 @zhs 等待加载完成的元素
@@ -339,7 +336,7 @@ class ExtractHTMLParagraphs(PipelineStage):
         text = trafilatura.extract(html, config=trafcfg)
         return text
 
-    def resolve(self, paragraph: Paragraph) -> Paragraph:
+    def resolve(self, paragraph: Paragraph) -> Iterable[Paragraph]:
         html = paragraph.extdata.get(self.field) or ''
         b = B(html, 'lxml')
         self.log('load html data of length', len(html))

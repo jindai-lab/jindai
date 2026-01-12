@@ -7,10 +7,9 @@ import zipfile
 from collections import defaultdict
 from typing import Callable
 
-from flask import Flask, Response
+from flask import Flask, Response, jsonify
 
 from .config import instance as config
-from .helpers import rest
 from .storage import instance as storage
 from .pipeline import Pipeline, PipelineStage
 
@@ -88,25 +87,22 @@ class PluginManager:
             return Response(css, mimetype='text/css')
 
         @app.route('/api/plugins/filters', methods=["GET", "POST"])
-        @rest()
         def plugin_pages():
             """Returns names for special filters in every plugins
             """
-            return [
+            return jsonify([
                 dict(spec, handler='')
                 for spec in self.filters.values()
-            ]
+            ])
 
         @app.route('/api/plugins')
-        @rest(role='admin')
         def plugin_list():
-            return [type(pl).__name__ for pl in self.plugins]
+            return jsonify([type(pl).__name__ for pl in self.plugins])
 
         @app.route('/api/plugins', methods=['POST'])
-        @rest(role='admin')
         def plugin_install(url):
             self.install(url)
-            return True
+            return jsonify(True)
 
         # load plugins
 

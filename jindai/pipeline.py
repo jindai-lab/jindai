@@ -7,7 +7,7 @@ from collections import defaultdict
 from collections.abc import Iterable as IterableClass
 from typing import Any, Callable, Dict, Iterable, List, Tuple, Type, Union
 
-from .helpers import config, storage
+from .app import config, storage
 from .models import Paragraph
 
 
@@ -146,7 +146,7 @@ class PipelineStage:
     def parse_paths(val):
         files = []
         for pattern in PipelineStage.parse_lines(val):
-            files += storage.globs(pattern)
+            files.extend(storage.globs(pattern))
         return files
 
     @property
@@ -194,7 +194,7 @@ class PipelineStage:
         """
         return result
 
-    def flow(self, paragraph: Paragraph) -> Tuple:
+    def flow(self, paragraph: Paragraph) -> Iterable[Tuple]:
         """Flow control
 
         :param paragraph: Paragraph to process
@@ -252,7 +252,7 @@ class DataSourceStage(PipelineStage):
     def fetch(self) -> Iterable[Paragraph]:
         yield from []
 
-    def resolve(self, paragraph: Paragraph) -> Paragraph:
+    def resolve(self, paragraph: Paragraph) -> Paragraph | Iterable[Paragraph]:
         """Update the parameters of the data source with
             the input paragraph
 

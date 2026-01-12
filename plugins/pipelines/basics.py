@@ -212,7 +212,7 @@ class WordCut(PipelineStage):
     @zhs 多语种分词
     """
 
-    t2s = safe_import('opencc', 'opencc-python-reimplementation').OpenCC('t2s')
+    t2s = safe_import('opencc', 'opencc-python-reimplemented').OpenCC('t2s')
     kks = safe_import('pykakasi').kakasi()
     jieba = safe_import('jieba')
 
@@ -519,8 +519,6 @@ class ArrayField(PipelineStage):
     def resolve(self, paragraph: Paragraph) -> Paragraph:
         if paragraph[self.field] is None and self.push:
             paragraph[self.field] = []
-        if not isinstance(paragraph[self.field], (list, DbObjectCollection)):
-            return paragraph
         for ele in self.elements:
             ele = evaluateqx(ele, paragraph)
             if self.push:
@@ -653,30 +651,6 @@ class Limit(PipelineStage):
             return paragraph
 
 
-class FilterDuplication(PipelineStage):
-    """
-    Filter duplications in specified database collection
-    @zhs 过滤已经存储在指定数据库中的段落
-    """
-
-    def __init__(self, field, mongocollection='paragraph') -> None:
-        """
-        Args:
-            mongocollection (str): Database collection name
-                @zhs 数据库集合名
-            field (str): Field that mark an duplication
-                @zhs 要去重的字段值
-        """
-        super().__init__()
-        self.mongocollection = mongocollection or 'paragraph'
-        self.field = field
-
-    def resolve(self, paragraph: Paragraph) -> Paragraph:
-        for _ in db[self.mongocollection].find({self.field: getattr(paragraph, self.field)}):
-            return
-        return paragraph
-
-
 class RegexReplace(PipelineStage):
     """
     Replace with regular expression
@@ -801,44 +775,9 @@ class FieldAssignment(PipelineStage):
 
     def resolve(self, paragraph: Paragraph) -> Paragraph:
         if self.delete_field:
-            del paragraph[self.field]
+            del paragraph.extdata[self.field]
         else:
             paragraph[self.field] = evaluateqx(self.value, paragraph)
-        return paragraph
-
-
-class FilterArrayField(PipelineStage):
-    """Filter array field
-    @zhs 过滤列表字段的值
-    """
-
-    def __init__(self, field, cond) -> None:
-        """
-        Args:
-            field (str): Field name
-                @zhs 字段名称
-            cond (QUERY): Conditional expression, use `iter` for the iterated item,
-                or use abbreviated form like '>0' to mean 'iter>0'
-                @zhs 条件式，用 iter 表示被判断的项目，或用省略形式。将仅保留满足条件式的项目。
-        """
-        super().__init__()
-        self.field = field
-        self.cond = QExprInterpreter('iter', '=').parse(cond)
-
-    def resolve(self, paragraph: Paragraph) -> Paragraph:
-        vals = getattr(paragraph, self.field, [])
-        if not isinstance(vals, list):
-            return paragraph
-
-        new_vals = []
-        for val in vals:
-            paragraph.iter = val
-            if evaluateqx(self.cond, paragraph):
-                new_vals.append(val)
-
-        if hasattr(paragraph, 'iter'):
-            delattr(paragraph, 'iter')
-        setattr(paragraph, self.field, new_vals)
         return paragraph
 
 
@@ -860,23 +799,14 @@ class SaveParagraph(PipelineStage):
     @zhs 保存
     """
 
-    def __init__(self, mongocollection=''):
+    def __init__(self):
         '''
-        Args:
-            mongocollection (str): Database collection name
-                @zhs 数据库集合名
         '''
         super().__init__()
-        self.mongocollection = mongocollection
         self.datasets = {}
 
     def resolve(self, paragraph: Paragraph):
         db_session.add(paragraph)
-        if paragraph.dataset and paragraph.dataset not in self.datasets:
-            self.datasets[paragraph.dataset] = {
-                'mongocollection': getattr(paragraph, '_collection', ''),
-                'sources': set()
-            }
         return paragraph
     
     def sumamrize(self, _):
@@ -1060,40 +990,6 @@ class KeywordsReplacement(PipelineStage):
         return paragraph
 
 
-class MongoCollectionBatchOper(PipelineStage):
-    """Batch operation on database collection
-    @zhs 数据库批处理"""
-
-    def __init__(self, mongocollection='', updates='[]', query=''):
-        """
-        Args:
-            mongocollection (str):
-                Database collection
-                @zhs 要处理的数据库
-            query (QUERY):
-                Batch operand range condition
-                @zhs 查询范围
-            updates (QUERY):
-                Updates to perform, composed of function calls to set, pull, unset, etc.
-                @zhs 要执行的更新，如 pull(keywords=newkey) 。update 可为 set, pull, unset 等。
-        """
-        super().__init__()
-        self.collection = Paragraph.get_coll(mongocollection)
-        self.updates = updates
-        self.query = query
-
-    def resolve(self, paragraph: Paragraph):
-        pdict = paragraph.as_dict()
-        query = parser.parse(self.query, context=pdict)
-        updates = parser.parse(self.updates, context=pdict)
-        if not isinstance(updates, list):
-            updates = [updates]
-        for update in updates:
-            self.collection.query(query).update(update)
-            self.log(query, update)
-        return paragraph
-
-
 class PDFUnlock(PipelineStage):
     """Unlock "secured" PDF
     @zhs 解锁读保护的 PDF
@@ -1106,7 +1002,7 @@ class PDFUnlock(PipelineStage):
         :type file: file:pdf
         """
         super().__init__()
-        pike = safe_import('')
+        import pike
         buf = BytesIO()
         pike.open(storage.open(file, 'rb')).save(buf)
         self.data = PipelineStage.return_file('pdf', buf.getvalue())

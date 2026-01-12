@@ -1,13 +1,16 @@
 from typing import Type
-
+import os
+from flask import Response, abort, request, send_file
+from flask_restful import Resource, reqparse
 from sqlalchemy import exists, or_
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.sql import func, text
 
-from .app import UUID, Resource, app, assert_admin, oidc, request
+from .app import (UUID, Resource, ResponseTuple, api, app, assert_admin,
+                  config, storage, oidc, request)
 from .models import (Base, Dataset, History, Paragraph, TaskDBO, Terms,
                      TextEmbeddings, UserInfo, db_session, is_uuid_literal)
-from .worker import add_task, get_task_stats, get_task_result, delete_task
+from .worker import add_task, delete_task, get_task_result, get_task_stats
 
 
 class JindaiResource(Resource):
@@ -27,10 +30,10 @@ class JindaiResource(Resource):
         if data["results"]:
             data["total"] = stmt.count()
         return data
-    
+
     def get_object_by_id(self, resource_id):
         return db_session.query(self.model).get(UUID(resource_id))
-    
+
     def get(self, resource_id=None):
         if resource_id:
             result = self.get_object_by_id(resource_id)
@@ -106,7 +109,7 @@ class HistoryResource(JindaiResource):
 class DatasetResource(JindaiResource):
     def __init__(self) -> None:
         super().__init__(Dataset)
-        
+
     def get_object_by_id(self, resource_id):
         if not is_uuid_literal(resource_id):
             return Dataset.get_by_name(resource_id, True)
@@ -144,23 +147,23 @@ class DatasetResource(JindaiResource):
                         current_level.append(new_item)
                         current_level = new_item["children"]
             return {"results": hierarchy, "count": len(datasets)}, 200
-        
+
         return super().get(resource_id)
-    
+
     def post(self, resource_id):
         assert_admin()
         return super().post(resource_id)
-    
+
     def delete(self, resource_id):
         assert_admin()
         return super().delete(resource_id)
-    
+
     def put(self, resource_id=""):
         assert_admin()
         ds = self.get_object_by_id(resource_id)
         if ds is None:
-            return 'Not Found', 404
-        return ds.rename_dataset(request.json['name'])
+            return "Not Found", 404
+        return ds.rename_dataset(request.json["name"])
 
 
 class TaskDBOResource(JindaiResource):
@@ -171,7 +174,7 @@ class TaskDBOResource(JindaiResource):
 class ParagraphResource(JindaiResource):
     def __init__(self) -> None:
         super().__init__(Paragraph)
-        
+
     def post(self):
         data = request.json
         if data.get("search"):
@@ -193,7 +196,7 @@ class ParagraphResource(JindaiResource):
 class TextEmbeddingsResource(JindaiResource):
     def __init__(self) -> None:
         super().__init__(TextEmbeddings)
-        
+
     def post(self, resource_id=""):
         paragraph = db_session.query(Paragraph).get(resource_id)
         if paragraph:
@@ -205,14 +208,14 @@ class TextEmbeddingsResource(JindaiResource):
                 te = TextEmbeddings(id=resource_id, embedding=embedding)
                 db_session.add(te)
             db_session.commit()
-        return {'id': resource_id}, 201
-            
+        return {"id": resource_id}, 201
+
     def put(self, resource_id=""):
         return self.post(resource_id)[0], 200
-        
+
 
 class OIDCUserInfoResource(Resource):
-    
+
     def get(self):
         if oidc.user_loggedin:
             info = oidc.user_getinfo(
@@ -230,7 +233,7 @@ class OIDCUserInfoResource(Resource):
                 "error": "User not logged in",
                 "redirect": oidc.redirect_to_auth_server(request.url).location,
             }, 401
-            
+
 
 class WorkerResource(Resource):
     def get(self, task_id=""):
@@ -238,13 +241,156 @@ class WorkerResource(Resource):
             return get_task_stats()
         else:
             return get_task_result(task_id)
-    
+
     def post(self):
         add_task(**request.json)
-        
+
     def delete(self, task_id=""):
         delete_task(task_id)
-        
+
+
+class FileManagerResource(Resource):
+    def get(self, file_path: str = "") -> ResponseTuple | Response:
+        """
+        GET /api/files/[file_path]
+        - 无file_path：列出根目录文件
+        - file_path是目录：列出该目录下的文件/文件夹
+        - file_path是文件：下载该文件
+        - metadata参数：仅返回文件/目录元信息，不下载文件
+        - page参数：下载文件指定页码（仅对PDF有效），从0开始
+        """
+        parser = reqparse.RequestParser()
+        parser.add_argument("metadata", type=bool, default=False, location="args")
+        parser.add_argument("page", type=int, location="args")
+        args = parser.parse_args()
+
+        try:
+            target_path = storage.safe_join(file_path)
+        except ValueError as e:
+            return {"error": str(e)}, 403
+
+        # 路径不存在
+        if not os.path.exists(target_path):
+            return {"error": "文件/目录不存在"}, 404
+
+        # 是目录：返回目录列表
+        if os.path.isdir(target_path):
+            dir_data = storage.list_directory(
+                target_path, only_basic=not args["metadata"]
+            )
+            return dir_data, 200
+
+        # 是文件：返回元数据
+        if args["metadata"]:
+            file_info = storage.get_file_info(target_path)
+            return file_info, 200
+
+        # 是文件：下载文件
+        try:
+            buf, mime_type, download_name = storage.read_file(file_path, args["page"])
+            return send_file(
+                buf,
+                mimetype=mime_type,
+                as_attachment=False,
+                download_name=download_name,
+            )
+        except ValueError as e:
+            return {"error": str(e)}, 400
+        except Exception as e:
+            return {"error": f"文件下载失败：{str(e)}"}, 500
+
+    def post(self, file_path="") -> ResponseTuple:
+        """
+        POST /api/files/[file_path]
+        - file_path为空：上传文件到根目录
+        - file_path是目录：上传文件到该目录
+        - 支持创建空目录（通过参数 is_directory=true）
+        """
+        # 解析请求参数
+        args = {"is_directory": False, "name": ""}
+        if request.is_json:
+            args.update(request.json)
+
+        # 创建空目录逻辑
+        if args["is_directory"] and args["name"]:
+            try:
+                dir_info = storage.create_directory(file_path, args["name"])
+                return dir_info, 201
+            except ValueError as e:
+                return {"error": str(e)}, 409
+            except Exception as e:
+                return {"error": f"创建目录失败：{str(e)}"}, 500
+
+        # 文件上传逻辑
+        if "file" not in request.files:
+            return {"error": "未找到上传的文件"}, 400
+        file = request.files["file"]
+        if not file.filename:
+            return {"error": "文件名不能为空"}, 400
+
+        try:
+            file_info = storage.save_file(file, file_path)
+            return file_info, 201
+        except ValueError as e:
+            return {"error": str(e)}, 403
+        except Exception as e:
+            return {"error": f"文件上传失败：{str(e)}"}, 500
+
+    def put(self, file_path) -> ResponseTuple:
+        """
+        PUT /api/files/[file_path]
+        - 重命名文件/目录
+        - 移动文件/目录
+        - 联动数据库更新Paragraph表的source_url字段
+        """
+        data = request.get_json()
+        if not data or not data.get("name") and not data.get("path"):
+            return {"error": "需要提供 name 或 path 参数"}, 400
+
+        try:
+            move_data = storage.move_or_rename(
+                file_path, data.get("name"), data.get("path")
+            )
+            old_rel_path = move_data["old_relative_path"]
+            new_rel_path = move_data["new_info"]["relative_path"]
+        except ValueError as e:
+            return {"error": str(e)}, 400
+        except Exception as e:
+            return {"error": f"操作失败：{str(e)}"}, 500
+
+        # 数据库联动更新 - 原逻辑完整保留
+        if os.path.isfile(storage.safe_join(old_rel_path)):
+            pattern = "%" + old_rel_path
+        else:
+            pattern = old_rel_path + "/%"
+
+        db_session.query(Paragraph).filter(Paragraph.source_url.like(pattern)).update(
+            {
+                Paragraph.source_url: db.func.replace(
+                    Paragraph.source_url, old_rel_path, new_rel_path
+                )
+            },
+            synchronize_session=False,
+        )
+        db_session.commit()
+
+        return move_data["new_info"], 200
+
+    def delete(self, file_path: str) -> ResponseTuple:
+        """
+        DELETE /api/files/[file_path]
+        - 删除文件/空目录
+        - 管理员权限校验 + 原逻辑完整保留
+        """
+        assert_admin()
+        try:
+            storage.delete(file_path)
+            return {"message": "文件/目录删除成功"}, 200
+        except ValueError as e:
+            return {"error": str(e)}, 400
+        except Exception as e:
+            return {"error": f"删除失败：{str(e)}"}, 500
+
 
 def apply_resources(api):
     api.add_resource(
@@ -265,6 +411,9 @@ def apply_resources(api):
     )
     api.add_resource(OIDCUserInfoResource, "/api/user")
     api.add_resource(WorkerResource, "/api/worker", "/api/worker/<string:task_id>")
+    api.add_resource(
+        FileManagerResource, "/api/files", "/api/files/", "/api/files/<path:file_path>"
+    )
 
 
 @app.teardown_appcontext

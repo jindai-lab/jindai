@@ -7,8 +7,8 @@ import tempfile
 from typing import Iterable
 
 import pandas as pd
-from jindai import storage
-from jindai.models import Paragraph
+from jindai.storage import instance as storage
+from jindai.models import Paragraph, Dataset
 from jindai.pipeline import DataSourceStage, PipelineStage
 
 
@@ -31,7 +31,7 @@ class WordDataSource(DataSourceStage):
                 Paths
                 @zhs 文件列表
         """
-        self.name = dataset_name
+        self.dataset = Dataset.get_by_name(dataset_name)
         self.lang = lang
         self.files = PipelineStage.parse_paths(content)
 
@@ -51,8 +51,10 @@ class WordDataSource(DataSourceStage):
             if doc:
                 para = Paragraph(
                     lang=self.lang, content=doc,
-                    source={'file': storage.truncate_path(file)}, pagenum=1,
-                    dataset=self.name, outline=''
+                    source_url=storage.relative_path(file),
+                    pagenum=1,
+                    dataset=self.dataset.id,
+                    outline=''
                 )
                 yield para
 
@@ -77,7 +79,7 @@ class ExcelDataSource(DataSourceStage):
                 @zhs 文件列表
         """
         
-        self.dataset = dataset_name
+        self.dataset = Dataset.get_by_name(dataset_name)
         self.lang = lang
         self.files = PipelineStage.parse_paths(content)
 
@@ -87,7 +89,7 @@ class ExcelDataSource(DataSourceStage):
             for _, row in dataframe.iterrows():
                 data = row.to_dict()
                 if 'dataset' not in data:
-                    data['dataset'] = self.dataset
+                    data['dataset'] = self.dataset.id
                 if 'lang' not in data:
                     data['lang'] = self.lang
                 yield Paragraph(**data)

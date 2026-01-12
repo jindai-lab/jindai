@@ -1,8 +1,8 @@
 """汉字拆字处理"""
 
 import pickle
-
-from jindai import PipelineStage, Plugin, storage
+import os
+from jindai import PipelineStage, Plugin
 from jindai.models import Paragraph
 
 
@@ -12,7 +12,7 @@ class HanziChaizi(PipelineStage):
     """
 
     def __init__(self) -> None:
-        with open(storage.fspath(__file__, 'chaizi.pkl'), 'rb') as fi:
+        with open(os.path.join(os.path.dirname(__file__), 'chaizi.pkl'), 'rb') as fi:
             self.dict = pickle.load(fi)
         super().__init__()
 

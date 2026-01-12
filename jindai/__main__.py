@@ -258,18 +258,6 @@ def web_service(port: int, deployment: bool):
         run_service(port=port)
 
 
-@cli.command("storage-service")
-@click.option("--port", "-p", default=8371)
-@click.option("--host", "-h", default="0.0.0.0")
-@click.option("--debug", "-d", default=None, flag_value=True)
-def serve_storage(port: int, host: str, debug: bool):
-    """Serve storage"""
-    if debug is None:
-        debug = config.debug
-    _init_plugins()
-    storage.serve(host, port, debug=debug)
-
-
 @cli.command("ipython")
 def call_ipython():
     from IPython import start_ipython
