@@ -2,9 +2,9 @@ from typing import Type
 import os
 from flask import Response, abort, request, send_file
 from flask_restful import Resource, reqparse
-from sqlalchemy import exists, or_
+from sqlalchemy.orm import Query
 from sqlalchemy.dialects.postgresql import insert
-from sqlalchemy.sql import func, text
+from sqlalchemy.sql import visitors
 
 from .app import (UUID, Resource, ResponseTuple, api, app, assert_admin,
                   config, storage, oidc, request)
@@ -18,17 +18,38 @@ class JindaiResource(Resource):
     def __init__(self, model_cls: Type[Base]) -> None:
         super().__init__()
         self.model = model_cls
+        
+    def _relate_to_embeddings(self, query):
+        statement = query.statement if isinstance(query, Query) else query
+        def is_target_column(element):
+            return element is TextEmbeddings.embedding
 
-    def paginate(self, results):
-        stmt = results
-        # stmt = results.add_columns(func.count(1).over().label("total_count"))
-        offset, limit = int(request.args.get("offset", "0")), int(
-            request.args.get("limit", "100")
-        )
-        results = stmt.offset(offset).limit(limit)
-        data = {"results": [r.as_dict() for r in results], "total": 0}
-        if data["results"]:
-            data["total"] = stmt.count()
+        # 1. 检查查询的列 (Select list)
+        # column_descriptions 包含了 query() 中指定的实体和列
+        if isinstance(query, Query):
+            for desc in query.column_descriptions:
+                if desc['expr'] is TextEmbeddings.embedding:
+                    return True
+
+        # 2. 检查过滤条件、排序、分组等 (Where, Order By, etc.)
+        # 使用 visitors.iterate 遍历整个 SQL 表达式树
+        for element in visitors.iterate(statement):
+            if is_target_column(element):
+                return True
+                
+        return False
+
+    def paginate(self, stmt):
+        count = 0
+        if not self._relate_to_embeddings(stmt):
+            offset, limit = int(request.args.get("offset", "0")), int(
+                request.args.get("limit", "100")
+            )
+            count = stmt.count()
+            stmt = stmt.offset(offset).limit(limit)
+        
+        data = {"results": [r.as_dict() for r in stmt], "total": 0}
+        data["total"] = count or len(data['results'])
         return data
 
     def get_object_by_id(self, resource_id):
@@ -121,32 +142,8 @@ class DatasetResource(JindaiResource):
             return len(ds.name.split("--")), ds.order_weight, ds.name
 
         if not resource_id:
-            datasets = db_session.query(Dataset).all()
-            sorted_datasets = sorted(datasets, key=_dataset_sort_key)
-            hierarchy = []
-            for dataset in sorted_datasets:
-                current_level = hierarchy
-                parts = dataset.name.split("--")
-                for parti, part in enumerate(parts):
-                    found = False
-                    for item in current_level:
-                        if item["title"] == part:
-                            current_level = item.setdefault("children", [])
-                            found = True
-                            break
-                    if not found:
-                        new_item = {
-                            "title": part,
-                            "children": [],
-                            "order_weight": dataset.order_weight,
-                            "record_id": (
-                                str(dataset.id) if parti == len(parts) - 1 else None
-                            ),
-                            "value": "--".join(parts[: parti + 1]),
-                        }
-                        current_level.append(new_item)
-                        current_level = new_item["children"]
-            return {"results": hierarchy, "count": len(datasets)}, 200
+            hierarchy = Dataset.get_hierarchy()
+            return {"results": hierarchy}, 200
 
         return super().get(resource_id)
 
@@ -214,23 +211,31 @@ class TextEmbeddingsResource(JindaiResource):
         return self.post(resource_id)[0], 200
     
     def get(self):
-        return db_session.query(TextEmbeddings).count()
+        return db_session.query(TextEmbeddings).filter(TextEmbeddings.chunk_id == 1).count()
 
 
 class OIDCUserInfoResource(Resource):
 
-    def get(self):
+    def get(self, section):
         if oidc.user_loggedin:
-            info = oidc.user_getinfo(
-                [
-                    "preferred_username",
-                    "email",
-                    "given_name",
-                    "family_name",
-                    "sub",
-                ]
-            )
-            return info, 200
+            if section:
+                info = {}
+                if section == 'histories':
+                    pass
+                elif section == '':
+                    pass
+                return info, 200
+            else:
+                info = oidc.user_getinfo(
+                    [
+                        "preferred_username",
+                        "email",
+                        "given_name",
+                        "family_name",
+                        "sub",
+                    ]
+                )
+                return info, 200
         else:
             return {
                 "error": "User not logged in",
@@ -412,7 +417,7 @@ def apply_resources(api):
         "/api/embeddings",
         "/api/embeddings/<string:resource_id>",
     )
-    api.add_resource(OIDCUserInfoResource, "/api/user")
+    api.add_resource(OIDCUserInfoResource, "/api/user", "/api/user/<string:section>")
     api.add_resource(WorkerResource, "/api/worker", "/api/worker/<string:task_id>")
     api.add_resource(
         FileManagerResource, "/api/files", "/api/files/", "/api/files/<path:file_path>"

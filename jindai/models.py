@@ -8,12 +8,34 @@ from typing import Any, Dict, List
 import jieba
 from pgvector.sqlalchemy import Vector
 from sentence_transformers import SentenceTransformer
-from sqlalchemy import (Boolean, DateTime, ForeignKey, Index, Integer, String,
-                        Text, UniqueConstraint, asc, create_engine, delete,
-                        desc, exists, or_, text, update)
+from sqlalchemy import (
+    Boolean,
+    DateTime,
+    ForeignKey,
+    Index,
+    Integer,
+    String,
+    Text,
+    UniqueConstraint,
+    asc,
+    create_engine,
+    delete,
+    desc,
+    exists,
+    or_,
+    select,
+    text,
+    update,
+)
 from sqlalchemy.dialects.postgresql import ARRAY, JSONB, UUID
-from sqlalchemy.orm import (Mapped, declarative_base, mapped_column,
-                            relationship, scoped_session, sessionmaker)
+from sqlalchemy.orm import (
+    Mapped,
+    declarative_base,
+    mapped_column,
+    relationship,
+    scoped_session,
+    sessionmaker,
+)
 from sqlalchemy.sql import func
 
 from .config import instance as config
@@ -58,7 +80,7 @@ class Base(MBase):
             elif isinstance(column.type, JSONB):
                 data[column.name] = value
             else:
-                data[column.name] = f'<{value} of {column.type}>'
+                data[column.name] = f"<{value} of {column.type}>"
         return data
 
 
@@ -82,7 +104,7 @@ class Dataset(Base):
     paragraphs: Mapped[List["Paragraph"]] = relationship(
         "Paragraph", back_populates="dataset_obj", cascade="all, delete-orphan"
     )
-    
+
     @staticmethod
     def get(name, auto_create=True):
         ds = db_session.query(Dataset).filter(Dataset.name == name).first()
@@ -97,15 +119,46 @@ class Dataset(Base):
             return
         ds = Dataset.get(new_name)
         if ds:
-            stmt = update(Paragraph).where(Paragraph.dataset == self.id).values({
-                'dataset': ds.id
-            })
+            stmt = (
+                update(Paragraph)
+                .where(Paragraph.dataset == self.id)
+                .values({"dataset": ds.id})
+            )
             db_session.execute(stmt)
             db_session.delete(self)
         else:
             self.name = new_name
         db_session.commit()
         return self.id
+
+    @staticmethod
+    def get_hierarchy():
+        datasets = db_session.query(Dataset).all()
+        sorted_datasets = sorted(datasets, key=_dataset_sort_key)
+        hierarchy = []
+        for dataset in sorted_datasets:
+            current_level = hierarchy
+            parts = dataset.name.split("--")
+            for parti, part in enumerate(parts):
+                found = False
+                for item in current_level:
+                    if item["title"] == part:
+                        current_level = item.setdefault("children", [])
+                        found = True
+                        break
+                if not found:
+                    new_item = {
+                        "title": part,
+                        "children": [],
+                        "order_weight": dataset.order_weight,
+                        "record_id": (
+                            str(dataset.id) if parti == len(parts) - 1 else None
+                        ),
+                        "value": "--".join(parts[: parti + 1]),
+                    }
+                    current_level.append(new_item)
+                    current_level = new_item["children"]
+        return hierarchy
 
 
 class UserInfo(Base):
@@ -124,7 +177,7 @@ class UserInfo(Base):
     datasets: Mapped[List[UUID] | None] = mapped_column(
         ARRAY(Text), default=list, comment="有权限的数据集列表"
     )
-    
+
     # 关联关系：一个用户对应多个操作历史/令牌
     histories: Mapped[List["History"]] = relationship(
         "History", back_populates="user", cascade="all, delete-orphan"
@@ -202,103 +255,125 @@ class Paragraph(Base):
     text_embeddings: Mapped[List["TextEmbeddings"]] = relationship(
         "TextEmbeddings", back_populates="paragraph", cascade="all, delete-orphan"
     )
-    
+
     def as_dict(self):
         data = super().as_dict()
-        data['dataset'] = self.dataset_obj.name
+        data["dataset"] = self.dataset_obj.name
         return data
-    
+
     def __getattr__(self, key):
         if key in self.extdata:
             return self.extdata[key]
         return super().__getattr__(key)
-    
+
     @staticmethod
     def build_query(query_data):
         query = db_session.query(Paragraph)
-        
-        search = query_data['search']
-        
+        filters = []
+
+        search = query_data["search"]
+
         if datasets := query_data.get("datasets"):
             dataset_filters = [Dataset.name.in_(datasets)]
             for dataset_prefix in datasets:
                 dataset_filters.append(Dataset.name.ilike(f"{dataset_prefix}--%"))
-            query = query.filter(Paragraph.dataset.in_(
-                db_session.query(Dataset).filter(or_(*dataset_filters)).with_entities(
-                    Dataset.id
+            filters.append(
+                Paragraph.dataset.in_(
+                    [
+                        _[0]
+                        for _ in db_session.query(Dataset)
+                        .filter(or_(*dataset_filters))
+                        .with_entities(Dataset.id)
+                        .all()
+                    ]
                 )
-            ))
-        
+            )
+
         if sources := query_data.get("sources"):
             source_filters = [Paragraph.source_url.in_(sources)]
             for source in sources:
                 source_filters.append(Paragraph.source_url.ilike(f"{source}%"))
-            query = query.filter(or_(*source_filters))
-            
-        if "embeddings" in query_data:
-            param = exists().where(TextEmbeddings.id == Paragraph.id).correlate(TextEmbeddings)
-            if not query_data["embeddings"]:
-                param = ~param
-            query = query.filter(param)
-            
+            filters.append(or_(*source_filters))
+
+        if query_data.get("query_data") == False:
+            param = (
+                ~exists()
+                .where(TextEmbeddings.id == Paragraph.id)
+                .correlate(TextEmbeddings)
+            )
+            filters.append(param)
+
         if search.startswith("?"):
             param = text(search[1:])
-            query = query.filter(param)
+            filters.append(param)
         elif search.startswith("*"):
             param = Paragraph.content.ilike(f"%{search.strip('*')}%")
-            query = query.filter(param)
-        elif search.startswith(":") or query_data.get('embeddings'):
+            filters.append(param)
+        elif search.startswith(":") or query_data.get("embeddings"):
             query_embedding = TextEmbeddings.get_embedding(search.strip(":"))
-            query = query.join(TextEmbeddings, TextEmbeddings.id == Paragraph.id).order_by(TextEmbeddings.embedding.cosine_distance(query_embedding))
+            subquery = (
+                select(TextEmbeddings.id)
+                .join(Paragraph, TextEmbeddings.id == Paragraph.id)
+                .where(*filters)
+                .order_by(TextEmbeddings.embedding.cosine_distance(query_embedding))
+                .limit(200)
+                .scalar_subquery()
+            )
+            filters = [Paragraph.id.in_(subquery)]
         else:
             param = Paragraph.keywords.contains(
                 [_.strip().lower() for _ in jieba.cut(search) if _.strip()]
             )
-            query = query.filter(param)
+            filters.append(param)
             
-        if sort_string := query_data.get('sort', ''):
-            assert isinstance(sort_string, (list, str)), 'Sort must be list of strings or a string seperated by commas'
-            if isinstance(sort_string, list): sort_string = ','.join(sort_string)
+        query = query.filter(*filters)
+
+        if sort_string := query_data.get("sort", ""):
+            assert isinstance(
+                sort_string, (list, str)
+            ), "Sort must be list of strings or a string seperated by commas"
+            if isinstance(sort_string, list):
+                sort_string = ",".join(sort_string)
 
             order_params = []
             # 1. 拆分字符串
-            parts = sort_string.split(',')
-            
+            parts = sort_string.split(",")
+
             for part in parts:
                 part = part.strip()
                 if not part:
                     continue
-                    
+
                 # 2. 判断排序方向
-                if part.startswith('-'):
+                if part.startswith("-"):
                     column_name = part[1:]
                     sort_func = desc
                 else:
                     column_name = part
                     sort_func = asc
-                    
+
                 # 3. 获取模型属性并生成排序对象
                 column = getattr(Paragraph, column_name, None)
                 if column is not None:
                     order_params.append(sort_func(column))
-                    
+
             query = query.order_by(*order_params)
-            
-        if offset := query_data.get('offset', 0):
+
+        if offset := query_data.get("offset", 0):
             query = query.offset(offset)
-            
-        if limit := query_data.get('limit', 0):
+
+        if limit := query_data.get("limit", 0):
             query = query.limit(limit)
-            
+
         return query
-    
-    
+
+
 class Terms(Base):
     __tablename__ = "terms"
     __table_args__ = {
         "comment": "词汇表",
     }
-    
+
     term: Mapped[str] = mapped_column(String, nullable=False, comment="词汇")
 
 
@@ -324,7 +399,7 @@ class TaskDBO(Base):
         String(64), nullable=False, comment="创建者用户名"
     )
     shared: Mapped[bool] = mapped_column(Boolean, default=False, comment="是否共享")
-    
+
     @staticmethod
     def get(id_or_name):
         query = db_session.query(TaskDBO)
@@ -336,7 +411,7 @@ class TaskDBO(Base):
 
 class TextEmbeddings(Base):
     embedding_model = None
-    
+
     __tablename__ = "text_embeddings"
     __table_args__ = (
         Index(
@@ -354,10 +429,15 @@ class TextEmbeddings(Base):
     id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
         ForeignKey("paragraph.id", ondelete="CASCADE"),
-        primary_key=True,
         comment="段落ID",
     )
-    
+
+    chunk_id: Mapped[int] = mapped_column(
+        Integer,
+        primary_key=True,
+        comment="分块ID",
+    )
+
     embedding: Mapped[Vector] = mapped_column(
         Vector(config.embedding_dims), nullable=False, comment="文本嵌入向量"
     )
@@ -387,9 +467,66 @@ class TextEmbeddings(Base):
             convert_to_numpy=True,  # 返回numpy数组，方便后续处理
             normalize_embeddings=True,  # 归一化向量，提升检索效果
         )
-        
+
         return embedding.tolist()
+
+    @staticmethod
+    def get_embedding_chunks(text: str, chunk_length: int, overlap: int):
+        """
+        长文本切分+批量生成embedding向量，带重叠窗口避免语义割裂
+        Args:
+            text: 待切分的长文本（语段/整页文本）
+            chunk_length: 每个文本块的字符长度
+            overlap: 相邻文本块的重叠字符长度
+        Returns:
+            list: 二维列表，每个元素为 单文本块的embedding向量(list格式)，与你get_embedding返回格式一致
+        Raises:
+            ValueError: 输入文本为空/切分参数非法时抛出异常
+        """
+        # 基础校验
+        if not text.strip():
+            return []
+        if chunk_length <= 0 or overlap < 0 or overlap >= chunk_length:
+            return []
+
+        text = text.strip()
+        chunks = []
+        start_idx = 0
+        text_total_len = len(text)
+
+        # 滑动窗口切分长文本：核心重叠分块逻辑
+        while start_idx < text_total_len:
+            # 计算当前块的结束下标
+            end_idx = start_idx + chunk_length
+            chunk = text[start_idx:end_idx]
+            chunks.append(chunk)
+            # 步进 = 块长度 - 重叠长度，实现滑动重叠
+            start_idx += chunk_length - overlap
+            # 兜底：处理最后一个不足长度的块，避免遗漏文本
+            if start_idx + chunk_length > text_total_len and start_idx < text_total_len:
+                chunk = text[-chunk_length:]
+                chunks.append(chunk)
+                break
+
+        # 批量生成每个chunk的embedding，复用已加载的模型，无需重复初始化
+        if TextEmbeddings.embedding_model is None:
+            TextEmbeddings.embedding_model = SentenceTransformer(config.embedding_model)
+        # 批量encode，参数与get_embedding完全一致，保证向量格式统一
+        embeddings = TextEmbeddings.embedding_model.encode(
+            chunks,
+            convert_to_numpy=True,
+            normalize_embeddings=True,  # 保持归一化，和单句向量一致性检索
+        )
+
+        # 统一返回list格式，与get_embedding的return embedding.tolist()完全对齐
+        return embeddings.tolist()
 
 
 def is_uuid_literal(val: str):
-    return re.match(r'^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$', val.lower()) is not None
+    return (
+        re.match(
+            r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+            val.lower(),
+        )
+        is not None
+    )
