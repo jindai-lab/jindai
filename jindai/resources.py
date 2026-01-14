@@ -138,9 +138,6 @@ class DatasetResource(JindaiResource):
 
     def get(self, resource_id=None):
 
-        def _dataset_sort_key(ds: Dataset):
-            return len(ds.name.split("--")), ds.order_weight, ds.name
-
         if not resource_id:
             hierarchy = Dataset.get_hierarchy()
             return {"results": hierarchy}, 200

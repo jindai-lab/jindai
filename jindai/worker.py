@@ -201,7 +201,6 @@ def handle_embedding(id=None, content=None, bulk=None):
                 TextEmbeddings.id == Paragraph.id, TextEmbeddings.chunk_id > 0
             ).correlate(Paragraph),
             func.length(Paragraph.content) > 10,
-            Paragraph.source_url.contains('Authors/') # 先处理这些! TODO: 之后删除
         )
         results = db_session.execute(stmt.limit(10000)).mappings().all()
         bulk = []
