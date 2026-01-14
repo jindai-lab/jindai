@@ -133,6 +133,10 @@ class Dataset(Base):
 
     @staticmethod
     def get_hierarchy():
+        
+        def _dataset_sort_key(ds: Dataset):
+            return len(ds.name.split("--")), ds.order_weight, ds.name
+        
         datasets = db_session.query(Dataset).all()
         sorted_datasets = sorted(datasets, key=_dataset_sort_key)
         hierarchy = []
@@ -429,6 +433,7 @@ class TextEmbeddings(Base):
     id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
         ForeignKey("paragraph.id", ondelete="CASCADE"),
+        primary_key=True,
         comment="段落ID",
     )
 
