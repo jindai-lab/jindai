@@ -1,16 +1,38 @@
+import copy
 from typing import Type
 import os
 from flask import Response, abort, request, send_file
 from flask_restful import Resource, reqparse
+from sqlalchemy import Select, Subquery, func
 from sqlalchemy.orm import Query
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.sql import visitors
 
-from .app import (UUID, Resource, ResponseTuple, api, app, assert_admin,
-                  config, storage, oidc, request)
-from .models import (Base, Dataset, History, Paragraph, TaskDBO, Terms,
-                     TextEmbeddings, UserInfo, db_session, is_uuid_literal)
-from .worker import add_task, delete_task, get_task_result, get_task_stats
+from .app import (
+    UUID,
+    Resource,
+    ResponseTuple,
+    api,
+    app,
+    assert_admin,
+    config,
+    storage,
+    oidc,
+    request,
+)
+from .models import (
+    Base,
+    Dataset,
+    History,
+    Paragraph,
+    TaskDBO,
+    Terms,
+    TextEmbeddings,
+    UserInfo,
+    db_session,
+    is_uuid_literal,
+)
+from .worker import add_task, delete_task, get_task_result, get_task_stats, clear_tasks
 
 
 class JindaiResource(Resource):
@@ -18,38 +40,17 @@ class JindaiResource(Resource):
     def __init__(self, model_cls: Type[Base]) -> None:
         super().__init__()
         self.model = model_cls
-        
-    def _relate_to_embeddings(self, query):
-        statement = query.statement if isinstance(query, Query) else query
-        def is_target_column(element):
-            return element is TextEmbeddings.embedding
 
-        # 1. 检查查询的列 (Select list)
-        # column_descriptions 包含了 query() 中指定的实体和列
-        if isinstance(query, Query):
-            for desc in query.column_descriptions:
-                if desc['expr'] is TextEmbeddings.embedding:
-                    return True
-
-        # 2. 检查过滤条件、排序、分组等 (Where, Order By, etc.)
-        # 使用 visitors.iterate 遍历整个 SQL 表达式树
-        for element in visitors.iterate(statement):
-            if is_target_column(element):
-                return True
-                
-        return False
-
-    def paginate(self, stmt):
-        count = 0
-        if not self._relate_to_embeddings(stmt):
-            offset, limit = int(request.args.get("offset", "0")), int(
-                request.args.get("limit", "100")
-            )
-            count = stmt.count()
+    def paginate(self, stmt, get_results=True, get_total=True):
+        data = {"results": [], "total": -1}
+        offset, limit = int(request.args.get("offset", "0")), int(
+            request.args.get("limit", "100")
+        )
+        if get_total:
+            data["total"] = stmt.count()
+        if get_results:
             stmt = stmt.offset(offset).limit(limit)
-        
-        data = {"results": [r.as_dict() for r in stmt], "total": 0}
-        data["total"] = count or len(data['results'])
+            data["results"] = [r.as_dict() for r in stmt]
         return data
 
     def get_object_by_id(self, resource_id):
@@ -173,7 +174,12 @@ class ParagraphResource(JindaiResource):
         data = request.json
         if data.get("search"):
             query = Paragraph.build_query(data)
-            return self.paginate(query), 200
+            return (
+                self.paginate(
+                    query, get_results="total" not in data, get_total="total" in data
+                ),
+                200,
+            )
         else:
             return super().post()
 
@@ -206,9 +212,13 @@ class TextEmbeddingsResource(JindaiResource):
 
     def put(self, resource_id=""):
         return self.post(resource_id)[0], 200
-    
+
     def get(self):
-        return db_session.query(TextEmbeddings).filter(TextEmbeddings.chunk_id == 1).count()
+        return (
+            db_session.query(TextEmbeddings)
+            .filter(TextEmbeddings.chunk_id == 1)
+            .count()
+        )
 
 
 class OIDCUserInfoResource(Resource):
@@ -217,9 +227,9 @@ class OIDCUserInfoResource(Resource):
         if oidc.user_loggedin:
             if section:
                 info = {}
-                if section == 'histories':
+                if section == "histories":
                     pass
-                elif section == '':
+                elif section == "":
                     pass
                 return info, 200
             else:
@@ -251,7 +261,11 @@ class WorkerResource(Resource):
         add_task(**request.json)
 
     def delete(self, task_id=""):
-        delete_task(task_id)
+        if task_id in ["", "pending", "processing", "completed", "failed"]:
+            clear_tasks(task_id)
+        else:
+            delete_task(task_id)
+        return True
 
 
 class FileManagerResource(Resource):

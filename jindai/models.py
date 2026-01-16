@@ -1,41 +1,22 @@
 """DB Objects"""
 
+from functools import wraps
 import re
 import uuid
 from datetime import datetime
 from typing import Any, Dict, List
 
+import json
 import jieba
+import redis
 from pgvector.sqlalchemy import Vector
 from sentence_transformers import SentenceTransformer
-from sqlalchemy import (
-    Boolean,
-    DateTime,
-    ForeignKey,
-    Index,
-    Integer,
-    String,
-    Text,
-    UniqueConstraint,
-    asc,
-    create_engine,
-    delete,
-    desc,
-    exists,
-    or_,
-    select,
-    text,
-    update,
-)
+from sqlalchemy import (Boolean, DateTime, ForeignKey, Index, Integer, String,
+                        Text, UniqueConstraint, asc, create_engine, desc,
+                        exists, or_, select, text, update)
 from sqlalchemy.dialects.postgresql import ARRAY, JSONB, UUID
-from sqlalchemy.orm import (
-    Mapped,
-    declarative_base,
-    mapped_column,
-    relationship,
-    scoped_session,
-    sessionmaker,
-)
+from sqlalchemy.orm import (Mapped, declarative_base, mapped_column,
+                            relationship, scoped_session, sessionmaker)
 from sqlalchemy.sql import func
 
 from .config import instance as config
@@ -133,10 +114,10 @@ class Dataset(Base):
 
     @staticmethod
     def get_hierarchy():
-        
+
         def _dataset_sort_key(ds: Dataset):
             return len(ds.name.split("--")), ds.order_weight, ds.name
-        
+
         datasets = db_session.query(Dataset).all()
         sorted_datasets = sorted(datasets, key=_dataset_sort_key)
         hierarchy = []
@@ -299,7 +280,7 @@ class Paragraph(Base):
                 source_filters.append(Paragraph.source_url.ilike(f"{source}%"))
             filters.append(or_(*source_filters))
 
-        if query_data.get("query_data") == False:
+        if query_data.get("embeddings") == False:
             param = (
                 ~exists()
                 .where(TextEmbeddings.id == Paragraph.id)
@@ -313,23 +294,27 @@ class Paragraph(Base):
         elif search.startswith("*"):
             param = Paragraph.content.ilike(f"%{search.strip('*')}%")
             filters.append(param)
-        elif search.startswith(":") or query_data.get("embeddings"):
+        elif 'total' not in query_data and (search.startswith(":") or query_data.get("embeddings")):
             query_embedding = TextEmbeddings.get_embedding(search.strip(":"))
-            subquery = (
-                select(TextEmbeddings.id)
-                .join(Paragraph, TextEmbeddings.id == Paragraph.id)
-                .where(*filters)
+            sub_stmt = (
+                select(
+                    TextEmbeddings.id,
+                    TextEmbeddings.embedding.cosine_distance(query_embedding).label(
+                        "dist"
+                    ),
+                )
                 .order_by(TextEmbeddings.embedding.cosine_distance(query_embedding))
-                .limit(200)
-                .scalar_subquery()
+                .subquery("embs")
             )
-            filters = [Paragraph.id.in_(subquery)]
+            query = query.join(sub_stmt, Paragraph.id == sub_stmt.c.id).order_by(
+                sub_stmt.c.dist
+            )
         else:
             param = Paragraph.keywords.contains(
                 [_.strip().lower() for _ in jieba.cut(search) if _.strip()]
             )
             filters.append(param)
-            
+
         query = query.filter(*filters)
 
         if sort_string := query_data.get("sort", ""):
@@ -413,16 +398,68 @@ class TaskDBO(Base):
             return query.filter(TaskDBO.name.contains(id_or_name)).first()
 
 
+redis_client = redis.Redis(**config.redis)
+
+
+# 缓存核心配置（可根据业务灵活修改）
+CACHE_EXPIRE_SECONDS = 60 * 10  # 缓存默认过期时间：5分钟
+CACHE_KEY_PREFIX = "query_cache:"  # 缓存key前缀，方便redis中区分缓存数据
+
+
+def redis_auto_renew_cache(func):
+    """
+    Redis缓存装饰器 - 核心特性：
+    1. 自动缓存查询结果，避免重复执行耗时查询
+    2. 缓存自动过期，默认5分钟，防止Redis内存溢出
+    3. 热点缓存自动续期：访问时如果缓存剩余时间不足阈值，自动重置过期时间
+    4. 自动处理缓存穿透：查询结果为空也缓存，避免空值穿透数据库
+    5. 函数入参自动拼接为缓存key，支持带参数的查询函数
+    """
+
+    @wraps(func)  # 保留原函数的属性（函数名、注释等）
+    def wrapper(*args, **kwargs):
+        # -------- 步骤1：生成唯一的缓存KEY --------
+        # 拼接：前缀 + 函数名 + 位置参数 + 关键字参数，保证不同参数对应不同缓存
+        args_str = "_".join(map(str, args))
+        kwargs_str = "_".join([f"{k}_{v}" for k, v in sorted(kwargs.items())])
+        cache_key = f"{CACHE_KEY_PREFIX}{func.__name__}_{args_str}_{kwargs_str}"
+
+        # -------- 步骤2：优先查询Redis缓存 --------
+        cached_data = redis_client.get(cache_key)
+        if cached_data is not None:
+            # ✅ 缓存命中：判断是否需要「自动续期」
+            ttl = redis_client.ttl(cache_key)  # 获取缓存剩余存活时间（秒），-1=永不过期，-2=已过期
+            # 执行自动续期，重置过期时间为默认值
+            redis_client.expire(cache_key, CACHE_EXPIRE_SECONDS)
+            return json.loads(cached_data)
+
+        # -------- 步骤3：缓存未命中，执行原查询函数 --------
+        result = func(*args, **kwargs)
+
+        # -------- 步骤4：将查询结果写入Redis，并设置过期时间 --------
+        if result is not None:
+            # 写入缓存+设置过期时间，实现「自动过期」
+            redis_client.setex(
+                name=cache_key,
+                time=CACHE_EXPIRE_SECONDS,
+                value=json.dumps(result),  # 统一转字符串，支持任意可序列化结果
+            )
+
+        return result
+
+    return wrapper
+
+
 class TextEmbeddings(Base):
     embedding_model = None
 
     __tablename__ = "text_embeddings"
     __table_args__ = (
         Index(
-            "idx_embedding_uuid_cosine",
+            "idx_embedding_cosine",
             "embedding",
             postgresql_using="ivfflat",
-            postgresql_with={"lists": "100"},
+            postgresql_with={"lists": "5000"},
             postgresql_ops={"embedding": "vector_cosine_ops"},
         ),
         {
@@ -452,6 +489,7 @@ class TextEmbeddings(Base):
     )
 
     @staticmethod
+    @redis_auto_renew_cache
     def get_embedding(text: str):
         """
         将多语言文本转换为embedding向量

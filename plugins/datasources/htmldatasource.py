@@ -13,13 +13,13 @@ from hashlib import sha1
 from typing import Dict
 from urllib.parse import urljoin
 from bs4 import BeautifulSoup as B
-import pyppeteer
 import asyncio
+from typing import Iterable
 
-from jindai.helpers import config, safe_import
+from jindai.app import config, storage
+from jindai.helpers import safe_import
 from jindai.models import Paragraph
 from jindai.pipeline import DataSourceStage, PipelineStage
-from jindai import storage, parser
 
 
 trafilatura = safe_import('trafilatura')
@@ -47,6 +47,8 @@ class CachedWebAccess:
                                           'Referer': url}).content
     
     def request_browserless(self, url, wait_for=''):
+        
+        pyppeteer = safe_import('pyppeteer')
 
         async def fetch():
             browser = await pyppeteer.launcher.connect(
@@ -145,9 +147,6 @@ class WebPageListingDataSource(DataSourceStage):
             wait_for (str):
                 Wait for element
                 @zhs 等待加载完成的元素
-            with_chrome (bool):
-                Fetch with browserless (Chrome)
-                @zhs 使用 Browserless 抓取
         """
         self.base_cls = base_cls or Paragraph
         self.proxies = {} if not proxy else {
@@ -165,7 +164,6 @@ class WebPageListingDataSource(DataSourceStage):
         self.image_patterns = PipelineStage.parse_lines(
             img_pattern) or DEFAULT_IMG_PATTERNS.split('\n')
         self.level = level
-        self.with_chrome = with_chrome
         self.wait_for = wait_for
 
     def get_url(self, url):
