@@ -5,6 +5,7 @@ description = "Add your description here"
 readme = "README.md"
 requires-python = ">=3.13"
 dependencies = [
+    "asteval>=1.0.8",
     "authlib>=1.6.6",
     "bs4>=0.0.2",
     "chardet>=5.2.0",
@@ -16,7 +17,10 @@ dependencies = [
     "ipython>=9.9.0",
     "jieba>=0.42.1",
     "nltk>=3.9.2",
+    "ocrmypdf>=16.13.0",
+    "ocrmypdf-paddleocr",
     "opencc-python-reimplemented>=0.1.7",
+    "opencv-python-headless>=4.12.0.88",
     "pandas>=2.3.3",
     "pgvector>=0.4.2",
     "pillow>=12.1.0",
@@ -25,7 +29,7 @@ dependencies = [
     "pymupdf>=1.26.7",
     "pypdf2>=3.0.1",
     "python-dateutil>=2.9.0.post0",
-    "pyyaml>=6.0.3",
+    "pyyaml>=6.0.2",
     "redis>=7.1.0",
     "requests>=2.32.5",
     "sentence-transformers>=5.2.0",
@@ -40,3 +44,6 @@ dependencies = [
 [[tool.uv.index]]
 url = "https://mirrors.tuna.tsinghua.edu.cn/pypi/web/simple/"
 default = true
+
+[tool.uv.sources]
+ocrmypdf-paddleocr = { git = "https://github.com/clefru/ocrmypdf-paddleocr/" }

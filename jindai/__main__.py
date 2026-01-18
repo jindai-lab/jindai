@@ -78,14 +78,14 @@ def run_worker():
 @click.option("-o", "--output", type=click.File("w", "utf-8", "ignore"), default=None)
 def run_task(task_id, concurrent, verbose, edit, log, output):
     """Run task according to id or name"""
-    dbo = db_session.query(TaskDBO).filter((TaskDBO.id == task_id) | (TaskDBO.name == task_id)).first()
+    dbo = TaskDBO.get(task_id)
     
     if not dbo:
         print(f"Task {task_id} not found")
         return
 
     if edit:
-        temp_name = tempfile.mkstemp()
+        _, temp_name = tempfile.mkstemp()
         with open(temp_name, "w", encoding="utf-8") as fo:
             dat = dbo.as_dict()
             dat.pop("_id", "")
@@ -104,8 +104,8 @@ def run_task(task_id, concurrent, verbose, edit, log, output):
         with open(temp_name, encoding="utf-8") as fi:
             param = yaml.safe_load(fi)
             for key, val in param.items():
-                dbo[key] = val
-            dbo.save()
+                setattr(dbo, key, val)
+            db_session.commit()
 
         os.unlink(temp_name)
 
@@ -264,6 +264,8 @@ def call_ipython():
     from uuid import UUID
     from tqdm import tqdm
     import jindai
+    import jindai.models
+    import jindai.resources
 
     tpe = ThreadPoolExecutor(os.cpu_count())
     init = _init_plugins
@@ -281,6 +283,10 @@ def call_ipython():
 
     ns = dict(jindai.__dict__)
     ns.update(**locals())
+    for obj in [jindai, jindai.models, jindai.resources]:
+        for k in dir(obj):
+            if k.startswith('_'): continue
+            ns[k] = getattr(obj, k)
 
     start_ipython(argv=[], user_ns=ns)
 

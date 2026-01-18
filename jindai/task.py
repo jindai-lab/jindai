@@ -2,9 +2,6 @@
 
 import ctypes
 import datetime
-import json
-import os
-import sys
 import time
 import traceback
 from collections import deque
@@ -17,7 +14,7 @@ import redis
 from tqdm import tqdm
 
 from .app import config
-from .models import Paragraph
+from .models import Paragraph, db_session
 from .pipeline import Pipeline
 
 redis_client = redis.Redis(**config.redis)
@@ -217,7 +214,7 @@ class Task:
         
         if dbo.pipeline:
             dbo.last_run = datetime.datetime.now()
-            dbo.save()
+            db_session.commit()
             
             return Task(params={},
                         stages=dbo.pipeline,

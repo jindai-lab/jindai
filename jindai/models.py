@@ -246,11 +246,6 @@ class Paragraph(Base):
         data["dataset"] = self.dataset_obj.name
         return data
 
-    def __getattr__(self, key):
-        if key in self.extdata:
-            return self.extdata[key]
-        return super().__getattr__(key)
-
     @staticmethod
     def build_query(query_data):
         query = db_session.query(Paragraph)
@@ -294,21 +289,22 @@ class Paragraph(Base):
         elif search.startswith("*"):
             param = Paragraph.content.ilike(f"%{search.strip('*')}%")
             filters.append(param)
-        elif 'total' not in query_data and (search.startswith(":") or query_data.get("embeddings")):
-            query_embedding = TextEmbeddings.get_embedding(search.strip(":"))
-            sub_stmt = (
-                select(
-                    TextEmbeddings.id,
-                    TextEmbeddings.embedding.cosine_distance(query_embedding).label(
-                        "dist"
-                    ),
+        elif search.startswith(":") or query_data.get("embeddings"):
+            if 'total' not in query_data:
+                query_embedding = TextEmbeddings.get_embedding(search.strip(":"))
+                sub_stmt = (
+                    select(
+                        TextEmbeddings.id,
+                        TextEmbeddings.embedding.cosine_distance(query_embedding).label(
+                            "dist"
+                        ),
+                    )
+                    .order_by(TextEmbeddings.embedding.cosine_distance(query_embedding))
+                    .subquery("embs")
                 )
-                .order_by(TextEmbeddings.embedding.cosine_distance(query_embedding))
-                .subquery("embs")
-            )
-            query = query.join(sub_stmt, Paragraph.id == sub_stmt.c.id).order_by(
-                sub_stmt.c.dist
-            )
+                query = query.join(sub_stmt, Paragraph.id == sub_stmt.c.id).order_by(
+                    sub_stmt.c.dist
+                )
         else:
             param = Paragraph.keywords.contains(
                 [_.strip().lower() for _ in jieba.cut(search) if _.strip()]
@@ -384,8 +380,8 @@ class TaskDBO(Base):
     shortcut_map: Mapped[Dict[str, Any]] = mapped_column(
         JSONB, default=dict, nullable=False, comment="快捷方式映射（JSON）"
     )
-    creator: Mapped[str] = mapped_column(
-        String(64), nullable=False, comment="创建者用户名"
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        UUID, nullable=False, comment="创建者用户 ID"
     )
     shared: Mapped[bool] = mapped_column(Boolean, default=False, comment="是否共享")
 
@@ -406,48 +402,41 @@ CACHE_EXPIRE_SECONDS = 60 * 10  # 缓存默认过期时间：5分钟
 CACHE_KEY_PREFIX = "query_cache:"  # 缓存key前缀，方便redis中区分缓存数据
 
 
-def redis_auto_renew_cache(func):
-    """
-    Redis缓存装饰器 - 核心特性：
-    1. 自动缓存查询结果，避免重复执行耗时查询
-    2. 缓存自动过期，默认5分钟，防止Redis内存溢出
-    3. 热点缓存自动续期：访问时如果缓存剩余时间不足阈值，自动重置过期时间
-    4. 自动处理缓存穿透：查询结果为空也缓存，避免空值穿透数据库
-    5. 函数入参自动拼接为缓存key，支持带参数的查询函数
-    """
+def redis_auto_renew_cache(cache_key=None):
+    
+    def wrapped(func):
+        func.cache_key_method = cache_key
+        @wraps(func)  # 保留原函数的属性（函数名、注释等）
+        def wrapper(*args, **kwargs):
+            
+            if func.cache_key_method is not None:
+                cache_key = f"{CACHE_KEY_PREFIX}{func.__name__}_{func.cache_key_method(*args, **kwargs)}"
+            else:
+                args_str = "_".join(map(str, args))
+                kwargs_str = "_".join([f"{k}_{v}" for k, v in sorted(kwargs.items())])
+                cache_key = f"{CACHE_KEY_PREFIX}{func.__name__}_{args_str}_{kwargs_str}"
 
-    @wraps(func)  # 保留原函数的属性（函数名、注释等）
-    def wrapper(*args, **kwargs):
-        # -------- 步骤1：生成唯一的缓存KEY --------
-        # 拼接：前缀 + 函数名 + 位置参数 + 关键字参数，保证不同参数对应不同缓存
-        args_str = "_".join(map(str, args))
-        kwargs_str = "_".join([f"{k}_{v}" for k, v in sorted(kwargs.items())])
-        cache_key = f"{CACHE_KEY_PREFIX}{func.__name__}_{args_str}_{kwargs_str}"
+            if cache_key:
+                cached_data = redis_client.get(cache_key)
+                if cached_data is not None:
+                    redis_client.expire(cache_key, CACHE_EXPIRE_SECONDS)
+                    return json.loads(cached_data)
 
-        # -------- 步骤2：优先查询Redis缓存 --------
-        cached_data = redis_client.get(cache_key)
-        if cached_data is not None:
-            # ✅ 缓存命中：判断是否需要「自动续期」
-            ttl = redis_client.ttl(cache_key)  # 获取缓存剩余存活时间（秒），-1=永不过期，-2=已过期
-            # 执行自动续期，重置过期时间为默认值
-            redis_client.expire(cache_key, CACHE_EXPIRE_SECONDS)
-            return json.loads(cached_data)
+            result = func(*args, **kwargs)
 
-        # -------- 步骤3：缓存未命中，执行原查询函数 --------
-        result = func(*args, **kwargs)
+            if result is not None and cache_key:
+                # 写入缓存+设置过期时间，实现「自动过期」
+                redis_client.setex(
+                    name=cache_key,
+                    time=CACHE_EXPIRE_SECONDS,
+                    value=json.dumps(result),  # 统一转字符串，支持任意可序列化结果
+                )
 
-        # -------- 步骤4：将查询结果写入Redis，并设置过期时间 --------
-        if result is not None:
-            # 写入缓存+设置过期时间，实现「自动过期」
-            redis_client.setex(
-                name=cache_key,
-                time=CACHE_EXPIRE_SECONDS,
-                value=json.dumps(result),  # 统一转字符串，支持任意可序列化结果
-            )
+            return result
 
-        return result
+        return wrapper
 
-    return wrapper
+    return wrapped
 
 
 class TextEmbeddings(Base):
@@ -489,7 +478,7 @@ class TextEmbeddings(Base):
     )
 
     @staticmethod
-    @redis_auto_renew_cache
+    @redis_auto_renew_cache()
     def get_embedding(text: str):
         """
         将多语言文本转换为embedding向量

@@ -118,6 +118,8 @@ def worker():
             # 策略模式：根据类型处理
             if task["type"] == "text_embedding":
                 result = handle_embedding(**task["params"])
+            elif task["type"] == "ocr":
+                result = handle_ocr(**task["params"])
             else:
                 result = handle_custom(**task["params"])
 
@@ -173,6 +175,17 @@ def handle_custom(task_id="", **params):
         dbo = TaskDBO(**params)
     task = Task.from_dbo(dbo)
     return task.execute()
+
+
+def handle_ocr(input, output, lang):
+    import ocrmypdf
+    ocrmypdf.ocr(
+        input, output,
+        plugins=['ocrmypdf_paddleocr'],
+        language=lang,
+        paddle_use_gpu=True
+    )
+    return output
 
 
 def handle_embedding(id=None, content=None, bulk=None):

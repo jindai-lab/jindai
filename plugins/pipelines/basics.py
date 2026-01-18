@@ -11,6 +11,7 @@ import json
 import pandas
 
 from jindai import Pipeline, PipelineStage, storage
+from jindai.app import aeval
 from jindai.helpers import safe_import, WordStemmer as _Stemmer
 from jindai.models import Dataset, Paragraph, db_session
 
@@ -34,42 +35,13 @@ class FilterOut(PipelineStage):
             cond (QUERY): Condition
                 @zhs 截止条件
         """
-        self.cond = parser.parse(cond)
-        self.ee = QExprEvaluator(parser.shortcuts)
+        self.cond = cond
 
     def resolve(self, paragraph):
-        if self.ee.evaluate(self.cond, paragraph):
+        ee = aeval(self.cond, paragraph)
+        if ee:
             return
         return paragraph
-
-
-class ExecuteCode(PipelineStage):
-    """
-    Execute QExpr Code
-    @zhs 执行查询表达式代码
-    """
-
-    def __init__(self, code, summarizing):
-        """
-        Args:
-            code (QUERY): Code to execute when resolving paragraph.
-                Use $paragraph to access to the current paragraph,
-                and $ctx to access the global context.
-                @zhs 处理段落时执行的代码
-            summarizing (QUERY): Code to execute when summarizing.
-                @zhs 总结阶段执行的代码
-        """
-        super().__init__()
-        self.code = parser.parse(code)
-        self.summarizing = parser.parse(summarizing)
-        self.ee = QExprEvaluator(parser.shortcuts)
-
-    def resolve(self, paragraph):
-        self.ee.execute(self.code, {'paragraph': paragraph, 'ctx': self.gctx})
-        return paragraph
-
-    def summarize(self, result):
-        return self.ee.execute(self.summarizing, {'result': result, 'ctx': self.gctx})
 
 
 class TradToSimpChinese(PipelineStage):
@@ -513,14 +485,14 @@ class ArrayField(PipelineStage):
         """
         super().__init__()
         self.field = field
-        self.elements = [parser.parse(ele) for ele in PipelineStage.parse_lines(elements)]
+        self.elements = PipelineStage.parse_lines(elements)
         self.push = push
 
     def resolve(self, paragraph: Paragraph) -> Paragraph:
         if paragraph[self.field] is None and self.push:
             paragraph[self.field] = []
         for ele in self.elements:
-            ele = evaluateqx(ele, paragraph)
+            ele = aeval(ele, paragraph)
             if self.push:
                 paragraph[self.field].append(ele)
             else:
@@ -777,7 +749,7 @@ class FieldAssignment(PipelineStage):
         if self.delete_field:
             del paragraph.extdata[self.field]
         else:
-            paragraph[self.field] = evaluateqx(self.value, paragraph)
+            paragraph[self.field] = aeval(self.value, paragraph)
         return paragraph
 
 
@@ -829,11 +801,11 @@ class FieldIncresement(PipelineStage):
         '''
         super().__init__()
         self.field = field
-        self.inc_value = parser.parse(inc_value)
+        self.inc_value = inc_value
 
     def resolve(self, paragraph: Paragraph):
         val = getattr(paragraph, self.field)
-        val += evaluateqx(self.inc_value, paragraph)
+        val += aeval(self.inc_value, paragraph)
         setattr(paragraph, val)
         return paragraph
 
@@ -949,14 +921,14 @@ class ConditionalAssignment(PipelineStage):
                 @zhs 要赋值的字段
         """
         super().__init__()
-        self.conds = parser.parse(cond)
+        self.conds = aeval(cond)
         self.field = field
 
     def resolve(self, paragraph: Paragraph):
         for cond, val in self.conds:
-            if evaluateqx(cond, paragraph):
+            if aeval(cond, paragraph):
                 setattr(paragraph, self.field,
-                        evaluateqx(val, paragraph))
+                        aeval(val, paragraph))
                 break
         return paragraph
 

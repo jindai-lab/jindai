@@ -1,6 +1,7 @@
 """Flask App definition and configuration"""
 from typing import Any, Dict, Tuple, Type
 from uuid import UUID
+from asteval import Interpreter
 
 from flask import Flask, jsonify, request, session, g
 from flask_oidc import OpenIDConnect
@@ -21,6 +22,13 @@ app.config.update({
 })
 oidc = OpenIDConnect(app)
 api = Api(app, decorators=[oidc.accept_token()])
+
+
+def aeval(expr, context):
+    if not isinstance(context, dict):
+        context = context.as_dict()
+    ee = Interpreter(context)
+    return ee(expr)
 
 
 def assert_admin():
