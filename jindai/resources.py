@@ -1,12 +1,9 @@
-import copy
+import hashlib
 from typing import Type
 import os
-from flask import Response, abort, request, send_file
+from flask import Response, request, send_file
 from flask_restful import Resource, reqparse
-from sqlalchemy import Select, Subquery, func
-from sqlalchemy.orm import Query
 from sqlalchemy.dialects.postgresql import insert
-from sqlalchemy.sql import visitors
 
 from .app import (
     UUID,
@@ -31,9 +28,17 @@ from .models import (
     UserInfo,
     db_session,
     is_uuid_literal,
+    redis_auto_renew_cache
 )
 from .worker import add_task, delete_task, get_task_result, get_task_stats, clear_tasks
 
+
+def paginate_cache_key(_, stmt, get_results=True, get_total=True):
+    if get_total and not get_results:
+        if hasattr(stmt, 'statement'): stmt = stmt.statement
+        stmt_str = str(stmt) + str(sorted(stmt.compile().params.items()))
+        return hashlib.sha1(stmt_str.encode('utf-8')).hexdigest()
+    
 
 class JindaiResource(Resource):
 
@@ -41,6 +46,7 @@ class JindaiResource(Resource):
         super().__init__()
         self.model = model_cls
 
+    @redis_auto_renew_cache(cache_key=paginate_cache_key)
     def paginate(self, stmt, get_results=True, get_total=True):
         data = {"results": [], "total": -1}
         offset, limit = int(request.args.get("offset", "0")), int(
@@ -65,8 +71,8 @@ class JindaiResource(Resource):
                 }, 404
             return result.as_dict()
         else:
-            results = self.model.query
-            return {"results": self.paginate(results), "count": results.count()}, 200
+            results = db_session.query(self.model)
+            return self.paginate(results), 200
 
     def post(self, resource_id=""):
         data = request.json

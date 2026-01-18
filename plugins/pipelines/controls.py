@@ -4,7 +4,8 @@
 
 from uuid import UUID
 from jindai import PipelineStage, Pipeline, Task
-from jindai.models import TaskDBO
+from jindai.app import aeval
+from jindai.models import TaskDBO, db_session
 
 
 class FlowControlStage(PipelineStage):
@@ -79,8 +80,7 @@ class RepeatWhile(FlowControlStage):
         """
         self.times = times
         self.times_key = f'REPEATWHILE_{id(self)}_TIMES_COUNTER'
-        self.cond = parser.parse(
-            cond if cond else f'{self.times_key} < {times}')
+        self.cond = cond if cond else f'{self.times_key} < {times}'
         self.pipeline = Pipeline(pipeline, self.log)
         super().__init__()
 
@@ -89,7 +89,7 @@ class RepeatWhile(FlowControlStage):
             paragraph[self.times_key] = 0
 
         try:
-            condition_satisfied = evaluateqx(self.cond, paragraph)
+            condition_satisfied = aeval(self.cond, paragraph)
         except Exception as ex:
             self.log_exception('failed to evaluate qx', ex)
             return
@@ -122,13 +122,13 @@ class ForEach(FlowControlStage):
                 @zhs 要枚举的范围
         """
         self.as_name = as_name
-        self.input_value = parser.parse(input_value)
+        self.input_value = input_value
         self.pipeline = Pipeline(pipeline, self.log)
         super().__init__()
 
     def resolve(self, paragraph):
         try:
-            input_value = evaluateqx(self.input_value, paragraph)
+            input_value = aeval(self.input_value, paragraph)
         except Exception as ex:
             self.log_exception('failed to evaluate qx', ex)
             return
@@ -155,7 +155,7 @@ class Condition(FlowControlStage):
             iffalse (PIPELINE): Pipeline when condition is not satisfied
                 @zhs 条件不成立时执行的流程
         """
-        self.cond = parser.parse(cond)
+        self.cond = cond
         self.iftrue = Pipeline(iftrue, self.log)
         self.iffalse = Pipeline(iffalse, self.log)
         super().__init__()
@@ -163,7 +163,7 @@ class Condition(FlowControlStage):
     def resolve(self, paragraph):
         pipeline = self.iftrue
         try:
-            if not evaluateqx(self.cond, paragraph):
+            if not aeval(self.cond, paragraph):
                 pipeline = self.iffalse
         except Exception as ex:
             self.log_exception('failed to evaluate qx', ex)
@@ -193,11 +193,9 @@ class CallTask(FlowControlStage):
             params (QUERY): Override parameters in the task
                 @zhs 设置任务中各处理流程参数
         """
-        with SessionLocal() as session:
-            task = session.query(TaskDBO).first(TaskDBO.id == UUID(task))
+        task = db_session.query(TaskDBO).first(TaskDBO.id == UUID(task))
         assert task, f'No specified task: {task}'
         if params:
-            params = parser.parse(params)
             for key, val in params.items():
                 secs = key.split('.')
                 target = task.pipeline

@@ -16,7 +16,7 @@ from bs4 import BeautifulSoup as B
 import asyncio
 from typing import Iterable
 
-from jindai.app import config, storage
+from jindai.app import config, storage, aeval
 from jindai.helpers import safe_import
 from jindai.models import Paragraph
 from jindai.pipeline import DataSourceStage, PipelineStage
@@ -298,7 +298,7 @@ class ExtractHTMLParagraphs(PipelineStage):
         self.field = field
         self.paragraph_selector = paragraph_selector
         if isinstance(assignments, str):
-            assignments = parser.parse(assignments)
+            assignments = aeval(assignments)
         self.assignments = assignments or {'content': '//text'}
         self.autoextract = autoextract
 
