@@ -38,6 +38,7 @@ def paginate_cache_key(_, stmt, get_results=True, get_total=True):
         if hasattr(stmt, 'statement'): stmt = stmt.statement
         stmt_str = str(stmt) + str(sorted(stmt.compile().params.items()))
         return hashlib.sha1(stmt_str.encode('utf-8')).hexdigest()
+    return ''
     
 
 class JindaiResource(Resource):

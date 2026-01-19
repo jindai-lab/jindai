@@ -18,7 +18,7 @@ dependencies = [
     "jieba>=0.42.1",
     "nltk>=3.9.2",
     "ocrmypdf>=16.13.0",
-    "ocrmypdf-paddleocr",
+    "ocrmypdf-paddleocr-remote",
     "opencc-python-reimplemented>=0.1.7",
     "opencv-python-headless>=4.12.0.88",
     "pandas>=2.3.3",
@@ -46,4 +46,4 @@ url = "https://mirrors.tuna.tsinghua.edu.cn/pypi/web/simple/"
 default = true
 
 [tool.uv.sources]
-ocrmypdf-paddleocr = { git = "https://github.com/clefru/ocrmypdf-paddleocr/" }
+ocrmypdf-paddleocr-remote = { git = "https://github.com/zhuth/ocrmypdf-paddleocr-remote" }

@@ -10,7 +10,6 @@ import json
 import jieba
 import redis
 from pgvector.sqlalchemy import Vector
-from sentence_transformers import SentenceTransformer
 from sqlalchemy import (Boolean, DateTime, ForeignKey, Index, Integer, String,
                         Text, UniqueConstraint, asc, create_engine, desc,
                         exists, or_, select, text, update)
@@ -20,6 +19,8 @@ from sqlalchemy.orm import (Mapped, declarative_base, mapped_column,
 from sqlalchemy.sql import func
 
 from .config import instance as config
+from .helpers import AutoUnloadSentenceTransformer
+
 
 engine = create_engine(config.database)
 session_factory = sessionmaker(bind=engine)
@@ -163,9 +164,12 @@ class UserInfo(Base):
         ARRAY(Text), default=list, comment="有权限的数据集列表"
     )
 
-    # 关联关系：一个用户对应多个操作历史/令牌
+    # 关联关系：一个用户对应多个操作历史/任务
     histories: Mapped[List["History"]] = relationship(
         "History", back_populates="user", cascade="all, delete-orphan"
+    )
+    tasks: Mapped[List["TaskDBO"]] = relationship(
+        "TaskDBO", back_populates="user", cascade="all, delete-orphan"
     )
 
 
@@ -380,10 +384,17 @@ class TaskDBO(Base):
     shortcut_map: Mapped[Dict[str, Any]] = mapped_column(
         JSONB, default=dict, nullable=False, comment="快捷方式映射（JSON）"
     )
+
     user_id: Mapped[uuid.UUID] = mapped_column(
-        UUID, nullable=False, comment="创建者用户 ID"
+        UUID(as_uuid=True),
+        ForeignKey("user_info.id", ondelete="CASCADE"),
+        nullable=False,
+        comment="关联用户ID",
     )
     shared: Mapped[bool] = mapped_column(Boolean, default=False, comment="是否共享")
+
+    # 关联关系：关联到用户
+    user: Mapped["UserInfo"] = relationship("UserInfo", back_populates="tasks")
 
     @staticmethod
     def get(id_or_name):
@@ -403,20 +414,55 @@ CACHE_KEY_PREFIX = "query_cache:"  # 缓存key前缀，方便redis中区分缓�
 
 
 def redis_auto_renew_cache(cache_key=None):
+    """
+    Redis 自动续期缓存的装饰器工厂函数，为业务函数提供自动缓存/访问续期/自动过期的缓存能力。
+    核心特性：每次命中缓存时，自动刷新缓存的过期时间，实现「热点数据永不失效、冷数据自动过期」。
+
+    :param cache_key: 可选，自定义缓存key的生成方法/函数，接收被装饰函数的*args和**kwargs作为入参，
+                      需返回字符串类型的缓存key片段；为None时，自动拼接函数入参生成缓存key
+    :type cache_key: callable | None
+
+    :return: 实际作用于业务函数的装饰器函数
+    :rtype: function
+
+    缓存key生成规则优先级 & 拼接规则：
+        1. 传参指定cache_key函数 → 缓存key = 全局前缀 + 被装饰函数名 + 自定义函数返回的key片段
+        2. 未指定cache_key → 缓存key = 全局前缀 + 被装饰函数名 + 有序拼接的位置参数+关键字参数
+        3. 空key场景：若生成的key片段为空，则不会执行任何缓存相关逻辑，直接执行原函数
+
+    核心执行逻辑流程：
+        1. 调用被装饰函数前，先根据规则生成完整缓存key；
+        2. 若缓存key有效，从Redis查询缓存数据，命中则自动续期并直接返回缓存结果；
+        3. 缓存未命中/无有效key时，执行原业务函数获取执行结果；
+        4. 若函数返回有效结果+存在有效缓存key，将结果序列化后写入Redis并设置过期时间；
+        5. 统一返回业务函数执行结果/缓存结果。
+
+    依赖说明：
+        - 全局常量 CACHE_KEY_PREFIX: 所有缓存key的统一前缀，用于Redis key的命名隔离
+        - 全局常量 CACHE_EXPIRE_SECONDS: 缓存默认过期时长，单位为秒
+        - 全局实例 redis_client: 已初始化的Redis客户端，需支持 get/expire/setex 方法
+        - 序列化方式：统一使用json.dumps/json.loads，支持所有可JSON序列化的返回结果
+
+    使用限制：
+        1. 被装饰函数的返回值必须是可JSON序列化的对象（dict/list/str/int等）；
+        2. 关键字参数拼接时会做排序，保证入参顺序不同但内容一致时生成相同key；
+        3. 若自定义cache_key函数返回空值，则跳过缓存逻辑，直接执行原函数。
+    """
     
-    def wrapped(func):
+    def decorator(func):
         func.cache_key_method = cache_key
         @wraps(func)  # 保留原函数的属性（函数名、注释等）
         def wrapper(*args, **kwargs):
             
             if func.cache_key_method is not None:
-                cache_key = f"{CACHE_KEY_PREFIX}{func.__name__}_{func.cache_key_method(*args, **kwargs)}"
+                cache_key = f"{func.cache_key_method(*args, **kwargs) or ''}"
             else:
                 args_str = "_".join(map(str, args))
                 kwargs_str = "_".join([f"{k}_{v}" for k, v in sorted(kwargs.items())])
-                cache_key = f"{CACHE_KEY_PREFIX}{func.__name__}_{args_str}_{kwargs_str}"
+                cache_key = f"{args_str}_{kwargs_str}"
 
             if cache_key:
+                cache_key = f'{CACHE_KEY_PREFIX}{func.__name__}_{cache_key}'
                 cached_data = redis_client.get(cache_key)
                 if cached_data is not None:
                     redis_client.expire(cache_key, CACHE_EXPIRE_SECONDS)
@@ -436,12 +482,12 @@ def redis_auto_renew_cache(cache_key=None):
 
         return wrapper
 
-    return wrapped
+    return decorator
 
 
 class TextEmbeddings(Base):
-    embedding_model = None
-
+    embedding_model = AutoUnloadSentenceTransformer(config.embedding_model)
+    
     __tablename__ = "text_embeddings"
     __table_args__ = (
         Index(
@@ -492,8 +538,6 @@ class TextEmbeddings(Base):
         Raises:
             ValueError: 输入文本为空时抛出异常
         """
-        if TextEmbeddings.embedding_model is None:
-            TextEmbeddings.embedding_model = SentenceTransformer(config.embedding_model)
         embedding = TextEmbeddings.embedding_model.encode(
             text.strip(),
             convert_to_numpy=True,  # 返回numpy数组，方便后续处理
@@ -540,9 +584,6 @@ class TextEmbeddings(Base):
                 chunks.append(chunk)
                 break
 
-        # 批量生成每个chunk的embedding，复用已加载的模型，无需重复初始化
-        if TextEmbeddings.embedding_model is None:
-            TextEmbeddings.embedding_model = SentenceTransformer(config.embedding_model)
         # 批量encode，参数与get_embedding完全一致，保证向量格式统一
         embeddings = TextEmbeddings.embedding_model.encode(
             chunks,

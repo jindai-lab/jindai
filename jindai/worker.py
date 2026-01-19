@@ -5,7 +5,7 @@ import uuid
 
 from sqlalchemy import exists, func, select
 
-from .app import config
+from .app import config, storage
 from .models import Paragraph, TaskDBO, TextEmbeddings, db_session, redis_client
 from .task import Task
 
@@ -132,8 +132,7 @@ def worker():
                     res_key,
                     mapping={"status": "completed", "result": json.dumps(result)},
                 )
-        # except Exception as e:
-        except ValueError as e:
+        except Exception as e:
             print(task_id, "failed with exception", e)
             redis_client.hset(res_key, "status", "failed")
 
@@ -178,12 +177,16 @@ def handle_custom(task_id="", **params):
 
 
 def handle_ocr(input, output, lang):
+    input = storage.safe_join(input)
+    output = storage.safe_join(output)
     import ocrmypdf
     ocrmypdf.ocr(
         input, output,
-        plugins=['ocrmypdf_paddleocr'],
+        plugins=['ocrmypdf_paddleocr_remote'],
         language=lang,
-        paddle_use_gpu=True
+        paddle_remote=config.paddle_remote,
+        jobs=2,
+        force_ocr=True
     )
     return output
 
