@@ -4,7 +4,6 @@
 
 from collections import defaultdict
 from io import BytesIO
-import re
 from typing import Dict
 import numpy as np
 from jindai import PipelineStage

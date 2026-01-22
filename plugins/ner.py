@@ -2,7 +2,7 @@
 Named Entity Recognition
 @zhs 命名实体识别
 """
-import re
+import regex as re
 
 from jindai import PipelineStage, Plugin
 from jindai.models import Paragraph

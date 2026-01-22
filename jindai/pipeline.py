@@ -1,6 +1,6 @@
 """Pipeline"""
 import inspect
-import re
+import regex as re
 import sys
 import traceback
 from collections import defaultdict
@@ -264,7 +264,6 @@ class DataSourceStage(PipelineStage):
         """
 
         args = paragraph.as_dict()
-
         for k, mapped in self.mappings.items():
             if k in args:
                 args[mapped] = args.pop(k)

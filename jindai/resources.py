@@ -30,7 +30,7 @@ from .models import (
     is_uuid_literal,
     redis_auto_renew_cache
 )
-from .worker import add_task, delete_task, get_task_result, get_task_stats, clear_tasks
+from .worker import add_task, revoke_task, get_task_result, get_task_stats, clear_tasks
 
 
 def paginate_cache_key(_, stmt, get_results=True, get_total=True):
@@ -57,7 +57,7 @@ class JindaiResource(Resource):
             data["total"] = stmt.count()
         if get_results:
             stmt = stmt.offset(offset).limit(limit)
-            data["results"] = [r.as_dict() for r in stmt]
+            data["results"] = [r.as_dict() if isinstance(r, Base) else r for r in stmt]
         return data
 
     def get_object_by_id(self, resource_id):
@@ -265,14 +265,13 @@ class WorkerResource(Resource):
             return get_task_result(task_id)
 
     def post(self):
-        add_task(**request.json)
+        return add_task(**request.json)
 
     def delete(self, task_id=""):
         if task_id in ["", "pending", "processing", "completed", "failed"]:
-            clear_tasks(task_id)
+            return clear_tasks(task_id)
         else:
-            delete_task(task_id)
-        return True
+            return revoke_task(task_id)
 
 
 class FileManagerResource(Resource):

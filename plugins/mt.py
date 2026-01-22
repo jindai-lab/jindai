@@ -4,7 +4,7 @@
 import hashlib
 import json
 import random
-import re
+import regex as re
 import time
 import uuid
 import urllib

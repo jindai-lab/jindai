@@ -1,3 +1,4 @@
+import os
 import tempfile
 import fitz
 from PIL import Image
@@ -8,7 +9,6 @@ from flask import request, send_file
 from flask_restful.reqparse import RequestParser
 
 from .app import app
-from .worker import add_task
 
 
 def convert_pdf_to_tiff_group4(pdf, outp):
@@ -53,7 +53,21 @@ def convert_pdf_to_tiff_group4(pdf, outp):
         
         
 def merge_images_from_folder(folderpath, outp):
-    pass
+    image_list = []
+    for f in sorted(os.listdir(folderpath)):
+        if f.endswith(('.jpg', '.png', '.jpeg', '.tif', '.tiff')):
+            im = Image.open(os.path.join(folderpath, f))
+            image_list.append(im)
+    if image_list:
+        image_list[0].save(
+            outp,
+            format="pdf",
+            save_all=True,
+            append_images=image_list[1:],
+            compression="group4",
+            dpi=(300, 300),  # Set desired DPI
+        )
+
 
 
 def read_pdf_pages(path, reverse=False):
@@ -106,6 +120,23 @@ def sequential_merge_pdf(outp, pdf1, pdf2, reversed1, reversed2):
 
     except Exception as e:
         raise e
+    
+    
+def extract_pdf_texts(filename, since=0):
+    doc = fitz.open(filename)
+
+    for page in range(since, doc.page_count):
+        try:
+            label = doc[page].get_label()
+        except (RuntimeError, TypeError):
+            label = ""
+
+        try:
+            content = doc[page].get_text()
+        except Exception as ex:
+            content = ""
+
+        yield page, label, content
 
 
 def requestio(func, **kwargs):
@@ -122,42 +153,22 @@ def requestio(func, **kwargs):
     return send_file(outp, as_attachment=True, mimetype="")
 
 
-@app.route("/api/pdfutils/convert_monochrome", methods=["POST"])
-def api_convert_monochrome():
-    return requestio(convert_pdf_to_tiff_group4)
+def inject_endpoints():
+    @app.route("/api/pdfutils/convert_monochrome", methods=["POST"])
+    def api_convert_monochrome():
+        return requestio(convert_pdf_to_tiff_group4)
 
 
-@app.route("/api/pdfutils/cross_merge_pdf", methods=["POST"])
-def api_cross_merge_pdf():
-    parser = RequestParser()
-    parser.add_argument("cross", type=bool)
-    parser.add_argument("reversed1", type=bool)
-    parser.add_argument("reversed2", type=bool)
-    args = parser.parse_args()
+    @app.route("/api/pdfutils/cross_merge_pdf", methods=["POST"])
+    def api_cross_merge_pdf():
+        parser = RequestParser()
+        parser.add_argument("cross", type=bool)
+        parser.add_argument("reversed1", type=bool)
+        parser.add_argument("reversed2", type=bool)
+        args = parser.parse_args()
 
-    return requestio(
-        cross_merge_pdf if args["cross"] else sequential_merge_pdf,
-        reversed1=args["reversed1"],
-        reversed2=args["reversed2"],
-    )
-
-
-@app.route("/api/pdfutils/convert_monochrome", methods=["POST"])
-def api_convert_monochrome():
-    return requestio(convert_pdf_to_tiff_group4)
-
-
-@app.route("/app/pdfutils/ocr", methods=["POST"])
-def api_ocr_backend():
-    output_filename, input_filename = tempfile.mkdtemp('.pdf'), tempfile.mkdtemp()
-    file = request.files.get('file')
-    if not file or not file.filename.endswith('.pdf'):
-        return 'Invalid input.', 400
-    input_filename += file.filename
-    file.save(input_filename)
-    
-    add_task('ocr', {
-        'input': input_filename,
-        'output': output_filename,
-        'lang': request.form.get('lang', 'chi_sim')
-    })
+        return requestio(
+            cross_merge_pdf if args["cross"] else sequential_merge_pdf,
+            reversed1=args["reversed1"],
+            reversed2=args["reversed2"],
+        )

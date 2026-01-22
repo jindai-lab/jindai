@@ -1,13 +1,12 @@
 """DB Objects"""
 
-from functools import wraps
-import re
+import json
+import regex as re
 import uuid
 from datetime import datetime
+from functools import wraps
 from typing import Any, Dict, List
 
-import json
-import jieba
 import redis
 from pgvector.sqlalchemy import Vector
 from sqlalchemy import (Boolean, DateTime, ForeignKey, Index, Integer, String,
@@ -19,7 +18,7 @@ from sqlalchemy.orm import (Mapped, declarative_base, mapped_column,
 from sqlalchemy.sql import func
 
 from .config import instance as config
-from .helpers import AutoUnloadSentenceTransformer
+from .helpers import AutoUnloadSentenceTransformer, jieba
 
 
 engine = create_engine(config.database)
@@ -232,24 +231,52 @@ class Paragraph(Base):
         UUID(as_uuid=True),
         ForeignKey("dataset.id"),
         nullable=False,
-        comment="关联数据集ID",
+        comment="关联数据集ID"
     )
     keywords: Mapped[List[str] | None] = mapped_column(
         ARRAY(Text), comment="关键词列表"
     )
 
     dataset_obj: Mapped["Dataset"] = relationship(
-        "Dataset", back_populates="paragraphs"
+        "Dataset", back_populates="paragraphs",
+        lazy='joined'
     )
     text_embeddings: Mapped[List["TextEmbeddings"]] = relationship(
         "TextEmbeddings", back_populates="paragraph", cascade="all, delete-orphan"
     )
 
+    @staticmethod
+    def from_dict(data, ignored_fields=['id', 'dataset_name']):
+        p = Paragraph()
+        for k, v in data.items():
+            if k in ignored_fields: continue
+            if hasattr(p, k): setattr(p, k, v)
+            else: 
+                if p.extdata is None: p.extdata = {}
+                p.extdata[k] = v
+        return p
+
+    def __getitem__(self, key):
+        if hasattr(self, key): return getattr(self, key)
+        else:
+            if self.extdata is None: self.extdata = {}
+            return self.extdata.get(key)
+    
+    def __setitem__(self, key, val):
+        if hasattr(self, key): setattr(self, key, val)
+        else: 
+            if self.extdata is None: self.extdata = {}
+            self.extdata[key] = val
+            
+    def __delitem__(self, key):
+        if key in self.extdata:
+            del self.extdata[key]
+            
     def as_dict(self):
         data = super().as_dict()
-        data["dataset"] = self.dataset_obj.name
+        data['dataset_name'] = self.dataset_obj.name if self.dataset_obj else None
         return data
-
+    
     @staticmethod
     def build_query(query_data):
         query = db_session.query(Paragraph)
@@ -311,7 +338,7 @@ class Paragraph(Base):
                 )
         else:
             param = Paragraph.keywords.contains(
-                [_.strip().lower() for _ in jieba.cut(search) if _.strip()]
+                [_.strip().lower() for _ in jieba.cut_query(search) if _.strip()]
             )
             filters.append(param)
 
@@ -405,7 +432,7 @@ class TaskDBO(Base):
             return query.filter(TaskDBO.name.contains(id_or_name)).first()
 
 
-redis_client = redis.Redis(**config.redis)
+redis_client = redis.Redis.from_url(config.redis.rstrip('/') + '/2')
 
 
 # 缓存核心配置（可根据业务灵活修改）

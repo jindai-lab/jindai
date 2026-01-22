@@ -1,18 +1,21 @@
 """基本操作"""
 
-import re
+import json
+import regex as re
 import statistics
+import string
 from collections import defaultdict, deque
 from io import BytesIO
 from itertools import chain
 from itertools import count as iter_count
-import string
-import json
+
+import many_stop_words
+import textrank4zh
 import pandas
 
 from jindai import Pipeline, PipelineStage, storage
 from jindai.app import aeval
-from jindai.helpers import safe_import, WordStemmer as _Stemmer
+from jindai.helpers import WordStemmer as _Stemmer, safe_import, jieba
 from jindai.models import Dataset, Paragraph, db_session
 
 
@@ -186,8 +189,7 @@ class WordCut(PipelineStage):
 
     t2s = safe_import('opencc', 'opencc-python-reimplemented').OpenCC('t2s')
     kks = safe_import('pykakasi').kakasi()
-    jieba = safe_import('jieba')
-
+    
     def __init__(self, for_search=False, field='keywords', **_):
         """
         Args:
@@ -218,8 +220,7 @@ class WordCut(PipelineStage):
             content = paragraph.content
 
         if paragraph.lang in ('zhs', 'zht'):
-            words = list(WordCut.jieba.cut_for_search(content)
-                         if self.for_search else WordCut.jieba.cut(content))
+            words = list(jieba.cut_query(content) if self.for_search else jieba.cut_text(content))
         elif paragraph.lang == 'ja':
             words = list(set(content))
             for i in WordCut.kks.convert(content):
@@ -301,7 +302,8 @@ class Reparagraph(PipelineStage):
         data = paragraph.as_dict()
         del data['content']
         for text in merge_lines():
-            yield type(paragraph)(content=text, **data)
+            data['content'] = text
+            yield Paragraph.from_dict(data)
 
 
 class SplitParagraph(PipelineStage):
@@ -323,7 +325,7 @@ class SplitParagraph(PipelineStage):
     def resolve(self, paragraph: Paragraph):
         for content in paragraph.content.split(self.delimeter):
             if content:
-                new_paragraph = type(paragraph)(paragraph)
+                new_paragraph = Paragraph.from_dict(paragraph.as_dict())
                 new_paragraph.content = content
                 yield new_paragraph
 
@@ -345,7 +347,7 @@ class AccumulateParagraphs(PipelineStage):
         self.sort = [_.strip() for _ in sort.split(',') if _]
 
     def resolve(self, paragraph: Paragraph):
-        self.paragraphs.append(paragraph.as_dict(expand=True))
+        self.paragraphs.append(paragraph.as_dict())
         
     def sorter(self, obj):
         class _Rev:
@@ -456,8 +458,7 @@ class AutoSummary(PipelineStage):
         self.count = count
 
     def resolve(self, paragraph: Paragraph) -> Paragraph:
-        # textrank4zh is a package for Chinese text ranking
-        tr4s = safe_import('textrank4zh').TextRank4Sentence()
+        tr4s = textrank4zh.TextRank4Sentence()
         tr4s.analyze(text=paragraph.content, lower=True, source='all_filters')
         paragraph.summary = '\n'.join([
             item.sentence
@@ -775,13 +776,19 @@ class SaveParagraph(PipelineStage):
         '''
         '''
         super().__init__()
-        self.datasets = {}
+        self.queue = []
 
     def resolve(self, paragraph: Paragraph):
-        db_session.add(paragraph)
+        if not paragraph.id:
+            self.queue.append(paragraph)
+            if len(self.queue) >= 100:
+                db_session.add_all(self.queue)
+                db_session.commit()
+                self.queue.clear()
         return paragraph
     
     def sumamrize(self, _):
+        db_session.add_all(self.queue)
         db_session.commit()
 
 
@@ -1028,7 +1035,8 @@ class FilterStopWords(PipelineStage):
     """
     
     _lang_stopwords = {
-        l: safe_import('many_stop_words').get_stop_words(l) for l in ['en', 'fr', 'de', 'ru', 'ja', 'zh']
+        l: many_stop_words.get_stop_words(l)
+        for l in ['en', 'fr', 'de', 'ru', 'ja', 'zh']
     }
     
     _punctuations = re.compile(r'^[\u3000-\u303F\uFF00-\uFFEF\"\'{}()\[\]\\*&.?!,…:;@#!]$')

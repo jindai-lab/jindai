@@ -3,7 +3,7 @@ Import from web or file
 @zhs 来自网页或文本文件
 """
 
-import re
+import regex as re
 import json
 import datetime
 import tempfile
@@ -270,7 +270,7 @@ class JSONDataSource(DataSourceStage):
 
     def fetch(self):
         for paragraph in self.content:
-            yield Paragraph().fill_dict(paragraph)
+            yield Paragraph.from_dict(paragraph.as_dict())
 
 
 class ExtractHTMLParagraphs(PipelineStage):

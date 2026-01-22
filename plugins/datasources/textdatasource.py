@@ -138,7 +138,7 @@ class BiblioDataSource(DataSourceStage):
         for line in lines:
             if not line.strip():
                 if doc:
-                    yield Paragraph(dataset=self.dataset, lang=self.lang, **doc)
+                    yield Paragraph.from_dict(dict(dataset=self.dataset, lang=self.lang, **doc))
                 doc = {
                     'content': '',
                     'authors': []
@@ -180,7 +180,7 @@ class BiblioDataSource(DataSourceStage):
                 else:
                     doc[field] = value
         if doc:
-            yield Paragraph(dataset=self.dataset, **doc)
+            yield Paragraph.from_dict(dict(dataset=self.dataset, **doc))
 
     def fetch(self):
         for file in self.files:

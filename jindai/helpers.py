@@ -1,9 +1,10 @@
 """Helper functions"""
+
 import gc
 import glob
 import importlib
 import os
-import re
+import regex as re
 import subprocess
 import sys
 import threading
@@ -11,8 +12,12 @@ import time
 from threading import Lock
 from typing import Dict, Type
 
+import jieba3
+import nltk.stem.snowball
 import torch
 from sentence_transformers import SentenceTransformer
+
+jieba = jieba3.jieba3()
 
 
 class AutoUnloadSentenceTransformer:
@@ -20,6 +25,7 @@ class AutoUnloadSentenceTransformer:
     SentenceTransformer 模型自动加载/卸载辅助类
     核心机制：超过指定空闲时间（默认5分钟）无调用，自动卸载模型释放内存/显存
     """
+
     def __init__(self, model_name_or_path: str, idle_timeout: int = 300):
         """
         初始化模型管理器
@@ -39,20 +45,27 @@ class AutoUnloadSentenceTransformer:
 
     def _start_monitor(self):
         """启动模型空闲监控后台线程"""
+
         def monitor_loop():
             while not self._stop_monitor:
                 time.sleep(10)  # 每10秒检测一次，降低CPU占用
                 with self.lock:
                     # 满足2个条件触发卸载：1.模型已加载 2.当前时间 - 最后使用时间 > 超时阈值
-                    if self.model is not None and (time.time() - self.last_used_time) > self.idle_timeout:
+                    if (
+                        self.model is not None
+                        and (time.time() - self.last_used_time) > self.idle_timeout
+                    ):
                         self._unload_model()
+
         self._monitor_thread = threading.Thread(target=monitor_loop, daemon=True)
         self._monitor_thread.start()
 
     def _load_model(self):
         """加载模型（加锁保证线程安全，防止重复加载）"""
         if self.model is None:
-            self.model = SentenceTransformer(self.model_name_or_path)
+            self.model = SentenceTransformer(
+                self.model_name_or_path, local_files_only=True
+            )
         # 每次加载/复用，都更新最后使用时间
         self.last_used_time = time.time()
 
@@ -63,15 +76,15 @@ class AutoUnloadSentenceTransformer:
             # 核心：删除模型对象
             del self.model
             self.model = None
-            
+
             # 强制触发Python垃圾回收，释放内存
             gc.collect()
-            
+
             # 关键步骤：清空torch显存缓存（GPU环境必须，否则显存不释放）
             if torch.cuda.is_available():
                 torch.cuda.empty_cache()
                 torch.cuda.ipc_collect()
-            
+
             print(f"[自动卸载] 模型资源释放完成")
 
     def encode(self, sentences, **kwargs):
@@ -114,16 +127,36 @@ class WordStemmer:
     Stemming words
     """
 
-    _language_stemmers = {}
+    _language_stemmers = {"en": nltk.stem.snowball.SnowballStemmer("english")}
+
+    _language_names = {
+        # ISO-639-1 code to language name mapping
+        "ar": "arabic",  # Arabic
+        "da": "danish",  # Danish
+        "nl": "dutch",  # Dutch
+        "en": "english",  # English
+        "fi": "finnish",  # Finnish
+        "fr": "french",  # French
+        "de": "german",  # German
+        "hu": "hungarian",  # Hungarian
+        "it": "italian",  # Italian
+        "no": "norwegian",  # Norwegian (ISO 639-1 for Norwegian)
+        "xx": "porter",  # Porter (custom code, no standard ISO-639-1)
+        "pt": "portuguese",  # Portuguese
+        "ro": "romanian",  # Romanian
+        "ru": "russian",  # Russian
+        "es": "spanish",  # Spanish
+        "sv": "swedish",  # Swedish
+    }
 
     @staticmethod
     def get_stemmer(lang):
         """Get stemmer for language"""
-        import nltk.stem.snowball
         stemmer = nltk.stem.snowball.SnowballStemmer
+        lang = WordStemmer._language_names.get(lang, lang)
         if lang not in WordStemmer._language_stemmers:
             if lang not in stemmer.languages:
-                return WordStemmer.get_stemmer("en")
+                return WordStemmer._language_stemmers["en"]
             stemmer = stemmer(lang)
             WordStemmer._language_stemmers[lang] = stemmer
         return WordStemmer._language_stemmers[lang]
