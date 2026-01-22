@@ -92,4 +92,4 @@ class ExcelDataSource(DataSourceStage):
                     data['dataset'] = self.dataset.id
                 if 'lang' not in data:
                     data['lang'] = self.lang
-                yield Paragraph(**data)
+                yield Paragraph.from_dict(data)

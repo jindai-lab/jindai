@@ -1,6 +1,6 @@
 """Word extraction based on PMILR
 @zhs 基于信息熵的词汇抽取词汇抽取"""
-import re
+import regex as re
 
 import numpy as np
 from jindai.models import Paragraph

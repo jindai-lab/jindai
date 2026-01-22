@@ -1,4 +1,4 @@
-import re
+import regex as re
 import chardet
 from datetime import datetime, timedelta
 from jindai.models import Paragraph
@@ -27,17 +27,17 @@ matchs = {
 # 正则中的%s分割
 splits = [
     {1: [('年', '月', '日', '点', '分', '秒'), ('-', '-', '', ':', ':', ''),
-         ('\/', '\/', '', ':', ':', ''), ('\.', '\.', '', ':', ':', '')]},
+         (r'\/', r'\/', '', ':', ':', ''), (r'\.', r'\.', '', ':', ':', '')]},
     {2: [('年', '月', '日', '点', '分'), ('-', '-', '', ':', ''),
-         ('\/', '\/', '', ':', ''), ('\.', '\.', '', ':', '')]},
-    {3: [('年', '月', '日'), ('-', '-', ''), ('\/', '\/', ''), ('\.', '\.', '')]},
-    {4: [('年', '月', '日'), ('-', '-', ''), ('\/', '\/', ''), ('\.', '\.', '')]},
+         (r'\/', r'\/', '', ':', ''), (r'\.', r'\.', '', ':', '')]},
+    {3: [('年', '月', '日'), ('-', '-', ''), (r'\/', r'\/', ''), (r'\.', r'\.', '')]},
+    {4: [('年', '月', '日'), ('-', '-', ''), (r'\/', r'\/', ''), (r'\.', r'\.', '')]},
 
     {5: [('月', '日', '点', '分', '秒'), ('-', '', ':', ':', ''),
-         ('\/', '', ':', ':', ''), ('\.', '', ':', ':', '')]},
+         (r'\/', '', ':', ':', ''), (r'\.', '', ':', ':', '')]},
     {6: [('月', '日', '点', '分'), ('-', '', ':', ''),
-         ('\/', '', ':', ''), ('\.', '', ':', '')]},
-    {7: [('月', '日'), ('-', ''), ('\/', ''), ('\.', '')]},
+         (r'\/', '', ':', ''), (r'\.', '', ':', '')]},
+    {7: [('月', '日'), ('-', ''), (r'\/', ''), (r'\.', '')]},
 
     {8: [('点', '分', '秒'), (':', ':', '')]},
     {9: [('点', '分'), (':', '')]},
@@ -48,7 +48,7 @@ def func(parten, tp):
     re.search(parten, parten)
 
 
-parten_other = '\d+天前|\d+分钟前|\d+小时前|\d+秒前'
+parten_other = r'\d+天前|\d+分钟前|\d+小时前|\d+秒前'
 
 
 class TimeExtractor(PipelineStage):
@@ -66,7 +66,7 @@ class TimeExtractor(PipelineStage):
                 self.base_date = datetime.strptime(
                     self.base_date, '%Y-%m-%d %H:%M:%S')
             except ValueError:
-                raise 'type of base_date must be str of%Y-%m-%d %H:%M:%S or datetime'
+                raise 'type of base_date must be str of %Y-%m-%d %H:%M:%S or datetime'
 
         for item in splits:
             for num, value in item.items():
@@ -78,7 +78,7 @@ class TimeExtractor(PipelineStage):
                     self.match_item.append(tuple(tmp))
 
     def get_time_other(self, text):
-        m = re.search('\d+', text)
+        m = re.search(r'\d+', text)
         if not m:
             return None
         num = int(m.group())

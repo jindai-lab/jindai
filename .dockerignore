@@ -1,0 +1,34 @@
+# 本地uv/pip的虚拟环境目录【重中之重，必忽略】
+.venv/
+venv/
+env/
+ENV/
+
+# Python 编译缓存目录【必忽略，容器内运行会自动生成】
+__pycache__/
+**/__pycache__/
+*.py[cod]
+*$py.class
+
+# uv/pip/pdm 包管理缓存目录【必忽略】
+.cache/
+uv_cache/
+.pip_cache/
+
+# 本地IDE/编辑器配置文件
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# 日志/临时文件
+logs/
+*.log
+tmp/
+temp/
+
+# 其他无用文件
+.dockerignore
+.gitignore
+README.md
+requirements.txt.bak

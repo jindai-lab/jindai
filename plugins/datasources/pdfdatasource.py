@@ -2,12 +2,12 @@
 @zhs 从 PDF 导入
 """
 
-import re
+import regex as re
 import fitz
 from sqlalchemy import func, select
 
 from jindai.app import storage
-from jindai.models import Paragraph, db_session
+from jindai.models import Paragraph, Dataset, db_session
 from jindai.pipeline import DataSourceStage, PipelineStage
 
 
@@ -63,11 +63,12 @@ class PDFDataSource(DataSourceStage):
                 Page range, e.g. 1-3
                 @zhs 页码范围，例如 1-3
         """
-        self.name = dataset_name
+        self.dataset = Dataset.get(dataset_name).id
         self.lang = lang
         self.skip_existed = skip_existed
         self.page_range = sorted(resolve_range(page_range))
         self.files = PipelineStage.parse_paths(content)
+        assert self.dataset
 
     def fetch(self):
         lang = self.lang
@@ -87,8 +88,7 @@ class PDFDataSource(DataSourceStage):
 
         for filepath in self.files:
             imported_pages = 0
-            short_path = storage.relative_path(filepath)
-            self.log("importing", short_path)
+            self.log("importing", filepath)
 
             stream = storage.open(filepath, "rb")
             if hasattr(stream, "name"):
@@ -98,7 +98,7 @@ class PDFDataSource(DataSourceStage):
 
             page_range = self.page_range
             if not page_range:
-                min_page = existent.get(short_path)
+                min_page = existent.get(filepath)
                 min_page = 0 if min_page is None else (min_page + 1)
                 self.log("... from page", min_page)
                 page_range = range(min_page, doc.page_count)
@@ -129,10 +129,11 @@ class PDFDataSource(DataSourceStage):
                 yield Paragraph(
                     lang=lang,
                     content=content,
-                    source={"file": short_path, "page": page},
+                    source_url=filepath,
+                    source_page=page,
                     pagenum=label or (page + 1),
-                    dataset=self.name,
+                    dataset=self.dataset,
                 )
 
-            if not existent.get(short_path) and imported_pages == 0:
+            if not existent.get(filepath) and imported_pages == 0:
                 self.log(filepath, "no sufficient texts found.")

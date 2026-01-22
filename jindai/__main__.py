@@ -3,7 +3,7 @@
 import glob
 import json
 import os
-import re
+import regex as re
 import subprocess
 import sys
 import tempfile

@@ -8,16 +8,10 @@ from io import BytesIO
 from werkzeug.utils import secure_filename
 
 
-# ------------------------------
-# 单例模式 纯文件处理核心类
-# 所有文件系统相关逻辑全部封装在此，无任何Flask/API相关依赖
-# ------------------------------
 class Storage:
-    # 单例核心：类属性保存唯一实例
     __instance = None
     __initialized = False
 
-    # 私有化构造方法，防止外部实例化
     def __new__(cls, *args, **kwargs):
         if cls.__instance is None:
             cls.__instance = super().__new__(cls)
@@ -28,26 +22,24 @@ class Storage:
         if Storage.__initialized:
             return
         # 核心配置
-        self.FILE_STORAGE_ROOT: str = storage_root
+        self.FILE_STORAGE_ROOT: str = os.path.abspath(storage_root)
         self.MAX_FILE_SIZE = 1024  # MB
         self.ALLOWED_EXTENSIONS = [
             "txt", "pdf", "doc", "docx", "jpg", "png", "json", "csv", "xlsx",
         ]
-        self.ALLOWED_ROOT_PATHS = [os.path.abspath(self.FILE_STORAGE_ROOT)]
         # 初始化存储目录
         os.makedirs(self.FILE_STORAGE_ROOT, exist_ok=True)
         Storage.__initialized = True
 
-    # ------------------------------ 内部安全工具方法 ------------------------------
-    def safe_join(self, *paths):
+    def safe_join(self, *segs):
         """安全拼接路径，防止路径穿越攻击，核心安全校验"""
-        try:
-            joined_path = os.path.abspath(os.path.join(self.FILE_STORAGE_ROOT, *paths))
-            if not any(joined_path.startswith(allowed_root) for allowed_root in self.ALLOWED_ROOT_PATHS):
-                raise ValueError("访问的路径不在允许范围内，疑似路径穿越攻击")
-            return joined_path
-        except Exception as e:
-            raise ValueError(f"路径错误：{str(e)}")
+        segs = '/'.join(segs).lstrip('/').replace('../', '/')
+        if segs.startswith(self.FILE_STORAGE_ROOT.lstrip('/')):
+            segs = segs[len(self.FILE_STORAGE_ROOT)]
+        joined_path = os.path.abspath(os.path.join(self.FILE_STORAGE_ROOT, segs))
+        if not joined_path.startswith(self.FILE_STORAGE_ROOT):
+            raise ValueError(f"访问的路径不在允许范围内，疑似路径穿越攻击 {segs} -> {joined_path}")
+        return joined_path
 
     def allowed_file(self, filename):
         """检查文件后缀是否在允许列表内"""
@@ -218,10 +210,10 @@ class Storage:
         return os.path.relpath(p, self.FILE_STORAGE_ROOT)
     
     def globs(self, pattern):
-        return [self.relative_path(p) for p in glob.glob(self.safe_join(self.FILE_STORAGE_ROOT, pattern))]
+        return [self.relative_path(p) for p in glob.glob(self.safe_join(pattern))]
     
     def open(self, relpath, mode='rb'):
-        return open(self.safe_join(self.FILE_STORAGE_ROOT, relpath), mode)
+        return open(self.safe_join(relpath), mode)
 
 # 初始化单例实例 (项目全局唯一)
 # 导入方式：from .storage import instance as storage

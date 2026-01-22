@@ -3,21 +3,16 @@
 import ctypes
 import datetime
 import time
+import uuid
 import traceback
 from collections import deque
 from queue import PriorityQueue
 from threading import Lock, Thread
 from typing import Callable
-from uuid import UUID
-
-import redis
 from tqdm import tqdm
 
-from .app import config
 from .models import Paragraph, db_session
 from .pipeline import Pipeline
-
-redis_client = redis.Redis(**config.redis)
 
 
 class WorkersPool:
@@ -33,7 +28,7 @@ class WorkersPool:
         return len(self._threads)
         
     def submit(self, func, *args, **kwargs):
-        tid = UUID()
+        tid = uuid.uuid4()
         
         def _func():
             func(*args, **kwargs)
@@ -153,7 +148,7 @@ class Task:
         
         try:
             if self.pipeline.stages:
-                self._queue.put((0, 0, (Paragraph(**self.params),
+                self._queue.put((0, 0, (Paragraph.from_dict(self.params),
                                   self.pipeline.stages[0])))
                 self._pbar.n += 1
 

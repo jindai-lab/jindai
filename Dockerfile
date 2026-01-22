@@ -1,10 +1,25 @@
-FROM python:3.11-bookworm
+FROM python:3.13
+
 WORKDIR /app
-ADD . /app
+
+ENV LANG=C.UTF-8
+ENV TZ=Asia/Shanghai
+RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone
+
+RUN apt update && apt install -yqq nano tesseract-ocr ghostscript
+
+# 国内源加速
+ENV PIP_INDEX_URL=https://mirrors.aliyun.com/pypi/simple/
+ENV PIP_TRUSTED_HOST=mirrors.aliyun.com
+RUN pip install --no-cache-dir uv
+
+COPY pyproject.toml uv.lock ./
+
+RUN uv pip install --system --no-cache --disable-pip-version-check pyproject.toml
+
+COPY . .
+
 EXPOSE 8370
 
-RUN apt-get update && apt-get install -yqq python3 python3-pip && \
-    pip3 config set global.index-url https://mirrors.aliyun.com/pypi/simple && pip3 install gunicorn && \
-    pip3 install -r /app/requirements.txt
-
-CMD ["bash", "start.sh"]
+# 启动命令（uv标准运行方式），按需替换
+CMD ["uv", "run", "-m", "jindai", "web-service"]

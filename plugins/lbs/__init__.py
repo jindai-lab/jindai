@@ -41,7 +41,7 @@ class AMapCityCodeQuery(DataSourceStage):
             for field in data:
                 for q in self.query:
                     if q in str(field):
-                        yield Paragraph(content=q[0], adcode=q[1], citycode=q[2])
+                        yield Paragraph(content=q[0], extdata=dict(adcode=q[1], citycode=q[2]))
 
 
 class AMapPOISearch(DataSourceStage):
@@ -94,10 +94,10 @@ class AMapPOISearch(DataSourceStage):
                         },
                     }
                     p = Paragraph(content=poi['name'],
-                                  adcode=self.adcode,
+                                  extdata=dict(adcode=self.adcode,
                                   category=poi["typecode"] + " " + poi["type"],
                                   coordinate=poi['location'],
-                                  geojson=feature)
+                                  geojson=feature))
                     gcjconv(p)
                     yield p
 
@@ -257,7 +257,7 @@ class OSMPOISearch(DataSourceStage):
             for guess in set(self.guesses(tag)):
                 for p in self.ox.geometries_from_polygon(
                     self.city['geometry'].all(), tags={guess: True}):
-                    yield Paragraph(**p)
+                    yield Paragraph.from_dict(**p)
 
 
 class LBSPlugin(Plugin):
