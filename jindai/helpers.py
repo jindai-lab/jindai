@@ -61,7 +61,7 @@ class AutoUnloadSentenceTransformer:
         self._monitor_thread.start()
 
     def _load_model(self):
-        """加载模型（加锁保证线程安全，防止重复加载）"""
+        """加载模型"""
         if self.model is None:
             self.model = SentenceTransformer(
                 self.model_name_or_path, local_files_only=True

@@ -15,7 +15,7 @@ import yaml
 from flask import Flask
 
 from . import Plugin, PluginManager, Task, config, storage
-from .api import prepare_plugins, run_service
+from .api import run_service
 from .helpers import get_context, safe_import
 from .models import Dataset, Paragraph, TaskDBO, UserInfo, db_session
 
@@ -140,18 +140,18 @@ def run_task(task_id, concurrent, verbose, edit, log, output):
 def user_manage(add, delete, setrole, roles):
     """User management"""
     if add:
-        user = db_session(UserInfo).query(UserInfo.username == add).first()
+        user = db_session.query(UserInfo).filter(UserInfo.username == add).first()
         if not user:
-            user = User(username=add)
+            user = UserInfo(username=add)
             db_session.add(user)
         else:
             print("User already exists.")
     elif delete:
-        user = db_session(UserInfo).query(UserInfo.username == delete).first()
+        user = db_session.query(UserInfo).filter(UserInfo.username == delete).first()
         if user:
             db_session.delete(user)
     elif setrole:
-        user = db_session(UserInfo).query(UserInfo.username == setrole).first()
+        user = db_session.query(UserInfo).filter(UserInfo.username == setrole).first()
         if user:
             user.roles.extend(roles)
     db_session.commit()
@@ -218,13 +218,8 @@ def plugin_export(output: str, infiles):
             if pname in (
                 "datasources",
                 "hashing",
-                "imageproc",
                 "pipelines",
-                "shortcuts",
                 "taskqueue.py",
-                "onedrive.py",
-                "scheduler.py",
-                "autotagging.py",
             ):
                 continue
 
@@ -242,7 +237,6 @@ def web_service(port: int, deployment: bool):
     """
     from .api import app
 
-    prepare_plugins()
     if deployment:
         safe_import("waitress")
         from waitress import serve
@@ -292,6 +286,5 @@ def call_ipython():
 
 
 if __name__ == "__main__":
-    print("* loaded config from", config._filename)
-    print("* using", config.database)
+    print("* db connection:", config.database, 'redis:', config.redis)
     cli()

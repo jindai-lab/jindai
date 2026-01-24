@@ -13,7 +13,7 @@ from sqlalchemy import (Boolean, DateTime, ForeignKey, Index, Integer, String,
                         Text, UniqueConstraint, asc, create_engine, desc,
                         exists, or_, select, text, update)
 from sqlalchemy.dialects.postgresql import ARRAY, JSONB, UUID
-from sqlalchemy.orm import (Mapped, declarative_base, mapped_column,
+from sqlalchemy.orm import (Mapped, declarative_base, mapped_column, validates,
                             relationship, scoped_session, sessionmaker)
 from sqlalchemy.sql import func
 
@@ -244,6 +244,12 @@ class Paragraph(Base):
     text_embeddings: Mapped[List["TextEmbeddings"]] = relationship(
         "TextEmbeddings", back_populates="paragraph", cascade="all, delete-orphan"
     )
+    
+    @validates('keywords')
+    def normalize_keywords(self, key, val):
+        if val:
+            val = list({v.strip().lower() for v in val if v.strip()})
+        return val
 
     @staticmethod
     def from_dict(data, ignored_fields=['id', 'dataset_name']):
@@ -279,10 +285,10 @@ class Paragraph(Base):
     
     @staticmethod
     def build_query(query_data):
-        query = db_session.query(Paragraph)
+        query = select(Paragraph)
         filters = []
 
-        search = query_data["search"]
+        search = query_data.get('search', '*')
 
         if datasets := query_data.get("datasets"):
             dataset_filters = [Dataset.name.in_(datasets)]
@@ -291,8 +297,8 @@ class Paragraph(Base):
             filters.append(
                 Paragraph.dataset.in_(
                     [
-                        _[0]
-                        for _ in db_session.query(Dataset)
+                        _
+                        for _, in db_session.query(Dataset)
                         .filter(or_(*dataset_filters))
                         .with_entities(Dataset.id)
                         .all()
@@ -307,19 +313,17 @@ class Paragraph(Base):
             filters.append(or_(*source_filters))
 
         if query_data.get("embeddings") == False:
-            param = (
-                ~exists()
-                .where(TextEmbeddings.id == Paragraph.id)
-                .correlate(TextEmbeddings)
-            )
+            param = ~exists().where(TextEmbeddings.id == Paragraph.id)
             filters.append(param)
 
         if search.startswith("?"):
             param = text(search[1:])
             filters.append(param)
         elif search.startswith("*"):
-            param = Paragraph.content.ilike(f"%{search.strip('*')}%")
-            filters.append(param)
+            search = search.strip('*')
+            if search:
+                param = Paragraph.content.ilike(f"%{search}%")
+                filters.append(param)
         elif search.startswith(":") or query_data.get("embeddings"):
             if 'total' not in query_data:
                 query_embedding = TextEmbeddings.get_embedding(search.strip(":"))

@@ -4,8 +4,10 @@ import os
 import shutil
 from datetime import datetime
 from io import BytesIO
-
+from PIL import Image
 from werkzeug.utils import secure_filename
+
+from .pdfutils import render_pdf_with_fitz, get_pdf_page_count
 
 
 class Storage:
@@ -35,7 +37,7 @@ class Storage:
         """安全拼接路径，防止路径穿越攻击，核心安全校验"""
         segs = '/'.join(segs).lstrip('/').replace('../', '/')
         if segs.startswith(self.FILE_STORAGE_ROOT.lstrip('/')):
-            segs = segs[len(self.FILE_STORAGE_ROOT)]
+            segs = segs[len(self.FILE_STORAGE_ROOT):]
         joined_path = os.path.abspath(os.path.join(self.FILE_STORAGE_ROOT, segs))
         if not joined_path.startswith(self.FILE_STORAGE_ROOT):
             raise ValueError(f"访问的路径不在允许范围内，疑似路径穿越攻击 {segs} -> {joined_path}")
@@ -48,7 +50,7 @@ class Storage:
         return "." in filename and filename.rsplit(".", 1)[1].lower() in self.ALLOWED_EXTENSIONS
 
     # ------------------------------ 文件元信息核心方法 ------------------------------
-    def get_file_info(self, file_path):
+    def fileinfo(self, file_path):
         """获取文件/文件夹的完整元信息"""
         if not os.path.exists(file_path):
             return {}
@@ -67,41 +69,56 @@ class Storage:
         }
         # 额外追加PDF页数信息
         if not is_dir and file_info["mime_type"] == "application/pdf":
-            file_info["page_count"] = self._get_pdf_page_count(file_path)
+            file_info["page_count"] = get_pdf_page_count(file_path)
         return file_info
-
-    def _get_pdf_page_count(self, pdf_path):
-        """私有方法：获取PDF文件页数"""
-        try:
-            from PyPDF2 import PdfReader
-            with open(pdf_path, "rb") as f:
-                return len(PdfReader(f).pages)
-        except Exception:
-            return None
-
-    # ------------------------------ 目录操作 ------------------------------
-    def list_directory(self, target_path, only_basic=False):
-        """列出目录下所有文件/文件夹，过滤隐藏文件"""
+    
+    def _dir_files(self, basedir, filenames, detailed=True):
         items = []
-        for item in os.listdir(target_path):
+        for item in filenames:
             if item.startswith('.'): continue
-            item_path = os.path.join(target_path, item)
-            if only_basic:
+            item_path = os.path.join(basedir, item)
+            if detailed:
+                items.append(self.fileinfo(item_path))
+            else:
                 items.append({
                     "name": item,
                     "is_directory": os.path.isdir(item_path),
                     "relative_path": os.path.relpath(item_path, self.FILE_STORAGE_ROOT),
                 })
-            else:
-                items.append(self.get_file_info(item_path))
+            
         return {
-            "directory": target_path,
-            "relative_directory": os.path.relpath(target_path, self.FILE_STORAGE_ROOT),
+            "directory": basedir,
+            "relative_directory": os.path.relpath(basedir, self.FILE_STORAGE_ROOT),
             "items": items
         }
 
+    def ls(self, basedir, detailed=True):
+        """列出目录下所有文件/文件夹，过滤隐藏文件"""
+        return self._dir_files(basedir, os.listdir(basedir), detailed)
+                    
+    def globs(self, pattern):
+        return [self.relative_path(p) for p in glob.glob(self.safe_join(pattern))]
+    
+    def search(self, base_dir, search, detailed=True):
+        pattern = search.split()
+        
+        def _match_pattern(fn):
+            return all(pat in fn for pat in pattern)
+
+        items = []
+        for pwd, ds, fs in os.walk(self.safe_join(base_dir)):
+            fs = [f for f in fs if _match_pattern(f)]
+            ds = [d for d in ds if _match_pattern(d)]
+            items.extend(self._dir_files(pwd, fs, detailed)['items'] + self._dir_files(pwd, ds, detailed)['items'])
+            
+        return {
+            "directory": base_dir,
+            "relative_directory": os.path.relpath(base_dir, self.FILE_STORAGE_ROOT),
+            "items": items
+        }
+          
     # ------------------------------ 文件上传 ------------------------------
-    def save_file(self, file_obj, save_rel_path):
+    def save(self, file_obj, save_rel_path):
         """保存上传文件，流式校验文件大小"""
         # 安全校验文件名和路径
         filename = secure_filename(file_obj.filename)
@@ -118,19 +135,19 @@ class Storage:
             raise ValueError(f"文件大小超过限制（最大{self.MAX_FILE_SIZE}MB）")
         # 保存文件
         file_obj.save(save_path)
-        return self.get_file_info(save_path)
+        return self.fileinfo(save_path)
 
     # ------------------------------ 创建目录 ------------------------------
-    def create_directory(self, dir_rel_path, dir_name):
+    def mkdir(self, dir_rel_path, dir_name):
         """创建空目录"""
         dir_path = self.safe_join(dir_rel_path, dir_name)
         if os.path.exists(dir_path):
             raise ValueError("目录已存在")
         os.makedirs(dir_path, exist_ok=True)
-        return self.get_file_info(dir_path)
+        return self.fileinfo(dir_path)
 
     # ------------------------------ 文件/目录 移动/重命名 ------------------------------
-    def move_or_rename(self, old_rel_path, new_name=None, new_rel_path=None):
+    def mv(self, old_rel_path, new_name=None, new_rel_path=None):
         """
         移动或重命名文件/目录
         :param old_rel_path: 原文件相对路径
@@ -156,7 +173,7 @@ class Storage:
         shutil.move(old_path, new_path)
         return {
             "old_relative_path": os.path.relpath(old_path, self.FILE_STORAGE_ROOT),
-            "new_info": self.get_file_info(new_path)
+            "new_info": self.fileinfo(new_path)
         }
 
     # ------------------------------ 文件/目录 删除 ------------------------------
@@ -175,7 +192,7 @@ class Storage:
         return True
 
     # ------------------------------ 文件下载核心 ------------------------------
-    def read_file(self, target_rel_path, page=None):
+    def read_file(self, target_rel_path, page=None, format=None):
         """
         读取文件内容，支持PDF分页下载
         :return: (BytesIO流, MIME类型, 下载文件名)
@@ -186,34 +203,49 @@ class Storage:
         
         mime_type, _ = mimetypes.guess_type(target_path) or ("application/octet-stream", None)
         file_name = os.path.basename(target_path)
+        
+        buf = None
+        
+        # 处理 PDF 页面
+        if mime_type == "application/pdf":
+            if page:
+                # PDF按页码下载
+                from PyPDF2 import PdfReader, PdfWriter
+                reader = PdfReader(target_path)
+                if page < 0 or page >= len(reader.pages):
+                    raise ValueError("页码超出范围")
+                writer = PdfWriter()
+                writer.add_page(reader.pages[page])
+                buf = BytesIO()
+                writer.write(buf)
+                buf.seek(0)
+                file_name = f"{file_name}.page{page}.pdf"
+            
+        if buf is None:
+            buf = open(target_path, 'rb')
 
-        # 普通文件下载
-        if mime_type != "application/pdf" or page is None:
-            with open(target_path, "rb") as f:
-                buf = BytesIO(f.read())
-            buf.seek(0)
-            return buf, mime_type, file_name
+        # 检查format参数
+        if format:
+            file_name = file_name.rsplit('.', 1)[0] + '.' + format
+            if mime_type.startswith('image/'):
+                im = Image.open(buf)
+                buf = BytesIO()
+                im.save(buf, format)
+                mime_type = f'image/{format}'
+            elif mime_type == 'application/pdf':
+                buf = render_pdf_with_fitz(buf, format=format)
+                mime_type = f'image/{format}'
 
-        # PDF按页码下载
-        from PyPDF2 import PdfReader, PdfWriter
-        reader = PdfReader(target_path)
-        if page < 0 or page >= len(reader.pages):
-            raise ValueError("页码超出范围")
-        writer = PdfWriter()
-        writer.add_page(reader.pages[page])
-        buf = BytesIO()
-        writer.write(buf)
         buf.seek(0)
-        return buf, "application/pdf", f"{file_name}.page{page}.pdf"
-    
+        return buf, mime_type, file_name
+
     def relative_path(self, p):
         return os.path.relpath(p, self.FILE_STORAGE_ROOT)
     
-    def globs(self, pattern):
-        return [self.relative_path(p) for p in glob.glob(self.safe_join(pattern))]
-    
     def open(self, relpath, mode='rb'):
         return open(self.safe_join(relpath), mode)
+    
+
 
 # 初始化单例实例 (项目全局唯一)
 # 导入方式：from .storage import instance as storage

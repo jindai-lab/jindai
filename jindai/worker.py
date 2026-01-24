@@ -4,19 +4,25 @@ import os
 import tempfile
 
 from celery import Celery
+from celery.signals import task_prerun, task_postrun, worker_process_init
+from celery.utils.log import get_task_logger
 from sqlalchemy import exists, func, select
+from flask import Response
 
 from .app import config, storage
 from .models import Dataset, Paragraph, TaskDBO, TextEmbeddings, db_session
 from .task import Task
+
+import logging
+import redis
 
 
 def make_celery(app_name=__name__):
     # 初始化Celery
     celery = Celery(
         app_name,
-        broker=config.redis.rstrip("/") + "/0",
-        backend=config.redis.rstrip("/") + "/1",
+        broker=config.redis + "/0",
+        backend=config.redis + "/1",
         # 配置项
         broker_connection_retry_on_startup=True,
         result_expires=86400,  # 结果保留24小时
@@ -29,19 +35,40 @@ def make_celery(app_name=__name__):
 
 
 celery = make_celery()
+task_handlers = {}
+logger = get_task_logger(__name__)
 
 
-@celery.task(name="task_worker.handle_custom")
+class CeleryTaskLogHandler(logging.Handler):
+    def __init__(self, task_id):
+        super().__init__()
+        self.redis_client = redis.Redis.from_url(config.redis + "/0")
+        self.channel = f"task_logs:{task_id}"
+
+    def subscribe(self):
+        sub = self.redis_client.pubsub()
+        sub.subscribe(self.channel)
+        return sub
+
+    def emit(self, record):
+        try:
+            msg = self.format(record)
+            self.redis_client.publish(self.channel, msg)
+        except Exception:
+            self.handleError(record)
+
+
+@celery.task(name="handle_custom")
 def handle_custom(task_id="", **params):
     if task_id:
         dbo = db_session.query(TaskDBO).get(task_id)
     else:
         dbo = TaskDBO(**params)
-    task = Task.from_dbo(dbo)
+    task = Task.from_dbo(dbo, log=print)
     return task.execute()
 
 
-@celery.task(name="task_worker.import_pdf")
+@celery.task(name="import_pdf")
 def import_pdf(source, lang, dataset):
     from .pdfutils import extract_pdf_texts
 
@@ -58,7 +85,7 @@ def import_pdf(source, lang, dataset):
     inputs = [f for f in inputs if f.endswith(".pdf")]
 
     for file in inputs:
-        rel_path = '/' + storage.relative_path(file)
+        rel_path = "/" + storage.relative_path(file)
         print(rel_path)
         max_page = (
             db_session.query(func.max(Paragraph.source_page))
@@ -66,7 +93,7 @@ def import_pdf(source, lang, dataset):
             .scalar()
         )
         try:
-            for page, pagenum, text in extract_pdf_texts(file, since=max_page+1):
+            for page, pagenum, text in extract_pdf_texts(file, since=max_page + 1):
                 p = Paragraph(
                     content=text,
                     lang=lang,
@@ -83,7 +110,7 @@ def import_pdf(source, lang, dataset):
     return inputs
 
 
-@celery.task(name="task_worker.handle_ocr")
+@celery.task(name="handle_ocr")
 def handle_ocr(input, output, lang, monochrome=False):
     from .pdfutils import convert_pdf_to_tiff_group4, merge_images_from_folder
 
@@ -140,10 +167,8 @@ def handle_ocr(input, output, lang, monochrome=False):
     return output
 
 
-@celery.task(name="task_worker.handle_embedding")
-def handle_embedding(id=None, content=None, bulk=None):
-    if content is not None:
-        bulk = [{"id": id, "content": content}]
+@celery.task(name="text_embedding")
+def text_embedding(bulk=None):
     if bulk is not None:
         embs = []
         for i in bulk:
@@ -158,22 +183,26 @@ def handle_embedding(id=None, content=None, bulk=None):
         try:
             db_session.add_all(embs)
             db_session.commit()
-        except:
+        except Exception as e:
+            print(e)
             db_session.rollback()
     else:
-        stmt = select(Paragraph.id, Paragraph.content).where(
-            ~exists()
-            .where(TextEmbeddings.id == Paragraph.id, TextEmbeddings.chunk_id > 0)
-            .correlate(Paragraph),
-            func.length(Paragraph.content) > 10,
+        print(f"start db query")
+        stmt = (
+            Paragraph.build_query({"embeddings": False, "limit": 10000})
+            .filter(func.length(Paragraph.content) > 10)
+            .with_only_columns(Paragraph.id, Paragraph.content)
         )
-        results = db_session.execute(stmt.limit(10000)).mappings().all()
+        results = db_session.execute(stmt).mappings().all()
         bulk = []
         len_results = len(results)
+        print(f"start handling embedding with {len_results}")
         for i, p in enumerate(results, start=1):
             bulk.append({"id": str(p["id"]), "content": p["content"]})
+            print(f"{i}")
             if i % 100 == 0 or i == len_results:
                 add_task("text_embedding", {"bulk": bulk})
+                print(f"add task text_embedding {len(bulk)}")
                 bulk = []
         if len_results:
             add_task("text_embedding", {})
@@ -182,7 +211,7 @@ def handle_embedding(id=None, content=None, bulk=None):
 # Interact with celery
 def add_task(task_type, params):
     task_map = {
-        "text_embedding": handle_embedding,
+        "text_embedding": text_embedding,
         "ocr": handle_ocr,
         "import": import_pdf,
         "custom": handle_custom,
@@ -299,5 +328,20 @@ def clear_tasks(status=""):
     return {"status": "success", "deleted_count": revoked_count}
 
 
+def log_stream(task_id):
+    def stream():
+        pubsub = CeleryTaskLogHandler(task_id).subscribe()
+
+        # 首先发送一条连接成功的消息
+        yield "data: --- 已连接日志服务器 ---\n\n"
+
+        for message in pubsub.listen():
+            if message["type"] == "message":
+                data = message["data"].decode("utf-8")
+                yield f"data: {data}\n\n"
+
+    return Response(stream(), mimetype="text/event-stream")
+
+
 def worker():
-    celery.worker_main(["worker", "--concurrency=2"])
+    celery.worker_main(["worker", "--pool=solo", "--loglevel=INFO"])

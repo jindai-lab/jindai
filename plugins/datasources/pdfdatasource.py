@@ -75,7 +75,7 @@ class PDFDataSource(DataSourceStage):
 
         if self.skip_existed:
             existent = {
-                d["source_file"]: d["max_page"]
+                d["source_url"]: d["max_page"]
                 for d in db_session.execute(
                     select(
                         Paragraph.source_url,
@@ -86,9 +86,10 @@ class PDFDataSource(DataSourceStage):
         else:
             existent = {}
 
-        for filepath in self.files:
+        total = len(self.files)
+        for i, filepath in enumerate(self.files):
             imported_pages = 0
-            self.log("importing", filepath)
+            self.log(f"{i+1}/{total} importing {filepath}")
 
             stream = storage.open(filepath, "rb")
             if hasattr(stream, "name"):
