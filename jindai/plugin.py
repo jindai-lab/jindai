@@ -75,7 +75,7 @@ class PluginManager:
         self.callbacks = defaultdict(list)
         self.app = app
 
-        @app.route('/api/plugins/styles.css')
+        @app.route('/api/v2/plugins/styles.css')
         def plugins_style():
             """Returns css from all enabled plugins
 
@@ -86,7 +86,7 @@ class PluginManager:
                 [handler() or '' for handler in self.callbacks['css']])
             return Response(css, mimetype='text/css')
 
-        @app.route('/api/plugins/filters', methods=["GET", "POST"])
+        @app.route('/api/v2/plugins/filters', methods=["GET", "POST"])
         def plugin_pages():
             """Returns names for special filters in every plugins
             """
@@ -95,11 +95,11 @@ class PluginManager:
                 for spec in self.filters.values()
             ])
 
-        @app.route('/api/plugins')
+        @app.route('/api/v2/plugins')
         def plugin_list():
             return jsonify([type(pl).__name__ for pl in self.plugins])
 
-        @app.route('/api/plugins', methods=['POST'])
+        @app.route('/api/v2/plugins', methods=['POST'])
         def plugin_install(url):
             self.install(url)
             return jsonify(True)
@@ -120,7 +120,7 @@ class PluginManager:
             if isinstance(plugin_name, tuple) and len(plugin_name) == 2:
                 plugin_name, params = plugin_name
             else:
-                params = getattr(config, plugin_name) or {}
+                params = getattr(config, plugin_name, {})
 
             if isinstance(plugin_name, str):
                 plugin_cls = plugin_ctx.get(plugin_name)
@@ -166,9 +166,9 @@ class PluginManager:
                 continue
 
             if dirname == 'sources':
-                target = storage.expand_path('/').rstrip('/')
+                target = storage.safe_join('/').rstrip('/')
             else:
-                target = os.path.join(config.rootpath, dirname)
+                target = './' + dirname
 
             shutil.copytree(source, target)
 

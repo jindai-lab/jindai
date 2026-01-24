@@ -273,7 +273,7 @@ class Reparagraph(PipelineStage):
         def merge_lines():
             lens = [len(_) for _ in lines]
             if len(lens) < 3:
-                yield ('' if lang[:2] in ('ch', 'ja') else ' ').join(lines)
+                yield ('' if lang[:2] in ('zh', 'ja') else ' ').join(lines)
                 return
 
             std = abs(statistics.stdev(lens))
@@ -287,7 +287,7 @@ class Reparagraph(PipelineStage):
                 if re.search(r'^[①-⑩]', line):
                     break
 
-                if lang[:2] != 'ch':
+                if lang[:2] != 'zh':
                     text += ' '
                 text += line
                 if len(line) < maxl - std:

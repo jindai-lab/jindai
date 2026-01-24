@@ -16,7 +16,7 @@ from .resources import apply_resources
 apply_resources(api)
 
 
-@app.route("/api/pipelines")
+@app.route("/api/v2/pipelines")
 def help_info():
     """Provide help info for pipelines, with respect to preferred language"""
 
@@ -32,12 +32,6 @@ def help_info():
             continue
         result[name][key] = val.get_spec()
     return jsonify(result)
-
-
-@app.route("/api/plugins", methods=["GET"])
-def get_plugins():
-    """Get plugin names"""
-    return jsonify([type(pl).__name__ for pl in app.plugins])
 
 
 @app.route("/<path:path>", methods=["GET"])
@@ -60,7 +54,16 @@ def prepare_plugins():
     if os.path.exists("restarting"):
         os.unlink("restarting")
     plugin_ctx = get_context("plugins", Plugin)
-    app.plugins = PluginManager(plugin_ctx, app)
+    return PluginManager(plugin_ctx, app)
+
+
+@app.route("/api/v2/plugins", methods=["GET"])
+def get_plugins():
+    """Get plugin names"""
+    return jsonify([type(pl).__name__ for pl in plugins])
+
+
+plugins = prepare_plugins()
 
 
 def run_service(host="0.0.0.0", port=8370):
