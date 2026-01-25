@@ -22,6 +22,11 @@ from .helpers import AutoUnloadSentenceTransformer, jieba
 
 
 engine = create_engine(config.database)
+with engine.connect() as conn:
+    # 确保 vchord 扩展已启用
+    conn.execute(text("CREATE EXTENSION IF NOT EXISTS vchord CASCADE"))
+    conn.commit()
+
 session_factory = sessionmaker(bind=engine)
 db_session = scoped_session(session_factory)
 MBase = declarative_base()
@@ -289,6 +294,9 @@ class Paragraph(Base):
         filters = []
 
         search = query_data.get('search', '*')
+        
+        if ids := query_data.get('ids'):
+            filters.append(Paragraph.id.in_(ids))
 
         if datasets := query_data.get("datasets"):
             dataset_filters = [Dataset.name.in_(datasets)]
@@ -524,8 +532,8 @@ class TextEmbeddings(Base):
         Index(
             "idx_embedding_cosine",
             "embedding",
-            postgresql_using="ivfflat",
-            postgresql_with={"lists": "5000"},
+            postgresql_using="vchordrq",
+            # postgresql_with={"m": 16},
             postgresql_ops={"embedding": "vector_cosine_ops"},
         ),
         {
@@ -573,7 +581,7 @@ class TextEmbeddings(Base):
             text.strip(),
             convert_to_numpy=True,  # 返回numpy数组，方便后续处理
             normalize_embeddings=True,  # 归一化向量，提升检索效果
-        )
+        ).half()
 
         return embedding.tolist()
 

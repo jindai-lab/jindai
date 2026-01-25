@@ -17,6 +17,7 @@ from jindai import Pipeline, PipelineStage, storage
 from jindai.app import aeval
 from jindai.helpers import WordStemmer as _Stemmer, safe_import, jieba
 from jindai.models import Dataset, Paragraph, db_session
+from jindai.worker import add_task
 
 
 class Passthrough(PipelineStage):
@@ -784,12 +785,14 @@ class SaveParagraph(PipelineStage):
             if len(self.queue) >= 100:
                 db_session.add_all(self.queue)
                 db_session.commit()
+                add_task('text_embedding', {'filters': {'ids': [p.id for p in self.queue]}})
                 self.queue.clear()
         return paragraph
     
     def sumamrize(self, _):
         db_session.add_all(self.queue)
         db_session.commit()
+        add_task('text_embedding', {'filters': {'ids': [p.id for p in self.queue]}})
 
 
 class FieldIncresement(PipelineStage):
