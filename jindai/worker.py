@@ -168,7 +168,7 @@ def handle_ocr(input, output, lang, monochrome=False):
 
 
 @celery.task(name="text_embedding")
-def text_embedding(bulk=None):
+def text_embedding(bulk=None, filters=None):
     if bulk is not None:
         embs = []
         for i in bulk:
@@ -188,8 +188,11 @@ def text_embedding(bulk=None):
             db_session.rollback()
     else:
         print(f"start db query")
+        if filters is None:
+            filters = {}
+        filters.update(embeddings=False, limit=10000)
         stmt = (
-            Paragraph.build_query({"embeddings": False, "limit": 10000})
+            Paragraph.build_query(filters)
             .filter(func.length(Paragraph.content) > 10)
             .with_only_columns(Paragraph.id, Paragraph.content)
         )
@@ -199,12 +202,10 @@ def text_embedding(bulk=None):
         print(f"start handling embedding with {len_results}")
         for i, p in enumerate(results, start=1):
             bulk.append({"id": str(p["id"]), "content": p["content"]})
-            print(f"{i}")
-            if i % 100 == 0 or i == len_results:
+            if i % 100 == 0 or i == len_results:  
                 add_task("text_embedding", {"bulk": bulk})
-                print(f"add task text_embedding {len(bulk)}")
                 bulk = []
-        if len_results:
+        if len_results == 10000:
             add_task("text_embedding", {})
 
 
