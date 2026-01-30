@@ -1,14 +1,16 @@
 import os
 from io import BytesIO
+from typing import Iterator
 
 import fitz
 from flask import request, send_file
 from flask_restful.reqparse import RequestParser
 from PIL import Image
 from PyPDF2 import PdfReader, PdfWriter
+from werkzeug.wrappers.response import Response
 
 
-def get_pdf_page_count(pdf_path):
+def get_pdf_page_count(pdf_path) -> int | None:
     """私有方法：获取PDF文件页数"""
     try:
         from PyPDF2 import PdfReader
@@ -19,7 +21,18 @@ def get_pdf_page_count(pdf_path):
         return None
 
 
-def render_pdf_with_fitz(pdf_path, page_num=0, format="png"):
+def render_pdf_with_fitz(pdf_path, page_num=0, format="png") -> BytesIO:
+    """Render PDF page to image using PyMuPDF (fitz)
+
+    :param pdf_path: Path to PDF file or bytes
+    :type pdf_path: str | bytes
+    :param page_num: Page number to render, defaults to 0
+    :type page_num: int, optional
+    :param format: Output image format, defaults to "png"
+    :type format: str, optional
+    :return: Image data as BytesIO
+    :rtype: BytesIO
+    """
     # 打开 PDF
     if isinstance(pdf_path, str):
         doc = fitz.open(pdf_path)
@@ -36,7 +49,7 @@ def render_pdf_with_fitz(pdf_path, page_num=0, format="png"):
     return BytesIO(img_data)
 
 
-def convert_pdf_to_tiff_group4(pdf, outp):
+def convert_pdf_to_tiff_group4(pdf, outp) -> None:
     """
     Converts a PDF file to a multi-page Group 4 compressed TIFF file.
 
@@ -77,7 +90,14 @@ def convert_pdf_to_tiff_group4(pdf, outp):
         )
 
 
-def merge_images_from_folder(folderpath, outp):
+def merge_images_from_folder(folderpath, outp) -> None:
+    """Merge images from folder into a single PDF
+
+    :param folderpath: Path to folder containing images
+    :type folderpath: str
+    :param outp: Output file object
+    :type outp: file-like object
+    """
     image_list = []
     for f in sorted(os.listdir(folderpath)):
         if f.endswith((".jpg", ".png", ".jpeg", ".tif", ".tiff")):
@@ -94,16 +114,26 @@ def merge_images_from_folder(folderpath, outp):
         )
 
 
-def read_pdf_pages(path, reverse=False):
+def read_pdf_pages(path, reverse=False) -> list:
+    """Read pages from PDF file
+
+    :param path: Path to PDF file
+    :type path: str
+    :param reverse: Whether to reverse page order, defaults to False
+    :type reverse: bool, optional
+    :return: List of page objects
+    :rtype: list
+    """
     reader = PdfReader(path)
     return list(reversed(reader.pages) if reverse else reader.pages)
 
 
-def cross_merge_pdf(outp, pdf1, pdf2, reversed1, reversed2):
+def cross_merge_pdf(outp, pdf1, pdf2, reversed1, reversed2) -> None:
     """合并PDF文件，返回合并后的临时文件路径"""
     try:
-        pdf1_pages, pdf2_pages = read_pdf_pages(pdf1, reversed1), read_pdf_pages(
-            pdf2, reversed2
+        pdf1_pages, pdf2_pages = (
+            read_pdf_pages(pdf1, reversed1),
+            read_pdf_pages(pdf2, reversed2),
         )
 
         # 检查页数是否匹配
@@ -125,11 +155,12 @@ def cross_merge_pdf(outp, pdf1, pdf2, reversed1, reversed2):
         raise e
 
 
-def sequential_merge_pdf(outp, pdf1, pdf2, reversed1, reversed2):
+def sequential_merge_pdf(outp, pdf1, pdf2, reversed1, reversed2) -> None:
     """顺序合并PDF文件，返回合并后的临时文件路径"""
     try:
-        pdf1_pages, pdf2_pages = read_pdf_pages(pdf1, reversed1), read_pdf_pages(
-            pdf2, reversed2
+        pdf1_pages, pdf2_pages = (
+            read_pdf_pages(pdf1, reversed1),
+            read_pdf_pages(pdf2, reversed2),
         )
 
         # 创建输出PDF
@@ -146,7 +177,16 @@ def sequential_merge_pdf(outp, pdf1, pdf2, reversed1, reversed2):
         raise e
 
 
-def extract_pdf_texts(filename, since=0):
+def extract_pdf_texts(filename, since=0) -> Iterator:
+    """Extract text from PDF pages
+
+    :param filename: Path to PDF file
+    :type filename: str
+    :param since: Start page number, defaults to 0
+    :type since: int, optional
+    :return: Iterator of (page, label, content) tuples
+    :rtype: Iterator
+    """
     doc = fitz.open(filename)
 
     for page in range(since, doc.page_count):
@@ -163,7 +203,16 @@ def extract_pdf_texts(filename, since=0):
         yield page, label, content
 
 
-def requestio(func, **kwargs):
+def requestio(func, **kwargs) -> Response:
+    """Handle file I/O from HTTP request and call function
+
+    :param func: Function to call with file objects
+    :type func: Callable
+    :param kwargs: Additional keyword arguments for function
+    :type kwargs: dict
+    :return: File download response
+    :rtype: Response
+    """
     files = {}
     for key, file in request.files.items():
         inp = BytesIO()
@@ -177,7 +226,8 @@ def requestio(func, **kwargs):
     return send_file(outp, as_attachment=True, mimetype="")
 
 
-def inject_endpoints():
+def inject_endpoints() -> None:
+    """Inject PDF utility API endpoints into Flask app"""
     from .app import app
 
     @app.route("/api/v2/pdfutils/convert_monochrome", methods=["POST"])

@@ -1,6 +1,8 @@
-import regex as re
-import chardet
 from datetime import datetime, timedelta
+
+import chardet
+import regex as re
+
 from jindai.models import Paragraph
 from jindai.pipeline import PipelineStage
 
@@ -44,11 +46,14 @@ splits = [
 ]
 
 
-def func(parten, tp):
+def func(parten, tp) -> None:
     re.search(parten, parten)
 
 
 parten_other = r'\d+天前|\d+分钟前|\d+小时前|\d+秒前'
+
+
+from _pydatetime import datetime
 
 
 class TimeExtractor(PipelineStage):
@@ -57,7 +62,7 @@ class TimeExtractor(PipelineStage):
     @zhs 从文本中提取日期时间
     '''
 
-    def __init__(self, base_date=None):
+    def __init__(self, base_date=None) -> None:
         self.base_date = base_date or datetime.now()
         self.match_item = []
 
@@ -77,7 +82,7 @@ class TimeExtractor(PipelineStage):
                         tmp.append(m % sp)
                     self.match_item.append(tuple(tmp))
 
-    def get_time_other(self, text):
+    def get_time_other(self, text) -> None:
         m = re.search(r'\d+', text)
         if not m:
             return None
@@ -93,7 +98,7 @@ class TimeExtractor(PipelineStage):
 
         return None
 
-    def find_time(self, text):
+    def find_time(self, text) -> list | list[datetime] | None:
         # 格式化text为str类型
         if isinstance(text, bytes):
             encoding = chardet.detect(text)['encoding']

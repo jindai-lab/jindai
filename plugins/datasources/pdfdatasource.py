@@ -2,16 +2,18 @@
 @zhs 从 PDF 导入
 """
 
-import regex as re
+from typing import Iterator
+
 import fitz
+import regex as re
 from sqlalchemy import func, select
 
 from jindai.app import storage
-from jindai.models import Paragraph, Dataset, db_session
+from jindai.models import Dataset, Paragraph, db_session
 from jindai.pipeline import DataSourceStage, PipelineStage
 
 
-def resolve_range(page_range: str):
+def resolve_range(page_range: str) -> Iterator:
     """Resolve page range string
 
     :param page_range: page range, e.g. 1-3; 1,3,5-6,23
@@ -31,6 +33,9 @@ def resolve_range(page_range: str):
             yield int(rng) - 1
 
 
+from typing import Iterable
+
+
 class PDFDataSource(DataSourceStage):
     """
     Import paragraphs from PDF
@@ -44,7 +49,7 @@ class PDFDataSource(DataSourceStage):
         content="",
         skip_existed=True,
         page_range=""
-    ):
+    ) -> None:
         """
         Args:
             dataset_name (DATASET):
@@ -70,7 +75,7 @@ class PDFDataSource(DataSourceStage):
         self.files = PipelineStage.parse_paths(content)
         assert self.dataset
 
-    def fetch(self):
+    def fetch(self) -> Iterable:
         lang = self.lang
 
         if self.skip_existed:

@@ -1,7 +1,8 @@
 """Plugin platform for jindai"""
+
 import glob
-import shutil
 import os
+import shutil
 import tempfile
 import zipfile
 from collections import defaultdict
@@ -10,20 +11,25 @@ from typing import Callable
 from flask import Flask, Response, jsonify
 
 from .config import instance as config
-from .storage import instance as storage
 from .pipeline import Pipeline, PipelineStage
+from .storage import instance as storage
 
 
 class Plugin:
-    """Base class for plugins
-    """
+    """Base class for plugins"""
 
     def __init__(self, pmanager, **conf) -> None:
         self.config = conf
         self.pmanager = pmanager
 
-    def register_filter(self, name: str, keybind: str = '', format_string: str = '',
-                        icon: str = '', handler: Callable = lambda *_: list()) -> None:
+    def register_filter(
+        self,
+        name: str,
+        keybind: str = "",
+        format_string: str = "",
+        icon: str = "",
+        handler: Callable = lambda *_: list(),
+    ) -> None:
         """Register filter
 
         :param name: filter name
@@ -38,14 +44,14 @@ class Plugin:
         :type handler: Callable
         """
         self.pmanager.filters[name] = {
-            'name': name,
-            'keybind': keybind,
-            'format': format_string,
-            'icon': icon,
-            'handler': handler
+            "name": name,
+            "keybind": keybind,
+            "format": format_string,
+            "icon": icon,
+            "handler": handler,
         }
 
-    def register_callback(self, name: str, handler: Callable):
+    def register_callback(self, name: str, handler: Callable) -> None:
         """Register callback function
 
         :param name: callback name
@@ -55,51 +61,60 @@ class Plugin:
         """
         self.pmanager.callbacks[name].append(handler)
 
-    def register_pipelines(self, pipeline_classes):
+    def register_pipelines(self, pipeline_classes) -> None:
         """Register pipeline stage"""
         if isinstance(pipeline_classes, dict):
             pipeline_classes = pipeline_classes.values()
 
         for cls in pipeline_classes:
-            if isinstance(cls, type) and issubclass(cls, PipelineStage) \
-                    and cls is not PipelineStage and not cls.__name__.startswith('_'):
+            if (
+                isinstance(cls, type)
+                and issubclass(cls, PipelineStage)
+                and cls is not PipelineStage
+                and not cls.__name__.startswith("_")
+            ):
                 Pipeline.ctx[cls.__name__] = cls
-                
+
+
+from typing import Iterator
+
 
 class PluginManager:
     """Plugin manager"""
 
     def __init__(self, plugin_ctx: dict, app: Flask) -> None:
+        """Initialize plugin manager
+
+        :param plugin_ctx: Plugin context dictionary
+        :type plugin_ctx: dict
+        :param app: Flask application instance
+        :type app: Flask
+        """
         self.plugins = []
         self.filters = {}
         self.callbacks = defaultdict(list)
         self.app = app
 
-        @app.route('/api/v2/plugins/styles.css')
+        @app.route("/api/v2/plugins/styles.css")
         def plugins_style():
             """Returns css from all enabled plugins
 
             Returns:
                 Response: css document
             """
-            css = '\n'.join(
-                [handler() or '' for handler in self.callbacks['css']])
-            return Response(css, mimetype='text/css')
+            css = "\n".join([handler() or "" for handler in self.callbacks["css"]])
+            return Response(css, mimetype="text/css")
 
-        @app.route('/api/v2/plugins/filters', methods=["GET", "POST"])
+        @app.route("/api/v2/plugins/filters", methods=["GET", "POST"])
         def plugin_pages():
-            """Returns names for special filters in every plugins
-            """
-            return jsonify([
-                dict(spec, handler='')
-                for spec in self.filters.values()
-            ])
+            """Returns names for special filters in every plugins"""
+            return jsonify([dict(spec, handler="") for spec in self.filters.values()])
 
-        @app.route('/api/v2/plugins')
+        @app.route("/api/v2/plugins")
         def plugin_list():
             return jsonify([type(pl).__name__ for pl in self.plugins])
 
-        @app.route('/api/v2/plugins', methods=['POST'])
+        @app.route("/api/v2/plugins", methods=["POST"])
         def plugin_install(url):
             self.install(url)
             return jsonify(True)
@@ -108,9 +123,9 @@ class PluginManager:
 
         pls = []
         for plugin_name in config.plugins:
-            if plugin_name == '*':
+            if plugin_name == "*":
                 pls += list(plugin_ctx.keys())
-            elif plugin_name.startswith('~'):
+            elif plugin_name.startswith("~"):
                 if plugin_name[1:] in pls:
                     pls.remove(plugin_name[1:])
             elif plugin_name in plugin_ctx:
@@ -128,23 +143,32 @@ class PluginManager:
                 plugin_cls = plugin_name
 
             if not plugin_cls:
-                print('Plugin', plugin_name, 'not found.')
+                print("Plugin", plugin_name, "not found.")
                 continue
 
             try:
                 plugin_instance = plugin_cls(self, **params)
                 self.plugins.append(plugin_instance)
-                print('Registered plugin:', type(plugin_instance).__name__)
+                print("Registered plugin:", type(plugin_instance).__name__)
             except Exception as ex:
-                print('Error while registering plugin:', plugin_name, ex)
+                print("Error while registering plugin:", plugin_name, ex)
                 continue
 
-    def __iter__(self):
-        """Iterate through loaded plugins"""
+    def __iter__(self) -> Iterator:
+        """Iterate through loaded plugins
+
+        :return: Iterator over loaded plugin instances
+        :rtype: Iterator
+        """
         yield from self.plugins
 
-    def install(self, file_or_url: str):
-        """Install plugin from local file storage"""
+    def install(self, file_or_url: str) -> None:
+        """Install plugin from local file storage or URL
+
+        :param file_or_url: Path to local file or URL to download plugin
+        :type file_or_url: str
+        :raises ValueError: If no main directory found in plugin package
+        """
         if file_or_url.startswith('https://github.com/') and not file_or_url.endswith('.zip'):
             file_or_url += '/archive/refs/heads/main.zip'
         ziptar = storage.open(file_or_url)
@@ -157,7 +181,8 @@ class PluginManager:
         if not maindir:
             shutil.rmtree(tmpdir)
             raise ValueError(
-                f'No main directory found while attempting to install from {file_or_url}')
+                f"No main directory found while attempting to install from {file_or_url}"
+            )
         maindir = maindir[0]
 
         for dirname in ('plugins', 'sources'):
@@ -169,6 +194,20 @@ class PluginManager:
                 target = storage.safe_join('/').rstrip('/')
             else:
                 target = './' + dirname
+
+            shutil.copytree(source, target)
+
+        maindir = maindir[0]
+
+        for dirname in ("plugins", "sources"):
+            source = os.path.join(maindir, dirname)
+            if not os.path.exists(source):
+                continue
+
+            if dirname == "sources":
+                target = storage.safe_join("/").rstrip("/")
+            else:
+                target = "./" + dirname
 
             shutil.copytree(source, target)
 

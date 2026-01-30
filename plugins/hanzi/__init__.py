@@ -1,7 +1,8 @@
 """汉字拆字处理"""
 
-import pickle
 import os
+import pickle
+
 from jindai import PipelineStage, Plugin
 from jindai.models import Paragraph
 
@@ -28,6 +29,6 @@ class HanziChaizi(PipelineStage):
 class ChaiziPlugin(Plugin):
     """汉字部首拆字插件"""
 
-    def __init__(self, pmanager, **config):
+    def __init__(self, pmanager, **config) -> None:
         super().__init__(pmanager, **config)
         self.register_pipelines(globals())

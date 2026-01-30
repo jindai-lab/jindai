@@ -3,7 +3,8 @@
 """
 
 from uuid import UUID
-from jindai import PipelineStage, Pipeline, Task
+
+from jindai import Pipeline, PipelineStage, Task
 from jindai.app import aeval
 from jindai.models import TaskDBO, db_session
 
@@ -25,50 +26,53 @@ class FlowControlStage(PipelineStage):
         return lambda *x: self._log(self.instance_name or self.__class__.__name__, '|', *x)
 
     @log.setter
-    def log(self, val):
+    def log(self, val) -> None:
         self._log = val
         for pipeline in self._pipelines:
             pipeline.log = val
 
     @property
-    def gctx(self):
+    def gctx(self) -> dict:
         return self._gctx
     
     @gctx.setter
-    def gctx(self, val):
+    def gctx(self, val) -> None:
         self._gctx = val
         for pipeline in self._pipelines:
             pipeline.gctx = val
 
     @property
-    def verbose(self):
+    def verbose(self) -> bool:
         """Print out debug info when verbose is set"""
         return self._verbose
 
     @verbose.setter
-    def verbose(self, val):
+    def verbose(self, val) -> None:
         self._verbose = val
         for pipeline in self._pipelines:
             pipeline.verbose = val
 
     @property
-    def next(self):
+    def next(self) -> next:
         """Next stage in pipeline"""
         return self._next
 
     @next.setter
-    def next(self, val):
+    def next(self, val) -> None:
         self._next = val
         for pipeline in self._pipelines:
             if pipeline.stages:
                 pipeline.stages[-1].next = val
 
 
+from typing import Dict, Iterator
+
+
 class RepeatWhile(FlowControlStage):
     """Repeat loops
     @zhs 重复"""
 
-    def __init__(self, pipeline, times=1, cond=''):
+    def __init__(self, pipeline, times=1, cond='') -> None:
         """
         Args:
             pipeline (PIPELINE): Loop pipeline
@@ -84,7 +88,7 @@ class RepeatWhile(FlowControlStage):
         self.pipeline = Pipeline(pipeline, self.log)
         super().__init__()
 
-    def resolve(self, paragraph):
+    def resolve(self, paragraph) -> Iterator:
         if paragraph[self.times_key] is None:
             paragraph[self.times_key] = 0
 
@@ -103,8 +107,11 @@ class RepeatWhile(FlowControlStage):
             del paragraph[self.times_key]
             yield paragraph, self.next
 
-    def summarize(self, result):
+    def summarize(self, result) -> Dict:
         return self.pipeline.summarize(result)
+
+
+from typing import Iterator
 
 
 class ForEach(FlowControlStage):
@@ -126,7 +133,7 @@ class ForEach(FlowControlStage):
         self.pipeline = Pipeline(pipeline, self.log)
         super().__init__()
 
-    def resolve(self, paragraph):
+    def resolve(self, paragraph) -> Iterator:
         try:
             input_value = aeval(self.input_value, paragraph)
         except Exception as ex:
@@ -141,11 +148,14 @@ class ForEach(FlowControlStage):
         yield paragraph, self.next
 
 
+from typing import Dict, Iterator
+
+
 class Condition(FlowControlStage):
     """Conditional execution
     @zhs 条件判断"""
 
-    def __init__(self, cond, iftrue, iffalse):
+    def __init__(self, cond, iftrue, iffalse) -> None:
         """
         Args:
             cond (QUERY): Condition to check
@@ -160,7 +170,7 @@ class Condition(FlowControlStage):
         self.iffalse = Pipeline(iffalse, self.log)
         super().__init__()
         
-    def resolve(self, paragraph):
+    def resolve(self, paragraph) -> Iterator:
         pipeline = self.iftrue
         try:
             if not aeval(self.cond, paragraph):
@@ -174,16 +184,19 @@ class Condition(FlowControlStage):
         else:
             yield paragraph, self.next
 
-    def summarize(self, result):
+    def summarize(self, result) -> Dict:
         self.iftrue.summarize(result)
         self.iffalse.summarize(result)
+
+
+from typing import Dict, Iterator
 
 
 class CallTask(FlowControlStage):
     """Call to other task
     @zhs 调用其他任务"""
 
-    def __init__(self, task, skip=0, params=''):
+    def __init__(self, task, skip=0, params='') -> None:
         """
         Args:
             task (TASK): Task ID
@@ -221,21 +234,24 @@ class CallTask(FlowControlStage):
 
         super().__init__()
 
-    def resolve(self, paragraph):
+    def resolve(self, paragraph) -> Iterator:
         if self.pipeline.stages:
             yield paragraph, self.pipeline.stages[0]
         else:
             yield paragraph, self.next
 
-    def summarize(self, _):
+    def summarize(self, _) -> Dict:
         return self.pipeline.summarize()
+
+
+from typing import Dict, Iterable, Tuple
 
 
 class RunTask(CallTask):
     """Run task at summarization phrase
     @zhs 在收尾阶段运行任务"""
 
-    def __init__(self, task, params=''):
+    def __init__(self, task, params='') -> None:
         """
         Args:
             task (TASK): Task ID
@@ -245,12 +261,15 @@ class RunTask(CallTask):
         """
         super().__init__(task, 0, params)
 
-    def flow(self, paragraph, gctx):
+    def flow(self, paragraph, gctx) -> Iterable[Tuple]:
         self.gctx = gctx
         yield paragraph, self.next
 
-    def summarize(self, _):
+    def summarize(self, _) -> Dict:
         return self.task.execute()
+
+
+from typing import Iterator
 
 
 class AggregateDataSource(FlowControlStage):
@@ -258,7 +277,7 @@ class AggregateDataSource(FlowControlStage):
     @zhs 聚合不同管线模块的结果
     """
     
-    def __init__(self, pipelines):
+    def __init__(self, pipelines) -> None:
         """
         Args:
             pipelines (PIPELINES): Pipeline of data sources
@@ -267,7 +286,7 @@ class AggregateDataSource(FlowControlStage):
         super().__init__()
         self._pipelines = [Pipeline(pipeline, self.log) for pipeline in pipelines]
         
-    def resolve(self, paragraph):
+    def resolve(self, paragraph) -> Iterator:
         if self._pipelines:
             for pipeline in self._pipelines:
                 if pipeline.stages:

@@ -3,27 +3,27 @@ Import from web or file
 @zhs 来自网页或文本文件
 """
 
-import regex as re
-import json
-import datetime
-import tempfile
-import requests
-import os
-from hashlib import sha1
-from typing import Dict
-from urllib.parse import urljoin
-from bs4 import BeautifulSoup as B
 import asyncio
-from typing import Iterable
+import datetime
+import json
+import os
+import tempfile
+from hashlib import sha1
+from typing import Dict, Iterable
+from urllib.parse import urljoin
 
-from jindai.app import config, storage, aeval
+import regex as re
+import requests
+from bs4 import BeautifulSoup as B
+
+from jindai.app import aeval, config, storage
 from jindai.helpers import safe_import
 from jindai.models import Paragraph
 from jindai.pipeline import DataSourceStage, PipelineStage
 
-
 trafilatura = safe_import('trafilatura')
 from trafilatura.settings import use_config
+
 trafcfg = use_config()
 trafcfg.set("DEFAULT", "EXTRACTION_TIMEOUT", "0")
 
@@ -34,12 +34,12 @@ DEFAULT_IMG_PATTERNS = 'img[src]|[zoomfile]|[data-original]|[data-src]|[file]|[d
 
 class CachedWebAccess:
 
-    def __init__(self, base):
+    def __init__(self, base) -> None:
         if not os.path.exists(base):
             os.mkdir(base)
         self.base = base
         
-    def _digest(self, url):
+    def _digest(self, url) -> str:
         return os.path.join(self.base, sha1(url.encode('utf-8')).hexdigest())
     
     def request(self, url):
@@ -83,6 +83,9 @@ class CachedWebAccess:
                 with open(hashed, 'wb') as fo:
                     fo.write(data)
             return data
+
+
+from typing import Iterable
 
 
 class WebPageListingDataSource(DataSourceStage):
@@ -166,7 +169,7 @@ class WebPageListingDataSource(DataSourceStage):
         self.level = level
         self.wait_for = wait_for
 
-    def get_url(self, url):
+    def get_url(self, url) -> Paragraph:
         """Read html from url, return BeautifulSoup object"""
         self.log('get url', url)
         try:
@@ -176,7 +179,7 @@ class WebPageListingDataSource(DataSourceStage):
             data = ''
         return Paragraph(source_url=url, extdata={'html': data}, dataset=self.dataset, lang=self.lang)
 
-    def get_text(self, element):
+    def get_text(self, element) -> str:
         """Get text of element"""
         if element and element.text:
             return re.sub(r'\s+', ' ', element.text)
@@ -194,7 +197,7 @@ class WebPageListingDataSource(DataSourceStage):
         
         return para
 
-    def parse_list(self, url, b):
+    def parse_list(self, url, b) -> list:
         """Parse url as a list page"""
 
         if not b:
@@ -221,7 +224,7 @@ class WebPageListingDataSource(DataSourceStage):
         self.log(len(links), 'links')
         return list(links)
 
-    def fetch(self):
+    def fetch(self) -> Iterable:
         level = self.level or 1
         for url in self.paths:
             if url in self.visited:
@@ -250,6 +253,9 @@ class WebPageListingDataSource(DataSourceStage):
         return result
 
 
+from typing import Iterable
+
+
 class JSONDataSource(DataSourceStage):
     """Parse JSON data to Paragraphs, used to interact with web interface
     @zhs 从 JSON 数据解析出语段，用于与网页客户端交互
@@ -268,7 +274,7 @@ class JSONDataSource(DataSourceStage):
         if not isinstance(self.content, list):
             self.content = [self.content]
 
-    def fetch(self):
+    def fetch(self) -> Iterable:
         for paragraph in self.content:
             yield Paragraph.from_dict(paragraph.as_dict())
 
@@ -279,7 +285,7 @@ class ExtractHTMLParagraphs(PipelineStage):
     @zhs 从 HTML 中提取段落
     """
 
-    def __init__(self, field='html', autoextract=False, assignments='', paragraph_selector=''):
+    def __init__(self, field='html', autoextract=False, assignments='', paragraph_selector='') -> None:
         """
         Args:
             field (str): Field to read HTML
@@ -302,12 +308,12 @@ class ExtractHTMLParagraphs(PipelineStage):
         self.assignments = assignments or {'content': '//text'}
         self.autoextract = autoextract
 
-    def _get_text(self, bs_ele):
+    def _get_text(self, bs_ele) -> str:
         if bs_ele and bs_ele.text:
             return re.sub(r'\s+', ' ', bs_ele.text)
         return ''
 
-    def _resolve_assignments(self, bs_ele, para: Paragraph):
+    def _resolve_assignments(self, bs_ele, para: Paragraph) -> None:
         for field_name, field_path in self.assignments.items():
             if '//' in field_path:
                 field_path, field_attr = field_path.rsplit('//', 1)

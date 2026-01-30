@@ -2,6 +2,9 @@
 Query Database
 @zhs 来自数据库
 """
+
+from typing import Iterable
+
 from jindai.models import Paragraph, db_session
 from jindai.pipeline import DataSourceStage
 
@@ -11,7 +14,9 @@ class DBQueryDataSource(DataSourceStage):
     @zhs 从数据库查询
     """
 
-    def apply_params(self, query, req='', limit=0, skip=0, sort='', raw=False, groups='none'):
+    def apply_params(
+        self, query, req="", limit=0, skip=0, sort="", raw=False, groups="none"
+    ) -> None:
         """
         Args:
             query (QUERY):
@@ -33,15 +38,12 @@ class DBQueryDataSource(DataSourceStage):
                 @choose(none|group|source|both) Groups
                 @zhs @choose(无:none|按组:group|按来源:source|分组和来源:both) 分组
         """
-        self.query = Paragraph.build_query({
-            'search': query,
-            'sort': sort,
-            'offset': skip,
-            'limit': limit
-        })
-        
+        self.query = Paragraph.build_query(
+            {"search": query, "sort": sort, "offset": skip, "limit": limit}
+        )
+
         if raw:
             self.query = self.query.mappings()
 
-    def fetch(self):
-        yield from self.query
+    def fetch(self) -> Iterable:
+        yield from db_session.execute(self.query)

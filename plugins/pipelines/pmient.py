@@ -1,8 +1,8 @@
 """Word extraction based on PMILR
 @zhs 基于信息熵的词汇抽取词汇抽取"""
+import numpy as np
 import regex as re
 
-import numpy as np
 from jindai.models import Paragraph
 
 from .basics import NgramCounter
@@ -14,7 +14,7 @@ class PMILREntropyWordFetcher(NgramCounter):
     """
     re_stopwords = re.compile(r'[a-zA-Z0-9一二三四五六七八九十]')
 
-    def __init__(self, word_length=4, min_pmi=2, min_lr_ent=1, min_freq=1e-5, **_):
+    def __init__(self, word_length=4, min_pmi=2, min_lr_ent=1, min_freq=1e-5, **_) -> None:
         """
         Args:
             word_length (int, optional): Max word length
@@ -34,7 +34,7 @@ class PMILREntropyWordFetcher(NgramCounter):
         self.result = {}
         super().__init__(word_length, self.min_lr_ent > 0)
 
-    def resolve(self, paragraph: Paragraph):
+    def resolve(self, paragraph: Paragraph) -> None:
         self.text_length[paragraph.id] = len(paragraph.content)
         super().resolve(paragraph)
 
@@ -45,7 +45,7 @@ class PMILREntropyWordFetcher(NgramCounter):
             result = self.ent_lr()
         return sorted([(w, self.ngrams[w]) for w in result], key=lambda x: x[1], reverse=True)
 
-    def pmient(self):
+    def pmient(self) -> list:
         """Calculating PMI Entropy"""
         candidates = []
         min_p = 2 ** self.min_pmi / self.text_length
@@ -64,7 +64,7 @@ class PMILREntropyWordFetcher(NgramCounter):
         self.result['pmi_words'] = candidates
         return candidates
 
-    def ent_lr(self):
+    def ent_lr(self) -> list:
         """Left Right Entropy"""
         def calculate_entropy(char_dic):
             if not char_dic:

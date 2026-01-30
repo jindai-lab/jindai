@@ -3,13 +3,13 @@
 import glob
 import json
 import os
-import regex as re
 import subprocess
 import sys
 import tempfile
 import zipfile
 
 import click
+import regex as re
 import urllib3
 import yaml
 from flask import Flask
@@ -17,35 +17,36 @@ from flask import Flask
 from . import Plugin, PluginManager, Task, config, storage
 from .api import run_service
 from .helpers import get_context, safe_import
-from .models import Dataset, Paragraph, TaskDBO, UserInfo, db_session
+from .models import (Dataset, Paragraph, TaskDBO, UserInfo, db_session,
+                     try_commit)
 
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 
-def _init_plugins(*paths):
+def _init_plugins(*paths) -> PluginManager:
     """Inititalize plugins"""
     return PluginManager(get_context("plugins", Plugin, *paths), Flask(__name__))
 
 
 @click.group()
-def cli():
+def cli() -> None:
     """Cli group"""
 
 
 @cli.command("init")
-def first_run():
+def first_run() -> None:
     u = db_session.query(UserInfo).first()
     if not u:
         u = UserInfo(username="admin", roles=["admin"])
         db_session.add(u)
-        db_session.commit()
+        try_commit()
         print("Created user: admin; dataset: Default")
 
 
 @cli.command("export")
 @click.option("--output")
 @click.option("--query")
-def export(query, output_file):
+def export(query, output_file) -> None:
     """Export query results to json"""
     _init_plugins()
     task_obj = Task(
@@ -64,7 +65,7 @@ def export(query, output_file):
 
 
 @cli.command("worker")
-def run_worker():
+def run_worker() -> None:
     from .worker import worker
     worker()
 
@@ -76,7 +77,7 @@ def run_worker():
 @click.option("-v", "--verbose", type=bool, flag_value=True)
 @click.option("-e", "--edit", type=bool, flag_value=True)
 @click.option("-o", "--output", type=click.File("w", "utf-8", "ignore"), default=None)
-def run_task(task_id, concurrent, verbose, edit, log, output):
+def run_task(task_id, concurrent, verbose, edit, log, output) -> None:
     """Run task according to id or name"""
     dbo = TaskDBO.get(task_id)
     
@@ -105,7 +106,7 @@ def run_task(task_id, concurrent, verbose, edit, log, output):
             param = yaml.safe_load(fi)
             for key, val in param.items():
                 setattr(dbo, key, val)
-            db_session.commit()
+            try_commit()
 
         os.unlink(temp_name)
 
@@ -137,7 +138,7 @@ def run_task(task_id, concurrent, verbose, edit, log, output):
 @click.option("--setrole", "-g", default="")
 @click.option("--delete", "-d", default="")
 @click.argument("roles", nargs=-1)
-def user_manage(add, delete, setrole, roles):
+def user_manage(add, delete, setrole, roles) -> None:
     """User management"""
     if add:
         user = db_session.query(UserInfo).filter(UserInfo.username == add).first()
@@ -154,12 +155,12 @@ def user_manage(add, delete, setrole, roles):
         user = db_session.query(UserInfo).filter(UserInfo.username == setrole).first()
         if user:
             user.roles.extend(roles)
-    db_session.commit()
+    try_commit()
 
 
 @cli.command("plugin-install")
 @click.argument("url")
-def plugin_install(url: str):
+def plugin_install(url: str) -> None:
     """Install plugin
 
     :param url: install from
@@ -172,7 +173,7 @@ def plugin_install(url: str):
 @cli.command("plugin-export")
 @click.option("--output", "-o")
 @click.argument("infiles", nargs=-1)
-def plugin_export(output: str, infiles):
+def plugin_export(output: str, infiles) -> None:
     """Export plugin
 
     :param output: output file name
@@ -229,7 +230,7 @@ def plugin_export(output: str, infiles):
 @cli.command("web-service")
 @click.option("--port", default=8370, type=int)
 @click.option("--deployment", "-D", default=False, flag_value=True)
-def web_service(port: int, deployment: bool):
+def web_service(port: int, deployment: bool) -> None:
     """Run web service on port
 
     :param port: port number
@@ -247,7 +248,7 @@ def web_service(port: int, deployment: bool):
 
 
 @cli.command("ipython")
-def call_ipython():
+def call_ipython() -> None:
     from IPython import start_ipython
 
     os.chdir(os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
@@ -256,7 +257,9 @@ def call_ipython():
     import sys
     from concurrent.futures import ThreadPoolExecutor
     from uuid import UUID
+
     from tqdm import tqdm
+
     import jindai
     import jindai.models
     import jindai.resources
