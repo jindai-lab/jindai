@@ -2,22 +2,24 @@
 AMap LBS API
 高德地图地理位置服务 API
 """
-from typing import Iterable
-import pandas as pd
-import os
 import json
-import requests
 import math
+import os
+from typing import Iterable
 
+import pandas as pd
+import requests
+
+from jindai.helpers import safe_import
 from jindai.models import Paragraph
 from jindai.pipeline import DataSourceStage, PipelineStage
 from jindai.plugin import Plugin
-from jindai.models import Paragraph
-from jindai.helpers import safe_import
-
 
 gcj2wgs = safe_import('geojson_utils').gcj02towgs84
 pluginConfig = {}
+
+
+from typing import Iterable
 
 
 class AMapCityCodeQuery(DataSourceStage):
@@ -26,7 +28,7 @@ class AMapCityCodeQuery(DataSourceStage):
     @zhs 查询高德地图城市代码表
     """
 
-    def apply_params(self, content: str):
+    def apply_params(self, content: str) -> None:
         """
         Args:
             content (str): Query keywords
@@ -34,7 +36,7 @@ class AMapCityCodeQuery(DataSourceStage):
         """
         self.query = [q for q in content.split() if q]
 
-    def fetch(self):
+    def fetch(self) -> Iterable:
         df = pd.read_excel(os.path.join(os.path.dirname(
             __file__), 'AMap_adcode_citycode.xlsx'))
         for _, data in df.iterrows():
@@ -50,7 +52,7 @@ class AMapPOISearch(DataSourceStage):
     @zhs 查询高德地图位置信息，可根据关键字、城市代码和类别信息限定
     """
 
-    def apply_params(self, content: str, adcode: str, category: str = ''):
+    def apply_params(self, content: str, adcode: str, category: str = '') -> None:
         """
         Args:
             content (str): Query keywords
@@ -113,7 +115,7 @@ class _GeoCodingStage(PipelineStage):
     Geocoding parent class, do not use directly
     """
 
-    def __init__(self, field: str = 'coordinate', out_format: str = 'lat_lng'):
+    def __init__(self, field: str = 'coordinate', out_format: str = 'lat_lng') -> None:
         """
         Args:
             field (str): Field name for coordinate
@@ -166,7 +168,7 @@ class GCJtoWGS(_GeoCodingStage):
         self.in_format = in_format
 
     @staticmethod
-    def convert(coords, in_format=''):
+    def convert(coords, in_format='') -> list | None:
         if not coords:
             return
         if isinstance(coords, str):
@@ -189,7 +191,7 @@ class GoogleMapGeoCode(_GeoCodingStage):
     @zhs 查询谷歌地图位置信息
     """
 
-    def __init__(self, *args, **kwargs):
+    def __init__(self, *args, **kwargs) -> None:
         super().__init__(*args, **kwargs)
         googlemaps = safe_import('googlemaps')
         self.gmaps = googlemaps.Client(key=pluginConfig['google_key'])
@@ -213,12 +215,15 @@ class BingMapGeoCode(_GeoCodingStage):
         return self.assign_coordinates(paragraph, lat, lng)
     
 
+from typing import Iterator
+
+
 class OSMPOISearch(DataSourceStage):
     """
     POI Search with OSM (OpenStreetMap)
     """
 
-    def apply_params(self, content: str = '', tags: str = '', ):
+    def apply_params(self, content: str = '', tags: str = '', ) -> None:
         """
         Args:
             tags (LINES): Tags
@@ -241,7 +246,7 @@ class OSMPOISearch(DataSourceStage):
         # ]
         self.city = self.ox.geocode_to_gdf(content)
 
-    def guesses(self, tag):
+    def guesses(self, tag) -> Iterator:
         yield tag
         if tag.endswith('s'):
             tag = tag[:-1]

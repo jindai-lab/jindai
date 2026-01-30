@@ -1,40 +1,34 @@
 import hashlib
-from typing import Type
 import os
+from typing import Type
+
 from flask import Response, request, send_file
 from flask_restful import Resource, reqparse
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.sql import func, select
 
-from .app import (
-    UUID,
-    Resource,
-    ResponseTuple,
-    api,
-    app,
-    assert_admin,
-    config,
-    storage,
-    oidc,
-    request,
-)
-from .models import (
-    Base,
-    Dataset,
-    History,
-    Paragraph,
-    TaskDBO,
-    Terms,
-    TextEmbeddings,
-    UserInfo,
-    db_session,
-    is_uuid_literal,
-    redis_auto_renew_cache,
-)
-from .worker import add_task, revoke_task, get_task_result, get_task_stats, clear_tasks, log_stream
+from .app import (UUID, Resource, ResponseTuple, api, app, assert_admin,
+                  config, oidc, request, storage)
+from .models import (Base, Dataset, History, Paragraph, TaskDBO, Terms,
+                     TextEmbeddings, UserInfo, db_session, is_uuid_literal,
+                     redis_auto_renew_cache)
+from .worker import (add_task, clear_tasks, get_task_result, get_task_stats,
+                     log_stream, revoke_task)
 
 
-def paginate_cache_key(_, stmt, get_results=True, get_total=True):
+def paginate_cache_key(_, stmt, get_results=True, get_total=True) -> str:
+    """Generate cache key for pagination queries
+
+    :param _: Unused parameter
+    :param stmt: SQL statement
+    :type stmt: sqlalchemy.sql.Select
+    :param get_results: Whether getting results, defaults to True
+    :type get_results: bool, optional
+    :param get_total: Whether getting total count, defaults to True
+    :type get_total: bool, optional
+    :return: Cache key string
+    :rtype: str
+    """
     if get_total and not get_results:
         if hasattr(stmt, "statement"):
             stmt = stmt.statement
@@ -44,19 +38,21 @@ def paginate_cache_key(_, stmt, get_results=True, get_total=True):
 
 
 class JindaiResource(Resource):
-
     def __init__(self, model_cls: Type[Base]) -> None:
         super().__init__()
         self.model = model_cls
 
     @redis_auto_renew_cache(cache_key=paginate_cache_key)
-    def paginate(self, stmt, get_results=True, get_total=True):
+    def paginate(self, stmt, get_results=True, get_total=True) -> dict:
         data = {"results": [], "total": -1}
-        offset, limit = int(request.args.get("offset", "0")), int(
-            request.args.get("limit", "100")
+        offset, limit = (
+            int(request.args.get("offset", "0")),
+            int(request.args.get("limit", "100")),
         )
         if get_total:
-            data["total"] = db_session.execute(stmt.with_only_columns(func.count())).scalar()
+            data["total"] = db_session.execute(
+                stmt.with_only_columns(func.count())
+            ).scalar()
         if get_results:
             stmt = stmt.offset(offset).limit(limit)
             stmt = db_session.execute(stmt)
@@ -64,9 +60,15 @@ class JindaiResource(Resource):
         return data
 
     def get_object_by_id(self, resource_id):
+        """Get model instance by UUID
+
+        :param resource_id: Resource ID string
+        :type resource_id: str
+        :return: Model instance or None
+        """
         return db_session.query(self.model).get(UUID(resource_id))
 
-    def get(self, resource_id=None):
+    def get(self, resource_id=None) -> tuple[dict, int] | tuple[dict[str, str], int]:
         if resource_id:
             result = self.get_object_by_id(resource_id)
             if not result:
@@ -78,7 +80,7 @@ class JindaiResource(Resource):
             results = select(self.model)
             return self.paginate(results), 200
 
-    def post(self, resource_id=""):
+    def post(self, resource_id="") -> tuple[dict[str, str], int] | tuple:
         data = request.json
         new_item = self.model(**data)
 
@@ -90,8 +92,10 @@ class JindaiResource(Resource):
         except Exception as e:
             db_session.rollback()
             return {"error": str(e)}, 500
+        finally:
+            db_session.close()
 
-    def put(self, resource_id=""):
+    def put(self, resource_id="") -> tuple[dict[str, str], int] | tuple:
         data = request.json
         item = self.get_object_by_id(resource_id)
         if not item:
@@ -108,8 +112,10 @@ class JindaiResource(Resource):
         except Exception as e:
             db_session.rollback()
             return {"error": str(e)}, 500
+        finally:
+            db_session.close()
 
-    def delete(self, resource_id):
+    def delete(self, resource_id) -> tuple[dict[str, str], int]:
         item = self.get_object_by_id(resource_id)
         if not item:
             return {
@@ -123,8 +129,15 @@ class JindaiResource(Resource):
         except Exception as e:
             db_session.rollback()
             return {"error": str(e)}, 500
+        finally:
+            db_session.close()
 
     def _on_create_or_update(self, item):
+        """Hook called when item is created or updated
+
+        :param item: Model instance being created/updated
+        :type item: Base
+        """
         pass
 
 
@@ -138,6 +151,9 @@ class HistoryResource(JindaiResource):
         super().__init__(History)
 
 
+from typing import Any
+
+
 class DatasetResource(JindaiResource):
     def __init__(self) -> None:
         super().__init__(Dataset)
@@ -147,23 +163,22 @@ class DatasetResource(JindaiResource):
             return Dataset.get(resource_id, True)
         return super().get_object_by_id(resource_id)
 
-    def get(self, resource_id=None):
-
+    def get(self, resource_id=None) -> tuple | tuple[dict[str, Any], int]:
         if not resource_id:
             hierarchy = Dataset.get_hierarchy()
             return {"results": hierarchy}, 200
 
         return super().get(resource_id)
 
-    def post(self, resource_id):
+    def post(self, resource_id) -> tuple:
         assert_admin()
         return super().post(resource_id)
 
-    def delete(self, resource_id):
+    def delete(self, resource_id) -> tuple:
         assert_admin()
         return super().delete(resource_id)
 
-    def put(self, resource_id=""):
+    def put(self, resource_id="") -> tuple[str, int]:
         assert_admin()
         ds = self.get_object_by_id(resource_id)
         if ds is None:
@@ -180,7 +195,7 @@ class ParagraphResource(JindaiResource):
     def __init__(self) -> None:
         super().__init__(Paragraph)
 
-    def post(self):
+    def post(self) -> tuple | tuple[dict, int]:
         data = request.json
         if data.get("search"):
             query = Paragraph.build_query(data)
@@ -193,7 +208,7 @@ class ParagraphResource(JindaiResource):
         else:
             return super().post()
 
-    def _on_create_or_update(self, item: Paragraph):
+    def _on_create_or_update(self, item: Paragraph) -> None:
         if item.keywords:
             db_session.execute(
                 insert(Terms)
@@ -201,13 +216,14 @@ class ParagraphResource(JindaiResource):
                 .on_conflict_do_nothing()
             )
             db_session.commit()
+            db_session.close()
 
 
 class TextEmbeddingsResource(JindaiResource):
     def __init__(self) -> None:
         super().__init__(TextEmbeddings)
 
-    def post(self, resource_id=""):
+    def post(self, resource_id="") -> tuple[dict[str, str], int]:
         paragraph = db_session.query(Paragraph).get(resource_id)
         if paragraph:
             embedding = TextEmbeddings.get_embedding(paragraph.content)
@@ -218,9 +234,10 @@ class TextEmbeddingsResource(JindaiResource):
                 te = TextEmbeddings(id=resource_id, embedding=embedding)
                 db_session.add(te)
             db_session.commit()
+        db_session.close()
         return {"id": resource_id}, 201
 
-    def put(self, resource_id=""):
+    def put(self, resource_id="") -> tuple[dict, int]:
         return self.post(resource_id)[0], 200
 
     def get(self):
@@ -232,8 +249,7 @@ class TextEmbeddingsResource(JindaiResource):
 
 
 class OIDCUserInfoResource(Resource):
-
-    def get(self, section):
+    def get(self, section) -> tuple[dict[str, str], int] | tuple | tuple[dict, int]:
         if oidc.user_loggedin:
             if section:
                 info = {}
@@ -278,7 +294,6 @@ class WorkerResource(Resource):
 
 
 class FileManagerResource(Resource):
-    
     def get(self, file_path: str = "") -> ResponseTuple | Response:
         """
         GET /api/v2/files/[file_path]
@@ -309,7 +324,9 @@ class FileManagerResource(Resource):
         # 是目录：返回目录列表
         if os.path.isdir(target_path):
             if args.search:
-                return storage.search(target_path, args.search, detailed=args["metadata"]), 200
+                return storage.search(
+                    target_path, args.search, detailed=args["metadata"]
+                ), 200
             else:
                 return storage.ls(target_path, detailed=args["metadata"]), 200
 
@@ -383,9 +400,7 @@ class FileManagerResource(Resource):
             return {"error": "需要提供 name 或 path 参数"}, 400
 
         try:
-            move_data = storage.mv(
-                file_path, data.get("name"), data.get("path")
-            )
+            move_data = storage.mv(file_path, data.get("name"), data.get("path"))
             old_rel_path = move_data["old_relative_path"]
             new_rel_path = move_data["new_info"]["relative_path"]
         except ValueError as e:
@@ -408,6 +423,7 @@ class FileManagerResource(Resource):
             synchronize_session=False,
         )
         db_session.commit()
+        db_session.close()
 
         return move_data["new_info"], 200
 
@@ -427,7 +443,12 @@ class FileManagerResource(Resource):
             return {"error": f"删除失败：{str(e)}"}, 500
 
 
-def apply_resources(api):
+def apply_resources(api) -> None:
+    """Register all API resources with Flask-RESTful
+
+    :param api: Flask-RESTful API instance
+    :type api: Api
+    """
     api.add_resource(
         DatasetResource, "/api/v2/datasets", "/api/v2/datasets/<string:resource_id>"
     )
@@ -462,11 +483,11 @@ def apply_resources(api):
         "/api/v2/files/",
         "/api/v2/files/<path:file_path>",
     )
-    
-    
-app.route('/api/v2/worker/logs/<task_id>')(log_stream)
+
+
+app.route("/api/v2/worker/logs/<task_id>")(log_stream)
 
 
 @app.teardown_appcontext
-def shutdown_session(exception=None):
-    db_session.remove()  # 关键：防止连接泄露
+def shutdown_session(exception=None) -> None:
+    db_session.remove()

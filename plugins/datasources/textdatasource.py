@@ -4,10 +4,11 @@ Data Source from File Patterns
 """
 
 import codecs
+from typing import Iterable
 
 from jindai.models import Paragraph
-from jindai.storage import instance as storage
 from jindai.pipeline import DataSourceStage, PipelineStage
+from jindai.storage import instance as storage
 
 
 class FilePatternDataSource(DataSourceStage):
@@ -16,7 +17,7 @@ class FilePatternDataSource(DataSourceStage):
     @zhs 文件名模式匹配数据源
     """
 
-    def apply_params(self, content=""):
+    def apply_params(self, content="") -> None:
         """File Pattern Data Source
 
         :param content: Patterns
@@ -25,9 +26,12 @@ class FilePatternDataSource(DataSourceStage):
         """
         self.paths = PipelineStage.parse_paths(content)
 
-    def fetch(self):
+    def fetch(self) -> Iterable:
         for path in self.paths:
             yield Paragraph(content=path)
+
+
+from typing import Iterable
 
 
 class TextDataSource(DataSourceStage):
@@ -36,7 +40,7 @@ class TextDataSource(DataSourceStage):
     @zhs 从文本文件中读取语段
     """
 
-    def apply_params(self, dataset_name='', lang='auto', content=''):
+    def apply_params(self, dataset_name='', lang='auto', content='') -> None:
         """
         Args:
             dataset_name (DATASET):
@@ -53,12 +57,15 @@ class TextDataSource(DataSourceStage):
         self.lang = lang
         self.files = PipelineStage.parse_paths(content)
 
-    def fetch(self):
+    def fetch(self) -> Iterable:
         for path in self.files:
             for i, line in enumerate(storage.open(path)):
                 yield Paragraph(content=codecs.decode(line),
                                 source_url=path if '://' in path else storage.relative_path(path),
                                 dataset=self.name, lang=self.lang, outline=f'{i+1:06d}')
+
+
+from typing import Iterable
 
 
 class LinesDataSource(DataSourceStage):
@@ -67,7 +74,7 @@ class LinesDataSource(DataSourceStage):
     @zhs 从直接输入的文本中获得语段，每行一个语段
     """
 
-    def apply_params(self, dataset_name='', lang="auto", content="", params=None, delimiter='\n'):
+    def apply_params(self, dataset_name='', lang="auto", content="", params=None, delimiter='\n') -> None:
         """
         Args:
             dataset_name (DATASET):
@@ -91,10 +98,13 @@ class LinesDataSource(DataSourceStage):
         self.lines = content.split(delimiter)
         self.params = params or {}
 
-    def fetch(self):
+    def fetch(self) -> Iterable:
         self.params.pop('contnet', '')
         for line in self.lines:
             yield Paragraph(lang=self.lang, dataset=self.name, content=line)
+
+
+from typing import Iterable, Iterator
 
 
 class BiblioDataSource(DataSourceStage):
@@ -127,7 +137,7 @@ class BiblioDataSource(DataSourceStage):
         self.lang = lang
         self.files = PipelineStage.parse_paths(content)
 
-    def endnote(self, lines):
+    def endnote(self, lines) -> Iterator:
         """"Parse EndNote format"""
 
         doc = {
@@ -182,6 +192,6 @@ class BiblioDataSource(DataSourceStage):
         if doc:
             yield Paragraph.from_dict(dict(dataset=self.dataset, **doc))
 
-    def fetch(self):
+    def fetch(self) -> Iterable:
         for file in self.files:
             yield from self.method(file)

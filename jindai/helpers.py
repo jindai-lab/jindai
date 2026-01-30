@@ -4,7 +4,6 @@ import gc
 import glob
 import importlib
 import os
-import regex as re
 import subprocess
 import sys
 import threading
@@ -14,6 +13,8 @@ from typing import Dict, Type
 
 import jieba3
 import nltk.stem.snowball
+import numpy as np
+import regex as re
 import torch
 from sentence_transformers import SentenceTransformer
 
@@ -26,7 +27,7 @@ class AutoUnloadSentenceTransformer:
     核心机制：超过指定空闲时间（默认5分钟）无调用，自动卸载模型释放内存/显存
     """
 
-    def __init__(self, model_name_or_path: str, idle_timeout: int = 300):
+    def __init__(self, model_name_or_path: str, idle_timeout: int = 300) -> None:
         """
         初始化模型管理器
         :param model_name_or_path: 模型名称(如all-MiniLM-L6-v2)或本地模型路径，与SentenceTransformer一致
@@ -43,10 +44,11 @@ class AutoUnloadSentenceTransformer:
         # 启动空闲监控线程（后台守护线程，随主线程退出）
         self._start_monitor()
 
-    def _start_monitor(self):
+    def _start_monitor(self) -> None:
         """启动模型空闲监控后台线程"""
 
         def monitor_loop():
+            """Monitor model usage and unload when idle timeout is reached"""
             while not self._stop_monitor:
                 time.sleep(10)  # 每10秒检测一次，降低CPU占用
                 with self.lock:
@@ -60,16 +62,14 @@ class AutoUnloadSentenceTransformer:
         self._monitor_thread = threading.Thread(target=monitor_loop, daemon=True)
         self._monitor_thread.start()
 
-    def _load_model(self):
+    def _load_model(self) -> None:
         """加载模型"""
         if self.model is None:
-            self.model = SentenceTransformer(
-                self.model_name_or_path, local_files_only=True
-            )
+            self.model = SentenceTransformer(self.model_name_or_path)
         # 每次加载/复用，都更新最后使用时间
         self.last_used_time = time.time()
 
-    def _unload_model(self):
+    def _unload_model(self) -> None:
         """卸载模型，彻底释放内存+显存"""
         if self.model is not None:
             print(f"[自动卸载] 模型空闲超{self.idle_timeout}秒，开始释放资源...")
@@ -87,7 +87,7 @@ class AutoUnloadSentenceTransformer:
 
             print(f"[自动卸载] 模型资源释放完成")
 
-    def encode(self, sentences, **kwargs):
+    def encode(self, sentences, **kwargs) -> np.ndarray:
         """
         封装原生encode方法，无缝调用
         :param sentences: 单句/句子列表，与原生一致
@@ -115,11 +115,16 @@ class AutoUnloadSentenceTransformer:
             self.last_used_time = time.time()
             return embeddings
 
-    def __del__(self):
+    def __del__(self) -> None:
         """对象销毁时，主动卸载模型+停止监控线程"""
         self._stop_monitor = True
         with self.lock:
             self._unload_model()
+
+
+from typing import Any
+
+from nltk.stem.snowball import SnowballStemmer
 
 
 class WordStemmer:
@@ -150,7 +155,7 @@ class WordStemmer:
     }
 
     @staticmethod
-    def get_stemmer(lang):
+    def get_stemmer(lang: str) -> SnowballStemmer:
         """Get stemmer for language"""
         stemmer = nltk.stem.snowball.SnowballStemmer
         lang = WordStemmer._language_names.get(lang, lang)
@@ -172,18 +177,18 @@ class WordStemmer:
         tokens = [WordStemmer.get_stemmer(lang).stem(_) for _ in tokens]
         return tokens
 
-    def stem_from_params(self, word, lang="en"):
+    def stem_from_params(self, word, lang="en") -> dict[str, Any]:
         """Add stem() function for query"""
-        assert isinstance(lang, str) and isinstance(
-            word, str
-        ), f"Parameter type error for stem function: got {type(word)} and {type(lang)}"
+        assert isinstance(lang, str) and isinstance(word, str), (
+            f"Parameter type error for stem function: got {type(word)} and {type(lang)}"
+        )
         return {"keywords": self.stem_tokens(lang, [word])[0]}
 
 
 _pip_lock = Lock()
 
 
-def safe_import(module_name, package_name=""):
+def safe_import(module_name: str, package_name: str = ""):
     """
     Import a module and if it's not installed install it.
 

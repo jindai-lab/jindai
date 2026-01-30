@@ -4,20 +4,22 @@
 import hashlib
 import json
 import random
-import regex as re
 import time
-import uuid
 import urllib
+import uuid
 from hashlib import md5
+from typing import Iterator
 
+import regex as re
 import requests
 from opencc import OpenCC
+
 from jindai import PipelineStage, Plugin
 from jindai.helpers import safe_import
 from jindai.models import Paragraph
 
 
-def split_chunks(content, max_len=5000):
+def split_chunks(content, max_len=5000) -> Iterator:
     """Split content into chunks of no more than `max_len` characters"""
     while len(content) > max_len:
         res = re.match(r'.*[\.\?!。？！”’\'\"]', content)
@@ -53,7 +55,7 @@ class RemoteTranslation(PipelineStage):
         self.to_lang = to_lang if to_lang not in ('zhs', 'zht') else 'zh'
         self.convert = OpenCC('s2t' if to_lang == 'zht' else 't2s').convert
 
-    def resolve(self, paragraph):
+    def resolve(self, paragraph) -> None:
         """Translate the paragraph
         """
         result = ''
@@ -99,7 +101,7 @@ class YoudaoTranslation(PipelineStage):
     @zhs 有道云机器翻译（付费）
     """
 
-    def __init__(self, api_id, api_key, to_lang='zhs'):
+    def __init__(self, api_id, api_key, to_lang='zhs') -> None:
         """
         :param api_id: Youdao API ID
         :type api_id: str
@@ -113,7 +115,7 @@ class YoudaoTranslation(PipelineStage):
         self.api_id, self.api_key = api_id, api_key
         self.to_lang = to_lang
 
-    def resolve(self, paragraph: Paragraph):
+    def resolve(self, paragraph: Paragraph) -> None:
 
         def _regulate_lang(lang):
             if lang in ('zhs', 'zht'):
@@ -160,7 +162,7 @@ class BaiduTranslation(PipelineStage):
     @zhs 百度云机器翻译
     """
 
-    def __init__(self, to_lang='zhs', api_key='', api_id=''):
+    def __init__(self, to_lang='zhs', api_key='', api_id='') -> None:
         """
         :param to_lang: Target language
             @zhs 目标语言
@@ -213,7 +215,7 @@ class QCloudTranslation(PipelineStage):
     @zhs 腾讯云机器翻译
     """
 
-    def __init__(self, to_lang='zhs', api_key='', api_id=''):
+    def __init__(self, to_lang='zhs', api_key='', api_id='') -> None:
         """
         :param to_lang: Target language
             @zhs 目标语言
@@ -232,10 +234,11 @@ class QCloudTranslation(PipelineStage):
 
     def resolve(self, paragraph: Paragraph):
         from tencentcloud.common import credential
+        from tencentcloud.common.exception.tencent_cloud_sdk_exception import \
+            TencentCloudSDKException
         from tencentcloud.common.profile.client_profile import ClientProfile
         from tencentcloud.common.profile.http_profile import HttpProfile
-        from tencentcloud.common.exception.tencent_cloud_sdk_exception import TencentCloudSDKException
-        from tencentcloud.tmt.v20180321 import tmt_client, models
+        from tencentcloud.tmt.v20180321 import models, tmt_client
 
         try:
             # "xxxx"改为SecretId，"yyyyy"改为SecretKey
@@ -268,7 +271,7 @@ class DeeplxTranslation(PipelineStage):
     """DeepLx translation
     @zhs 基于 DeepLx 的机器翻译"""
 
-    def __init__(self, to_lang='zhs'):
+    def __init__(self, to_lang='zhs') -> None:
         """
         :param to_lang: Target language
             @zhs 目标语言
@@ -325,7 +328,7 @@ class DeeplxTranslation(PipelineStage):
         response = requests.post(url, headers=headers, data=reqBody)
         return response.json()
 
-    def resolve(self, paragraph: Paragraph):
+    def resolve(self, paragraph: Paragraph) -> None:
         paragraph.original = paragraph.content
         paragraph.content = self.deeplx(paragraph.content, paragraph.lang[:2])
 
@@ -335,7 +338,7 @@ class GPTTranslation(PipelineStage):
     @zhs 基于 GPT 的机器翻译
     """
 
-    def __init__(self, endpoint='', prompt='', schema='messages'):
+    def __init__(self, endpoint='', prompt='', schema='messages') -> None:
         """
         Args:
             endpoint (str):
@@ -355,7 +358,7 @@ class GPTTranslation(PipelineStage):
         self.schema = schema
         super().__init__()
 
-    def call(self, message):
+    def call(self, message) -> str:
         if message == 'test':
             return 'test'
         resp = requests.post(self.endpoint, json={self.schema: [{
@@ -365,7 +368,7 @@ class GPTTranslation(PipelineStage):
         assert resp and resp['success'], f'Failed with response: {resp}'
         return resp['choices'][0]['message']['content']
 
-    def resolve(self, paragraph: Paragraph):
+    def resolve(self, paragraph: Paragraph) -> Paragraph:
         text = self.prompt.format(**paragraph.as_dict()).strip()
         text = self.call(text)
         return Paragraph(paragraph, content=text)
@@ -384,7 +387,7 @@ class GoogleTranslation(PipelineStage):
         self.to_lang = to_lang
         super().__init__()
 
-    def translate(self, lang_from, lang_to, text):
+    def translate(self, lang_from, lang_to, text) -> str:
         def TL(a):
             k = ""
             b = 406644
@@ -497,6 +500,6 @@ class MachineTranslationPlugin(Plugin):
     """Plugin for machin translations
     """
 
-    def __init__(self, pmanager, **config):
+    def __init__(self, pmanager, **config) -> None:
         super().__init__(pmanager, **config)
         self.register_pipelines(globals())

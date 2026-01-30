@@ -4,14 +4,13 @@ import os
 import sys
 from collections import defaultdict
 
-from flask import Response, send_file, jsonify
+from flask import Response, jsonify, send_file
 
-from .app import app, config, api
+from .app import api, app, config
 from .helpers import get_context
 from .pipeline import Pipeline
 from .plugin import Plugin, PluginManager
 from .resources import apply_resources
-
 
 apply_resources(api)
 
@@ -36,7 +35,7 @@ def help_info():
 
 @app.route("/<path:path>", methods=["GET"])
 @app.route("/", methods=["GET"])
-def index(path="index.html"):
+def index(path="index.html") -> tuple[str, int] | Response:
     """Serve static files"""
 
     if path.startswith("api/"):
@@ -49,7 +48,7 @@ def index(path="index.html"):
     return "Not found for " + path, 404
 
 
-def prepare_plugins():
+def prepare_plugins() -> PluginManager:
     """Prepare plugins"""
     if os.path.exists("restarting"):
         os.unlink("restarting")
@@ -66,12 +65,12 @@ def get_plugins():
 plugins = prepare_plugins()
 
 
-def run_service(host="0.0.0.0", port=8370):
+def run_service(host="0.0.0.0", port=8370) -> None:
     """Run API web service. Must run `prepare_plugins` first.
 
     :param host: Host, defaults to '0.0.0.0'
     :type host: str, optional
-    :param port: Port, defaults to None
+    :param port: Port, defaults to 8370
     :type port: int, optional
     """
     if port is None:

@@ -1,25 +1,25 @@
 """DB Objects"""
 
 import json
-import regex as re
 import uuid
 from datetime import datetime
 from functools import wraps
 from typing import Any, Dict, List
 
 import redis
+import regex as re
 from pgvector.sqlalchemy import Vector
 from sqlalchemy import (Boolean, DateTime, ForeignKey, Index, Integer, String,
                         Text, UniqueConstraint, asc, create_engine, desc,
                         exists, or_, select, text, update)
 from sqlalchemy.dialects.postgresql import ARRAY, JSONB, UUID
-from sqlalchemy.orm import (Mapped, declarative_base, mapped_column, validates,
-                            relationship, scoped_session, sessionmaker)
+from sqlalchemy.orm import (Mapped, declarative_base, mapped_column,
+                            relationship, scoped_session, sessionmaker,
+                            validates)
 from sqlalchemy.sql import func
 
 from .config import instance as config
 from .helpers import AutoUnloadSentenceTransformer, jieba
-
 
 engine = create_engine(config.database)
 with engine.connect() as conn:
@@ -44,7 +44,7 @@ class Base(MBase):
         UUID(as_uuid=True), primary_key=True, default=uuid.uuid4, comment="主键ID"
     )
 
-    def as_dict(self):
+    def as_dict(self) -> dict:
         data = {}
         for column in self.__table__.columns:
             value = getattr(self, column.name)
@@ -97,12 +97,19 @@ class Dataset(Base):
         if ds is None and auto_create:
             ds = Dataset(name=name)
             db_session.add(ds)
-            db_session.commit()
+            try_commit()
         return ds
 
     def rename_dataset(self, new_name):
+        """Rename dataset and update all related paragraphs
+
+        :param new_name: New dataset name
+        :type new_name: str
+        :return: Dataset ID
+        :rtype: uuid.UUID
+        """
         if self.name == new_name:
-            return
+            return None
         ds = Dataset.get(new_name)
         if ds:
             stmt = (
@@ -114,11 +121,16 @@ class Dataset(Base):
             db_session.delete(self)
         else:
             self.name = new_name
-        db_session.commit()
+        try_commit()
         return self.id
 
     @staticmethod
-    def get_hierarchy():
+    def get_hierarchy() -> list:
+        """Get hierarchical structure of datasets
+
+        :return: Nested list representing dataset hierarchy
+        :rtype: list
+        """
 
         def _dataset_sort_key(ds: Dataset):
             return len(ds.name.split("--")), ds.order_weight, ds.name
@@ -236,66 +248,76 @@ class Paragraph(Base):
         UUID(as_uuid=True),
         ForeignKey("dataset.id"),
         nullable=False,
-        comment="关联数据集ID"
+        comment="关联数据集ID",
     )
     keywords: Mapped[List[str] | None] = mapped_column(
         ARRAY(Text), comment="关键词列表"
     )
 
     dataset_obj: Mapped["Dataset"] = relationship(
-        "Dataset", back_populates="paragraphs",
-        lazy='joined'
+        "Dataset", back_populates="paragraphs", lazy="joined"
     )
     text_embeddings: Mapped[List["TextEmbeddings"]] = relationship(
         "TextEmbeddings", back_populates="paragraph", cascade="all, delete-orphan"
     )
-    
-    @validates('keywords')
-    def normalize_keywords(self, key, val):
+
+    @validates("content")
+    def normalize_content(self, key, val):
+        return val.replace("\x00", "")
+
+    @validates("keywords")
+    def normalize_keywords(self, key, val) -> list:
         if val:
             val = list({v.strip().lower() for v in val if v.strip()})
         return val
 
     @staticmethod
-    def from_dict(data, ignored_fields=['id', 'dataset_name']):
+    def from_dict(data, ignored_fields=["id", "dataset_name"]) -> "Paragraph":
         p = Paragraph()
         for k, v in data.items():
-            if k in ignored_fields: continue
-            if hasattr(p, k): setattr(p, k, v)
-            else: 
-                if p.extdata is None: p.extdata = {}
+            if k in ignored_fields:
+                continue
+            if hasattr(p, k):
+                setattr(p, k, v)
+            else:
+                if p.extdata is None:
+                    p.extdata = {}
                 p.extdata[k] = v
         return p
 
     def __getitem__(self, key):
-        if hasattr(self, key): return getattr(self, key)
+        if hasattr(self, key):
+            return getattr(self, key)
         else:
-            if self.extdata is None: self.extdata = {}
+            if self.extdata is None:
+                self.extdata = {}
             return self.extdata.get(key)
-    
-    def __setitem__(self, key, val):
-        if hasattr(self, key): setattr(self, key, val)
-        else: 
-            if self.extdata is None: self.extdata = {}
+
+    def __setitem__(self, key, val) -> None:
+        if hasattr(self, key):
+            setattr(self, key, val)
+        else:
+            if self.extdata is None:
+                self.extdata = {}
             self.extdata[key] = val
-            
-    def __delitem__(self, key):
+
+    def __delitem__(self, key) -> None:
         if key in self.extdata:
             del self.extdata[key]
-            
-    def as_dict(self):
+
+    def as_dict(self) -> dict:
         data = super().as_dict()
-        data['dataset_name'] = self.dataset_obj.name if self.dataset_obj else None
+        data["dataset_name"] = self.dataset_obj.name if self.dataset_obj else None
         return data
-    
+
     @staticmethod
     def build_query(query_data):
         query = select(Paragraph)
         filters = []
 
-        search = query_data.get('search', '*')
-        
-        if ids := query_data.get('ids'):
+        search = query_data.get("search", "*")
+
+        if ids := query_data.get("ids"):
             filters.append(Paragraph.id.in_(ids))
 
         if datasets := query_data.get("datasets"):
@@ -306,7 +328,7 @@ class Paragraph(Base):
                 Paragraph.dataset.in_(
                     [
                         _
-                        for _, in db_session.query(Dataset)
+                        for (_,) in db_session.query(Dataset)
                         .filter(or_(*dataset_filters))
                         .with_entities(Dataset.id)
                         .all()
@@ -328,12 +350,12 @@ class Paragraph(Base):
             param = text(search[1:])
             filters.append(param)
         elif search.startswith("*"):
-            search = search.strip('*')
+            search = search.strip("*")
             if search:
                 param = Paragraph.content.ilike(f"%{search}%")
                 filters.append(param)
         elif search.startswith(":") or query_data.get("embeddings"):
-            if 'total' not in query_data:
+            if "total" not in query_data:
                 query_embedding = TextEmbeddings.get_embedding(search.strip(":"))
                 sub_stmt = (
                     select(
@@ -357,9 +379,9 @@ class Paragraph(Base):
         query = query.filter(*filters)
 
         if sort_string := query_data.get("sort", ""):
-            assert isinstance(
-                sort_string, (list, str)
-            ), "Sort must be list of strings or a string seperated by commas"
+            assert isinstance(sort_string, (list, str)), (
+                "Sort must be list of strings or a string seperated by commas"
+            )
             if isinstance(sort_string, list):
                 sort_string = ",".join(sort_string)
 
@@ -437,6 +459,13 @@ class TaskDBO(Base):
 
     @staticmethod
     def get(id_or_name):
+        """Get TaskDBO by ID or name
+
+        :param id_or_name: UUID string or name to search for
+        :type id_or_name: str
+        :return: TaskDBO instance or None
+        :rtype: TaskDBO | None
+        """
         query = db_session.query(TaskDBO)
         if is_uuid_literal(id_or_name):
             return query.get(uuid.UUID(id_or_name))
@@ -444,7 +473,7 @@ class TaskDBO(Base):
             return query.filter(TaskDBO.name.contains(id_or_name)).first()
 
 
-redis_client = redis.Redis.from_url(config.redis.rstrip('/') + '/2')
+redis_client = redis.Redis.from_url(config.redis.rstrip("/") + "/2")
 
 
 # 缓存核心配置（可根据业务灵活修改）
@@ -487,12 +516,12 @@ def redis_auto_renew_cache(cache_key=None):
         2. 关键字参数拼接时会做排序，保证入参顺序不同但内容一致时生成相同key；
         3. 若自定义cache_key函数返回空值，则跳过缓存逻辑，直接执行原函数。
     """
-    
+
     def decorator(func):
         func.cache_key_method = cache_key
+
         @wraps(func)  # 保留原函数的属性（函数名、注释等）
         def wrapper(*args, **kwargs):
-            
             if func.cache_key_method is not None:
                 cache_key = f"{func.cache_key_method(*args, **kwargs) or ''}"
             else:
@@ -501,7 +530,7 @@ def redis_auto_renew_cache(cache_key=None):
                 cache_key = f"{args_str}_{kwargs_str}"
 
             if cache_key:
-                cache_key = f'{CACHE_KEY_PREFIX}{func.__name__}_{cache_key}'
+                cache_key = f"{CACHE_KEY_PREFIX}{func.__name__}_{cache_key}"
                 cached_data = redis_client.get(cache_key)
                 if cached_data is not None:
                     redis_client.expire(cache_key, CACHE_EXPIRE_SECONDS)
@@ -526,7 +555,7 @@ def redis_auto_renew_cache(cache_key=None):
 
 class TextEmbeddings(Base):
     embedding_model = AutoUnloadSentenceTransformer(config.embedding_model)
-    
+
     __tablename__ = "text_embeddings"
     __table_args__ = (
         Index(
@@ -581,12 +610,12 @@ class TextEmbeddings(Base):
             text.strip(),
             convert_to_numpy=True,  # 返回numpy数组，方便后续处理
             normalize_embeddings=True,  # 归一化向量，提升检索效果
-        ).half()
+        )
 
         return embedding.tolist()
 
     @staticmethod
-    def get_embedding_chunks(text: str, chunk_length: int, overlap: int):
+    def get_embedding_chunks(text: str, chunk_length: int, overlap: int) -> list:
         """
         长文本切分+批量生成embedding向量，带重叠窗口避免语义割裂
         Args:
@@ -634,7 +663,14 @@ class TextEmbeddings(Base):
         return embeddings.tolist()
 
 
-def is_uuid_literal(val: str):
+def is_uuid_literal(val: str) -> bool:
+    """Check if string is a valid UUID literal
+
+    :param val: String to check
+    :type val: str
+    :return: True if string is valid UUID format
+    :rtype: bool
+    """
     return (
         re.match(
             r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
@@ -642,3 +678,17 @@ def is_uuid_literal(val: str):
         )
         is not None
     )
+
+
+def try_commit() -> None:
+    """Commit database session with error handling
+
+    :raises Exception: Re-raises any exception during commit
+    """
+    try:
+        db_session.commit()
+    except Exception as e:
+        db_session.rollback()
+        raise e
+    finally:
+        db_session.close()

@@ -3,12 +3,13 @@
 import ctypes
 import datetime
 import time
-import uuid
 import traceback
+import uuid
 from collections import deque
 from queue import PriorityQueue
 from threading import Lock, Thread
 from typing import Callable
+
 from tqdm import tqdm
 
 from .models import Paragraph, db_session
@@ -16,18 +17,36 @@ from .pipeline import Pipeline
 
 
 class WorkersPool:
-    
     def __init__(self, workers: int, interval: float = 0.1) -> None:
+        """Initialize workers pool
+
+        :param workers: Number of worker threads
+        :type workers: int
+        :param interval: Sleep interval when pool is full, defaults to 0.1
+        :type interval: float, optional
+        """
         self.workers = workers
         self._threads = {}
         self._lock = Lock()
         self._read_lock = Lock()
         self._interval = interval
-        
-    def count(self):
+
+    def count(self) -> int:
+        """Get current number of running threads
+
+        :return: Number of active threads
+        :rtype: int
+        """
         return len(self._threads)
-        
-    def submit(self, func, *args, **kwargs):
+
+def submit(self, func, *args, **kwargs) -> None:
+        """Submit a function to be executed by a worker thread
+
+        :param func: Function to execute
+        :type func: Callable
+        :param args: Positional arguments for the function
+        :param kwargs: Keyword arguments for the function
+        """
         tid = uuid.uuid4()
         
         def _func():
@@ -42,8 +61,9 @@ class WorkersPool:
             self._threads[tid] = thr
         
         thr.start()
-            
-    def stop(self):
+
+def stop(self) -> None:
+        """Stop all worker threads forcefully"""
         
         def _terminate_thread(thread, exc_type = SystemExit):
             if not thread.is_alive():
@@ -60,17 +80,26 @@ class WorkersPool:
             
         for thr in list(self._threads.values()):
             _terminate_thread(thr)
-            
-    def debug_print(self):
-        print('running threads:', self.count())
-        print(' ', '\n  '.join(map(str, self._threads.keys())))
-        
+
+        def debug_print(self) -> None:
+            """Print debug information about running threads"""
+            print("running threads:", self.count())
+            print(" ", "\n  ".join(map(str, self._threads.keys())))
+
 
 class Task:
     """Task object"""
 
-    def __init__(self, params: dict, stages, concurrent=3, log: Callable = None,
-                 resume_next: bool = False, verbose: bool = False, use_tqdm: bool = True) -> None:
+    def __init__(
+        self,
+        params: dict,
+        stages,
+        concurrent=3,
+        log: Callable = None,
+        resume_next: bool = False,
+        verbose: bool = False,
+        use_tqdm: bool = True,
+    ) -> None:
         """Initialize the task object
 
         :param params: Parameters, used as the first paragraph/input to the pipeline
@@ -103,10 +132,17 @@ class Task:
 
         self._pbar = tqdm()
         self._queue = PriorityQueue()
-        
+
         self._workers = None
-         
-    def _thread_execute(self, priority, fc):
+
+    def _thread_execute(self, priority, fc) -> None:
+        """Execute a single pipeline stage in a thread
+
+        :param priority: Priority level for the task
+        :type priority: int
+        :param fc: Tuple containing input paragraph and stage
+        :type fc: tuple
+        """
         input_paragraph, stage = fc
 
         self._pbar.update(1)
@@ -130,33 +166,38 @@ class Task:
             self.log_exception('Error while executing', ex)
             if not self.resume_next:
                 self.alive = False
-                
-    def print(self, *args):
+
+    def print(self, *args) -> None:
+        """Append log message to logs queue
+
+        :param args: Log message arguments
+        """
         self.logs.append(args)
 
-    def execute(self):
+    def execute(self) -> dict[str, str | list] | None:
         """Execute the task
         :return: Summarized result, or exception in execution
         :rtype: dict
         """
-        
+
         self._queue = PriorityQueue()
         self._workers = WorkersPool(self.concurrent)
         self._pbar.reset()
-        
+
         self.pipeline.gctx = {}
-        
+
         try:
             if self.pipeline.stages:
-                self._queue.put((0, 0, (Paragraph.from_dict(self.params),
-                                  self.pipeline.stages[0])))
+                self._queue.put(
+                    (0, 0, (Paragraph.from_dict(self.params), self.pipeline.stages[0]))
+                )
                 self._pbar.n += 1
 
                 while self.alive:
                     while self.logs:
                         log = self.logs.popleft()
                         print(*log)
-                        
+
                     if self._queue.empty():
                         if self._workers.count() > 0:
                             time.sleep(0.1)
@@ -168,17 +209,17 @@ class Task:
                         else:
                             priority, _, job = self._queue.get()
                             self._workers.submit(self._thread_execute, priority, job)
-            
+
             if self.alive:
                 return self.pipeline.summarize()
         except KeyboardInterrupt:
             self.alive = False
         except Exception as ex:
             self.alive = False
-            self.log_exception('Error while executing task', ex)
+            self.log_exception("Error while executing task", ex)
             return {
-                '__exception__': str(ex),
-                '__tracestack__': traceback.format_tb(ex.__traceback__)
+                "__exception__": str(ex),
+                "__tracestack__": traceback.format_tb(ex.__traceback__),
             }
         finally:
             for log in self.logs:
@@ -187,18 +228,25 @@ class Task:
 
         return None
 
-    def log_exception(self, info, exc):
+    def log_exception(self, info, exc) -> None:
+        """Log exception information with traceback
+
+        :param info: Information about where the error occurred
+        :type info: str
+        :param exc: Exception object
+        :type exc: Exception
+        """
         self.log(info, type(exc).__name__, exc)
-        self.log('\n'.join(traceback.format_tb(exc.__traceback__)))
-        
-    def stop(self):
+        self.log("\n".join(traceback.format_tb(exc.__traceback__)))
+
+    def stop(self) -> None:
         """Stop task"""
         self.alive = False
-        if self._workers: 
+        if self._workers:
             self._workers.stop()
 
     @staticmethod
-    def from_dbo(dbo, **kwargs):
+    def from_dbo(dbo, **kwargs) -> "Task":
         """Get task from TaskDBO
 
         :param dbo: TaskDBO
@@ -206,15 +254,18 @@ class Task:
         :return: task object according to DBO
         :rtype: Task
         """
-        
+
         if dbo.pipeline:
             dbo.last_run = datetime.datetime.now()
             db_session.commit()
-            
-            return Task(params={},
-                        stages=dbo.pipeline,
-                        concurrent=dbo.concurrent,
-                        resume_next=dbo.resume_next,
-                        **kwargs)
+            db_session.close()
+
+            return Task(
+                params={},
+                stages=dbo.pipeline,
+                concurrent=dbo.concurrent,
+                resume_next=dbo.resume_next,
+                **kwargs,
+            )
         else:
             return Task({}, [])

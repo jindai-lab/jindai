@@ -1,11 +1,13 @@
 """TF/IDF"""
 
+import math
 from collections import defaultdict
-from .basics import Counter
+from typing import Dict
+
 from jindai import *
 from jindai.models import Paragraph
 
-import math
+from .basics import Counter
 
 
 class TermFreq(PipelineStage):
@@ -13,18 +15,21 @@ class TermFreq(PipelineStage):
     @zhs 词频统计
     """
 
-    def __init__(self):
+    def __init__(self) -> None:
         self.tf = defaultdict(list)
         self.result = {}
 
-    def resolve(self, p: Paragraph):
+    def resolve(self, p: Paragraph) -> None:
         for w in p.tokens:
             self.tf[w].append(p)
 
-    def summarize(self, returned):
+    def summarize(self, returned) -> Dict:
         final_words = sorted([{'word': k, 'count': len(v), 'paragraphs': v}
                              for k, v in self.tf.items()], key=lambda x: x['count'], reverse=True)
         return final_words
+
+
+from typing import Dict
 
 
 class TFIDFWordFetch(PipelineStage):
@@ -32,7 +37,7 @@ class TFIDFWordFetch(PipelineStage):
     @zhs 基于TFIDF的词汇抽取，需要先分词或产生 tokens 字段
     """
 
-    def __init__(self, min_df=1e-3):
+    def __init__(self, min_df=1e-3) -> None:
         """
         Args:
             min_df (float, optional): 最小的文档频率
@@ -43,14 +48,14 @@ class TFIDFWordFetch(PipelineStage):
         self.tf = Counter()
         self.result = {}
 
-    def resolve(self, p: Paragraph):
+    def resolve(self, p: Paragraph) -> None:
         self.docs[''].inc()
         for w in p.tokens:
             self.tf[w].inc()
         for w in set(p.tokens):
             self.df[w].append(p)
 
-    def summarize(self, returned):
+    def summarize(self, returned) -> Dict:
         self.tf = self.tf.as_dict()
         num_docs = self.docs.as_dict()['']
         min_df = self.min_df * num_docs

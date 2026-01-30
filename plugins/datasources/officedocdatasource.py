@@ -7,9 +7,10 @@ import tempfile
 from typing import Iterable
 
 import pandas as pd
-from jindai.storage import instance as storage
-from jindai.models import Paragraph, Dataset
+
+from jindai.models import Dataset, Paragraph
 from jindai.pipeline import DataSourceStage, PipelineStage
+from jindai.storage import instance as storage
 
 
 class WordDataSource(DataSourceStage):
@@ -18,7 +19,7 @@ class WordDataSource(DataSourceStage):
     @zhs 从Word文档中导入语段
     """
 
-    def apply_params(self, dataset_name='', lang='auto', content=''):
+    def apply_params(self, dataset_name='', lang='auto', content='') -> None:
         """
         Args:
             dataset_name (DATASET): 
@@ -45,7 +46,7 @@ class WordDataSource(DataSourceStage):
             os.unlink(filename)
             return res
 
-    def fetch(self):
+    def fetch(self) -> Iterable:
         for file in self.files:
             doc = self.call_abiword(file)
             if doc:

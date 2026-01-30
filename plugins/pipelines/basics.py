@@ -1,7 +1,6 @@
 """基本操作"""
 
 import json
-import regex as re
 import statistics
 import string
 from collections import defaultdict, deque
@@ -10,13 +9,15 @@ from itertools import chain
 from itertools import count as iter_count
 
 import many_stop_words
-import textrank4zh
 import pandas
+import regex as re
+import textrank4zh
 
 from jindai import Pipeline, PipelineStage, storage
 from jindai.app import aeval
-from jindai.helpers import WordStemmer as _Stemmer, safe_import, jieba
-from jindai.models import Dataset, Paragraph, db_session
+from jindai.helpers import WordStemmer as _Stemmer
+from jindai.helpers import jieba, safe_import
+from jindai.models import Dataset, Paragraph, db_session, try_commit
 from jindai.worker import add_task
 
 
@@ -33,7 +34,7 @@ class FilterOut(PipelineStage):
     @zhs 截止当前处理的段落
     """
 
-    def __init__(self, cond='true'):
+    def __init__(self, cond='true') -> None:
         """
         Arg:
             cond (QUERY): Condition
@@ -41,7 +42,7 @@ class FilterOut(PipelineStage):
         """
         self.cond = cond
 
-    def resolve(self, paragraph):
+    def resolve(self, paragraph) -> None:
         ee = aeval(self.cond, paragraph)
         if ee:
             return
@@ -84,7 +85,7 @@ class LanguageDetect(PipelineStage):
 
         return paragraph
 
-    def detect(self, sentence):
+    def detect(self, sentence) -> str:
         """Detect language"""
 
         hanzidentifier = safe_import('hanzidentifier')
@@ -116,7 +117,7 @@ class WordStemmer(PipelineStage):
     @zhs 附加词干到 tokens 中（需要先进行切词）
     """
 
-    def __init__(self, append=True, field='tokens'):
+    def __init__(self, append=True, field='tokens') -> None:
         """
         Args:
             append (bool):
@@ -149,7 +150,7 @@ class LatinTransliterate(PipelineStage):
     @zhs 转写为拉丁字母的单词（需要先进行切词）
     """
 
-    def __init__(self, append=True, field='tokens'):
+    def __init__(self, append=True, field='tokens') -> None:
         """
         Args:
             append (bool):
@@ -166,7 +167,7 @@ class LatinTransliterate(PipelineStage):
         self.supported_languages = transliterate.get_available_language_codes()
         self.translit = transliterate.translit
         
-    def transliterate(self, lang, words):
+    def transliterate(self, lang, words) -> list:
         if lang in self.supported_languages:
             return [self.translit(
                 word, lang, reversed=True).lower() for word in words]
@@ -191,7 +192,7 @@ class WordCut(PipelineStage):
     t2s = safe_import('opencc', 'opencc-python-reimplemented').OpenCC('t2s')
     kks = safe_import('pykakasi').kakasi()
     
-    def __init__(self, for_search=False, field='keywords', **_):
+    def __init__(self, for_search=False, field='keywords', **_) -> None:
         """
         Args:
             for_search (bool): 
@@ -208,7 +209,7 @@ class WordCut(PipelineStage):
         self.trlit = LatinTransliterate(append=True, field=field)
 
     @staticmethod
-    def remove_accents(input_str):
+    def remove_accents(input_str) -> str:
         unicodedata = safe_import('unicodedata')
         nfkd_form = unicodedata.normalize('NFKD', input_str)
         return u"".join([c for c in nfkd_form if not unicodedata.combining(c)])
@@ -307,13 +308,16 @@ class Reparagraph(PipelineStage):
             yield Paragraph.from_dict(data)
 
 
+from typing import Iterator
+
+
 class SplitParagraph(PipelineStage):
     """
     Split paragraphs
     @zhs 拆分语段
     """
 
-    def __init__(self, delimeter='\n'):
+    def __init__(self, delimeter='\n') -> None:
         """
         Args:
             delimeter (str):
@@ -323,7 +327,7 @@ class SplitParagraph(PipelineStage):
         super().__init__()
         self.delimeter = delimeter
 
-    def resolve(self, paragraph: Paragraph):
+    def resolve(self, paragraph: Paragraph) -> Iterator:
         for content in paragraph.content.split(self.delimeter):
             if content:
                 new_paragraph = Paragraph.from_dict(paragraph.as_dict())
@@ -337,7 +341,7 @@ class AccumulateParagraphs(PipelineStage):
     @zhs 聚集段落遍历结果
     """
 
-    def __init__(self, sort=''):
+    def __init__(self, sort='') -> None:
         """
         Args:
             sort (str): Sort by field name
@@ -347,10 +351,10 @@ class AccumulateParagraphs(PipelineStage):
         self.paragraphs = deque()
         self.sort = [_.strip() for _ in sort.split(',') if _]
 
-    def resolve(self, paragraph: Paragraph):
+    def resolve(self, paragraph: Paragraph) -> None:
         self.paragraphs.append(paragraph.as_dict())
         
-    def sorter(self, obj):
+    def sorter(self, obj) -> list:
         class _Rev:
             def __init__(self, val):
                 self.val = val
@@ -367,7 +371,7 @@ class AccumulateParagraphs(PipelineStage):
                     
         return [_rev(obj.get(k.strip('-'), ''), k.startswith('-')) for k in self.sort]
 
-    def summarize(self, _):
+    def summarize(self, _) -> list:
         results = list(self.paragraphs)
         if self.sort:
             results = sorted(results, key=self.sorter)
@@ -396,7 +400,7 @@ class Export(PipelineStage):
         self.format = {'xlsx': 'excel'}.get(output_format, output_format)
         self.limit = limit
 
-    def summarize(self, result):
+    def summarize(self, result) -> dict:
         
         def json_dump(val):
             return json.dumps(val)
@@ -552,18 +556,21 @@ class Counter:
     def __getitem__(self, key):
         return self._d[key]
 
-    def as_dict(self):
+    def as_dict(self) -> dict:
         """Get the dictionary representation of the counter"""
         return {
             k: v.value() for k, v in self._d.items()
         }
 
 
+from typing import Dict
+
+
 class NgramCounter(PipelineStage):
     """N-Gram
     """
 
-    def __init__(self, n: int, lr=False):
+    def __init__(self, n: int, lr=False) -> None:
         """ N-Gram
 
         Args:
@@ -594,7 +601,7 @@ class NgramCounter(PipelineStage):
                     self.ngrams_lefts[word][left].inc()
                     self.ngrams_rights[word][right].inc()
 
-    def summarize(self, _):
+    def summarize(self, _) -> Dict:
         self.ngrams = self.ngrams.as_dict()
         self.ngrams_lefts = {k: v.as_dict()
                              for k, v in self.ngrams_lefts.items()}
@@ -608,7 +615,7 @@ class Limit(PipelineStage):
     @zhs 限制返回的结果数量
     """
 
-    def __init__(self, limit):
+    def __init__(self, limit) -> None:
         """
         Args:
             limit (int):
@@ -631,7 +638,7 @@ class RegexReplace(PipelineStage):
     @zhs 正则表达式匹配并替换
     """
 
-    def __init__(self, pattern, replacement='', plain=False):
+    def __init__(self, pattern, replacement='', plain=False) -> None:
         """
         Args:
             pattern (str):
@@ -660,7 +667,7 @@ class RegexFilter(PipelineStage):
     """
 
     def __init__(self, pattern, target, source='content', match='{0}',
-                 continuous=False, filter_out=False):
+                 continuous=False, filter_out=False) -> None:
         """
         Args:
             pattern (str): Regular expression
@@ -706,7 +713,7 @@ class RegexMatches(PipelineStage):
     @zhs 正则表达式匹配
     """
 
-    def __init__(self, regex, field='content'):
+    def __init__(self, regex, field='content') -> None:
         """
         Args:
             field (str): Field name to match from
@@ -730,7 +737,7 @@ class FieldAssignment(PipelineStage):
     @zhs 将某一个字段的值或输入值保存到另一个字段
     """
 
-    def __init__(self, field, value='', delete_field=False):
+    def __init__(self, field, value='', delete_field=False) -> None:
         """
         Args:
             field (str): Field name
@@ -755,17 +762,20 @@ class FieldAssignment(PipelineStage):
         return paragraph
 
 
+from typing import Dict
+
+
 class DeleteParagraph(PipelineStage):
     """Delete Paragraph from Database
     @zhs 从数据库删除段落
     """
 
-    def resolve(self, paragraph: Paragraph):
+    def resolve(self, paragraph: Paragraph) -> None:
         if paragraph.id:
             db_session.delete(paragraph)
             
-    def summarize(self, _):
-        db_session.commit()
+    def summarize(self, _) -> Dict:
+        try_commit()
 
 
 class SaveParagraph(PipelineStage):
@@ -773,7 +783,7 @@ class SaveParagraph(PipelineStage):
     @zhs 保存
     """
 
-    def __init__(self):
+    def __init__(self) -> None:
         '''
         '''
         super().__init__()
@@ -784,14 +794,14 @@ class SaveParagraph(PipelineStage):
             self.queue.append(paragraph)
             if len(self.queue) >= 100:
                 db_session.add_all(self.queue)
-                db_session.commit()
+                try_commit()
                 add_task('text_embedding', {'filters': {'ids': [p.id for p in self.queue]}})
                 self.queue.clear()
         return paragraph
     
-    def sumamrize(self, _):
+    def sumamrize(self, _) -> None:
         db_session.add_all(self.queue)
-        db_session.commit()
+        try_commit()
         add_task('text_embedding', {'filters': {'ids': [p.id for p in self.queue]}})
 
 
@@ -801,7 +811,7 @@ class FieldIncresement(PipelineStage):
     @zhs 对字段进行自增操作
     """
 
-    def __init__(self, field, inc_value):
+    def __init__(self, field, inc_value) -> None:
         '''
         Args:
             field (str): Field name
@@ -830,17 +840,17 @@ class OutlineFilter(PipelineStage):
     romannum = (
         ',I,II,III,IV,V,VI,VII,VIII,IX,X,XI,XII,XIII,XIV,XV,XVI,XVII,').split(',')
 
-    def __init__(self):
+    def __init__(self) -> None:
         super().__init__()
         self.nums = ['00', '00', '00']
 
-    def roman(self, text):
+    def roman(self, text) -> int:
         """Decode Roman numbers"""
         if '.' in text:
             text = text[:text.find('.')]
         return OutlineFilter.romannum.index(text) if text in OutlineFilter.romannum else 99
 
-    def dechnum(self, text):
+    def dechnum(self, text) -> int:
         """Decode Chinese numbers"""
         vals = [(OutlineFilter.chnum+_).find(_) for _ in text]
         if len(vals) == 1:
@@ -856,7 +866,7 @@ class OutlineFilter(PipelineStage):
         else:
             return vals[0]*vals[1]+vals[2]
 
-    def check_outline(self, paragraph: Paragraph):
+    def check_outline(self, paragraph: Paragraph) -> str:
         """Check outline"""
         lang, content = paragraph.lang, paragraph. content
         outline = ''
@@ -912,7 +922,7 @@ class OutlineFilter(PipelineStage):
                 self.nums = nnums
 
         paragraph.outline = '.'.join(self.nums)
-        paragraph.save()
+        try_commit()
         return paragraph
 
 
@@ -921,7 +931,7 @@ class ConditionalAssignment(PipelineStage):
     Conditional assignment
     @zhs 按条件赋值字段"""
 
-    def __init__(self, cond, field):
+    def __init__(self, cond, field) -> None:
         """
         Args:
             cond (QUERY): Conditions and assignment values, in forms like:
@@ -947,7 +957,7 @@ class KeywordsReplacement(PipelineStage):
     """Replace keywords/tags
     @zhs 替换关键词（标签）"""
 
-    def __init__(self, from_tag, to_tag, arr='keywords'):
+    def __init__(self, from_tag, to_tag, arr='keywords') -> None:
         """
         Args:
             from_tag (str): Original keyword
@@ -977,7 +987,7 @@ class PDFUnlock(PipelineStage):
     @zhs 解锁读保护的 PDF
     """
 
-    def __init__(self, file: bytes):
+    def __init__(self, file: bytes) -> None:
         """
         :param file: File binary
             @zhs 文件 data: URL
@@ -989,8 +999,11 @@ class PDFUnlock(PipelineStage):
         pike.open(storage.open(file, 'rb')).save(buf)
         self.data = PipelineStage.return_file('pdf', buf.getvalue())
 
-    def summarize(self, _):
+    def summarize(self, _) -> dict:
         return self.data
+
+
+from typing import Dict
 
 
 class SetNamedResult(Passthrough):
@@ -998,7 +1011,7 @@ class SetNamedResult(Passthrough):
     @zhs 为总结阶段的结果设置名称
     """
 
-    def __init__(self, name: str):
+    def __init__(self, name: str) -> None:
         """
         :param name: Name
             @zhs 名称
@@ -1007,7 +1020,7 @@ class SetNamedResult(Passthrough):
         super().__init__()
         self.name = name
 
-    def summarize(self, result):
+    def summarize(self, result) -> Dict:
         self.gctx[self.name] = result
         return result
 
@@ -1017,7 +1030,7 @@ class LoadNamedResult(Passthrough):
     @zhs 读取已命名的结果
     """
 
-    def __init__(self, name: str):
+    def __init__(self, name: str) -> None:
         """
         :param name: Name
             @zhs 名称
@@ -1026,7 +1039,7 @@ class LoadNamedResult(Passthrough):
         super().__init__()
         self.name = name
 
-    def summarize(self, _):
+    def summarize(self, _) -> dict:
         if self.name == '':
             return self.gctx
         return self.gctx.get(self.name)
@@ -1045,7 +1058,7 @@ class FilterStopWords(PipelineStage):
     _punctuations = re.compile(r'^[\u3000-\u303F\uFF00-\uFFEF\"\'{}()\[\]\\*&.?!,…:;@#!]$')
     
     @staticmethod
-    def get(lang):
+    def get(lang) -> list:
         if lang == 'chs':
             return FilterStopWords._lang_stopwords['zh']
         elif lang in FilterStopWords._lang_stopwords:
@@ -1053,7 +1066,7 @@ class FilterStopWords(PipelineStage):
         else:
             return []
 
-    def __init__(self, stopwords=''):
+    def __init__(self, stopwords='') -> None:
         """
         Args:
             stopwords (str): 额外的停用词表，用空格分割

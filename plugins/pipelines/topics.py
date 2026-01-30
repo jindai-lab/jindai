@@ -4,14 +4,17 @@
 
 from collections import defaultdict
 from io import BytesIO
+from threading import Lock
 from typing import Dict
+
 import numpy as np
+from sentence_transformers import SentenceTransformer, util
+
 from jindai import PipelineStage
 from jindai.helpers import safe_import
 from jindai.models import Paragraph
+
 from .basics import AccumulateParagraphs, Counter
-from threading import Lock
-from sentence_transformers import SentenceTransformer, util
 
 
 def import_plt():
@@ -21,7 +24,7 @@ def import_plt():
     return plt
 
 
-def import_sklearn_kmeans_pca():
+def import_sklearn_kmeans_pca() -> tuple:
     """safe import sklearn kmeans and pca, in respective order
     """
     safe_import('sklearn.cluster', 'scikit-learn')
@@ -36,7 +39,7 @@ class LDA(PipelineStage):
     @zhs 基于 LDA 的话题模型
     """
 
-    def __init__(self, num_topics):
+    def __init__(self, num_topics) -> None:
         """
         Args:
             num_topics (int): 话题数
@@ -51,7 +54,7 @@ class LDA(PipelineStage):
     def resolve(self, paragraph: Paragraph) -> Paragraph:
         self.mat[str(paragraph.id)] = paragraph.tokens
 
-    def summarize(self, *_):
+    def summarize(self, *_) -> dict[str, dict]:
         model = safe_import('gensim.models_ldamodel').LdaModel
 
         for sent_vec in self.mat.values():
@@ -84,7 +87,7 @@ class Word2Vec(PipelineStage):
     @zhs （调用 transformers 的 paraphrase-multilingual-MiniLM-L12-v2 模型）
     """
 
-    def __init__(self, model_name='paraphrase-multilingual-MiniLM-L12-v2'):
+    def __init__(self, model_name='paraphrase-multilingual-MiniLM-L12-v2') -> None:
         '''
         Args:
             model_name (str): Model name
@@ -131,7 +134,7 @@ class CosSimFSClassifier(AccumulateParagraphs):
     @zhs 基于余弦相似度的小样本分类
     """
 
-    def __init__(self, label_field, auto_update=False):
+    def __init__(self, label_field, auto_update=False) -> None:
         '''
         Args:
             label_field (str): Field for labels
@@ -156,7 +159,7 @@ class CosSimFSClassifier(AccumulateParagraphs):
             self.vecs_cnt[label] += 1
         return paragraph
 
-    def _infer(self, vec):
+    def _infer(self, vec) -> str:
         vec = np.array(vec)
         vec = vec / np.linalg.norm(vec)
         result, sim = '', 0
@@ -186,7 +189,7 @@ class CosSimClustering(AccumulateParagraphs):
     """Clustering with cosine similarity
     @zhs 余弦相似度聚类"""
 
-    def __init__(self, min_community_size=10, threshold=0.75, label_field='label'):
+    def __init__(self, min_community_size=10, threshold=0.75, label_field='label') -> None:
         '''
         Args:
             min_community_size (int): Min size for clustering community
@@ -222,7 +225,7 @@ class KmeansClustering(PipelineStage):
     @zhs 使用 K-Means 方法聚类
     """
 
-    def __init__(self, k, vector_field='vec'):
+    def __init__(self, k, vector_field='vec') -> None:
         """
         Args:
             k (int): Clusters
@@ -244,7 +247,7 @@ class KmeansClustering(PipelineStage):
         vec = getattr(self.paragraphs[i], self.vector_field)
         return vec
 
-    def summarize(self, _):
+    def summarize(self, _) -> list:
         if len(self.paragraphs) == 0:
             return []
         mat = np.zeros((len(self.paragraphs), len(self._get_vec(0))), 'float')
@@ -267,7 +270,7 @@ class DrawClusters(PipelineStage):
 
     def __init__(self,
                  label_field='label', coordinates_field='coords',
-                 notation_field='content', notation_length=5):
+                 notation_field='content', notation_length=5) -> None:
         '''
         Args:
             label_field (str): Label field
@@ -284,12 +287,12 @@ class DrawClusters(PipelineStage):
         self.fig, self.axis = import_plt().subplots()
         super().__init__()
 
-    def _get_label_coords_notation(self, paragraph: Paragraph):
+    def _get_label_coords_notation(self, paragraph: Paragraph) -> tuple:
         return (getattr(paragraph, self.label_field),
                 getattr(paragraph, self.coordinates_field),
                 getattr(paragraph, self.notation_field, '')[:self.notation_length])
 
-    def summarize(self, result):
+    def summarize(self, result) -> dict:
         buf = BytesIO()
         clusters = defaultdict(list)
 
@@ -307,6 +310,9 @@ class DrawClusters(PipelineStage):
         return PipelineStage.return_file('png', buf.getvalue())
 
 
+from typing import Dict
+
+
 class GenerateCooccurance(PipelineStage):
     """Generate cooccurance matrix
     @zhs 生成共现矩阵
@@ -322,7 +328,7 @@ class GenerateCooccurance(PipelineStage):
         self.method = weighted_by
         self.counter = Counter()
 
-    def token(self, paragraph):
+    def token(self, paragraph) -> None:
         """Count from tokens"""
         for i, t in enumerate(paragraph.tokens):
             for m in paragraph.tokens[i+1:]:
@@ -333,7 +339,7 @@ class GenerateCooccurance(PipelineStage):
             self.token(paragraph)
         return paragraph
 
-    def summarize(self, _):
+    def summarize(self, _) -> Dict:
         if self.method == 'vec_cos':
             from sentence_transformers.util import cos_sim
             sim_result = {}
@@ -362,7 +368,7 @@ class GraphicClustering(PipelineStage):
         self.paragraphs = []
         super().__init__()
 
-    def summarize(self, result):
+    def summarize(self, result) -> dict:
         nx = safe_import('networkx')
         graph = nx.Graph()
         for (node_a, node_b), val in sorted(result, key=lambda x: x[1], reverse=True)[:self.topk]:
@@ -390,14 +396,14 @@ class SentenceTransformer(PipelineStage):
     Sentence Transformer
     """
     
-    def __init__(self, n=10, model="sentence-transformers/distiluse-base-multilingual-cased-v1"):
+    def __init__(self, n=10, model="sentence-transformers/distiluse-base-multilingual-cased-v1") -> None:
         super().__init__()
         self.trans = SentenceTransformer(model)
         self.buffer = []
         self.n = n
         self.lock = Lock()
 
-    def process_buffer(self):
+    def process_buffer(self) -> None:
         """Process buffer"""
         sentences = [p.content for p in self.buffer]
         sentence_embeddings = self.trans.encode(sentences)
@@ -406,7 +412,7 @@ class SentenceTransformer(PipelineStage):
             p.save()
         self.buffer.clear()
 
-    def resolve(self, paragraph):
+    def resolve(self, paragraph) -> None:
         with self.lock:
             self.buffer.append(paragraph)
             if len(self.buffer) >= self.n:

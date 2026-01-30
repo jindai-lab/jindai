@@ -1,23 +1,31 @@
 """Task worker"""
 
+import logging
 import os
 import tempfile
 
+import redis
 from celery import Celery
-from celery.signals import task_prerun, task_postrun, worker_process_init
+from celery.app.base import Celery
+from celery.signals import task_postrun, task_prerun, worker_process_init
 from celery.utils.log import get_task_logger
-from sqlalchemy import exists, func, select
 from flask import Response
+from sqlalchemy import exists, func, select
 
 from .app import config, storage
-from .models import Dataset, Paragraph, TaskDBO, TextEmbeddings, db_session
+from .models import (Dataset, Paragraph, TaskDBO, TextEmbeddings,
+                     session_factory)
 from .task import Task
 
-import logging
-import redis
 
+def make_celery(app_name=__name__) -> Celery:
+    """Create and configure Celery instance
 
-def make_celery(app_name=__name__):
+    :param app_name: Application name for Celery, defaults to current module
+    :type app_name: str, optional
+    :return: Configured Celery instance
+    :rtype: Celery
+    """
     # 初始化Celery
     celery = Celery(
         app_name,
@@ -40,7 +48,7 @@ logger = get_task_logger(__name__)
 
 
 class CeleryTaskLogHandler(logging.Handler):
-    def __init__(self, task_id):
+    def __init__(self, task_id) -> None:
         super().__init__()
         self.redis_client = redis.Redis.from_url(config.redis + "/0")
         self.channel = f"task_logs:{task_id}"
@@ -50,7 +58,7 @@ class CeleryTaskLogHandler(logging.Handler):
         sub.subscribe(self.channel)
         return sub
 
-    def emit(self, record):
+    def emit(self, record) -> None:
         try:
             msg = self.format(record)
             self.redis_client.publish(self.channel, msg)
@@ -60,6 +68,15 @@ class CeleryTaskLogHandler(logging.Handler):
 
 @celery.task(name="handle_custom")
 def handle_custom(task_id="", **params):
+    """Handle custom task execution
+
+    :param task_id: Task ID from database, defaults to empty string
+    :type task_id: str, optional
+    :param params: Task parameters if creating new task
+    :type params: dict
+    :return: Task execution result
+    """
+    db_session = session_factory()
     if task_id:
         dbo = db_session.query(TaskDBO).get(task_id)
     else:
@@ -70,8 +87,20 @@ def handle_custom(task_id="", **params):
 
 @celery.task(name="import_pdf")
 def import_pdf(source, lang, dataset):
+    """Import PDF files and extract text content to database
+
+    :param source: Source path (file or directory)
+    :type source: str
+    :param lang: Language code
+    :type lang: str
+    :param dataset: Dataset name
+    :type dataset: str
+    :return: List of processed files
+    :rtype: list
+    """
     from .pdfutils import extract_pdf_texts
 
+    db_session = session_factory()
     dataset = Dataset.get(dataset).id
     source = storage.safe_join(source)
     if os.path.isdir(source):
@@ -107,11 +136,25 @@ def import_pdf(source, lang, dataset):
         except:
             db_session.rollback()
 
+    db_session.close()
     return inputs
 
 
 @celery.task(name="handle_ocr")
 def handle_ocr(input, output, lang, monochrome=False):
+    """Handle OCR processing of PDF files
+
+    :param input: Input file or directory path
+    :type input: str
+    :param output: Output file path
+    :type output: str
+    :param lang: Language code for OCR
+    :type lang: str
+    :param monochrome: Convert to monochrome before OCR, defaults to False
+    :type monochrome: bool, optional
+    :return: Output file path
+    :rtype: str
+    """
     from .pdfutils import convert_pdf_to_tiff_group4, merge_images_from_folder
 
     temps = []
@@ -168,7 +211,15 @@ def handle_ocr(input, output, lang, monochrome=False):
 
 
 @celery.task(name="text_embedding")
-def text_embedding(bulk=None, filters=None):
+def text_embedding(bulk=None, filters=None) -> None:
+    """Generate text embeddings for paragraphs
+
+    :param bulk: Batch of paragraphs to process, defaults to None
+    :type bulk: list, optional
+    :param filters: Query filters for selecting paragraphs, defaults to None
+    :type filters: dict, optional
+    """
+    db_session = session_factory()
     if bulk is not None:
         embs = []
         for i in bulk:
@@ -186,31 +237,47 @@ def text_embedding(bulk=None, filters=None):
         except Exception as e:
             print(e)
             db_session.rollback()
+        finally:
+            db_session.close()
     else:
         print(f"start db query")
         if filters is None:
             filters = {}
-        filters.update(embeddings=False, limit=10000)
+        filters.update(embeddings=False)
+        cte = (
+            Paragraph.build_query(filters).with_only_columns(Paragraph.id).limit(10000)
+        ).cte()
         stmt = (
-            Paragraph.build_query(filters)
+            select(Paragraph)
+            .join(cte, Paragraph.id == cte.c.id)
             .filter(func.length(Paragraph.content) > 10)
             .with_only_columns(Paragraph.id, Paragraph.content)
         )
         results = db_session.execute(stmt).mappings().all()
         bulk = []
         len_results = len(results)
-        print(f"start handling embedding with {len_results}")
+        print(f"start handling embedding for {len_results} records")
         for i, p in enumerate(results, start=1):
             bulk.append({"id": str(p["id"]), "content": p["content"]})
-            if i % 100 == 0 or i == len_results:  
+            if i % 100 == 0 or i == len_results:
                 add_task("text_embedding", {"bulk": bulk})
                 bulk = []
-        if len_results == 10000:
+        if len_results == 1000:
             add_task("text_embedding", {})
 
 
 # Interact with celery
 def add_task(task_type, params):
+    """Add a task to the Celery queue
+
+    :param task_type: Type of task to add
+    :type task_type: str
+    :param params: Task parameters
+    :type params: dict
+    :return: Task ID
+    :rtype: str
+    :raises ValueError: If task_type is not supported
+    """
     task_map = {
         "text_embedding": text_embedding,
         "ocr": handle_ocr,
@@ -225,7 +292,7 @@ def add_task(task_type, params):
     return task.id
 
 
-def get_task_result(task_id):
+def get_task_result(task_id) -> dict:
     """获取任务结果和状态"""
     task = celery.AsyncResult(task_id)
 
@@ -244,7 +311,10 @@ def get_task_result(task_id):
     return result
 
 
-def get_task_stats():
+from typing import Any
+
+
+def get_task_stats() -> dict[str, Any]:
     """统计任务状态（基于Celery Inspect，适合开发/测试环境）"""
     # 生产环境建议用Celery Flower监控，或自定义统计表
     inspect = celery.control.inspect()
@@ -281,7 +351,7 @@ def get_task_stats():
     }
 
 
-def revoke_task(task_id, terminate=True):
+def revoke_task(task_id, terminate=True) -> dict[str, str]:
     """取消任务"""
     celery.control.revoke(task_id, terminate=terminate)
     # 删除任务结果
@@ -289,7 +359,7 @@ def revoke_task(task_id, terminate=True):
     return {"status": "success", "message": f"任务 {task_id} 已取消"}
 
 
-def clear_tasks(status=""):
+def clear_tasks(status="") -> dict[str, str | int]:
     """清理指定状态的任务"""
     inspect = celery.control.inspect()
     revoked_count = 0
@@ -329,7 +399,15 @@ def clear_tasks(status=""):
     return {"status": "success", "deleted_count": revoked_count}
 
 
-def log_stream(task_id):
+def log_stream(task_id) -> Response:
+    """Create a Server-Sent Events stream for task logs
+
+    :param task_id: Task ID to stream logs for
+    :type task_id: str
+    :return: SSE response object
+    :rtype: Response
+    """
+
     def stream():
         pubsub = CeleryTaskLogHandler(task_id).subscribe()
 
@@ -344,5 +422,6 @@ def log_stream(task_id):
     return Response(stream(), mimetype="text/event-stream")
 
 
-def worker():
+def worker() -> None:
+    """Start Celery worker process"""
     celery.worker_main(["worker", "--pool=solo", "--loglevel=INFO"])

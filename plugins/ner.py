@@ -2,13 +2,12 @@
 Named Entity Recognition
 @zhs 命名实体识别
 """
+import hanlp
 import regex as re
+import spacy
 
 from jindai import PipelineStage, Plugin
 from jindai.models import Paragraph
-
-import hanlp
-import spacy
 
 
 class HanLPModel(PipelineStage):
@@ -17,7 +16,7 @@ class HanLPModel(PipelineStage):
     @zhs 使用 HanLP 的预训练模型进行处理
     """
 
-    def __init__(self, pretrained, result=''):
+    def __init__(self, pretrained, result='') -> None:
         """
         Args:
             result (tok|ner|srl|sdp/dm|sdp/pas|sdp/psd|con|lem|pos|fea|dep): Result selection
@@ -151,6 +150,6 @@ class NERAsTokens(PipelineStage):
 class NERPlugin(Plugin):
     """NER Plugin"""
 
-    def __init__(self, pmanager, **config):
+    def __init__(self, pmanager, **config) -> None:
         super().__init__(pmanager, **config)
         self.register_pipelines(globals())
