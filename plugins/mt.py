@@ -11,10 +11,11 @@ from hashlib import md5
 from typing import Iterator
 
 import regex as re
-import requests
+import httpx
 from opencc import OpenCC
 
-from jindai import PipelineStage, Plugin
+from jindai.pipeline import PipelineStage
+from jindai.plugin import Plugin
 from jindai.helpers import safe_import
 from jindai.models import Paragraph
 
@@ -55,7 +56,7 @@ class RemoteTranslation(PipelineStage):
         self.to_lang = to_lang if to_lang not in ('zhs', 'zht') else 'zh'
         self.convert = OpenCC('s2t' if to_lang == 'zht' else 't2s').convert
 
-    def resolve(self, paragraph) -> None:
+    async def resolve(self, paragraph) -> None:
         """Translate the paragraph
         """
         result = ''
@@ -64,14 +65,14 @@ class RemoteTranslation(PipelineStage):
                 chunk = chunk.strip()
                 if not chunk:
                     continue
-
-                resp = requests.post(self.server, json={
-                    'text': chunk,
-                    'source_lang': paragraph.lang.upper() if paragraph.lang != 'auto' else 'auto',
-                    'target_lang': self.to_lang.upper()
-                })
-
-                resp = resp.json()
+                
+                async with httpx.AsyncClient() as client:
+                    resp = await client.post(self.server, json={
+                        'text': chunk,
+                        'source_lang': paragraph.lang.upper() if paragraph.lang != 'auto' else 'auto',
+                        'target_lang': self.to_lang.upper()
+                    })
+                    resp = resp.json()
                 if resp.get('code') != 200:
                     self.log('Error while translating:',
                              resp.get('msg', 'null message'))
@@ -115,7 +116,7 @@ class YoudaoTranslation(PipelineStage):
         self.api_id, self.api_key = api_id, api_key
         self.to_lang = to_lang
 
-    def resolve(self, paragraph: Paragraph) -> None:
+    async def resolve(self, paragraph: Paragraph):
 
         def _regulate_lang(lang):
             if lang in ('zhs', 'zht'):
@@ -152,7 +153,8 @@ class YoudaoTranslation(PipelineStage):
             'curtime': time_curtime,
         }
 
-        resp = requests.get(youdao_url, params=data).json()
+        async with httpx.AsyncClient() as client:
+            resp = (await client.get(youdao_url, params=data)).json()
         paragraph.content = resp['translation'][0]
         return paragraph
 
@@ -176,7 +178,7 @@ class BaiduTranslation(PipelineStage):
         self.to_lang = to_lang
         self.api_id, self.api_key = api_id, api_key
 
-    def resolve(self, paragraph: Paragraph):
+    async def resolve(self, paragraph: Paragraph):
         api_endpoint = 'https://fanyi-api.baidu.com/api/trans/vip/translate'
 
         def _regulate_lang(lang):
@@ -199,8 +201,9 @@ class BaiduTranslation(PipelineStage):
                        'salt': salt,
                        'sign': sign}
 
-            time.sleep(1)
-            resp = requests.post(api_endpoint, params=payload,
+            await asyncio.sleep(1)
+            async with httpx.AsyncClient() as client:
+                resp = client.post(api_endpoint, params=payload,
                                  headers=headers).json()
             if 'error_msg' in resp:
                 raise ValueError(resp['error_msg'])
@@ -208,129 +211,6 @@ class BaiduTranslation(PipelineStage):
 
         paragraph.content = result
         return paragraph
-
-
-class QCloudTranslation(PipelineStage):
-    """Machine Translation via Baidu API
-    @zhs 腾讯云机器翻译
-    """
-
-    def __init__(self, to_lang='zhs', api_key='', api_id='') -> None:
-        """
-        :param to_lang: Target language
-            @zhs 目标语言
-        :type to_lang: LANG
-        :param api_key: API Key
-        :type api_key: str, optional
-        :param api_id: API ID
-        :type api_id: str, optional
-        """
-        super().__init__()
-        safe_import('tencentcloud', 'tencentcloud-sdk-python')
-        if to_lang in ('zhs', 'zht'):
-            to_lang = 'ch'
-        self.to_lang = to_lang
-        self.api_id, self.api_key = api_id, api_key
-
-    def resolve(self, paragraph: Paragraph):
-        from tencentcloud.common import credential
-        from tencentcloud.common.exception.tencent_cloud_sdk_exception import \
-            TencentCloudSDKException
-        from tencentcloud.common.profile.client_profile import ClientProfile
-        from tencentcloud.common.profile.http_profile import HttpProfile
-        from tencentcloud.tmt.v20180321 import models, tmt_client
-
-        try:
-            # "xxxx"改为SecretId，"yyyyy"改为SecretKey
-            cred = credential.Credential(self.api_id, self.api_key)
-            httpProfile = HttpProfile()
-            httpProfile.endpoint = "tmt.tencentcloudapi.com"
-
-            clientProfile = ClientProfile()
-            clientProfile.httpProfile = httpProfile
-            client = tmt_client.TmtClient(cred, "ap-beijing", clientProfile)
-
-            req = models.TextTranslateRequest()
-            req.SourceText = paragraph.content  # 要翻译的语句
-            req.Source = paragraph.lang
-            req.Target = self.to_lang
-            req.ProjectId = 0
-
-            resp = client.TextTranslate(req)
-            data = json.loads(resp.to_json_string())
-            result = data['TargetText']
-            paragraph.content = result
-
-        except TencentCloudSDKException as err:
-            self.log_exception('TencentCloud SDK Exception', err)
-
-        return paragraph
-
-
-class DeeplxTranslation(PipelineStage):
-    """DeepLx translation
-    @zhs 基于 DeepLx 的机器翻译"""
-
-    def __init__(self, to_lang='zhs') -> None:
-        """
-        :param to_lang: Target language
-            @zhs 目标语言
-        :type to_lang: LANG
-        """
-        self.to_lang = to_lang
-        super().__init__()
-
-    def deeplx(self, text: str, langfrom: str) -> str:
-        id = 1000 * (random.randint(0, 99999) + 8300000) + 1
-        url = "https://www2.deepl.com/jsonrpc"
-        ICounts = text.count('i')
-        ts = int(time.time() * 1000)
-        if ICounts != 0:
-            ICounts += 1
-            ts = ts - (ts % ICounts) + ICounts
-
-        reqBody = json.dumps({
-            "jsonrpc": "2.0",
-            "method": "LMT_handle_texts",
-            "id": id,
-            "params": {
-                "texts": [
-                    {
-                        "text": text,
-                        "requestAlternatives": 3
-                    }
-                ],
-                "splitting": "newlines",
-                "lang": {
-                    "source_lang_user_selected": langfrom.split("-")[0].upper(),
-                    "target_lang": self.to_lang.split("-")[0].upper()
-                },
-                "timestamp": ts,
-                "commonJobParams": {
-                    "wasSpoken": False,
-                    "transcribe_as": ""
-                }
-            }
-        })
-        if (id + 5) % 29 == 0 or (id + 3) % 13 == 0:
-            reqBody = reqBody.replace('"method":"', '"method" : "')
-        else:
-            reqBody = reqBody.replace('"method":"', '"method": "')
-        headers = {
-            "Content-Type": "application/json; charset=utf-8",
-            "Accept": "*/*",
-            "x-app-os-name": "iOS",
-            "x-app-os-version": "16.3.0",
-            "Accept-Language": "en-US,en;q=0.9",
-            "Accept-Encoding": "gzip, deflate, br",
-            "x-app-device": "iPhone13,2"
-        }
-        response = requests.post(url, headers=headers, data=reqBody)
-        return response.json()
-
-    def resolve(self, paragraph: Paragraph) -> None:
-        paragraph.original = paragraph.content
-        paragraph.content = self.deeplx(paragraph.content, paragraph.lang[:2])
 
 
 class GPTTranslation(PipelineStage):
@@ -358,19 +238,20 @@ class GPTTranslation(PipelineStage):
         self.schema = schema
         super().__init__()
 
-    def call(self, message) -> str:
+    async def call(self, message) -> str:
         if message == 'test':
             return 'test'
-        resp = requests.post(self.endpoint, json={self.schema: [{
-            "role": "user", "content": message
-        }]}, headers={'Content-Type': 'application/json', 'Agent': 'jindai-mt/1.0'})
-        resp = resp.json()
+        async with httpx.AsyncClient() as client:
+            resp = await client.post(self.endpoint, json={self.schema: [{
+                "role": "user", "content": message
+            }]}, headers={'Content-Type': 'application/json', 'Agent': 'jindai-mt/1.0'})
+            resp = resp.json()
         assert resp and resp['success'], f'Failed with response: {resp}'
         return resp['choices'][0]['message']['content']
 
-    def resolve(self, paragraph: Paragraph) -> Paragraph:
+    async def resolve(self, paragraph: Paragraph) -> Paragraph:
         text = self.prompt.format(**paragraph.as_dict()).strip()
-        text = self.call(text)
+        text = await self.call(text)
         return Paragraph(paragraph, content=text)
 
 
@@ -387,7 +268,7 @@ class GoogleTranslation(PipelineStage):
         self.to_lang = to_lang
         super().__init__()
 
-    def translate(self, lang_from, lang_to, text) -> str:
+    async def translate(self, lang_from, lang_to, text) -> str:
         def TL(a):
             k = ""
             b = 406644
@@ -441,9 +322,9 @@ class GoogleTranslation(PipelineStage):
             return a
         
         param = f"sl={lang_from}&tl={lang_to}"
-        resp = requests.get(f"https://translate.google.com/translate_a/single?client=gtx&{param}&hl=zh-CN&dt=at&dt=bd&dt=ex&dt=ld&dt=md&dt=qca&dt=rw&dt=rm&dt=ss&dt=t&source=bh&ssel=0&tsel=0&kc=1&tk={TL(text)}&q={urllib.parse.quote(text)}", params=param, headers={ "responseType": "json" })
-        if resp.status_code != 200:
-            raise Exception(f"Request error: {resp.status_code}")
+        async with httpx.AsyncClient() as client:
+            resp = await client.get(f"https://translate.google.com/translate_a/single?client=gtx&{param}&hl=zh-CN&dt=at&dt=bd&dt=ex&dt=ld&dt=md&dt=qca&dt=rw&dt=rm&dt=ss&dt=t&source=bh&ssel=0&tsel=0&kc=1&tk={TL(text)}&q={urllib.parse.quote(text)}", params=param, headers={ "responseType": "json" })
+        resp.raise_for_status()
         tgt = ""
         results = resp.json()
         for result in results:
@@ -451,8 +332,8 @@ class GoogleTranslation(PipelineStage):
                 tgt += result[0]
         return tgt
     
-    def resolve(self, paragraph: Paragraph) -> str:
-        paragraph.content = self.translate(paragraph.content, paragraph.lang[:2], self.to_lang)
+    async def resolve(self, paragraph: Paragraph) -> str:
+        paragraph.content = await self.translate(paragraph.content, paragraph.lang[:2], self.to_lang)
         return paragraph
 
 

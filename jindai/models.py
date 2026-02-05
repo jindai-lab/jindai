@@ -1,7 +1,9 @@
 """DB Objects"""
 
+import asyncio
 import json
 import uuid
+from contextlib import contextmanager
 from datetime import datetime
 from functools import wraps
 from typing import Any, Dict, List
@@ -9,26 +11,43 @@ from typing import Any, Dict, List
 import redis
 import regex as re
 from pgvector.sqlalchemy import Vector
-from sqlalchemy import (Boolean, DateTime, ForeignKey, Index, Integer, String,
-                        Text, UniqueConstraint, asc, create_engine, desc,
+from sqlalchemy import (Boolean, DateTime, ForeignKey, Index, Integer, PrimaryKeyConstraint, String,
+                        Text, UniqueConstraint, asc, desc,
                         exists, or_, select, text, update)
 from sqlalchemy.dialects.postgresql import ARRAY, JSONB, UUID
 from sqlalchemy.orm import (Mapped, declarative_base, mapped_column,
-                            relationship, scoped_session, sessionmaker,
-                            validates)
+                            relationship, validates)
 from sqlalchemy.sql import func
+from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker, AsyncSession
 
 from .config import instance as config
 from .helpers import AutoUnloadSentenceTransformer, jieba
 
-engine = create_engine(config.database)
-with engine.connect() as conn:
-    # 确保 vchord 扩展已启用
-    conn.execute(text("CREATE EXTENSION IF NOT EXISTS vchord CASCADE"))
-    conn.commit()
+engine = create_async_engine(config.database)
+AsyncSessionFactory = async_sessionmaker(
+    bind=engine,
+    expire_on_commit=False,  # 同步版本的 expire_on_commit 配置迁移到这里
+    autoflush=False,  # 可选：根据你的需求设置，异步场景下建议显式控制
+    autocommit=False
+)
 
-session_factory = sessionmaker(bind=engine)
-db_session = scoped_session(session_factory)
+async def get_db_session():
+    async with AsyncSessionFactory() as session:
+        try:
+            yield session
+            await session.commit()
+        except Exception as e:
+            await session.rollback()
+            raise e
+        finally:
+            await session.close()
+            
+            
+async def get_db() -> AsyncSession:
+    async for session in get_db_session():
+        yield session
+        
+
 MBase = declarative_base()
 
 
@@ -92,15 +111,18 @@ class Dataset(Base):
     )
 
     @staticmethod
-    def get(name, auto_create=True):
-        ds = db_session.query(Dataset).filter(Dataset.name == name).first()
-        if ds is None and auto_create:
-            ds = Dataset(name=name)
-            db_session.add(ds)
-            try_commit()
+    async def get(name, auto_create=True):
+        async for session in get_db_session():
+            ds = await session.execute(select(Dataset).filter(Dataset.name == name))
+            ds = ds.scalar_one_or_none()
+            if ds is None and auto_create:
+                ds = Dataset(name=name)
+                session.add(ds)
+                await session.flush()
+
         return ds
 
-    def rename_dataset(self, new_name):
+    async def rename_dataset(self, new_name):
         """Rename dataset and update all related paragraphs
 
         :param new_name: New dataset name
@@ -110,22 +132,22 @@ class Dataset(Base):
         """
         if self.name == new_name:
             return None
-        ds = Dataset.get(new_name)
+        ds = await Dataset.get(new_name)
         if ds:
             stmt = (
                 update(Paragraph)
                 .where(Paragraph.dataset == self.id)
                 .values({"dataset": ds.id})
             )
-            db_session.execute(stmt)
-            db_session.delete(self)
+            async for session in get_db_session():           
+                await session.execute(stmt)
+                await session.delete(self)
         else:
             self.name = new_name
-        try_commit()
         return self.id
 
     @staticmethod
-    def get_hierarchy() -> list:
+    async def get_hierarchy() -> list:
         """Get hierarchical structure of datasets
 
         :return: Nested list representing dataset hierarchy
@@ -135,8 +157,9 @@ class Dataset(Base):
         def _dataset_sort_key(ds: Dataset):
             return len(ds.name.split("--")), ds.order_weight, ds.name
 
-        datasets = db_session.query(Dataset).all()
-        sorted_datasets = sorted(datasets, key=_dataset_sort_key)
+        async for session in get_db_session():
+            datasets = await session.execute(select(Dataset))
+        sorted_datasets = sorted(datasets.scalars().all(), key=_dataset_sort_key)
         hierarchy = []
         for dataset in sorted_datasets:
             current_level = hierarchy
@@ -216,6 +239,7 @@ class Paragraph(Base):
     __tablename__ = "paragraph"
     __table_args__ = (
         # 索引定义（与原表一致）
+        PrimaryKeyConstraint('id', 'dataset', name='paragraph_part_pk'),
         Index("fki_dataset", "dataset"),
         Index("idx_paragraph_author", "author"),
         Index("idx_paragraph_keywords", "keywords", postgresql_using="gin"),
@@ -272,8 +296,9 @@ class Paragraph(Base):
         return val
 
     @staticmethod
-    def from_dict(data, ignored_fields=["id", "dataset_name"]) -> "Paragraph":
+    def from_dict(data, ignored_fields=["id", "dataset_name"], **kwargs) -> "Paragraph":
         p = Paragraph()
+        data.update(kwargs)
         for k, v in data.items():
             if k in ignored_fields:
                 continue
@@ -311,9 +336,10 @@ class Paragraph(Base):
         return data
 
     @staticmethod
-    def build_query(query_data):
+    async def build_query(query_data):
         query = select(Paragraph)
         filters = []
+        query_embedding = None
 
         search = query_data.get("search", "*")
 
@@ -324,18 +350,13 @@ class Paragraph(Base):
             dataset_filters = [Dataset.name.in_(datasets)]
             for dataset_prefix in datasets:
                 dataset_filters.append(Dataset.name.ilike(f"{dataset_prefix}--%"))
-            filters.append(
-                Paragraph.dataset.in_(
-                    [
-                        _
-                        for (_,) in db_session.query(Dataset)
-                        .filter(or_(*dataset_filters))
-                        .with_entities(Dataset.id)
-                        .all()
-                    ]
+            async for session in get_db_session():
+                result = await session.execute(select(Dataset.id).where(or_(*dataset_filters)))
+                dataset_ids = result.scalars().all()
+                filters.append(
+                    Paragraph.dataset.in_(dataset_ids)
                 )
-            )
-
+        
         if sources := query_data.get("sources"):
             source_filters = [Paragraph.source_url.in_(sources)]
             for source in sources:
@@ -355,59 +376,51 @@ class Paragraph(Base):
                 param = Paragraph.content.ilike(f"%{search}%")
                 filters.append(param)
         elif search.startswith(":") or query_data.get("embeddings"):
-            if "total" not in query_data:
-                query_embedding = TextEmbeddings.get_embedding(search.strip(":"))
-                sub_stmt = (
-                    select(
-                        TextEmbeddings.id,
-                        TextEmbeddings.embedding.cosine_distance(query_embedding).label(
-                            "dist"
-                        ),
-                    )
-                    .order_by(TextEmbeddings.embedding.cosine_distance(query_embedding))
-                    .subquery("embs")
-                )
-                query = query.join(sub_stmt, Paragraph.id == sub_stmt.c.id).order_by(
-                    sub_stmt.c.dist
-                )
+            query_embedding = await TextEmbeddings.get_embedding(search.strip(":"))
         else:
-            param = Paragraph.keywords.contains(
-                [_.strip().lower() for _ in jieba.cut_query(search) if _.strip()]
-            )
-            filters.append(param)
+            words = [_.strip().lower() for _ in jieba.cut_query(search) if _.strip()]
+            for word in words:
+                candidates = [word.strip('^%')]
+                if word.startswith('^'):
+                    candidates.extend(await Terms.starting_with(word.strip('^')))
+                param = or_(*(Paragraph.keywords.contains([candidate]) for candidate in candidates))
+                filters.append(param)
 
         query = query.filter(*filters)
-
-        if sort_string := query_data.get("sort", ""):
-            assert isinstance(sort_string, (list, str)), (
+        if query_embedding is not None:
+            query = (
+                query
+                .join(TextEmbeddings, (Paragraph.id == TextEmbeddings.id) & (Paragraph.dataset == TextEmbeddings.dataset))
+                .order_by(TextEmbeddings.embedding.cosine_distance(query_embedding))
+                .limit(2000)
+            )
+        
+        if sort_by := query_data.get("sort", ""):
+            assert isinstance(sort_by, (list, str)), (
                 "Sort must be list of strings or a string seperated by commas"
             )
-            if isinstance(sort_string, list):
-                sort_string = ",".join(sort_string)
+            if isinstance(sort_by, str):
+                sort_by = sort_by.split(",")
 
-            order_params = []
-            # 1. 拆分字符串
-            parts = sort_string.split(",")
-
-            for part in parts:
-                part = part.strip()
-                if not part:
-                    continue
-
-                # 2. 判断排序方向
-                if part.startswith("-"):
-                    column_name = part[1:]
-                    sort_func = desc
+            sorts = []
+            for sort_part in sort_by:
+                if isinstance(sort_part, str):
+                    sort_part = sort_part.strip()
+                    if not sort_part:
+                        continue
+                    if sort_part.startswith("-"):
+                        column_name = sort_part[1:]
+                        sort_func = desc
+                    else:
+                        column_name = sort_part
+                        sort_func = asc
+                    column = getattr(Paragraph, column_name, None)
+                    if column is not None:
+                        sorts.append(sort_func(column))
                 else:
-                    column_name = part
-                    sort_func = asc
+                    sorts.append(sort_part)
 
-                # 3. 获取模型属性并生成排序对象
-                column = getattr(Paragraph, column_name, None)
-                if column is not None:
-                    order_params.append(sort_func(column))
-
-            query = query.order_by(*order_params)
+            query = query.order_by(*sorts)
 
         if offset := query_data.get("offset", 0):
             query = query.offset(offset)
@@ -425,6 +438,15 @@ class Terms(Base):
     }
 
     term: Mapped[str] = mapped_column(String, nullable=False, comment="词汇")
+    
+    @staticmethod
+    async def starting_with(prefix: str) -> List[str]:
+        if not prefix: return []
+        async for session in get_db_session():
+            q = await session.execute(
+                select(Terms).filter(Terms.term.startswith(prefix)).with_only_columns(Terms.term)
+            )
+            return list(q.scalars())
 
 
 class TaskDBO(Base):
@@ -458,7 +480,7 @@ class TaskDBO(Base):
     user: Mapped["UserInfo"] = relationship("UserInfo", back_populates="tasks")
 
     @staticmethod
-    def get(id_or_name):
+    async def get(id_or_name):
         """Get TaskDBO by ID or name
 
         :param id_or_name: UUID string or name to search for
@@ -466,11 +488,12 @@ class TaskDBO(Base):
         :return: TaskDBO instance or None
         :rtype: TaskDBO | None
         """
-        query = db_session.query(TaskDBO)
-        if is_uuid_literal(id_or_name):
-            return query.get(uuid.UUID(id_or_name))
-        else:
-            return query.filter(TaskDBO.name.contains(id_or_name)).first()
+        async for session in get_db_session():
+            if is_uuid_literal(id_or_name):
+                return session.get(TaskDBO, uuid.UUID(id_or_name))
+            else:
+                result = await session.execute(select(TaskDBO).filter(TaskDBO.name.contains(id_or_name)))
+                return result.scalar_one_or_none()
 
 
 redis_client = redis.Redis.from_url(config.redis.rstrip("/") + "/2")
@@ -577,6 +600,13 @@ class TextEmbeddings(Base):
         comment="段落ID",
     )
 
+    dataset: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("dataset.id", ondelete="CASCADE"),
+        primary_key=True,
+        comment="数据集ID",
+    )
+
     chunk_id: Mapped[int] = mapped_column(
         Integer,
         primary_key=True,
@@ -593,7 +623,17 @@ class TextEmbeddings(Base):
 
     @staticmethod
     @redis_auto_renew_cache()
-    def get_embedding(text: str):
+    def get_embedding_sync(text: str):
+        embedding = TextEmbeddings.embedding_model.encode(
+            text.strip(),
+            convert_to_numpy=True,  # 返回numpy数组，方便后续处理
+            normalize_embeddings=True,  # 归一化向量，提升检索效果
+        )
+
+        return embedding.tolist()        
+
+    @staticmethod
+    async def get_embedding(text: str):
         """
         将多语言文本转换为embedding向量
 
@@ -606,16 +646,10 @@ class TextEmbeddings(Base):
         Raises:
             ValueError: 输入文本为空时抛出异常
         """
-        embedding = TextEmbeddings.embedding_model.encode(
-            text.strip(),
-            convert_to_numpy=True,  # 返回numpy数组，方便后续处理
-            normalize_embeddings=True,  # 归一化向量，提升检索效果
-        )
-
-        return embedding.tolist()
+        return await asyncio.to_thread(TextEmbeddings.get_embedding_sync, text)
 
     @staticmethod
-    def get_embedding_chunks(text: str, chunk_length: int, overlap: int) -> list:
+    async def get_embedding_chunks(text: str, chunk_length: int, overlap: int) -> list:
         """
         长文本切分+批量生成embedding向量，带重叠窗口避免语义割裂
         Args:
@@ -653,7 +687,7 @@ class TextEmbeddings(Base):
                 break
 
         # 批量encode，参数与get_embedding完全一致，保证向量格式统一
-        embeddings = TextEmbeddings.embedding_model.encode(
+        embeddings = await asyncio.to_thread(TextEmbeddings.embedding_model.encode,
             chunks,
             convert_to_numpy=True,
             normalize_embeddings=True,  # 保持归一化，和单句向量一致性检索
@@ -678,17 +712,3 @@ def is_uuid_literal(val: str) -> bool:
         )
         is not None
     )
-
-
-def try_commit() -> None:
-    """Commit database session with error handling
-
-    :raises Exception: Re-raises any exception during commit
-    """
-    try:
-        db_session.commit()
-    except Exception as e:
-        db_session.rollback()
-        raise e
-    finally:
-        db_session.close()

@@ -17,7 +17,6 @@ class ConfigObject(BaseModel):
     model_config = ConfigDict(extra="allow")
 
     # defined fields
-    secret_key: str = Field(description="Secret key for Flask application")
     concurrent: int = Field(default=3, description="Default concurrency level")
     storage: str = Field(description="Storage root directory path")
     database: str = Field(description="Database connection string")
@@ -25,7 +24,7 @@ class ConfigObject(BaseModel):
     plugins: List[str] = Field(
         default_factory=lambda: ["*"], description="List of plugins to load"
     )
-    oidc_secrets: str = Field(description="Path to OIDC client secrets file")
+    oidc: dict = Field(description="OIDC config")
     port: int = Field(default=8370, description="Default port for web server")
     embedding_model: str = Field(
         description="Sentence transformer model name for embeddings"

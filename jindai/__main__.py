@@ -9,23 +9,29 @@ import tempfile
 import zipfile
 
 import click
+import asyncio
 import regex as re
+from sqlalchemy import select
 import urllib3
 import yaml
-from flask import Flask
 
 from . import Plugin, PluginManager, Task, config, storage
-from .api import run_service
+from .app import app, run_service
 from .helpers import get_context, safe_import
-from .models import (Dataset, Paragraph, TaskDBO, UserInfo, db_session,
-                     try_commit)
+from .models import (Dataset, Paragraph, TaskDBO, UserInfo, get_db_session)
 
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 
 def _init_plugins(*paths) -> PluginManager:
     """Inititalize plugins"""
-    return PluginManager(get_context("plugins", Plugin, *paths), Flask(__name__))
+    return PluginManager(get_context("plugins", Plugin, *paths))
+
+
+def asyncio_run(func):
+    def wrapped(*args, **kwargs):
+        return asyncio.run(func(*args, **kwargs))
+    return wrapped
 
 
 @click.group()
@@ -34,13 +40,17 @@ def cli() -> None:
 
 
 @cli.command("init")
-def first_run() -> None:
-    u = db_session.query(UserInfo).first()
-    if not u:
-        u = UserInfo(username="admin", roles=["admin"])
-        db_session.add(u)
-        try_commit()
-        print("Created user: admin; dataset: Default")
+@asyncio_run
+async def first_run() -> None:
+    async for session in get_db_session():
+        u = (await session.execute(select(UserInfo).limit(1))).first()
+        if u:
+            print("Already inited.")
+        else:
+            u = UserInfo(username="admin", roles=["admin"])
+            session.add(u)
+            await session.flush()
+            print("Created user: admin; dataset: Default")
 
 
 @cli.command("export")
@@ -77,9 +87,10 @@ def run_worker() -> None:
 @click.option("-v", "--verbose", type=bool, flag_value=True)
 @click.option("-e", "--edit", type=bool, flag_value=True)
 @click.option("-o", "--output", type=click.File("w", "utf-8", "ignore"), default=None)
-def run_task(task_id, concurrent, verbose, edit, log, output) -> None:
+@asyncio_run
+async def run_task(task_id, concurrent, verbose, edit, log, output) -> None:
     """Run task according to id or name"""
-    dbo = TaskDBO.get(task_id)
+    dbo = await TaskDBO.get(task_id)
     
     if not dbo:
         print(f"Task {task_id} not found")
@@ -104,10 +115,11 @@ def run_task(task_id, concurrent, verbose, edit, log, output) -> None:
 
         with open(temp_name, encoding="utf-8") as fi:
             param = yaml.safe_load(fi)
-            for key, val in param.items():
-                setattr(dbo, key, val)
-            try_commit()
-
+            async for session in get_db_session():
+                for key, val in param.items():
+                    setattr(dbo, key, val)
+                await session.merge(dbo)
+            
         os.unlink(temp_name)
 
     _init_plugins()
@@ -119,7 +131,7 @@ def run_task(task_id, concurrent, verbose, edit, log, output) -> None:
     if concurrent > 0:
         task.concurrent = concurrent
 
-    result = task.execute()
+    result = await task.execute_async()
 
     print()
     print(result)
@@ -138,113 +150,38 @@ def run_task(task_id, concurrent, verbose, edit, log, output) -> None:
 @click.option("--setrole", "-g", default="")
 @click.option("--delete", "-d", default="")
 @click.argument("roles", nargs=-1)
-def user_manage(add, delete, setrole, roles) -> None:
+@asyncio_run
+async def user_manage(add, delete, setrole, roles) -> None:
     """User management"""
-    if add:
-        user = db_session.query(UserInfo).filter(UserInfo.username == add).first()
-        if not user:
-            user = UserInfo(username=add)
-            db_session.add(user)
-        else:
-            print("User already exists.")
-    elif delete:
-        user = db_session.query(UserInfo).filter(UserInfo.username == delete).first()
-        if user:
-            db_session.delete(user)
-    elif setrole:
-        user = db_session.query(UserInfo).filter(UserInfo.username == setrole).first()
-        if user:
-            user.roles.extend(roles)
-    try_commit()
-
-
-@cli.command("plugin-install")
-@click.argument("url")
-def plugin_install(url: str) -> None:
-    """Install plugin
-
-    :param url: install from
-    :type url: str
-    """
-    pmanager = _init_plugins()
-    pmanager.install(url)
-
-
-@cli.command("plugin-export")
-@click.option("--output", "-o")
-@click.argument("infiles", nargs=-1)
-def plugin_export(output: str, infiles) -> None:
-    """Export plugin
-
-    :param output: output file name
-    :type output: str
-    :param infiles: includes path
-    :type infiles: path
-    """
-
-    def _all_files(path):
-        if os.path.isfile(path):
-            yield path
-        else:
-            for base, _, files in os.walk(path):
-                if base == "__pycache__":
-                    continue
-                for f in files:
-                    yield os.path.join(base, f)
-
-    def _export_one(outputzip, filelist):
-        if not outputzip.startswith("jindai.plugins."):
-            outputzip = f"jindai.plugins.{outputzip}"
-        if outputzip.endswith(".zip"):
-            outputzip = outputzip[:-4]
-
-        print("output to", outputzip)
-        with zipfile.ZipFile(outputzip + ".zip", "w", zipfile.ZIP_DEFLATED) as zout:
-            for filepath in filelist:
-                for filename in _all_files(filepath):
-                    print(" ...", filename)
-                    zout.write(filename, filename)
-
-    if len(infiles) > 0:
-        _export_one(output, infiles)
-    else:
-        for p in glob.glob("plugins/*"):
-            pname = os.path.basename(p)
-            if (
-                pname.startswith(("_", "temp_"))
-                or ("." in p and not p.endswith(".py"))
-                or ("." not in p and os.path.isfile(p))
-            ):
-                continue
-            if pname in (
-                "datasources",
-                "hashing",
-                "pipelines",
-                "taskqueue.py",
-            ):
-                continue
-
-            _export_one(os.path.basename(p).split(".")[0], [p])
+    async for session in get_db_session():
+        if add:
+            user = (await session.execute(select(UserInfo).filter(UserInfo.username == add))).first()
+            if not user:
+                user = UserInfo(username=add)
+                session.add(user)
+                await session.flush()
+            else:
+                print("User already exists.")
+        elif delete:
+            user = (await session.execute(select(UserInfo).filter(UserInfo.username == delete))).first()
+            if user:
+                await session.delete(user)
+        elif setrole:
+            user = (await session.execute(select(UserInfo).filter(UserInfo.username == setrole))).first()
+            if user:
+                user.roles.extend(roles)
+                await session.flush()
 
 
 @cli.command("web-service")
 @click.option("--port", default=8370, type=int)
-@click.option("--deployment", "-D", default=False, flag_value=True)
-def web_service(port: int, deployment: bool) -> None:
+def web_service(port: int) -> None:
     """Run web service on port
 
     :param port: port number
     :type port: int
     """
-    from .api import app
-
-    if deployment:
-        safe_import("waitress")
-        from waitress import serve
-
-        serve(app, host="0.0.0.0", port=port, threads=8)
-    else:
-        run_service(port=port)
+    run_service(port=port)
 
 
 @cli.command("ipython")
@@ -266,17 +203,15 @@ def call_ipython() -> None:
 
     tpe = ThreadPoolExecutor(os.cpu_count())
     init = _init_plugins
-    from .app import app
-    app.app_context().push()
-
+    from jindai import app
     def q(query_str):
         return Paragraph.build_query({'search': query_str})
 
-    def run(task_name):
-        dbo = TaskDBO.get(task_name)
+    async def run(task_name):
+        dbo = await TaskDBO.get(task_name)
         if dbo:
-            task = Task.from_dbo(dbo)
-            return task.execute()
+            task = Task.from_dbo(dbo, verbose=True)
+            return await task.execute_async()
 
     ns = dict(jindai.__dict__)
     ns.update(**locals())

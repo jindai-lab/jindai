@@ -2,7 +2,7 @@
 
 import os
 
-from jindai import Plugin
+from jindai.plugin import Plugin
 from jindai.helpers import get_context
 from jindai.pipeline import PipelineStage
 

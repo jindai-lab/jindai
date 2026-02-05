@@ -3,7 +3,8 @@ Sentiment Analysis
 @zhs 情感分析
 """
 
-from jindai import PipelineStage, Plugin
+from jindai.pipeline import PipelineStage
+from jindai.plugin import Plugin
 from jindai.helpers import safe_import
 from jindai.models import Paragraph
 

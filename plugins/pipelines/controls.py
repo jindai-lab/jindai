@@ -2,11 +2,13 @@
 @zhs 工作流程控制
 """
 
-from uuid import UUID
+import asyncio
+from typing import Dict, Iterable, Tuple
 
-from jindai import Pipeline, PipelineStage, Task
 from jindai.app import aeval
-from jindai.models import TaskDBO, db_session
+from jindai.models import TaskDBO
+from jindai.pipeline import Pipeline, PipelineStage
+from jindai.task import Task
 
 
 class FlowControlStage(PipelineStage):
@@ -16,14 +18,19 @@ class FlowControlStage(PipelineStage):
         self._verbose = False
         self._next = None
         self._gctx = {}
-        self._pipelines = [getattr(self, a) for a in dir(
-            self) if isinstance(getattr(self, a), Pipeline)]
+        self._pipelines = [
+            getattr(self, a)
+            for a in dir(self)
+            if isinstance(getattr(self, a), Pipeline)
+        ]
         super().__init__()
 
     @property
     def log(self):
         """log"""
-        return lambda *x: self._log(self.instance_name or self.__class__.__name__, '|', *x)
+        return lambda *x: self._log(
+            self.instance_name or self.__class__.__name__, "|", *x
+        )
 
     @log.setter
     def log(self, val) -> None:
@@ -34,7 +41,7 @@ class FlowControlStage(PipelineStage):
     @property
     def gctx(self) -> dict:
         return self._gctx
-    
+
     @gctx.setter
     def gctx(self, val) -> None:
         self._gctx = val
@@ -72,7 +79,7 @@ class RepeatWhile(FlowControlStage):
     """Repeat loops
     @zhs 重复"""
 
-    def __init__(self, pipeline, times=1, cond='') -> None:
+    def __init__(self, pipeline, times=1, cond="") -> None:
         """
         Args:
             pipeline (PIPELINE): Loop pipeline
@@ -83,8 +90,8 @@ class RepeatWhile(FlowControlStage):
                 @zhs 重复的条件
         """
         self.times = times
-        self.times_key = f'REPEATWHILE_{id(self)}_TIMES_COUNTER'
-        self.cond = cond if cond else f'{self.times_key} < {times}'
+        self.times_key = f"REPEATWHILE_{id(self)}_TIMES_COUNTER"
+        self.cond = cond if cond else f"{self.times_key} < {times}"
         self.pipeline = Pipeline(pipeline, self.log)
         super().__init__()
 
@@ -95,7 +102,7 @@ class RepeatWhile(FlowControlStage):
         try:
             condition_satisfied = aeval(self.cond, paragraph)
         except Exception as ex:
-            self.log_exception('failed to evaluate qx', ex)
+            self.log_exception("failed to evaluate qx", ex)
             return
 
         paragraph[self.times_key] += 1
@@ -137,7 +144,7 @@ class ForEach(FlowControlStage):
         try:
             input_value = aeval(self.input_value, paragraph)
         except Exception as ex:
-            self.log_exception('failed to evaluate qx', ex)
+            self.log_exception("failed to evaluate qx", ex)
             return
 
         for iterval in input_value:
@@ -169,14 +176,14 @@ class Condition(FlowControlStage):
         self.iftrue = Pipeline(iftrue, self.log)
         self.iffalse = Pipeline(iffalse, self.log)
         super().__init__()
-        
+
     def resolve(self, paragraph) -> Iterator:
         pipeline = self.iftrue
         try:
             if not aeval(self.cond, paragraph):
                 pipeline = self.iffalse
         except Exception as ex:
-            self.log_exception('failed to evaluate qx', ex)
+            self.log_exception("failed to evaluate qx", ex)
             return
 
         if pipeline.stages:
@@ -184,9 +191,11 @@ class Condition(FlowControlStage):
         else:
             yield paragraph, self.next
 
-    def summarize(self, result) -> Dict:
-        self.iftrue.summarize(result)
-        self.iffalse.summarize(result)
+    async def summarize(self, result) -> Dict:
+        return {
+            'iftrue': await self.iftrue.summarize(result),
+            'iffalse': await self.iffalse.summarize(result)
+        }
 
 
 from typing import Dict, Iterator
@@ -196,62 +205,70 @@ class CallTask(FlowControlStage):
     """Call to other task
     @zhs 调用其他任务"""
 
-    def __init__(self, task, skip=0, params='') -> None:
+    def __init__(self, task, skip=0, params="") -> None:
         """
         Args:
             task (TASK): Task ID
                 @zhs 任务ID
             skip (int): Skip first (n) stages in pipeline
-                @zhs 跳过处理流程中的前 n 个阶段 
+                @zhs 跳过处理流程中的前 n 个阶段
             params (QUERY): Override parameters in the task
                 @zhs 设置任务中各处理流程参数
         """
-        task = db_session.query(TaskDBO).first(TaskDBO.id == UUID(task))
-        assert task, f'No specified task: {task}'
-        if params:
+        self.task = task
+        if params and isinstance(params, dict):
             for key, val in params.items():
-                secs = key.split('.')
+                secs = key.split(".")
                 target = task.pipeline
                 for sec in secs[1:-1]:
                     if sec.isnumeric():
-                        assert isinstance(target, list) and len(
-                            target) > int(sec), f'Index error: {sec}'
+                        assert isinstance(target, list) and len(target) > int(
+                            sec
+                        ), f"Index error: {sec}"
                         target = target[int(sec)][1]
                     else:
-                        assert sec in target, f'No such parameter: {sec}'
+                        assert sec in target, f"No such parameter: {sec}"
                         target = target[sec]
-                        if isinstance(target, list) and len(target) == 2 and \
-                           isinstance(target[0], str) and isinstance(target[1], dict):
+                        if (
+                            isinstance(target, list)
+                            and len(target) == 2
+                            and isinstance(target[0], str)
+                            and isinstance(target[1], dict)
+                        ):
                             target = target[1]
                 sec = secs[-1]
                 target[sec] = val
 
         self._pipelines = []
-
-        task = Task.from_dbo(task)
-        self.pipeline = task.pipeline
-        self.pipeline.stages = self.pipeline.stages[skip:]
+        self._pipeline_skip = skip
 
         super().__init__()
-
-    def resolve(self, paragraph) -> Iterator:
+        
+        asyncio.run(self.async_init())
+        
+    async def async_init(self):
+        task = await TaskDBO.get(self.task)
+        assert task, f"No specified task: {task}"
+        
+        task = Task.from_dbo(task)
+        self.pipeline = task.pipeline
+        self.pipeline.stages = self.pipeline.stages[self._pipeline_skip:]
+        
+    async def resolve(self, paragraph):
         if self.pipeline.stages:
             yield paragraph, self.pipeline.stages[0]
         else:
             yield paragraph, self.next
 
-    def summarize(self, _) -> Dict:
-        return self.pipeline.summarize()
-
-
-from typing import Dict, Iterable, Tuple
+    async def summarize(self, _):
+        return await self.pipeline.summarize()
 
 
 class RunTask(CallTask):
     """Run task at summarization phrase
     @zhs 在收尾阶段运行任务"""
 
-    def __init__(self, task, params='') -> None:
+    def __init__(self, task, params="") -> None:
         """
         Args:
             task (TASK): Task ID
@@ -261,7 +278,7 @@ class RunTask(CallTask):
         """
         super().__init__(task, 0, params)
 
-    def flow(self, paragraph, gctx) -> Iterable[Tuple]:
+    async def flow(self, paragraph, gctx) -> Iterable[Tuple]:
         self.gctx = gctx
         yield paragraph, self.next
 
@@ -276,7 +293,7 @@ class AggregateDataSource(FlowControlStage):
     """Aggregate results from multiple pipeline stages
     @zhs 聚合不同管线模块的结果
     """
-    
+
     def __init__(self, pipelines) -> None:
         """
         Args:
@@ -285,7 +302,7 @@ class AggregateDataSource(FlowControlStage):
         """
         super().__init__()
         self._pipelines = [Pipeline(pipeline, self.log) for pipeline in pipelines]
-        
+
     def resolve(self, paragraph) -> Iterator:
         if self._pipelines:
             for pipeline in self._pipelines:

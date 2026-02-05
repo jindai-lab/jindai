@@ -5,12 +5,22 @@ import sys
 import traceback
 from collections import defaultdict
 from collections.abc import Iterable as IterableClass
-from typing import Any, Callable, Dict, Iterable, List, Tuple, Type, Union
-
+from typing import Any, Awaitable, Callable, Dict, Iterable, List, Tuple, Type, Union
 import regex as re
+import asyncio
 
 from .app import config, storage
 from .models import Paragraph
+
+
+ResolveResultType = Paragraph | None
+ResolveResultType |= Tuple[ResolveResultType, "PipelineStage"]
+ResolveReturn = (
+    ResolveResultType
+    | Iterable[ResolveResultType]
+    | Awaitable[ResolveResultType]
+    | Awaitable[Iterable[ResolveResultType]]
+)
 
 
 class PipelineStage:
@@ -149,10 +159,10 @@ class PipelineStage:
             return [ele for ele in str(val).split("\n") if ele]
 
     @staticmethod
-    def parse_paths(val) -> list:
+    async def parse_paths(val) -> list:
         files = []
         for pattern in PipelineStage.parse_lines(val):
-            files.extend(storage.globs(pattern))
+            files.extend(await storage.glob(pattern))
         return files
 
     @property
@@ -179,7 +189,7 @@ class PipelineStage:
         self.log(info, type(exc).__name__, exc)
         self.log("\n".join(traceback.format_tb(exc.__traceback__)))
 
-    def resolve(self, paragraph: Paragraph) -> Paragraph:
+    def resolve(self, paragraph: Paragraph) -> ResolveReturn:
         """Map period, handling paragraph.
 
         :param paragraph: Paragraph to process
@@ -202,7 +212,9 @@ class PipelineStage:
         """
         return result
 
-    def flow(self, paragraph: Paragraph) -> Iterable[Tuple]:
+    async def flow(
+        self, paragraph: Paragraph
+    ) -> Iterable[Tuple[ResolveReturn, "PipelineStage | None"]]:
         """Flow control
 
         :param paragraph: Paragraph to process
@@ -214,22 +226,34 @@ class PipelineStage:
         """
         if self.verbose:
             self.log("Processing")
+            
         results = self.resolve(paragraph)
+            
         if self.verbose:
             self.log("Resolved to", type(results).__name__)
-        if isinstance(results, IterableClass):
+        
+        def _handle(result):
+            if (
+                isinstance(result, tuple)
+                and len(result) == 2
+                and isinstance(result[0], Paragraph)
+                and isinstance(result[1], PipelineStage)
+            ):
+                return result
+            else:
+                return result, self.next
+        
+        if inspect.isasyncgen(results):
+            async for result in results:
+                yield _handle(result)
+        elif isinstance(results, IterableClass):
             for result in results:
-                if (
-                    isinstance(result, tuple)
-                    and len(result) == 2
-                    and isinstance(result[0], Paragraph)
-                    and isinstance(result[1], PipelineStage)
-                ):
-                    yield result
-                else:
-                    yield result, self.next
-        elif results is not None:
-            yield results, self.next
+                yield _handle(result)
+        else:
+            if asyncio.iscoroutine(results):
+                results = await results
+            if results is not None:
+                yield results, self.next
 
 
 class DataSourceStage(PipelineStage):
@@ -275,15 +299,15 @@ class DataSourceStage(PipelineStage):
         """
         pass
 
-    def fetch(self) -> Iterable[Paragraph]:
+    async def fetch(self):
         """Fetch data from data source
 
         :return: Iterator of paragraphs
         :rtype: Iterable[Paragraph]
         """
-        yield from []
+        yield
 
-    def resolve(self, paragraph: Paragraph) -> Paragraph | Iterable[Paragraph]:
+    async def resolve(self, paragraph: Paragraph):
         """Update the parameters of the data source with
             the input paragraph
 
@@ -312,7 +336,8 @@ class DataSourceStage(PipelineStage):
         instance.gctx = self.gctx
         instance.next = self.next
         self.before_fetch(instance)
-        yield from instance.fetch()
+        async for item in instance.fetch():
+            yield item
 
 
 class Pipeline:
@@ -350,9 +375,11 @@ class Pipeline:
                     args[k] = [
                         _
                         for _ in [
-                            line.get("text", "")
-                            if isinstance(line, dict)
-                            else str(line)
+                            (
+                                line.get("text", "")
+                                if isinstance(line, dict)
+                                else str(line)
+                            )
                             for line in args[k]
                         ]
                         if _
@@ -440,15 +467,16 @@ class Pipeline:
             stage.gctx = val
 
 
-def summarize(self, result=None):
-    """Summarize pipeline results by calling summarize on each stage
+    async def summarize(self, result=None):
+        """Summarize pipeline results by calling summarize on each stage
 
-    :param result: Result from previous stage, defaults to None
-    :type result: dict, optional
-    :return: Final summarized result
-    :rtype: dict
-    """
-    for stage in self.stages:
-        result = stage.summarize(result) or result
+        :param result: Result from previous stage, defaults to None
+        :type result: dict, optional
+        :return: Final summarized result
+        :rtype: dict
+        """
+        for stage in self.stages:
+            result = stage.summarize(result) or result
+            if asyncio.iscoroutine(result): result = await result
 
-    return result
+        return result

@@ -4,7 +4,7 @@ import math
 from collections import defaultdict
 from typing import Dict
 
-from jindai import *
+from jindai.pipeline import PipelineStage
 from jindai.models import Paragraph
 
 from .basics import Counter
