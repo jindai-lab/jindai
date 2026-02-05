@@ -2,13 +2,12 @@
 AMap LBS API
 高德地图地理位置服务 API
 """
-import json
 import math
 import os
 from typing import Iterable
 
 import pandas as pd
-import requests
+import httpx
 
 from jindai.helpers import safe_import
 from jindai.models import Paragraph
@@ -36,7 +35,7 @@ class AMapCityCodeQuery(DataSourceStage):
         """
         self.query = [q for q in content.split() if q]
 
-    def fetch(self) -> Iterable:
+    async def fetch(self):
         df = pd.read_excel(os.path.join(os.path.dirname(
             __file__), 'AMap_adcode_citycode.xlsx'))
         for _, data in df.iterrows():
@@ -66,7 +65,7 @@ class AMapPOISearch(DataSourceStage):
         self.category = '|'.join(self.parse_lines(category))
         self.geoutil = safe_import('geojson_utils')
 
-    def fetch(self) -> Iterable[Paragraph]:
+    async def fetch(self):
 
         gcjconv = GCJtoWGS(field='coordinate', out_format='lat_lng').resolve
 
@@ -77,10 +76,12 @@ class AMapPOISearch(DataSourceStage):
         while page < total_pages:
             try:
                 self.log("{}/{}".format(page, total_pages))
-                j = requests.get(url_template % page).content
-                j = json.loads(j)
-
-                for poi in j["pois"]:
+                
+                async with httpx.AsyncClient() as client:
+                    response = await client.get(url_template % page)
+                    data = response.json()
+                
+                for poi in data["pois"]:
                     lng, lat = GCJtoWGS.convert(poi["location"])
 
                     feature = {
@@ -103,8 +104,8 @@ class AMapPOISearch(DataSourceStage):
                     gcjconv(p)
                     yield p
 
-                total_pages = int(math.ceil(int(j["count"]) / 20))
-            except requests.ConnectionError:
+                total_pages = int(math.ceil(int(data["count"]) / 20))
+            except httpx.NetworkError:
                 pass
             finally:
                 page += 1
@@ -140,9 +141,11 @@ class AMapGeoCode(_GeoCodingStage):
     @zhs 高德地图地理编码
     """
 
-    def resolve(self, paragraph: Paragraph) -> Paragraph:
+    async def resolve(self, paragraph: Paragraph) -> Paragraph:
         url = f"https://restapi.amap.com/v3/geocode/geo?key={pluginConfig['amap_key']}&address={self.content}"
-        resp = requests.get(url).json()
+        async with httpx.AsyncClient() as client:
+            resp = await client.get(url)
+            resp = resp.json()
         location = resp['geocodes'][0]['location']
         lng, lat = GCJtoWGS.convert(location)
         return self.assign_coordinates(paragraph, lat, lng)
@@ -170,7 +173,7 @@ class GCJtoWGS(_GeoCodingStage):
     @staticmethod
     def convert(coords, in_format='') -> list | None:
         if not coords:
-            return
+            return [0, 0]
         if isinstance(coords, str):
             coords = coords.split(',')
         if isinstance(coords, (list, tuple)):
@@ -197,7 +200,7 @@ class GoogleMapGeoCode(_GeoCodingStage):
         self.gmaps = googlemaps.Client(key=pluginConfig['google_key'])
 
     def resolve(self, paragraph: Paragraph):
-        coordinates = self.gmaps.geocode(paragraph.content)[
+        lat, lng = self.gmaps.geocode(paragraph.content)[
             'geometry']['location']
         return self.assign_coordinates(paragraph, lat, lng)
 
@@ -208,9 +211,11 @@ class BingMapGeoCode(_GeoCodingStage):
     @zhs 查询必应地图位置信息
     """
 
-    def resolve(self, paragraph: Paragraph):
+    async def resolve(self, paragraph: Paragraph):
         url = f'http://dev.virtualearth.net/REST/v1/Locations?q={paragraph.content}&output=json&key={pluginConfig["bing_key"]}'
-        outp = requests.get(url).json()
+        async with httpx.AsyncClient() as client:
+            outp = await client.get(url)
+            outp = outp.json()
         lng, lat = outp['resourceSets'][0]['resources'][0]['point']['coordinates']
         return self.assign_coordinates(paragraph, lat, lng)
     
@@ -257,7 +262,7 @@ class OSMPOISearch(DataSourceStage):
                 tag = tag[:-1]
             yield tag
     
-    def fetch(self) -> Iterable[Paragraph]:
+    async def fetch(self):
         for tag in self.tags:
             for guess in set(self.guesses(tag)):
                 for p in self.ox.geometries_from_polygon(

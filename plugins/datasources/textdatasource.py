@@ -26,8 +26,8 @@ class FilePatternDataSource(DataSourceStage):
         """
         self.paths = PipelineStage.parse_paths(content)
 
-    def fetch(self) -> Iterable:
-        for path in self.paths:
+    async def fetch(self):
+        for path in await self.paths:
             yield Paragraph(content=path)
 
 
@@ -57,15 +57,12 @@ class TextDataSource(DataSourceStage):
         self.lang = lang
         self.files = PipelineStage.parse_paths(content)
 
-    def fetch(self) -> Iterable:
-        for path in self.files:
+    async def fetch(self):
+        for path in await self.files:
             for i, line in enumerate(storage.open(path)):
                 yield Paragraph(content=codecs.decode(line),
                                 source_url=path if '://' in path else storage.relative_path(path),
                                 dataset=self.name, lang=self.lang, outline=f'{i+1:06d}')
-
-
-from typing import Iterable
 
 
 class LinesDataSource(DataSourceStage):
@@ -98,7 +95,7 @@ class LinesDataSource(DataSourceStage):
         self.lines = content.split(delimiter)
         self.params = params or {}
 
-    def fetch(self) -> Iterable:
+    async def fetch(self):
         self.params.pop('contnet', '')
         for line in self.lines:
             yield Paragraph(lang=self.lang, dataset=self.name, content=line)
@@ -192,6 +189,7 @@ class BiblioDataSource(DataSourceStage):
         if doc:
             yield Paragraph.from_dict(dict(dataset=self.dataset, **doc))
 
-    def fetch(self) -> Iterable:
-        for file in self.files:
-            yield from self.method(file)
+    async def fetch(self):
+        for file in await self.files:
+            for item in self.method(file):
+                yield item

@@ -9,7 +9,7 @@ import regex as re
 from sqlalchemy import func, select
 
 from jindai.app import storage
-from jindai.models import Dataset, Paragraph, db_session
+from jindai.models import Dataset, Paragraph, get_db_session
 from jindai.pipeline import DataSourceStage, PipelineStage
 
 
@@ -68,31 +68,34 @@ class PDFDataSource(DataSourceStage):
                 Page range, e.g. 1-3
                 @zhs 页码范围，例如 1-3
         """
-        self.dataset = Dataset.get(dataset_name).id
+        self.dataset_name = dataset_name
         self.lang = lang
         self.skip_existed = skip_existed
         self.page_range = sorted(resolve_range(page_range))
         self.files = PipelineStage.parse_paths(content)
-        assert self.dataset
 
-    def fetch(self) -> Iterable:
+    async def fetch(self):
+        dataset = await Dataset.get(self.dataset_name)
         lang = self.lang
+        files = await self.files
 
         if self.skip_existed:
-            existent = {
-                d["source_url"]: d["max_page"]
-                for d in db_session.execute(
-                    select(
-                        Paragraph.source_url,
-                        func.max(Paragraph.source_page).label("max_page"),
-                    ).where(Paragraph.source_url.in_(self.files)).group_by(Paragraph.source_url)
-                ).mappings()
-            }
+            async for session in get_db_session():
+                result = await session.execute(
+                        select(
+                            Paragraph.source_url,
+                            func.max(Paragraph.source_page).label("max_page"),
+                        ).where(Paragraph.source_url.in_(files)).group_by(Paragraph.source_url)
+                    )
+                existent = {
+                    d["source_url"]: d["max_page"]
+                    for d in result.mappings()
+                }
         else:
             existent = {}
 
-        total = len(self.files)
-        for i, filepath in enumerate(self.files):
+        total = len(files)
+        for i, filepath in enumerate(files):
             imported_pages = 0
             self.log(f"{i+1}/{total} importing {filepath}")
 
@@ -137,8 +140,8 @@ class PDFDataSource(DataSourceStage):
                     content=content,
                     source_url=filepath,
                     source_page=page,
-                    pagenum=label or (page + 1),
-                    dataset=self.dataset,
+                    pagenum=label or str(page + 1),
+                    dataset=dataset.id,
                 )
 
             if not existent.get(filepath) and imported_pages == 0:

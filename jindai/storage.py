@@ -1,3 +1,4 @@
+import asyncio
 import glob
 import mimetypes
 import os
@@ -176,7 +177,7 @@ class Storage:
         """
         return self._dir_files(basedir, os.listdir(basedir), detailed)
 
-    def globs(self, pattern: str) -> List[str]:
+    async def glob(self, pattern: str, recursive: bool = False) -> List[str]:
         """Get relative paths matching glob pattern
 
         :param pattern: Glob pattern to match files
@@ -184,7 +185,8 @@ class Storage:
         :return: List of relative paths matching pattern
         :rtype: List[str]
         """
-        return [self.relative_path(p) for p in glob.glob(self.safe_join(pattern))]
+        results = await asyncio.to_thread(glob.glob, self.safe_join(pattern), recursive=recursive)
+        return [self.relative_path(p) for p in results]
 
     def search(self, base_dir: str, search: str, detailed: bool = True) -> Dict[str, Any]:
         """Search for files/directories matching pattern in directory tree
@@ -218,7 +220,7 @@ class Storage:
     def save(self, file_obj, save_rel_path: str) -> Dict[str, Any]:
         """Save uploaded file with streaming size validation
 
-        :param file_obj: File object from Flask request
+        :param file_obj: File object
         :type file_obj: file
         :param save_rel_path: Relative path where to save the file
         :type save_rel_path: str

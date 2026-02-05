@@ -6,10 +6,11 @@ import shutil
 import tempfile
 import zipfile
 from collections import defaultdict
-from typing import Callable
+from typing import Callable, Iterator
 
-from flask import Flask, Response, jsonify
+from .helpers import get_context
 
+from .app import router
 from .config import instance as config
 from .pipeline import Pipeline, PipelineStage
 from .storage import instance as storage
@@ -76,48 +77,27 @@ class Plugin:
                 Pipeline.ctx[cls.__name__] = cls
 
 
-from typing import Iterator
-
-
 class PluginManager:
     """Plugin manager"""
 
-    def __init__(self, plugin_ctx: dict, app: Flask) -> None:
+    def __init__(self, plugin_ctx: dict) -> None:
         """Initialize plugin manager
 
         :param plugin_ctx: Plugin context dictionary
-        :type plugin_ctx: dict
-        :param app: Flask application instance
-        :type app: Flask
+        :type plugin_ctx: dict 
         """
         self.plugins = []
         self.filters = {}
         self.callbacks = defaultdict(list)
-        self.app = app
 
-        @app.route("/api/v2/plugins/styles.css")
-        def plugins_style():
-            """Returns css from all enabled plugins
-
-            Returns:
-                Response: css document
-            """
-            css = "\n".join([handler() or "" for handler in self.callbacks["css"]])
-            return Response(css, mimetype="text/css")
-
-        @app.route("/api/v2/plugins/filters", methods=["GET", "POST"])
-        def plugin_pages():
-            """Returns names for special filters in every plugins"""
-            return jsonify([dict(spec, handler="") for spec in self.filters.values()])
-
-        @app.route("/api/v2/plugins")
+        @router.get("/plugins")
         def plugin_list():
-            return jsonify([type(pl).__name__ for pl in self.plugins])
+            return [type(pl).__name__ for pl in self.plugins]
 
-        @app.route("/api/v2/plugins", methods=["POST"])
+        @router.post("/plugins")
         def plugin_install(url):
             self.install(url)
-            return jsonify(True)
+            return True
 
         # load plugins
 
@@ -212,3 +192,16 @@ class PluginManager:
             shutil.copytree(source, target)
 
         shutil.rmtree(tmpdir)
+
+
+def prepare_plugins() -> 'PluginManager':
+    """Prepare plugins"""
+    from .plugin import Plugin, PluginManager
+    
+    if os.path.exists("restarting"):
+        os.unlink("restarting")
+    plugin_ctx = get_context("plugins", Plugin)
+    return PluginManager(plugin_ctx)
+
+
+plugins = prepare_plugins()

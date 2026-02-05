@@ -13,7 +13,7 @@ from typing import Dict, Iterable
 from urllib.parse import urljoin
 
 import regex as re
-import requests
+import httpx
 from bs4 import BeautifulSoup as B
 
 from jindai.app import aeval, config, storage
@@ -42,31 +42,30 @@ class CachedWebAccess:
     def _digest(self, url) -> str:
         return os.path.join(self.base, sha1(url.encode('utf-8')).hexdigest())
     
-    def request(self, url):
-        return requests.get(url, headers={'User-Agent': 'Mozilla/5.0', 
-                                          'Referer': url}).content
+    async def request(self, url):
+        async with httpx.AsyncClient() as client:
+           resp = await client.get(url, headers={'User-Agent': 'Mozilla/5.0', 
+                                          'Referer': url})
+        return resp.content    
     
-    def request_browserless(self, url, wait_for=''):
+    async def request_browserless(self, url, wait_for=''):
         
         pyppeteer = safe_import('pyppeteer')
 
-        async def fetch():
-            browser = await pyppeteer.launcher.connect(
-                browserWSEndpoint=config.browserless
-            )
-            page = await browser.newPage()
-            await page.goto(url)
-            if wait_for:
-                await page.waitForSelector(wait_for)
-            
-            values = await page.evaluate('''() => document.documentElement.outerHTML''')
-            
-            browser.close()
-            return values.encode('utf-8')
+        browser = await pyppeteer.launcher.connect(
+            browserWSEndpoint=config.browserless
+        )
+        page = await browser.newPage()
+        await page.goto(url)
+        if wait_for:
+            await page.waitForSelector(wait_for)
         
-        return asyncio.run(fetch())
-
-    def get(self, url, with_chrome=False, wait_for=''):
+        values = await page.evaluate('''() => document.documentElement.outerHTML''')
+        
+        browser.close()
+        return values.encode('utf-8')
+        
+    async def get(self, url, with_chrome=False, wait_for=''):
         hashed = self._digest(url)
         if os.path.exists(hashed):
             with open(hashed, 'rb') as fi:
@@ -74,9 +73,9 @@ class CachedWebAccess:
         else:
             if url.split('://')[0] in ('http', 'https'):
                 if with_chrome or wait_for:
-                    data = self.request_browserless(url, wait_for)
+                    data = await self.request_browserless(url, wait_for)
                 else:
-                    data = self.request(url)
+                    data = await self.request(url)
             else:
                 data = storage.open(url, 'rb').read()
             if data:
@@ -168,12 +167,13 @@ class WebPageListingDataSource(DataSourceStage):
             img_pattern) or DEFAULT_IMG_PATTERNS.split('\n')
         self.level = level
         self.wait_for = wait_for
+        self.with_chrome = with_chrome
 
-    def get_url(self, url) -> Paragraph:
+    async def get_url(self, url) -> Paragraph:
         """Read html from url, return BeautifulSoup object"""
         self.log('get url', url)
         try:
-            data = WebPageListingDataSource.cache.get(url, self.with_chrome, self.wait_for)
+            data = await WebPageListingDataSource.cache.get(url, self.with_chrome, self.wait_for)
         except OSError as ose:
             self.log_exception(f'Error while reading from {url}', ose)
             data = ''
@@ -197,7 +197,7 @@ class WebPageListingDataSource(DataSourceStage):
         
         return para
 
-    def parse_list(self, url, b) -> list:
+    async def parse_list(self, url, b) -> list:
         """Parse url as a list page"""
 
         if not b:
@@ -212,7 +212,7 @@ class WebPageListingDataSource(DataSourceStage):
             if link_url in self.visited:
                 continue
             # match scopes
-            for scope in self.scopes:
+            for scope in await self.scopes:
                 if link_url.startswith(scope):
                     break
             else:
@@ -224,23 +224,23 @@ class WebPageListingDataSource(DataSourceStage):
         self.log(len(links), 'links')
         return list(links)
 
-    def fetch(self) -> Iterable:
+    async def fetch(self):
         level = self.level or 1
-        for url in self.paths:
+        for url in await self.paths:
             if url in self.visited:
                 continue
             self.visited.add(url)
 
-            para = self.get_url(url)
+            para = await self.get_url(url)
             b = B(para.html, 'lxml')
             para.html = str(b)
 
             if level <= self.list_depth and (self.list_link.search(url) or self.detail_link.search(url)):
                 self.log('parse list', url, 'level', level) 
-                for upath in self.parse_list(url, b):
+                for upath in await self.parse_list(url, b):
                     if upath not in self.queued:
                         self.queued.add(upath)
-                        yield self.collection(content=upath, level=level+1), self
+                        yield Paragraph.from_dict(content=upath, level=level+1), self
 
             if self.detail_link.search(url):
                 self.log('parse detail', url)
@@ -274,7 +274,7 @@ class JSONDataSource(DataSourceStage):
         if not isinstance(self.content, list):
             self.content = [self.content]
 
-    def fetch(self) -> Iterable:
+    async def fetch(self):
         for paragraph in self.content:
             yield Paragraph.from_dict(paragraph.as_dict())
 

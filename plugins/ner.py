@@ -6,7 +6,8 @@ import hanlp
 import regex as re
 import spacy
 
-from jindai import PipelineStage, Plugin
+from jindai.pipeline import PipelineStage
+from jindai.plugin import Plugin
 from jindai.models import Paragraph
 
 

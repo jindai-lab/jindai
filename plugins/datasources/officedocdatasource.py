@@ -32,7 +32,7 @@ class WordDataSource(DataSourceStage):
                 Paths
                 @zhs 文件列表
         """
-        self.dataset = Dataset.get(dataset_name)
+        self.dataset_name = dataset_name
         self.lang = lang
         self.files = PipelineStage.parse_paths(content)
 
@@ -46,15 +46,16 @@ class WordDataSource(DataSourceStage):
             os.unlink(filename)
             return res
 
-    def fetch(self) -> Iterable:
-        for file in self.files:
+    async def fetch(self):
+        dataset = await Dataset.get(self.dataset_name)
+        for file in await self.files:
             doc = self.call_abiword(file)
             if doc:
                 para = Paragraph(
                     lang=self.lang, content=doc,
                     source_url=storage.relative_path(file),
                     pagenum=1,
-                    dataset=self.dataset.id,
+                    dataset=dataset.id,
                     outline=''
                 )
                 yield para
@@ -79,18 +80,18 @@ class ExcelDataSource(DataSourceStage):
                 Paths
                 @zhs 文件列表
         """
-        
-        self.dataset = Dataset.get(dataset_name)
+        self.dataset_name = dataset_name
         self.lang = lang
         self.files = PipelineStage.parse_paths(content)
 
-    def fetch(self) -> Iterable[Paragraph]:
-        for file in self.files:
+    async def fetch(self):
+        dataset = await Dataset.get(self.dataset_name)
+        for file in await self.files:
             dataframe = pd.read_excel(file)
             for _, row in dataframe.iterrows():
                 data = row.to_dict()
                 if 'dataset' not in data:
-                    data['dataset'] = self.dataset.id
+                    data['dataset'] = dataset.id
                 if 'lang' not in data:
                     data['lang'] = self.lang
                 yield Paragraph.from_dict(data)

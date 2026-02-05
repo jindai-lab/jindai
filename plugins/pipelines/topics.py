@@ -10,7 +10,7 @@ from typing import Dict
 import numpy as np
 from sentence_transformers import SentenceTransformer, util
 
-from jindai import PipelineStage
+from jindai.pipeline import PipelineStage
 from jindai.helpers import safe_import
 from jindai.models import Paragraph
 

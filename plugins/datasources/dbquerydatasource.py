@@ -2,10 +2,7 @@
 Query Database
 @zhs 来自数据库
 """
-
-from typing import Iterable
-
-from jindai.models import Paragraph, db_session
+from jindai.models import Paragraph, get_db_session
 from jindai.pipeline import DataSourceStage
 
 
@@ -45,5 +42,7 @@ class DBQueryDataSource(DataSourceStage):
         if raw:
             self.query = self.query.mappings()
 
-    def fetch(self) -> Iterable:
-        yield from db_session.execute(self.query)
+    async def fetch(self):
+        async for session in get_db_session():
+            for item in session.execute(self.query):
+                yield item

@@ -23,36 +23,42 @@ jieba = jieba3.jieba3()
 
 class AutoUnloadSentenceTransformer:
     """
-    SentenceTransformer 模型自动加载/卸载辅助类
-    核心机制：超过指定空闲时间（默认5分钟）无调用，自动卸载模型释放内存/显存
+    SentenceTransformer model automatic loading/unloading helper class.
+
+    Automatically unload the model to release memory/GPU memory when idle
+    for a specified timeout period (default 5 minutes).
     """
 
     def __init__(self, model_name_or_path: str, idle_timeout: int = 300) -> None:
         """
-        初始化模型管理器
-        :param model_name_or_path: 模型名称(如all-MiniLM-L6-v2)或本地模型路径，与SentenceTransformer一致
-        :param idle_timeout: 空闲超时时间，单位秒，默认300秒=5分钟
+        Initialize the model manager.
+
+        Args:
+            model_name_or_path: Model name (e.g., all-MiniLM-L6-v2) or local model path,
+                consistent with SentenceTransformer
+            idle_timeout: Idle timeout in seconds, default 300 seconds (5 minutes)
         """
         self.model_name_or_path = model_name_or_path
-        self.idle_timeout = idle_timeout  # 空闲超时阈值
-        self.model = None  # 核心模型对象，初始为空（惰性加载）
-        self.last_used_time = time.time()  # 最后一次使用时间戳
-        self.lock = threading.Lock()  # 线程安全锁
-        self._monitor_thread = None  # 监控线程
-        self._stop_monitor = False  # 监控线程停止标识
+        self.idle_timeout = idle_timeout  # Idle timeout threshold
+        self.model = None  # Core model object, initially empty (lazy loading)
+        self.last_used_time = time.time()  # Last used timestamp
+        self.lock = threading.Lock()  # Thread-safe lock
+        self._monitor_thread = None  # Monitoring thread
+        self._stop_monitor = False  # Monitoring thread stop flag
 
-        # 启动空闲监控线程（后台守护线程，随主线程退出）
+        # Start idle monitoring thread (daemon thread that exits with main thread)
         self._start_monitor()
 
     def _start_monitor(self) -> None:
-        """启动模型空闲监控后台线程"""
+        """Start the model idle monitoring background thread."""
 
         def monitor_loop():
             """Monitor model usage and unload when idle timeout is reached"""
             while not self._stop_monitor:
-                time.sleep(10)  # 每10秒检测一次，降低CPU占用
+                time.sleep(10)  # Check every 10 seconds to reduce CPU usage
                 with self.lock:
-                    # 满足2个条件触发卸载：1.模型已加载 2.当前时间 - 最后使用时间 > 超时阈值
+                    # Trigger unloading when both conditions are met:
+                    # 1. Model is loaded 2. Current time - last used time > timeout threshold
                     if (
                         self.model is not None
                         and (time.time() - self.last_used_time) > self.idle_timeout
@@ -63,51 +69,61 @@ class AutoUnloadSentenceTransformer:
         self._monitor_thread.start()
 
     def _load_model(self) -> None:
-        """加载模型"""
+        """Load the model."""
         if self.model is None:
             self.model = SentenceTransformer(self.model_name_or_path)
-        # 每次加载/复用，都更新最后使用时间
+        # Update last used time on each load/reuse
         self.last_used_time = time.time()
 
     def _unload_model(self) -> None:
-        """卸载模型，彻底释放内存+显存"""
+        """Unload the model to release memory/GPU memory completely."""
         if self.model is not None:
-            print(f"[自动卸载] 模型空闲超{self.idle_timeout}秒，开始释放资源...")
-            # 核心：删除模型对象
+            print(
+                f"[Auto-unload] Model idle for {self.idle_timeout} seconds, releasing resources..."
+            )
+            # Core: Delete the model object
             del self.model
             self.model = None
 
-            # 强制触发Python垃圾回收，释放内存
+            # Force Python garbage collection to release memory
             gc.collect()
 
-            # 关键步骤：清空torch显存缓存（GPU环境必须，否则显存不释放）
+            # Critical step: Clear PyTorch GPU memory cache (required for GPU, otherwise GPU memory won't be released)
             if torch.cuda.is_available():
                 torch.cuda.empty_cache()
                 torch.cuda.ipc_collect()
 
-            print(f"[自动卸载] 模型资源释放完成")
+            print(f"[Auto-unload] Model resources released")
 
     def encode(self, sentences, **kwargs) -> np.ndarray:
         """
-        封装原生encode方法，无缝调用
-        :param sentences: 单句/句子列表，与原生一致
-        :param kwargs: encode的其他参数，如convert_to_tensor、normalize_embeddings等
-        :return: 句子向量，与原生一致
+        Wrap the native encode method for seamless usage.
+
+        Args:
+            sentences: Single sentence or list of sentences, consistent with native method
+            kwargs: Other encode parameters such as convert_to_tensor, normalize_embeddings, etc.
+
+        Returns:
+            Sentence embeddings
         """
         with self.lock:
-            self._load_model()  # 无则加载，有则复用并更新时间
-            # 调用原生模型方法
+            self._load_model()  # Load if not present, reuse and update time
+            # Call native model method
             embeddings = self.model.encode(sentences, **kwargs)
-            # 更新最后使用时间
+            # Update last used time
             self.last_used_time = time.time()
             return embeddings
 
     def encode_batch(self, sentences, **kwargs):
         """
-        封装原生encode_batch方法，批量编码更高效
-        :param sentences: 二维句子列表，与原生一致
-        :param kwargs: 其他参数
-        :return: 批量句子向量，与原生一致
+        Wrap the native encode_batch method for efficient batch encoding.
+
+        Args:
+            sentences: 2D list of sentences
+            kwargs: Other parameters
+
+        Returns:
+            Batch sentence embeddings
         """
         with self.lock:
             self._load_model()
@@ -116,7 +132,7 @@ class AutoUnloadSentenceTransformer:
             return embeddings
 
     def __del__(self) -> None:
-        """对象销毁时，主动卸载模型+停止监控线程"""
+        """Clean up when object is destroyed - unload model and stop monitoring thread."""
         self._stop_monitor = True
         with self.lock:
             self._unload_model()
@@ -167,18 +183,29 @@ class WordStemmer:
         return WordStemmer._language_stemmers[lang]
 
     def stem_tokens(self, lang, tokens):
-        """Stem words
+        """
+        Stem words
 
-        :param tokens: list of words
-        :type tokens: list
-        :return: stemmed words
-        :rtype: list
+        Args:
+            tokens: list of words
+
+        Returns:
+            stemmed words
         """
         tokens = [WordStemmer.get_stemmer(lang).stem(_) for _ in tokens]
         return tokens
 
     def stem_from_params(self, word, lang="en") -> dict[str, Any]:
-        """Add stem() function for query"""
+        """
+        Add stem() function for query
+
+        Args:
+            word: word to stem
+            lang: language code
+
+        Returns:
+            dictionary with stemmed keywords
+        """
         assert isinstance(lang, str) and isinstance(word, str), (
             f"Parameter type error for stem function: got {type(word)} and {type(lang)}"
         )
@@ -190,12 +217,15 @@ _pip_lock = Lock()
 
 def safe_import(module_name: str, package_name: str = ""):
     """
-    Import a module and if it's not installed install it.
+    Import a module and install it if not installed.
 
-    @param module_name - The name of the module to import.
-    @param package_name - The name of the package to import the module from. Defaults to the module name if not specified.
+    Args:
+        module_name: Name of the module to import
+        package_name: Name of the package to import the module from.
+            Defaults to module name if not specified.
 
-    @return The imported module object.
+    Returns:
+        Imported module object
     """
     try:
         importlib.import_module(module_name)
@@ -211,25 +241,27 @@ RE_DIGITS = re.compile(r"[\+\-]?\d+")
 
 
 def get_context(directory: str, parent_class: Type, *sub_dirs: str) -> Dict:
-    """Get context for given directory and parent class
+    """
+    Get context for given directory and parent class.
 
-    :param directory: directory path relative to the working directory
-    :type directory: str
-    :param parent_class: parent class of all defined classes to include
-    :type parent_class: Type
-    :return: a directory in form of {"ClassName": Class}
-    :rtype: Dict
+    Args:
+        directory: Directory path relative to the working directory
+        parent_class: Parent class of all defined classes to include
+        sub_dirs: Subdirectories to search (optional)
+
+    Returns:
+        Dictionary in form of {"ClassName": Class}
     """
 
     def _prefix(sub_dir, name):
         """Prefixing module name"""
         dirpath = directory
-        if sub_dir != ".":
+        if sub_dir and sub_dir != ".":
             dirpath += os.sep + sub_dir
         return dirpath.replace(os.sep, ".") + "." + name
 
     if len(sub_dirs) == 0:
-        sub_dirs = ["."]
+        sub_dirs = [""]
     modules = []
     for sub_dir in sub_dirs:
         modules += [

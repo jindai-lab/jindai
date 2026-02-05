@@ -3,8 +3,6 @@ from io import BytesIO
 from typing import Iterator
 
 import fitz
-from flask import request, send_file
-from flask_restful.reqparse import RequestParser
 from PIL import Image
 from PyPDF2 import PdfReader, PdfWriter
 from werkzeug.wrappers.response import Response
@@ -90,7 +88,7 @@ def convert_pdf_to_tiff_group4(pdf, outp) -> None:
         )
 
 
-def merge_images_from_folder(folderpath, outp) -> None:
+def merge_images_from_folder(folderpath, outp) -> int:
     """Merge images from folder into a single PDF
 
     :param folderpath: Path to folder containing images
@@ -112,6 +110,7 @@ def merge_images_from_folder(folderpath, outp) -> None:
             compression="group4",
             dpi=(300, 300),  # Set desired DPI
         )
+    return len(image_list)
 
 
 def read_pdf_pages(path, reverse=False) -> list:
@@ -224,26 +223,3 @@ def requestio(func, **kwargs) -> Response:
     func(**files, **kwargs, outp=outp)
     outp.seek(0)
     return send_file(outp, as_attachment=True, mimetype="")
-
-
-def inject_endpoints() -> None:
-    """Inject PDF utility API endpoints into Flask app"""
-    from .app import app
-
-    @app.route("/api/v2/pdfutils/convert_monochrome", methods=["POST"])
-    def api_convert_monochrome():
-        return requestio(convert_pdf_to_tiff_group4)
-
-    @app.route("/api/v2/pdfutils/cross_merge_pdf", methods=["POST"])
-    def api_cross_merge_pdf():
-        parser = RequestParser()
-        parser.add_argument("cross", type=bool)
-        parser.add_argument("reversed1", type=bool)
-        parser.add_argument("reversed2", type=bool)
-        args = parser.parse_args()
-
-        return requestio(
-            cross_merge_pdf if args["cross"] else sequential_merge_pdf,
-            reversed1=args["reversed1"],
-            reversed2=args["reversed2"],
-        )

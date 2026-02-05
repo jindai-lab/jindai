@@ -13,11 +13,11 @@ import pandas
 import regex as re
 import textrank4zh
 
-from jindai import Pipeline, PipelineStage, storage
-from jindai.app import aeval
+from jindai.pipeline import PipelineStage
+from jindai.app import aeval, storage
 from jindai.helpers import WordStemmer as _Stemmer
 from jindai.helpers import jieba, safe_import
-from jindai.models import Dataset, Paragraph, db_session, try_commit
+from jindai.models import Paragraph, get_db_session
 from jindai.worker import add_task
 
 
@@ -770,13 +770,11 @@ class DeleteParagraph(PipelineStage):
     @zhs 从数据库删除段落
     """
 
-    def resolve(self, paragraph: Paragraph) -> None:
+    async def resolve(self, paragraph: Paragraph) -> None:
         if paragraph.id:
-            db_session.delete(paragraph)
+            async for session in get_db_session():
+                await session.delete(paragraph)
             
-    def summarize(self, _) -> Dict:
-        try_commit()
-
 
 class SaveParagraph(PipelineStage):
     """Save
@@ -787,23 +785,13 @@ class SaveParagraph(PipelineStage):
         '''
         '''
         super().__init__()
-        self.queue = []
 
-    def resolve(self, paragraph: Paragraph):
+    async def resolve(self, paragraph: Paragraph):
         if not paragraph.id:
-            self.queue.append(paragraph)
-            if len(self.queue) >= 100:
-                db_session.add_all(self.queue)
-                try_commit()
-                add_task('text_embedding', {'filters': {'ids': [p.id for p in self.queue]}})
-                self.queue.clear()
+            async for session in get_db_session():
+                session.add(paragraph)
         return paragraph
     
-    def sumamrize(self, _) -> None:
-        db_session.add_all(self.queue)
-        try_commit()
-        add_task('text_embedding', {'filters': {'ids': [p.id for p in self.queue]}})
-
 
 class FieldIncresement(PipelineStage):
     """

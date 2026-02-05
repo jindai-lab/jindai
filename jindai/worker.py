@@ -1,20 +1,16 @@
 """Task worker"""
 
-import logging
+import glob
 import os
 import tempfile
+from typing import Any
+import asyncio
 
-import redis
 from celery import Celery
-from celery.app.base import Celery
-from celery.signals import task_postrun, task_prerun, worker_process_init
-from celery.utils.log import get_task_logger
-from flask import Response
-from sqlalchemy import exists, func, select
+from sqlalchemy import func, select
 
 from .app import config, storage
-from .models import (Dataset, Paragraph, TaskDBO, TextEmbeddings,
-                     session_factory)
+from .models import Dataset, Paragraph, TaskDBO, TextEmbeddings, get_db_session
 from .task import Task
 
 
@@ -29,7 +25,7 @@ def make_celery(app_name=__name__) -> Celery:
     # 初始化Celery
     celery = Celery(
         app_name,
-        broker=config.redis + "/0",
+        broker=config.redis + "/1",
         backend=config.redis + "/1",
         # 配置项
         broker_connection_retry_on_startup=True,
@@ -44,30 +40,10 @@ def make_celery(app_name=__name__) -> Celery:
 
 celery = make_celery()
 task_handlers = {}
-logger = get_task_logger(__name__)
-
-
-class CeleryTaskLogHandler(logging.Handler):
-    def __init__(self, task_id) -> None:
-        super().__init__()
-        self.redis_client = redis.Redis.from_url(config.redis + "/0")
-        self.channel = f"task_logs:{task_id}"
-
-    def subscribe(self):
-        sub = self.redis_client.pubsub()
-        sub.subscribe(self.channel)
-        return sub
-
-    def emit(self, record) -> None:
-        try:
-            msg = self.format(record)
-            self.redis_client.publish(self.channel, msg)
-        except Exception:
-            self.handleError(record)
 
 
 @celery.task(name="handle_custom")
-def handle_custom(task_id="", **params):
+async def handle_custom(task_id="", **params):
     """Handle custom task execution
 
     :param task_id: Task ID from database, defaults to empty string
@@ -76,72 +52,16 @@ def handle_custom(task_id="", **params):
     :type params: dict
     :return: Task execution result
     """
-    db_session = session_factory()
     if task_id:
-        dbo = db_session.query(TaskDBO).get(task_id)
+        dbo = await TaskDBO.get(task_id)
     else:
         dbo = TaskDBO(**params)
     task = Task.from_dbo(dbo, log=print)
-    return task.execute()
-
-
-@celery.task(name="import_pdf")
-def import_pdf(source, lang, dataset):
-    """Import PDF files and extract text content to database
-
-    :param source: Source path (file or directory)
-    :type source: str
-    :param lang: Language code
-    :type lang: str
-    :param dataset: Dataset name
-    :type dataset: str
-    :return: List of processed files
-    :rtype: list
-    """
-    from .pdfutils import extract_pdf_texts
-
-    db_session = session_factory()
-    dataset = Dataset.get(dataset).id
-    source = storage.safe_join(source)
-    if os.path.isdir(source):
-        inputs = []
-        for pwd, ds, fs in os.walk(source):
-            for f in fs:
-                if f.endswith(".pdf"):
-                    inputs.append(os.path.join(pwd, f))
-    else:
-        inputs = [source]
-    inputs = [f for f in inputs if f.endswith(".pdf")]
-
-    for file in inputs:
-        rel_path = "/" + storage.relative_path(file)
-        print(rel_path)
-        max_page = (
-            db_session.query(func.max(Paragraph.source_page))
-            .filter(Paragraph.source_url == rel_path)
-            .scalar()
-        )
-        try:
-            for page, pagenum, text in extract_pdf_texts(file, since=max_page + 1):
-                p = Paragraph(
-                    content=text,
-                    lang=lang,
-                    dataset=dataset,
-                    source_url=rel_path,
-                    source_page=page,
-                    pagenum=pagenum,
-                )
-                db_session.add(p)
-            db_session.commit()
-        except:
-            db_session.rollback()
-
-    db_session.close()
-    return inputs
+    return await task.execute_async()
 
 
 @celery.task(name="handle_ocr")
-def handle_ocr(input, output, lang, monochrome=False):
+async def handle_ocr(input, output, lang, monochrome=False):
     """Handle OCR processing of PDF files
 
     :param input: Input file or directory path
@@ -163,10 +83,21 @@ def handle_ocr(input, output, lang, monochrome=False):
 
     if os.path.isdir(input):
         fo = tempfile.NamedTemporaryFile("wb", delete=False)
-        merge_images_from_folder(input, fo)
+        images = merge_images_from_folder(input, fo)
         fo.close()
-        input = fo.name
         temps.append(fo.name)
+        
+        if not images:
+            for fn in await storage.glob(os.path.join(input, '*.pdf')):
+                add_task('ocr', {
+                    'input': fn,
+                    'output': fn[:-4] + '_ocred.pdf',
+                    'lang': lang,
+                    'monochrome': monochrome
+                })
+            return None
+        
+        input = fo.name
         print("Converted directory to pdf:", input)
 
     if monochrome:
@@ -189,7 +120,7 @@ def handle_ocr(input, output, lang, monochrome=False):
     try:
         import ocrmypdf
 
-        ocrmypdf.ocr(
+        await asyncio.to_thread(ocrmypdf.ocr,
             input,
             output,
             plugins=["ocrmypdf_paddleocr_remote"],
@@ -211,7 +142,7 @@ def handle_ocr(input, output, lang, monochrome=False):
 
 
 @celery.task(name="text_embedding")
-def text_embedding(bulk=None, filters=None) -> None:
+async def text_embedding(bulk=None, filters=None) -> None:
     """Generate text embeddings for paragraphs
 
     :param bulk: Batch of paragraphs to process, defaults to None
@@ -219,33 +150,26 @@ def text_embedding(bulk=None, filters=None) -> None:
     :param filters: Query filters for selecting paragraphs, defaults to None
     :type filters: dict, optional
     """
-    db_session = session_factory()
     if bulk is not None:
         embs = []
         for i in bulk:
             id = i["id"]
             content = i["content"]
             for chunk_id, emb in enumerate(
-                TextEmbeddings.get_embedding_chunks(content, 200, 50), start=1
+                await TextEmbeddings.get_embedding_chunks(content, 200, 50), start=1
             ):
                 emb = TextEmbeddings(id=id, chunk_id=chunk_id, embedding=emb)
                 embs.append(emb)
 
-        try:
-            db_session.add_all(embs)
-            db_session.commit()
-        except Exception as e:
-            print(e)
-            db_session.rollback()
-        finally:
-            db_session.close()
+        async for session in get_db_session():
+            session.add_all(embs)
     else:
         print(f"start db query")
         if filters is None:
             filters = {}
         filters.update(embeddings=False)
         cte = (
-            Paragraph.build_query(filters).with_only_columns(Paragraph.id).limit(10000)
+            (await Paragraph.build_query(filters)).with_only_columns(Paragraph.id).limit(10000)
         ).cte()
         stmt = (
             select(Paragraph)
@@ -253,7 +177,8 @@ def text_embedding(bulk=None, filters=None) -> None:
             .filter(func.length(Paragraph.content) > 10)
             .with_only_columns(Paragraph.id, Paragraph.content)
         )
-        results = db_session.execute(stmt).mappings().all()
+        async for session in get_db_session():
+            results = (await session.execute(stmt)).mappings().all()
         bulk = []
         len_results = len(results)
         print(f"start handling embedding for {len_results} records")
@@ -281,7 +206,6 @@ def add_task(task_type, params):
     task_map = {
         "text_embedding": text_embedding,
         "ocr": handle_ocr,
-        "import": import_pdf,
         "custom": handle_custom,
     }
 
@@ -309,9 +233,6 @@ def get_task_result(task_id) -> dict:
         result["error"] = str(task.result)  # 异常信息
 
     return result
-
-
-from typing import Any
 
 
 def get_task_stats() -> dict[str, Any]:
@@ -397,29 +318,6 @@ def clear_tasks(status="") -> dict[str, str | int]:
                 revoked_count += 1
 
     return {"status": "success", "deleted_count": revoked_count}
-
-
-def log_stream(task_id) -> Response:
-    """Create a Server-Sent Events stream for task logs
-
-    :param task_id: Task ID to stream logs for
-    :type task_id: str
-    :return: SSE response object
-    :rtype: Response
-    """
-
-    def stream():
-        pubsub = CeleryTaskLogHandler(task_id).subscribe()
-
-        # 首先发送一条连接成功的消息
-        yield "data: --- 已连接日志服务器 ---\n\n"
-
-        for message in pubsub.listen():
-            if message["type"] == "message":
-                data = message["data"].decode("utf-8")
-                yield f"data: {data}\n\n"
-
-    return Response(stream(), mimetype="text/event-stream")
 
 
 def worker() -> None:
