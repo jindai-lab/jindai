@@ -3,8 +3,7 @@
 import os
 import sys
 from collections import defaultdict
-from typing import Any, Dict, List, Optional, Tuple, Type, Union
-from uuid import UUID
+from typing import Any, Dict, Union
 
 import httpx
 from sqlalchemy import select
@@ -21,7 +20,12 @@ from .helpers import get_context
 from .models import UserInfo, get_db_session
 from .storage import instance as storage
 
-app = FastAPI()
+app = FastAPI(
+    docs_url="/api/v2/docs",
+    openapi_url="/api/v2/openapi.json",
+    title="Jindai",
+    version="2.0.0",
+)
 
 
 CLIENT_ID = config.oidc["client_id"]
@@ -61,7 +65,7 @@ class OIDCValidator:
                 jwks,
                 algorithms=["RS256"],
                 audience=CLIENT_ID,
-                issuer=config.oidc['issuer'],
+                issuer=config.oidc["issuer"],
             )
             return payload
         except JWTError as e:
@@ -99,66 +103,39 @@ def aeval(expr: str, context: Union[Dict[str, Any], Any]) -> Any:
 
 
 async def get_current_admin(
-    token_payload: dict = Depends(oidc_validator.validate_token)
+    token_payload: dict = Depends(oidc_validator.validate_token),
 ) -> UserInfo:
     """
     验证当前用户是否具有 admin 角色
     """
     # 从 JWT payload 中获取用户名 (对应之前的 preferred_username)
     username = token_payload.get("preferred_username")
-    
+
     if not username:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Token missing username information"
+            detail="Token missing username information",
         )
 
     async for session in get_db_session():
         # 查询数据库校验角色
-        user = (await session.execute(
-            select(UserInfo)
-            .filter(
-                UserInfo.username == username, 
-                UserInfo.roles.contains(["admin"])
+        user = (
+            await session.execute(
+                select(UserInfo)
+                .filter(
+                    UserInfo.username == username, UserInfo.roles.contains(["admin"])
+                )
+                .limit(1)
             )
-            .limit(1)
-        )).first()
-        
+        ).first()
+
         if not user:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
-                detail=f"Must be admin. You are logged in as: {username}"
+                detail=f"Must be admin. You are logged in as: {username}",
             )
-            
+
         return user
-
-
-@router.get("/pipeline/info")
-async def get_pipeline_info():
-    """提供流水线帮助信息"""
-    from .pipeline import Pipeline
-
-    ctx = Pipeline.ctx
-    result = defaultdict(dict)
-
-    for key, val in ctx.items():
-        if key in ("DataSourceStage", "MediaItemStage"):
-            continue
-
-        # 获取模块文档或模块名作为分类
-        module_doc = (
-            sys.modules[val.__module__].__doc__ if hasattr(val, "__module__") else None
-        )
-        name = (
-            module_doc or val.__module__.split(".")[-1]
-            if hasattr(val, "__module__")
-            else key
-        ).strip()
-
-        # 假设你的 Stage 类有 get_spec 静态方法或类方法
-        result[name][key] = val.get_spec()
-
-    return result
 
 
 UI_DIST = config.ui_dist or "./dist/"

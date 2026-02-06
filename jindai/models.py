@@ -712,3 +712,4 @@ def is_uuid_literal(val: str) -> bool:
         )
         is not None
     )
+

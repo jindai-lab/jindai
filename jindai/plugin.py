@@ -3,14 +3,16 @@
 import glob
 import os
 import shutil
+import sys
 import tempfile
 import zipfile
 from collections import defaultdict
 from typing import Callable, Iterator
 
-from .helpers import get_context
+from fastapi import APIRouter, Depends
 
-from .app import router
+from .helpers import get_context
+from .app import get_current_admin
 from .config import instance as config
 from .pipeline import Pipeline, PipelineStage
 from .storage import instance as storage
@@ -90,15 +92,6 @@ class PluginManager:
         self.filters = {}
         self.callbacks = defaultdict(list)
 
-        @router.get("/plugins")
-        def plugin_list():
-            return [type(pl).__name__ for pl in self.plugins]
-
-        @router.post("/plugins")
-        def plugin_install(url):
-            self.install(url)
-            return True
-
         # load plugins
 
         pls = []
@@ -133,6 +126,46 @@ class PluginManager:
             except Exception as ex:
                 print("Error while registering plugin:", plugin_name, ex)
                 continue
+            
+    def get_router(self):
+        router = APIRouter(prefix='/plugins', tags=['Plugins'], dependencies=[Depends(get_current_admin)])
+               
+        @router.get("/")
+        def plugin_list():
+            return [type(pl).__name__ for pl in self.plugins]
+
+        @router.post("/")
+        def plugin_install(url):
+            self.install(url)
+            return True
+        
+        @router.get("/pipeline", tags=["Plugins"])
+        async def get_pipeline_info():
+            """提供流水线帮助信息"""
+            from .pipeline import Pipeline
+
+            ctx = Pipeline.ctx
+            result = defaultdict(dict)
+
+            for key, val in ctx.items():
+                if key in ("DataSourceStage", "MediaItemStage"):
+                    continue
+
+                # 获取模块文档或模块名作为分类
+                module_doc = (
+                    sys.modules[val.__module__].__doc__ if hasattr(val, "__module__") else None
+                )
+                name = (
+                    module_doc or val.__module__.split(".")[-1]
+                    if hasattr(val, "__module__")
+                    else key
+                ).strip()
+
+                result[name][key] = val.get_spec()
+
+                return result
+
+        return router
 
     def __iter__(self) -> Iterator:
         """Iterate through loaded plugins
