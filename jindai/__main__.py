@@ -76,8 +76,8 @@ def export(query, output_file) -> None:
 
 @cli.command("worker")
 def run_worker() -> None:
-    from .worker import worker
-    worker()
+    from .worker import worker_manager
+    worker_manager.run_worker()
 
 
 @cli.command("task")
