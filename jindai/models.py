@@ -14,7 +14,7 @@ from pgvector.sqlalchemy import Vector
 from sqlalchemy import (Boolean, DateTime, ForeignKey, Index, Integer, PrimaryKeyConstraint, String,
                         Text, UniqueConstraint, asc, desc,
                         exists, or_, select, text, update)
-from sqlalchemy.dialects.postgresql import ARRAY, JSONB, UUID
+from sqlalchemy.dialects.postgresql import ARRAY, JSONB, UUID, insert
 from sqlalchemy.orm import (Mapped, declarative_base, mapped_column,
                             relationship, validates)
 from sqlalchemy.sql import func
@@ -340,41 +340,52 @@ class Paragraph(Base):
         query = select(Paragraph)
         filters = []
         query_embedding = None
+        search = query_data.get("q", "*")
+        
+        if group_field_name := query_data.get("groupBy"):
+            group_column = getattr(Paragraph, group_field_name, None) if group_field_name else None
+            if group_column is not None:
+                query = (query.distinct(group_column)
+                    .order_by(group_column) # DISTINCT ON requires order_by to start with group column
+                )
 
-        search = query_data.get("search", "*")
-
+        # Primary Key / ID Filters
         if ids := query_data.get("ids"):
             filters.append(Paragraph.id.in_(ids))
 
+        # Dataset Filters (Optimized logic)
         if datasets := query_data.get("datasets"):
             dataset_filters = [Dataset.name.in_(datasets)]
             for dataset_prefix in datasets:
                 dataset_filters.append(Dataset.name.ilike(f"{dataset_prefix}--%"))
+            
             async for session in get_db_session():
-                result = await session.execute(select(Dataset.id).where(or_(*dataset_filters)))
-                dataset_ids = result.scalars().all()
-                filters.append(
-                    Paragraph.dataset.in_(dataset_ids)
-                )
-        
+                res = await session.execute(select(Dataset.id).where(or_(*dataset_filters)))
+                dataset_ids = res.scalars().all()
+                filters.append(Paragraph.dataset.in_(dataset_ids))
+
+        # Source URL Filters
         if sources := query_data.get("sources"):
             source_filters = [Paragraph.source_url.in_(sources)]
             for source in sources:
                 source_filters.append(Paragraph.source_url.ilike(f"{source}%"))
             filters.append(or_(*source_filters))
+            
+        # Outline Filter
+        if outline := query_data.get("outline"):
+            filters.append(Paragraph.outline.in_(outline))
 
-        if query_data.get("embeddings") == False:
-            param = ~exists().where(TextEmbeddings.id == Paragraph.id)
-            filters.append(param)
+        # Embedding Existence Filter
+        if query_data.get("embeddings") is False:
+            filters.append(~exists().where(TextEmbeddings.id == Paragraph.id))
 
+        # Search Logic
         if search.startswith("?"):
-            param = text(search[1:])
-            filters.append(param)
+            filters.append(text(search[1:]))
         elif search.startswith("*"):
-            search = search.strip("*")
-            if search:
-                param = Paragraph.content.ilike(f"%{search}%")
-                filters.append(param)
+            search_term = search.strip("*")
+            if search_term:
+                filters.append(Paragraph.content.ilike(f"%{search_term}%"))
         elif search.startswith(":") or query_data.get("embeddings"):
             query_embedding = await TextEmbeddings.get_embedding(search.strip(":"))
         else:
@@ -383,10 +394,11 @@ class Paragraph(Base):
                 candidates = [word.strip('^%')]
                 if word.startswith('^'):
                     candidates.extend(await Terms.starting_with(word.strip('^')))
-                param = or_(*(Paragraph.keywords.contains([candidate]) for candidate in candidates))
-                filters.append(param)
+                filters.append(or_(*(Paragraph.keywords.contains([c]) for c in candidates)))
 
         query = query.filter(*filters)
+
+        # Vector Search Join
         if query_embedding is not None:
             query = (
                 query
@@ -394,37 +406,35 @@ class Paragraph(Base):
                 .order_by(TextEmbeddings.embedding.cosine_distance(query_embedding))
                 .limit(2000)
             )
-        
+
+        # Sorting
         if sort_by := query_data.get("sort", ""):
-            assert isinstance(sort_by, (list, str)), (
-                "Sort must be list of strings or a string seperated by commas"
-            )
             if isinstance(sort_by, str):
                 sort_by = sort_by.split(",")
-
+            
             sorts = []
             for sort_part in sort_by:
-                if isinstance(sort_part, str):
-                    sort_part = sort_part.strip()
-                    if not sort_part:
-                        continue
-                    if sort_part.startswith("-"):
-                        column_name = sort_part[1:]
-                        sort_func = desc
-                    else:
-                        column_name = sort_part
-                        sort_func = asc
-                    column = getattr(Paragraph, column_name, None)
-                    if column is not None:
-                        sorts.append(sort_func(column))
-                else:
+                if not isinstance(sort_part, str):
                     sorts.append(sort_part)
-
+                    continue
+                
+                sort_part = sort_part.strip()
+                if not sort_part: continue
+                
+                if sort_part.startswith("-"):
+                    col_name, sort_func = sort_part[1:], desc
+                else:
+                    col_name, sort_func = sort_part, asc
+                
+                col = getattr(Paragraph, col_name, None)
+                if col is not None:
+                    sorts.append(sort_func(col))
+            
             query = query.order_by(*sorts)
 
+        # Pagination
         if offset := query_data.get("offset", 0):
             query = query.offset(offset)
-
         if limit := query_data.get("limit", 0):
             query = query.limit(limit)
 
@@ -447,6 +457,25 @@ class Terms(Base):
                 select(Terms).filter(Terms.term.startswith(prefix)).with_only_columns(Terms.term)
             )
             return list(q.scalars())
+        
+    async def store(words: list[str]):# Clean the input to ensure uniqueness in the batch
+        async for session in get_db_session():
+            async with session.begin(): # Start a transaction
+                # 1. Prepare the data dictionaries
+                data = [{"term": w} for w in words]
+                
+                # 2. Execute a bulk insert
+                # Note: This assumes 'term' is a unique column. 
+                # If not, use standard session.execute(insert(Terms), data)
+                stmt = insert(Terms).values(data)
+                
+                # If you have a UNIQUE constraint on 'term', use this to skip duplicates:
+                stmt = stmt.on_conflict_do_nothing(index_elements=['term']) 
+                
+                await session.execute(stmt)
+                # No need for manual commit if using 'async with session.begin()'
+                
+        return words
 
 
 class TaskDBO(Base):

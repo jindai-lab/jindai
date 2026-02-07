@@ -17,7 +17,7 @@ from jindai.pipeline import PipelineStage
 from jindai.app import aeval, storage
 from jindai.helpers import WordStemmer as _Stemmer
 from jindai.helpers import jieba, safe_import
-from jindai.models import Paragraph, get_db_session
+from jindai.models import Paragraph, Terms, get_db_session
 from jindai.worker import add_task
 
 
@@ -790,6 +790,7 @@ class SaveParagraph(PipelineStage):
         if not paragraph.id:
             async for session in get_db_session():
                 session.add(paragraph)
+                await Terms.store(paragraph.keywords)
         return paragraph
     
 

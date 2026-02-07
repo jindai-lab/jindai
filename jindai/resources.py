@@ -1,5 +1,6 @@
 import os
 import uuid
+import httpx
 from typing import Optional, Type
 
 from fastapi import (APIRouter, BackgroundTasks, Body, Depends, File,
@@ -7,7 +8,7 @@ from fastapi import (APIRouter, BackgroundTasks, Body, Depends, File,
 from fastapi.responses import StreamingResponse
 from sqlalchemy.sql import func, select
 
-from .app import get_current_admin, router, storage
+from .app import get_current_admin, router, storage, config
 from .maintenance import maintenance_manager
 from .models import (AsyncSession, Base, Dataset, History, Paragraph, TaskDBO,
                      TextEmbeddings, UserInfo, get_db, is_uuid_literal)
@@ -142,17 +143,41 @@ async def post_paragraphs(
     paging: dict = Depends(get_pagination),
     session: AsyncSession = Depends(get_db),
 ):
-    if data.get("search"):
-        query = await Paragraph.build_query(data)
-        return await paginate(
-            session, query, Paragraph, paging["offset"], paging["limit"]
-        )
-
     new_para = Paragraph.from_dict(data)
     session.add(new_para)
     await session.flush()
     return new_para.as_dict()
 
+
+@router.post("/paragraphs/search", tags=["Paragraphs"])
+async def search_paragraphs(
+    data: dict = Body(...),
+    paging: dict = Depends(get_pagination),
+    session: AsyncSession = Depends(get_db),
+):
+    data.pop('offset', 0)
+    data.pop('limit', 0)
+    query = await Paragraph.build_query(data)
+    return await paginate(
+        session, query, Paragraph, paging["offset"], paging["limit"]
+    )
+
+
+@router.post("/paragraphs/filters/{column}", tags=["Paragraphs"])
+async def filter_paragraphs_items(
+    column: str,data: dict = Body(...), session: AsyncSession = Depends(get_db)):
+    
+    data.pop('q')
+    data.pop('embeddings')
+    data.pop('sort', '')
+    data.pop(column, '')
+        
+    query = await Paragraph.build_query(data)
+    column = getattr(Paragraph, column)
+    query = query.with_only_columns(column.label('value'), func.count(1).label('count')).group_by(column)
+    results = await session.execute(query)
+    return results.mappings().all() or []
+    
 
 @router.get("/files/{file_path:path}", tags=["Files"])
 def get_file(
@@ -202,6 +227,27 @@ def upload_file(
     if not file:
         raise HTTPException(400, detail="No file")
     return storage.save(file.file, file_path)
+
+
+@router.post("/translator", tags=["Translator"])
+async def translator(params : dict = Body(...)):
+    url = "https://open.bigmodel.cn/api/paas/v4/chat/completions"
+    payload = {
+        "model": "glm-4.7-flash",
+        "messages": [
+            {"role": "system", "content": f"你是一个AI翻译器。翻译用户输入的文本为{params['lang']}，只返回翻译后的文本。"},
+            {"role": "user", "content": params['text']}
+        ],
+        "stream": False,
+        "temperature": 1
+    }
+    headers = {
+        "Authorization": "Bearer " + params['zhipu_api_key']
+    }
+
+    async with httpx.AsyncClient() as client:
+        response = await client.post(url, json=payload, headers=headers, timeout=30000)
+        return response.json()['choices'][0]['message']['content']
 
 
 router.include_router(worker_manager.get_router())
