@@ -124,7 +124,7 @@ class WorkerManager:
                     start=1,
                 ):
                     embs.append(
-                        TextEmbeddings(id=i["id"], chunk_id=chunk_id, embedding=emb)
+                        TextEmbeddings(id=i["id"], dataset=i["dataset"], chunk_id=chunk_id, embedding=emb)
                     )
             async for session in get_db_session():
                 session.add_all(embs)
@@ -141,7 +141,7 @@ class WorkerManager:
                 select(Paragraph)
                 .join(cte, Paragraph.id == cte.c.id)
                 .filter(func.length(Paragraph.content) > 10)
-                .with_only_columns(Paragraph.id, Paragraph.content)
+                .with_only_columns(Paragraph.id, Paragraph.Dataset, Paragraph.content)
             )
 
             async for session in get_db_session():
