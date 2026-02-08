@@ -3,7 +3,7 @@
 import asyncio
 import json
 import uuid
-from contextlib import contextmanager
+from contextlib import asynccontextmanager
 from datetime import datetime
 from functools import wraps
 from typing import Any, Dict, List
@@ -26,11 +26,13 @@ from .helpers import AutoUnloadSentenceTransformer, jieba
 engine = create_async_engine(config.database)
 AsyncSessionFactory = async_sessionmaker(
     bind=engine,
-    expire_on_commit=False,  # 同步版本的 expire_on_commit 配置迁移到这里
-    autoflush=False,  # 可选：根据你的需求设置，异步场景下建议显式控制
+    expire_on_commit=False,
+    autoflush=False,
     autocommit=False
 )
 
+
+@asynccontextmanager
 async def get_db_session():
     async with AsyncSessionFactory() as session:
         try:
@@ -41,12 +43,7 @@ async def get_db_session():
             raise e
         finally:
             await session.close()
-            
-            
-async def get_db() -> AsyncSession:
-    async for session in get_db_session():
-        yield session
-        
+
 
 MBase = declarative_base()
 
@@ -112,7 +109,7 @@ class Dataset(Base):
 
     @staticmethod
     async def get(name, auto_create=True):
-        async for session in get_db_session():
+        async with get_db_session() as session:
             ds = await session.execute(select(Dataset).filter(Dataset.name == name))
             ds = ds.scalar_one_or_none()
             if ds is None and auto_create:
@@ -139,7 +136,7 @@ class Dataset(Base):
                 .where(Paragraph.dataset == self.id)
                 .values({"dataset": ds.id})
             )
-            async for session in get_db_session():           
+            async with get_db_session() as session:           
                 await session.execute(stmt)
                 await session.delete(self)
         else:
@@ -157,8 +154,9 @@ class Dataset(Base):
         def _dataset_sort_key(ds: Dataset):
             return len(ds.name.split("--")), ds.order_weight, ds.name
 
-        async for session in get_db_session():
+        async with get_db_session() as session:
             datasets = await session.execute(select(Dataset))
+        
         sorted_datasets = sorted(datasets.scalars().all(), key=_dataset_sort_key)
         hierarchy = []
         for dataset in sorted_datasets:
@@ -272,6 +270,7 @@ class Paragraph(Base):
         UUID(as_uuid=True),
         ForeignKey("dataset.id"),
         nullable=False,
+        primary_key=True,
         comment="关联数据集ID",
     )
     keywords: Mapped[List[str] | None] = mapped_column(
@@ -359,7 +358,7 @@ class Paragraph(Base):
             for dataset_prefix in datasets:
                 dataset_filters.append(Dataset.name.ilike(f"{dataset_prefix}--%"))
             
-            async for session in get_db_session():
+            async with get_db_session() as session:
                 res = await session.execute(select(Dataset.id).where(or_(*dataset_filters)))
                 dataset_ids = res.scalars().all()
                 filters.append(Paragraph.dataset.in_(dataset_ids))
@@ -452,14 +451,14 @@ class Terms(Base):
     @staticmethod
     async def starting_with(prefix: str) -> List[str]:
         if not prefix: return []
-        async for session in get_db_session():
+        async with get_db_session() as session:
             q = await session.execute(
                 select(Terms).filter(Terms.term.startswith(prefix)).with_only_columns(Terms.term)
             )
             return list(q.scalars())
         
     async def store(words: list[str]):# Clean the input to ensure uniqueness in the batch
-        async for session in get_db_session():
+        async with get_db_session() as session:
             async with session.begin(): # Start a transaction
                 # 1. Prepare the data dictionaries
                 data = [{"term": w} for w in words]
@@ -474,7 +473,7 @@ class Terms(Base):
                 
                 await session.execute(stmt)
                 # No need for manual commit if using 'async with session.begin()'
-                
+            
         return words
 
 
@@ -517,13 +516,13 @@ class TaskDBO(Base):
         :return: TaskDBO instance or None
         :rtype: TaskDBO | None
         """
-        async for session in get_db_session():
+        async with get_db_session() as session:
             if is_uuid_literal(id_or_name):
                 return session.get(TaskDBO, uuid.UUID(id_or_name))
             else:
                 result = await session.execute(select(TaskDBO).filter(TaskDBO.name.contains(id_or_name)))
                 return result.scalar_one_or_none()
-
+            
 
 redis_client = redis.Redis.from_url(config.redis.rstrip("/") + "/2")
 

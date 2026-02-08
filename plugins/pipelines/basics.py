@@ -18,7 +18,6 @@ from jindai.app import aeval, storage
 from jindai.helpers import WordStemmer as _Stemmer
 from jindai.helpers import jieba, safe_import
 from jindai.models import Paragraph, Terms, get_db_session
-from jindai.worker import add_task
 
 
 class Passthrough(PipelineStage):
@@ -772,7 +771,7 @@ class DeleteParagraph(PipelineStage):
 
     async def resolve(self, paragraph: Paragraph) -> None:
         if paragraph.id:
-            async for session in get_db_session():
+            async with get_db_session() as session:
                 await session.delete(paragraph)
             
 
@@ -788,7 +787,7 @@ class SaveParagraph(PipelineStage):
 
     async def resolve(self, paragraph: Paragraph):
         if not paragraph.id:
-            async for session in get_db_session():
+            async with get_db_session() as session:
                 session.add(paragraph)
                 await Terms.store(paragraph.keywords)
         return paragraph

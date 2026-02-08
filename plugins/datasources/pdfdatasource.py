@@ -80,7 +80,7 @@ class PDFDataSource(DataSourceStage):
         files = await self.files
 
         if self.skip_existed:
-            async for session in get_db_session():
+            async with get_db_session() as session:
                 result = await session.execute(
                         select(
                             Paragraph.source_url,

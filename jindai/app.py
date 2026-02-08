@@ -117,7 +117,7 @@ async def get_current_admin(
             detail="Token missing username information",
         )
 
-    async for session in get_db_session():
+    async with get_db_session() as session:
         # 查询数据库校验角色
         user = (
             await session.execute(

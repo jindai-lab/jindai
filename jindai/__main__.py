@@ -42,7 +42,7 @@ def cli() -> None:
 @cli.command("init")
 @asyncio_run
 async def first_run() -> None:
-    async for session in get_db_session():
+    async with get_db_session() as session:
         u = (await session.execute(select(UserInfo).limit(1))).first()
         if u:
             print("Already inited.")
@@ -115,7 +115,7 @@ async def run_task(task_id, concurrent, verbose, edit, log, output) -> None:
 
         with open(temp_name, encoding="utf-8") as fi:
             param = yaml.safe_load(fi)
-            async for session in get_db_session():
+            async with get_db_session() as session:
                 for key, val in param.items():
                     setattr(dbo, key, val)
                 await session.merge(dbo)
@@ -153,7 +153,7 @@ async def run_task(task_id, concurrent, verbose, edit, log, output) -> None:
 @asyncio_run
 async def user_manage(add, delete, setrole, roles) -> None:
     """User management"""
-    async for session in get_db_session():
+    async with get_db_session() as session:
         if add:
             user = (await session.execute(select(UserInfo).filter(UserInfo.username == add))).first()
             if not user:

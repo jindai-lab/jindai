@@ -11,9 +11,14 @@ from sqlalchemy.sql import func, select
 from .app import get_current_admin, router, storage, config
 from .maintenance import maintenance_manager
 from .models import (AsyncSession, Base, Dataset, History, Paragraph, TaskDBO,
-                     TextEmbeddings, UserInfo, get_db, is_uuid_literal)
+                     TextEmbeddings, UserInfo, get_db_session, is_uuid_literal)
 from .plugin import plugins
 from .worker import worker_manager
+
+
+async def get_db():
+    async with get_db_session() as session:
+        yield session
 
 
 def get_pagination(offset: int = 0, limit: int = 100):
@@ -210,7 +215,7 @@ def get_file(
     return StreamingResponse(
         buf,
         media_type=mime,
-        headers={"Content-Disposition": f'attachment; filename="{name}"'},
+        # headers={"Content-Disposition": f'attachment; filename="{name}"'},
     )
 
 
