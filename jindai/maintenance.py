@@ -10,7 +10,7 @@ from .models import Dataset, Paragraph, Terms, get_db_session
 class MaintenanceManager:
     
     async def sync_terms(self):
-        async for session in get_db_session():
+        async with get_db_session() as session:
             unnested_query = select(
                 text("unnest(keywords)").label("word")
             ).select_from(text("paragraph")).subquery()
@@ -41,7 +41,7 @@ class MaintenanceManager:
             print(f"Sync complete. Processed {len(unique_words)} unique keywords.")
 
     async def update_pdate_from_url(self, dataset, session):
-        async for session in get_db_session():
+        async with get_db_session() as session:
             dataset_id_subquery = (
                 select(Dataset.id).where(Dataset.name == dataset).scalar_subquery()
             )

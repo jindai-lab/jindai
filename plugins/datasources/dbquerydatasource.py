@@ -12,7 +12,7 @@ class DBQueryDataSource(DataSourceStage):
     """
 
     def apply_params(
-        self, query, req="", limit=0, skip=0, sort="", raw=False, groups="none"
+        self, query, limit=0, skip=0, sort="", groups=""
     ) -> None:
         """
         Args:
@@ -32,17 +32,15 @@ class DBQueryDataSource(DataSourceStage):
                 Return dicts instead of Paragraph objects
                 @zhs 若为 False（默认值）则返回 Paragraph 对象，否则返回字典类型
             groups (str):
-                @choose(none|group|source|both) Groups
+                @choose(|source_url) Groups
                 @zhs @choose(无:none|按组:group|按来源:source|分组和来源:both) 分组
         """
         self.query = Paragraph.build_query(
-            {"search": query, "sort": sort, "offset": skip, "limit": limit}
+            {"search": query, "sort": sort, "offset": skip, "limit": limit, "groupBy": groups}
         )
 
-        if raw:
-            self.query = self.query.mappings()
-
     async def fetch(self):
-        async for session in get_db_session():
-            for item in session.execute(self.query):
+        async with get_db_session() as session:
+            result = await session.execute(self.query)
+            for item in result:
                 yield item

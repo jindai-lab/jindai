@@ -5,17 +5,24 @@ from typing import Any, Dict, List, Optional
 from celery import Celery
 from fastapi import APIRouter, Body
 from sqlalchemy import func, select
+from asgiref.sync import async_to_sync
 
 from .app import config, storage
 from .models import Dataset, Paragraph, TaskDBO, TextEmbeddings, get_db_session
 from .task import Task as CustomTaskLogic
 
 
+def tosync(func):
+    def wrapped(*args, **kwargs):
+        return async_to_sync(func)(*args, **kwargs)
+    return wrapped
+
+
 class WorkerManager:
     def __init__(self, app_name: str = "worker_manager"):
         self.celery = self._init_celery(app_name)
         # 将任务绑定到当前实例
-        self._register_tasks()
+        self.task_map = self._register_tasks()
 
     def _init_celery(self, app_name: str) -> Celery:
         """配置并初始化 Celery 实例"""
@@ -36,140 +43,136 @@ class WorkerManager:
         在这里利用 Celery 的装饰器将方法注册为任务。
         注意：在类中使用 celery.task 需要特殊处理，或者直接定义为普通函数再包装。
         """
-        self.handle_custom = self.celery.task(name="handle_custom")(
-            self._handle_custom_logic
-        )
-        self.handle_ocr = self.celery.task(name="handle_ocr")(self._handle_ocr_logic)
-        self.text_embedding = self.celery.task(name="text_embedding")(
-            self._text_embedding_logic
-        )
+        @self.celery.task(name="custom")
+        @tosync
+        async def _handle_custom_logic(task_id: str = "", **params):
+            if task_id:
+                dbo = await TaskDBO.get(task_id)
+            else:
+                dbo = TaskDBO(**params)
+            task = CustomTaskLogic.from_dbo(dbo, log=print)
+            return await task.execute_async()
 
-    # --- 任务逻辑实现 (Internal Logic) ---
+        @self.celery.task(name="ocr")
+        @tosync
+        async def _handle_ocr_logic(
+            input_path: str, output_path: str, lang: str, monochrome: bool = False
+            ):
+            from .pdfutils import convert_pdf_to_tiff_group4, merge_images_from_folder
 
-    async def _handle_custom_logic(self, task_id: str = "", **params):
-        if task_id:
-            dbo = await TaskDBO.get(task_id)
-        else:
-            dbo = TaskDBO(**params)
-        task = CustomTaskLogic.from_dbo(dbo, log=print)
-        return await task.execute_async()
+            temps = []
+            input_path = storage.safe_join(input_path)
 
-    async def _handle_ocr_logic(
-        self, input_path: str, output_path: str, lang: str, monochrome: bool = False
-    ):
-        from .pdfutils import convert_pdf_to_tiff_group4, merge_images_from_folder
+            if os.path.isdir(input_path):
+                fo = tempfile.NamedTemporaryFile("wb", delete=False)
+                images = merge_images_from_folder(input_path, fo)
+                fo.close()
+                temps.append(fo.name)
 
-        temps = []
-        input_path = storage.safe_join(input_path)
+                if not images:
+                    for fn in await storage.glob(os.path.join(input_path, "*.pdf")):
+                        self.add_task(
+                            "ocr",
+                            {
+                                "input_path": fn,
+                                "output_path": fn[:-4] + "_ocred.pdf",
+                                "lang": lang,
+                                "monochrome": monochrome,
+                            },
+                        )
+                    return None
+                input_path = fo.name
 
-        if os.path.isdir(input_path):
-            fo = tempfile.NamedTemporaryFile("wb", delete=False)
-            images = merge_images_from_folder(input_path, fo)
-            fo.close()
-            temps.append(fo.name)
+            if monochrome:
+                fo = tempfile.NamedTemporaryFile("wb", delete=False)
+                with open(input_path, "rb") as fi:
+                    convert_pdf_to_tiff_group4(fi, fo)
+                fo.close()
+                input_path = fo.name
+                temps.append(fo.name)
 
-            if not images:
-                for fn in await storage.glob(os.path.join(input_path, "*.pdf")):
-                    self.add_task(
-                        "ocr",
-                        {
-                            "input_path": fn,
-                            "output_path": fn[:-4] + "_ocred.pdf",
-                            "lang": lang,
-                            "monochrome": monochrome,
-                        },
-                    )
-                return None
-            input_path = fo.name
+            output_path = storage.safe_join(output_path)
+            if output_path.endswith("/"):
+                output_path += os.path.basename(input_path).rsplit(".", 1)[0] + "_ocred"
+            if not output_path.endswith(".pdf"):
+                output_path += ".pdf"
 
-        if monochrome:
-            fo = tempfile.NamedTemporaryFile("wb", delete=False)
-            with open(input_path, "rb") as fi:
-                convert_pdf_to_tiff_group4(fi, fo)
-            fo.close()
-            input_path = fo.name
-            temps.append(fo.name)
+            try:
+                import ocrmypdf
 
-        output_path = storage.safe_join(output_path)
-        if output_path.endswith("/"):
-            output_path += os.path.basename(input_path).rsplit(".", 1)[0] + "_ocred"
-        if not output_path.endswith(".pdf"):
-            output_path += ".pdf"
+                await asyncio.to_thread(
+                    ocrmypdf.ocr,
+                    input_path,
+                    output_path,
+                    plugins=["ocrmypdf_paddleocr_remote"],
+                    language=lang,
+                    paddle_remote=config.paddle_remote,
+                    jobs=2,
+                    force_ocr=True,
+                )
+            finally:
+                for f in temps:
+                    if os.path.exists(f):
+                        os.unlink(f)
+            return output_path
 
-        try:
-            import ocrmypdf
+        @self.celery.task(name="text_embedding")
+        @tosync
+        async def _text_embedding_logic(bulk: List = None, filters: Dict = None):
+            if bulk is not None:
+                embs = []
+                for i in bulk:
+                    for chunk_id, emb in enumerate(
+                        await TextEmbeddings.get_embedding_chunks(i["content"], 200, 50),
+                        start=1,
+                    ):
+                        embs.append(
+                            TextEmbeddings(id=i["id"], dataset=i["dataset"], chunk_id=chunk_id, embedding=emb)
+                        )
+                async with get_db_session() as session:
+                    session.add_all(embs)
+                    
+            else:
+                if filters is None:
+                    filters = {}
+                filters.update(embeddings=False)
+                cte = (
+                    (await Paragraph.build_query(filters))
+                    .with_only_columns(Paragraph.id)
+                    .limit(10000)
+                ).cte()
+                stmt = (
+                    select(Paragraph)
+                    .join(cte, Paragraph.id == cte.c.id)
+                    .filter(func.length(Paragraph.content) > 10)
+                    .with_only_columns(Paragraph.id, Paragraph.dataset, Paragraph.content)
+                )
 
-            await asyncio.to_thread(
-                ocrmypdf.ocr,
-                input_path,
-                output_path,
-                plugins=["ocrmypdf_paddleocr_remote"],
-                language=lang,
-                paddle_remote=config.paddle_remote,
-                jobs=2,
-                force_ocr=True,
-            )
-        finally:
-            for f in temps:
-                if os.path.exists(f):
-                    os.unlink(f)
-        return output_path
-
-    async def _text_embedding_logic(self, bulk: List = None, filters: Dict = None):
-        if bulk is not None:
-            embs = []
-            for i in bulk:
-                for chunk_id, emb in enumerate(
-                    await TextEmbeddings.get_embedding_chunks(i["content"], 200, 50),
-                    start=1,
-                ):
-                    embs.append(
-                        TextEmbeddings(id=i["id"], dataset=i["dataset"], chunk_id=chunk_id, embedding=emb)
-                    )
-            async for session in get_db_session():
-                session.add_all(embs)
-        else:
-            if filters is None:
-                filters = {}
-            filters.update(embeddings=False)
-            cte = (
-                (await Paragraph.build_query(filters))
-                .with_only_columns(Paragraph.id)
-                .limit(10000)
-            ).cte()
-            stmt = (
-                select(Paragraph)
-                .join(cte, Paragraph.id == cte.c.id)
-                .filter(func.length(Paragraph.content) > 10)
-                .with_only_columns(Paragraph.id, Paragraph.Dataset, Paragraph.content)
-            )
-
-            async for session in get_db_session():
-                results = (await session.execute(stmt)).mappings().all()
-
-            new_bulk = []
-            for i, p in enumerate(results, start=1):
-                new_bulk.append({"id": str(p["id"]), "content": p["content"]})
-                if i % 100 == 0 or i == len(results):
-                    self.add_task("text_embedding", {"bulk": new_bulk})
+                async with get_db_session() as session:
+                    results = await session.execute(stmt)
+                    results = results.mappings().all()
+                    
+                new_bulk = []
+                for i, p in enumerate(results, start=1):
+                    new_bulk.append({"id": str(p["id"]), "dataset": str(p["dataset"]), "content": p["content"]})
+                    if i % 100 == 0 or i == len(results):
+                        self.add_task("text_embedding", {"bulk": new_bulk})
                     new_bulk = []
-
-    # --- 对外暴露的管理接口 (Public API) ---
-
+        
+        return {
+            "text_embedding": _text_embedding_logic,
+            "ocr": _handle_ocr_logic,
+            "custom": _handle_custom_logic,
+        }
+        
     def add_task(self, task_type: str, params: Dict) -> str:
         """派发任务"""
-        task_map = {
-            "text_embedding": self.text_embedding,
-            "ocr": self.handle_ocr,
-            "custom": self.handle_custom,
-        }
-        if task_type not in task_map:
+        if task_type not in self.task_map:
             raise ValueError(
-                f"Unsupported task type. Choice from: {list(task_map.keys())}"
+                f"Unsupported task type. Choice from: {list(self.task_map.keys())}"
             )
 
-        # 使用 .delay() 异步调用
-        job = task_map[task_type].delay(**params)
+        job = self.task_map[task_type].delay(**params)
         return job.id
 
     def task_status(self, task_id: str) -> Dict[str, Any]:
