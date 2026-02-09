@@ -8,12 +8,14 @@ from fastapi import (APIRouter, BackgroundTasks, Body, Depends, File,
 from fastapi.responses import StreamingResponse
 from sqlalchemy.sql import func, select
 
-from .app import get_current_admin, router, storage, config
+from .app import get_current_admin, router
+from .config import instance as config
+from .storage import instance as storage
 from .maintenance import maintenance_manager
+from .worker import worker_manager
 from .models import (AsyncSession, Base, Dataset, History, Paragraph, TaskDBO,
                      TextEmbeddings, UserInfo, get_db_session, is_uuid_literal)
 from .plugin import plugins
-from .worker import worker_manager
 
 
 async def get_db():
@@ -255,6 +257,13 @@ async def translator(params : dict = Body(...)):
         return response.json()['choices'][0]['message']['content']
 
 
-router.include_router(worker_manager.get_router())
-router.include_router(maintenance_manager.get_router())
 router.include_router(plugins.get_router())
+router.include_router(maintenance_manager.get_router())
+router.include_router(worker_manager.get_router())
+
+# register worker tasks
+worker_manager.register_task(maintenance_manager.custom_task, 'custom')
+worker_manager.register_task(maintenance_manager.ocr, 'ocr')
+worker_manager.register_task(maintenance_manager.update_text_embeddings, 'text_embedding')
+worker_manager.register_task(maintenance_manager.sync_terms, 'sync_terms')
+worker_manager.register_task(maintenance_manager.update_pdate_from_url, 'sync_pdate')

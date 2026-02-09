@@ -1,288 +1,294 @@
-import os
-import tempfile
 import asyncio
-from typing import Any, Dict, List, Optional
-from celery import Celery
+from datetime import datetime
+import json
+import re
+from typing import Any, Dict
 from fastapi import APIRouter, Body
-from sqlalchemy import func, select
-from asgiref.sync import async_to_sync
+import redis.asyncio as redis
+from taskiq import TaskiqMessage, TaskiqMiddleware, TaskiqResult
+from taskiq_redis import RedisStreamBroker, RedisAsyncResultBackend
 
-from .app import config, storage
-from .models import Dataset, Paragraph, TaskDBO, TextEmbeddings, get_db_session
-from .task import Task as CustomTaskLogic
-
-
-def tosync(func):
-    def wrapped(*args, **kwargs):
-        return async_to_sync(func)(*args, **kwargs)
-    return wrapped
+from .config import instance as config
+import logging
 
 
-class WorkerManager:
-    def __init__(self, app_name: str = "worker_manager"):
-        self.celery = self._init_celery(app_name)
-        # 将任务绑定到当前实例
-        self.task_map = self._register_tasks()
+logger = logging.getLogger("taskiq_redis_stream_storage")
 
-    def _init_celery(self, app_name: str) -> Celery:
-        """配置并初始化 Celery 实例"""
-        return Celery(
-            app_name,
-            broker=f"{config.redis}/1",
-            backend=f"{config.redis}/1",
-            broker_connection_retry_on_startup=True,
-            result_expires=86400,
-            task_serializer="json",
-            result_serializer="json",
-            accept_content=["json"],
-            enable_utc=True,
-        )
 
-    def _register_tasks(self):
+class RedisStorageClient:
+    
+    def __init__(self, redis_dsn: str):
         """
-        在这里利用 Celery 的装饰器将方法注册为任务。
-        注意：在类中使用 celery.task 需要特殊处理，或者直接定义为普通函数再包装。
+        初始化Redis存储客户端（复用Taskiq的Redis Broker连接）
+        :param redis_broker: Taskiq的RedisBroker实例
         """
-        @self.celery.task(name="custom")
-        @tosync
-        async def _handle_custom_logic(task_id: str = "", **params):
-            if task_id:
-                dbo = await TaskDBO.get(task_id)
-            else:
-                dbo = TaskDBO(**params)
-            task = CustomTaskLogic.from_dbo(dbo, log=print)
-            return await task.execute_async()
+        self.redis = redis.from_url(redis_dsn, decode_responses=True)
+        # Redis key 前缀（便于区分任务参数和队列数据）
+        self.key_prefix = "taskiq:task_params:"
 
-        @self.celery.task(name="ocr")
-        @tosync
-        async def _handle_ocr_logic(
-            input_path: str, output_path: str, lang: str, monochrome: bool = False
-            ):
-            from .pdfutils import convert_pdf_to_tiff_group4, merge_images_from_folder
+    async def store_task_data(self, task_data: dict[str, Any]) -> None:
+        """
+        将任务数据存入Redis
+        - 主key：{prefix}{task_id}（哈希结构，存储任务详情）
+        - 辅助key：{prefix}task_names（集合，存储所有任务名）
+        - 辅助key：{prefix}enqueue_times（有序集合，存储任务入队时间）
+        """
+        try:
+            job_id = task_data["job_id"]
+            main_key = f"{self.key_prefix}{job_id}"
+            
+            # 1. 存储任务核心数据（哈希结构，便于单独查询字段）
+            # 将非字符串类型数据序列化
+            serialized_data = {
+                "task_name": task_data["task_name"],
+                "args": json.dumps(task_data["args"]),
+                "kwargs": json.dumps(task_data["kwargs"]),
+                "enqueue_time": task_data["enqueue_time"],
+                "created_at": datetime.now().isoformat()
+            }
+            
+            # 异步写入Redis哈希
+            await self.redis.hset(main_key, mapping=serialized_data)
+            # 设置过期时间（可选，避免Redis数据膨胀，比如7天过期）
+            await self.redis.expire(main_key, 60 * 60 * 24 * 7)  # 7天
 
-            temps = []
-            input_path = storage.safe_join(input_path)
+            # 2. 辅助存储：记录所有任务名（便于统计）
+            await self.redis.sadd(f"{self.key_prefix}task_names", task_data["task_name"])
 
-            if os.path.isdir(input_path):
-                fo = tempfile.NamedTemporaryFile("wb", delete=False)
-                images = merge_images_from_folder(input_path, fo)
-                fo.close()
-                temps.append(fo.name)
-
-                if not images:
-                    for fn in await storage.glob(os.path.join(input_path, "*.pdf")):
-                        self.add_task(
-                            "ocr",
-                            {
-                                "input_path": fn,
-                                "output_path": fn[:-4] + "_ocred.pdf",
-                                "lang": lang,
-                                "monochrome": monochrome,
-                            },
-                        )
-                    return None
-                input_path = fo.name
-
-            if monochrome:
-                fo = tempfile.NamedTemporaryFile("wb", delete=False)
-                with open(input_path, "rb") as fi:
-                    convert_pdf_to_tiff_group4(fi, fo)
-                fo.close()
-                input_path = fo.name
-                temps.append(fo.name)
-
-            output_path = storage.safe_join(output_path)
-            if output_path.endswith("/"):
-                output_path += os.path.basename(input_path).rsplit(".", 1)[0] + "_ocred"
-            if not output_path.endswith(".pdf"):
-                output_path += ".pdf"
-
-            try:
-                import ocrmypdf
-
-                await asyncio.to_thread(
-                    ocrmypdf.ocr,
-                    input_path,
-                    output_path,
-                    plugins=["ocrmypdf_paddleocr_remote"],
-                    language=lang,
-                    paddle_remote=config.paddle_remote,
-                    jobs=2,
-                    force_ocr=True,
-                )
-            finally:
-                for f in temps:
-                    if os.path.exists(f):
-                        os.unlink(f)
-            return output_path
-
-        @self.celery.task(name="text_embedding")
-        @tosync
-        async def _text_embedding_logic(bulk: List = None, filters: Dict = None):
-            if bulk is not None:
-                embs = []
-                for i in bulk:
-                    for chunk_id, emb in enumerate(
-                        await TextEmbeddings.get_embedding_chunks(i["content"], 200, 50),
-                        start=1,
-                    ):
-                        embs.append(
-                            TextEmbeddings(id=i["id"], dataset=i["dataset"], chunk_id=chunk_id, embedding=emb)
-                        )
-                async with get_db_session() as session:
-                    session.add_all(embs)
-                    
-            else:
-                if filters is None:
-                    filters = {}
-                filters.update(embeddings=False)
-                cte = (
-                    (await Paragraph.build_query(filters))
-                    .with_only_columns(Paragraph.id)
-                    .limit(10000)
-                ).cte()
-                stmt = (
-                    select(Paragraph)
-                    .join(cte, Paragraph.id == cte.c.id)
-                    .filter(func.length(Paragraph.content) > 10)
-                    .with_only_columns(Paragraph.id, Paragraph.dataset, Paragraph.content)
-                )
-
-                async with get_db_session() as session:
-                    results = await session.execute(stmt)
-                    results = results.mappings().all()
-                    
-                new_bulk = []
-                for i, p in enumerate(results, start=1):
-                    new_bulk.append({"id": str(p["id"]), "dataset": str(p["dataset"]), "content": p["content"]})
-                    if i % 100 == 0 or i == len(results):
-                        self.add_task("text_embedding", {"bulk": new_bulk})
-                    new_bulk = []
-        
-        return {
-            "text_embedding": _text_embedding_logic,
-            "ocr": _handle_ocr_logic,
-            "custom": _handle_custom_logic,
-        }
-        
-    def add_task(self, task_type: str, params: Dict) -> str:
-        """派发任务"""
-        if task_type not in self.task_map:
-            raise ValueError(
-                f"Unsupported task type. Choice from: {list(self.task_map.keys())}"
+            # 3. 辅助存储：记录任务入队时间（有序集合，便于按时间筛选）
+            enqueue_ts = datetime.fromisoformat(task_data["enqueue_time"]).timestamp()
+            await self.redis.zadd(
+                f"{self.key_prefix}enqueue_times",
+                {job_id: enqueue_ts}
             )
 
-        job = self.task_map[task_type].delay(**params)
-        return job.id
+        except Exception as e:
+            logging.error(f"Failed to store task {job_id} params to Redis: {str(e)}", exc_info=e)
 
-    def task_status(self, task_id: str) -> Dict[str, Any]:
-        """获取任务详情数据"""
-        res = self.celery.AsyncResult(task_id)
+    async def get_task_data(self, job_id: str) -> dict[str, Any]:
+        """
+        从Redis查询单个任务的参数（方便后续查询使用）
+        :return: 解析后的任务数据，None表示不存在
+        """
+        try:
+            main_key = f"{self.key_prefix}{job_id}"
+            raw_data = await self.redis.hgetall(main_key)
+            
+            if not raw_data:
+                return {}
+
+            # 反序列化数据
+            return {
+                "job_id": job_id,
+                "task_name": raw_data.get("task_name", ""),
+                "args": json.loads(raw_data.get("args", "[]")),
+                "kwargs": json.loads(raw_data.get("kwargs", "{}")),
+                "enqueue_time": raw_data.get("enqueue_time", ""),
+                "queue_name": raw_data.get("queue_name", ""),
+                "created_at": raw_data.get("created_at", ""),
+            }
+        except Exception as e:
+            logging.error(f"Failed to get task {job_id} params from Redis: {str(e)}", exc_info=e)
+            return {}
+        
+    async def remove_task_data(self, job_id: str):
+        
+        try:
+            main_key = f"{self.key_prefix}{job_id}"
+            await self.redis.hdel(main_key)
+        except Exception as e:
+            logging.error(f"Failed to remove task {job_id} params from Redis: {str(e)}", exc_info=e)
+            return {}
+
+
+class TaskParamsRedisStorageMiddleware(TaskiqMiddleware):
+    """
+    Taskiq中间件：任务入队时将参数和名称存储到Redis
+    """
+    def __init__(self, redis_client: RedisStorageClient):
+        self.redis_client = redis_client
+
+    async def pre_send(self, message: TaskiqMessage) -> TaskiqMessage:
+        """
+        任务发送（入队）前触发：解析数据并存储到Redis
+        """
+        # 1. 解析任务元数据
+        task_data = self._parse_task_data(message)
+        
+        # 2. 异步存储到Redis（不阻塞任务发送）
+        # 使用create_task避免阻塞主线程
+        asyncio.create_task(self.redis_client.store_task_data(task_data))
+        
+        # 3. 返回原始消息，不影响任务正常入队
+        return message
+
+    def _parse_task_data(self, message: TaskiqMessage) -> Dict[str, Any]:
+        """解析TaskiqMessage，提取需要存储的字段"""
         return {
-            "task_id": task_id,
-            "status": res.status.lower(),
-            "result": res.result if res.successful() else None,
-            "error": str(res.result) if res.failed() else None,
+            "job_id": message.task_id or "unknown_id",
+            "task_name": message.task_name or "unknown_task",
+            "args": message.args or [],
+            "kwargs": message.kwargs or {},
+            "enqueue_time": datetime.now().isoformat(),
         }
 
-    def get_stats(self) -> Dict[str, Any]:
-        """全局状态统计"""
-        inspect = self.celery.control.inspect()
 
-        # 统计运行中和队列中
-        active = sum(len(ts) for ts in (inspect.active() or {}).values())
-        pending = sum(len(ts) for ts in (inspect.reserved() or {}).values())
+class StatsMiddleware(TaskiqMiddleware):
+    def __init__(self, redis_url: str):
+        self.redis = redis.from_url(redis_url, decode_responses=True)
+        self.prefix = "taskiq:stats"
 
-        # 扫描 Redis 统计已完成/失败
-        success_count = 0
-        failed_count = 0
-        for key in self.celery.backend.client.scan_iter("celery-task-meta-*"):
-            task = self.celery.AsyncResult(key.decode().split("-")[-1])
-            if task.status == "SUCCESS":
-                success_count += 1
-            elif task.status == "FAILURE":
-                failed_count += 1
+    async def pre_enqueue(self, message: TaskiqMessage) -> TaskiqMessage:
+        # Task added to the queue
+        await self.redis.incr(f"{self.prefix}:queued")
+        return message
 
-        return {
-            "processing": active,
-            "pending": pending,
-            "completed": success_count,
-            "failed": failed_count,
-        }
+    async def pre_execute(self, message: TaskiqMessage) -> TaskiqMessage:
+        # Worker picked up the task
+        await self.redis.decr(f"{self.prefix}:queued")
+        await self.redis.incr(f"{self.prefix}:running")
+        return message
 
-    def revoke(self, task_id: str):
-        """取消任务"""
-        self.celery.control.revoke(task_id, terminate=True)
-        self.celery.backend.delete(task_id)
+    async def post_execute(self, message: TaskiqMessage, result: TaskiqResult) -> None:
+        # Task finished (Success or Error)
+        await self.redis.decr(f"{self.prefix}:running")
+        if result.is_err:
+            await self.redis.incr(f"{self.prefix}:failed")
+        else:
+            await self.redis.incr(f"{self.prefix}:completed")
+
+    async def post_save(self, message: TaskiqMessage, result: TaskiqResult) -> None:
+        pass
+
+
+class AsyncWorkerManager:
+
+    def __init__(self, redis_dsn) -> None:
+        self.redis_storage_client = RedisStorageClient(redis_dsn)
+
+        result_backend = RedisAsyncResultBackend(
+            redis_url=redis_dsn,
+        )
+        broker = RedisStreamBroker(
+            url=redis_dsn,
+        ).with_result_backend(result_backend).with_middlewares(
+            StatsMiddleware(redis_dsn),
+            TaskParamsRedisStorageMiddleware(self.redis_storage_client)
+        )
+        
+        self.broker = broker
+        self.redis_stats = redis.from_url(redis_dsn, decode_responses=True)
+        self.stats_prefix = "taskiq:stats"
+        self._started = False
+
+    async def startup(self):
+        if not self._started:
+            await self.broker.startup()
+        self._started = True
         return True
 
-    def clear_tasks(self, status="") -> dict[str, str | int]:
-        """清理指定状态的任务"""
-        inspect = self.celery.control.inspect()
-        revoked_count = 0
-        if not status:
-            self.celery.control.purge()
+    async def enqueue(self, task_name: str, *args, **kwargs) -> str:
+        """Enqueue a task and increment 'queued' counter"""
+        # We use the broker's formatted task name
+        await self.startup()
+        task = self.broker.find_task(task_name)
+        if task:
+            kiq = await task.kiq(*args, **kwargs)
 
-        if status in ["pending", ""]:
-            # 取消所有待处理任务
-            reserved = inspect.reserved() or {}
-            for worker, tasks in reserved.items():
-                for task in tasks:
-                    self.celery.control.revoke(task["id"], terminate=True)
-                    revoked_count += 1
+            # Atomic increment for stats
+            await self.redis_stats.incr(f"{self.stats_prefix}:queued")
+        return kiq.task_id
 
-        if status in ["processing", ""]:
-            # 取消所有处理中任务
-            active = inspect.active() or {}
-            for worker, tasks in active.items():
-                for task in tasks:
-                    self.celery.control.revoke(task["id"], terminate=True)
-                    revoked_count += 1
+    async def get_stats(self, detailed: bool = False) -> dict[str, int]:
+        """Fetch all counters from Redis"""
+        await self.startup()
+        keys = ["queued", "running", "completed", "failed"]
+    
+        # Use a pipeline for a single round-trip to Redis
+        async with self.redis_stats.pipeline() as pipe:
+            for key in keys:
+                pipe.get(f"taskiq:stats:{key}")
+            values = await pipe.execute()
 
-        if status in ["completed", "failed", ""]:
-            # 删除已完成/失败任务的结果
-            for key in self.celery.backend.client.scan_iter("celery-task-meta-*"):
-                task_id = key.decode().replace("celery-task-meta-", "")
-                task = self.celery.AsyncResult(task_id)
-                if (
-                    status == ""
-                    or (status == "completed" and task.status == "SUCCESS")
-                    or (status == "failed" and task.status == "FAILURE")
-                ):
-                    task.forget()
-                    revoked_count += 1
+        stats = {k: int(v) if v else 0 for k, v in zip(keys, values)}
+        if detailed:
+            ids = await self.redis_stats.keys('*')
+            ids = [_ for _ in ids if re.match(r'^[0-9a-f]+$', _)]
+            stats['results'] = [
+                await self.get_result(jid)
+                for jid in ids
+            ]
+        return stats
 
-        return {"status": "success", "deleted_count": revoked_count}
+    async def clear(self):
+        patterns = [
+            "*"
+        ]
+        
+        total_deleted = 0
+        for pattern in patterns:
+            keys = await self.redis_stats.keys(pattern)
+            if keys:
+                await self.redis_stats.delete(*keys)
+                total_deleted += len(keys)
+        
+        print(f"Purged {total_deleted} Redis keys.")
+        return total_deleted
+    
+    async def get_result(self, job_id):
+        result = await self.broker.result_backend.get_result(job_id, True)
+        result = result.__dict__
+        result.update(await self.redis_storage_client.get_task_data(job_id))
+        return result
+    
+    async def remove_result(self, job_id):
+        await self.redis_storage_client.remove_task_data(job_id)
+        await self.redis_stats.delete(job_id)
+    
+    async def abort(self, job_id):
+        raise NotImplementedError()
 
-    def run_worker(self):
-        """启动 Worker 进程"""
-        self.celery.worker_main(["worker", "--pool=solo", "--loglevel=INFO"])
+    async def shutdown(self):
+        """Cleanly close connections"""
+        await self.startup()
+        await self.broker.shutdown()
+        await self.redis_stats.close()
 
     def get_router(self):
-        router = APIRouter(prefix="/worker", tags=["Worker"])
-        
-        @router.get("/{task_id}")
-        def task_status(task_id: str = ""):
-            return self.task_status(task_id)
-
-        @router.post("/")
-        def start_task(payload: dict = Body(...)):
-            return self.add_task(**payload)
-
-        @router.delete("/")
-        def clear_task(status: str = ""):
-            return self.clear_tasks(status)
-
-        @router.delete("/{task_id}")
-        def task_status(task_id: str = ""):
-            return self.revoke(task_id)
+        router = APIRouter(prefix="/worker", tags=["worker"])
 
         @router.get("/")
-        def task_stats():
-            return self.get_stats()
+        async def get_stats():
+            return await self.get_stats()
+        
+        @router.get("/jobs")
+        async def list_jobs():
+            return await self.get_stats(True)
+        
+        @router.post("/{task_name}")
+        async def add_task(task_name: str, payload: dict = Body(...)):
+            return await self.enqueue(task_name, **payload)
+
+        @router.get("/{job_id}")
+        async def get_result(job_id):
+            return await self.get_result(job_id)
+
+        @router.delete("/")
+        async def clear_all():
+            return await self.clear()
+
+        @router.delete("/{job_id}")
+        async def remove_result(job_id):
+            return await self.remove_result(job_id)
         
         return router
 
+    def register_task(self, async_func, task_name):
+        async def wrapped(**kwargs):
+            return await async_func(**kwargs)
 
-# 实例化
-worker_manager = WorkerManager()
+        self.broker.register_task(wrapped, task_name)
+
+
+worker_manager = AsyncWorkerManager(config.redis)
+broker = worker_manager.broker

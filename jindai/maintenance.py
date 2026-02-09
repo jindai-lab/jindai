@@ -1,19 +1,24 @@
+import asyncio
+import os
+import tempfile
 from fastapi import APIRouter, BackgroundTasks, Body, Depends
 from sqlalchemy import TIMESTAMP, cast, func, select, text, update
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session
 
-from .app import get_current_admin
-from .models import Dataset, Paragraph, Terms, get_db_session
+from .app import get_current_admin, config, storage
+from .models import Dataset, Paragraph, TaskDBO, Terms, TextEmbeddings, get_db_session
 
 
 class MaintenanceManager:
-    
+
     async def sync_terms(self):
         async with get_db_session() as session:
-            unnested_query = select(
-                text("unnest(keywords)").label("word")
-            ).select_from(text("paragraph")).subquery()
+            unnested_query = (
+                select(text("unnest(keywords)").label("word"))
+                .select_from(text("paragraph"))
+                .subquery()
+            )
 
             # 2. Select unique words that aren't null or empty
             distinct_words_stmt = (
@@ -22,7 +27,7 @@ class MaintenanceManager:
                 .where(unnested_query.c.word != None)
                 .where(unnested_query.c.word != "")
             )
-            
+
             result = await session.execute(distinct_words_stmt)
             unique_words = result.scalars().all()
 
@@ -33,14 +38,14 @@ class MaintenanceManager:
             # 3. Perform a Bulk Upsert into the Terms table
             # We use on_conflict_do_nothing to ignore words already in the Terms table
             data = [{"term": w} for w in unique_words]
-            
+
             insert_stmt = insert(Terms).values(data)
-            upsert_stmt = insert_stmt.on_conflict_do_nothing(index_elements=['term'])
+            upsert_stmt = insert_stmt.on_conflict_do_nothing(index_elements=["term"])
 
             await session.execute(upsert_stmt)
             print(f"Sync complete. Processed {len(unique_words)} unique keywords.")
 
-    async def update_pdate_from_url(self, dataset, session):
+    async def update_pdate_from_url(self, dataset):
         async with get_db_session() as session:
             dataset_id_subquery = (
                 select(Dataset.id).where(Dataset.name == dataset).scalar_subquery()
@@ -54,7 +59,8 @@ class MaintenanceManager:
                 select(
                     Paragraph.id,
                     (
-                        func.regexp_matches(Paragraph.source_url, reg)[text("1")] + "-01-01"
+                        func.regexp_matches(Paragraph.source_url, reg)[text("1")]
+                        + "-01-01"
                     ).label("pdate_str"),
                 )
                 .where(Paragraph.dataset == dataset_id_subquery)
@@ -71,6 +77,126 @@ class MaintenanceManager:
 
             await session.execute(stmt)
 
+    async def update_text_embeddings(self, filters=None):
+        if not filters:
+            filters = {}
+        filters.update(embeddings=False)
+        cte = (
+            (await Paragraph.build_query(filters))
+            .with_only_columns(Paragraph.id)
+            .limit(10000)
+        ).cte()
+        stmt = (
+            select(Paragraph)
+            .join(cte, Paragraph.id == cte.c.id)
+            .filter(func.length(Paragraph.content) > 10)
+            .with_only_columns(Paragraph.id, Paragraph.dataset, Paragraph.content)
+        )
+
+        async with get_db_session() as session:
+            results = await session.execute(stmt)
+            results = results.mappings().all()
+
+        new_bulk = []
+        for i, p in enumerate(results, start=1):
+            new_bulk.append(
+                {
+                    "id": str(p["id"]),
+                    "dataset": str(p["dataset"]),
+                    "content": p["content"],
+                }
+            )
+            if i % 100 == 0 or i == len(results):
+                await self.update_text_embeddings_do(bulk=new_bulk)
+            new_bulk = []
+
+    async def update_text_embeddings_do(self, bulk):
+        embs = []
+        for i in bulk:
+            for chunk_id, emb in enumerate(
+                await TextEmbeddings.get_embedding_chunks(i["content"], 200, 50),
+                start=1,
+            ):
+                embs.append(
+                    TextEmbeddings(
+                        id=i["id"],
+                        dataset=i["dataset"],
+                        chunk_id=chunk_id,
+                        embedding=emb,
+                    )
+                )
+        async with get_db_session() as session:
+            session.add_all(embs)
+        return len(embs)
+
+    async def custom_task(self, task_id: str = "", **params):
+        from .task import Task
+        if task_id:
+            dbo = await TaskDBO.get(task_id)
+        else:
+            dbo = TaskDBO(**params)
+        task = Task.from_dbo(dbo, log=print)
+        return await task.execute_async()
+
+    async def ocr(
+        self, input_path: str, output_path: str, lang: str, monochrome: bool = False
+    ):
+        from .pdfutils import convert_pdf_to_tiff_group4, merge_images_from_folder
+
+        temps = []
+        input_path = storage.safe_join(input_path)
+
+        if os.path.isdir(input_path):
+            fo = tempfile.NamedTemporaryFile("wb", delete=False)
+            images = merge_images_from_folder(input_path, fo)
+            fo.close()
+            temps.append(fo.name)
+
+            if not images:
+                os.unlink(fo.name)
+                for fn in storage.glob(os.path.join(input_path, "*.pdf")):
+                    await self.ocr(
+                        input_path=fn,
+                        output_path=fn[:-4] + "_ocred.pdf",
+                        lang=lang,
+                        monochrome=monochrome,
+                    )
+                return
+            input_path = fo.name
+
+        if monochrome:
+            fo = tempfile.NamedTemporaryFile("wb", delete=False)
+            with open(input_path, "rb") as fi:
+                convert_pdf_to_tiff_group4(fi, fo)
+            fo.close()
+            input_path = fo.name
+            temps.append(fo.name)
+
+        output_path = storage.safe_join(output_path)
+        if output_path.endswith("/"):
+            output_path += os.path.basename(input_path).rsplit(".", 1)[0] + "_ocred"
+        if not output_path.endswith(".pdf"):
+            output_path += ".pdf"
+
+        try:
+            import ocrmypdf
+
+            await asyncio.to_thread(
+                ocrmypdf.ocr,
+                input_path,
+                output_path,
+                plugins=["ocrmypdf_paddleocr_remote"],
+                language=lang,
+                paddle_remote=config.paddle_remote,
+                jobs=2,
+                force_ocr=True,
+            )
+        finally:
+            for f in temps:
+                if os.path.exists(f):
+                    os.unlink(f)
+        return output_path
+
     def get_router(self):
 
         router = APIRouter(
@@ -81,19 +207,28 @@ class MaintenanceManager:
 
         @router.put("/{task_name}")
         async def call_task_in_background(
-            task_name: str,
-            background_tasks: BackgroundTasks,
-            params: dict = Body(...)
+            task_name: str, background_tasks: BackgroundTasks, params: dict = Body(...)
         ):
             func = {
-                'sync-pdate': self.update_pdate_from_url,
-                'sync-terms': self.sync_terms,
+                "sync-pdate": self.update_pdate_from_url,
+                "sync-terms": self.sync_terms,
+                "text-embeddings": self.update_text_embeddings,
+                "ocr": self.ocr,
+                "custom": self.custom_task,
             }.get(task_name)
             if func:
                 background_tasks.add_task(func, **params)
-                return {"message": "Maintenance task started in background", "task_name": task_name, "params": params}
+                return {
+                    "message": "Maintenance task started in background",
+                    "task_name": task_name,
+                    "params": params,
+                }
             else:
-                return {"error": "Maintenance task not found", "task_name": task_name, "params": params}
+                return {
+                    "error": "Maintenance task not found",
+                    "task_name": task_name,
+                    "params": params,
+                }
 
         return router
 

@@ -1,5 +1,6 @@
 """API Web Service"""
 
+from contextlib import asynccontextmanager
 import os
 import sys
 from collections import defaultdict
@@ -19,6 +20,8 @@ from .config import instance as config
 from .helpers import get_context
 from .models import UserInfo, get_db_session
 from .storage import instance as storage
+from .worker import AsyncWorkerManager
+
 
 app = FastAPI(
     docs_url="/api/v2/docs",

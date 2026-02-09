@@ -74,12 +74,6 @@ def export(query, output_file) -> None:
         output_file.write(xlsx)
 
 
-@cli.command("worker")
-def run_worker() -> None:
-    from .worker import worker_manager
-    worker_manager.run_worker()
-
-
 @cli.command("task")
 @click.argument("task_id")
 @click.option("-l", "--log", type=str, default="")

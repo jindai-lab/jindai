@@ -6,17 +6,37 @@ import uuid
 from contextlib import asynccontextmanager
 from datetime import datetime
 from functools import wraps
-from typing import Any, Dict, List
+from typing import Any, AsyncIterator, Dict, List
 
 import redis
 import regex as re
 from pgvector.sqlalchemy import Vector
-from sqlalchemy import (Boolean, DateTime, ForeignKey, Index, Integer, PrimaryKeyConstraint, String,
-                        Text, UniqueConstraint, asc, desc,
-                        exists, or_, select, text, update)
+from sqlalchemy import (
+    Boolean,
+    DateTime,
+    ForeignKey,
+    Index,
+    Integer,
+    PrimaryKeyConstraint,
+    String,
+    Text,
+    UniqueConstraint,
+    asc,
+    desc,
+    exists,
+    or_,
+    select,
+    text,
+    update,
+)
 from sqlalchemy.dialects.postgresql import ARRAY, JSONB, UUID, insert
-from sqlalchemy.orm import (Mapped, declarative_base, mapped_column,
-                            relationship, validates)
+from sqlalchemy.orm import (
+    Mapped,
+    declarative_base,
+    mapped_column,
+    relationship,
+    validates,
+)
 from sqlalchemy.sql import func
 from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker, AsyncSession
 
@@ -24,25 +44,23 @@ from .config import instance as config
 from .helpers import AutoUnloadSentenceTransformer, jieba
 
 engine = create_async_engine(config.database)
-AsyncSessionFactory = async_sessionmaker(
+session_factory = async_sessionmaker(
     bind=engine,
     expire_on_commit=False,
-    autoflush=False,
-    autocommit=False
 )
 
 
 @asynccontextmanager
-async def get_db_session():
-    async with AsyncSessionFactory() as session:
-        try:
-            yield session
-            await session.commit()
-        except Exception as e:
-            await session.rollback()
-            raise e
-        finally:
-            await session.close()
+async def get_db_session() -> AsyncIterator[AsyncSession]:
+    session = session_factory()
+    try:
+        yield session
+        await session.commit()
+    except Exception as e:
+        await session.rollback()
+        raise e
+    finally:
+        await session.close()
 
 
 MBase = declarative_base()
@@ -136,7 +154,7 @@ class Dataset(Base):
                 .where(Paragraph.dataset == self.id)
                 .values({"dataset": ds.id})
             )
-            async with get_db_session() as session:           
+            async with get_db_session() as session:
                 await session.execute(stmt)
                 await session.delete(self)
         else:
@@ -156,7 +174,7 @@ class Dataset(Base):
 
         async with get_db_session() as session:
             datasets = await session.execute(select(Dataset))
-        
+
         sorted_datasets = sorted(datasets.scalars().all(), key=_dataset_sort_key)
         hierarchy = []
         for dataset in sorted_datasets:
@@ -237,7 +255,7 @@ class Paragraph(Base):
     __tablename__ = "paragraph"
     __table_args__ = (
         # 索引定义（与原表一致）
-        PrimaryKeyConstraint('id', 'dataset', name='paragraph_part_pk'),
+        PrimaryKeyConstraint("id", "dataset", name="paragraph_part_pk"),
         Index("fki_dataset", "dataset"),
         Index("idx_paragraph_author", "author"),
         Index("idx_paragraph_keywords", "keywords", postgresql_using="gin"),
@@ -340,13 +358,15 @@ class Paragraph(Base):
         filters = []
         query_embedding = None
         search = query_data.get("q", "*")
-        
+
         if group_field_name := query_data.get("groupBy"):
-            group_column = getattr(Paragraph, group_field_name, None) if group_field_name else None
+            group_column = (
+                getattr(Paragraph, group_field_name, None) if group_field_name else None
+            )
             if group_column is not None:
-                query = (query.distinct(group_column)
-                    .order_by(group_column) # DISTINCT ON requires order_by to start with group column
-                )
+                query = query.distinct(group_column).order_by(
+                    group_column
+                )  # DISTINCT ON requires order_by to start with group column
 
         # Primary Key / ID Filters
         if ids := query_data.get("ids"):
@@ -357,11 +377,10 @@ class Paragraph(Base):
             dataset_filters = [Dataset.name.in_(datasets)]
             for dataset_prefix in datasets:
                 dataset_filters.append(Dataset.name.ilike(f"{dataset_prefix}--%"))
-            
-            async with get_db_session() as session:
-                res = await session.execute(select(Dataset.id).where(or_(*dataset_filters)))
-                dataset_ids = res.scalars().all()
-                filters.append(Paragraph.dataset.in_(dataset_ids))
+
+            datasets = select(Dataset.id).where(or_(*dataset_filters))
+            dataset_ids = datasets.scalar_subquery()
+            filters.append(Paragraph.dataset.in_(dataset_ids))
 
         # Source URL Filters
         if sources := query_data.get("sources"):
@@ -369,7 +388,7 @@ class Paragraph(Base):
             for source in sources:
                 source_filters.append(Paragraph.source_url.ilike(f"{source}%"))
             filters.append(or_(*source_filters))
-            
+
         # Outline Filter
         if outline := query_data.get("outline"):
             filters.append(Paragraph.outline.in_(outline))
@@ -390,18 +409,23 @@ class Paragraph(Base):
         else:
             words = [_.strip().lower() for _ in jieba.cut_query(search) if _.strip()]
             for word in words:
-                candidates = [word.strip('^%')]
-                if word.startswith('^'):
-                    candidates.extend(await Terms.starting_with(word.strip('^')))
-                filters.append(or_(*(Paragraph.keywords.contains([c]) for c in candidates)))
+                candidates = [word.strip("^%")]
+                if word.startswith("^"):
+                    candidates.extend(await Terms.starting_with(word.strip("^")))
+                filters.append(
+                    or_(*(Paragraph.keywords.contains([c]) for c in candidates))
+                )
 
         query = query.filter(*filters)
 
         # Vector Search Join
         if query_embedding is not None:
             query = (
-                query
-                .join(TextEmbeddings, (Paragraph.id == TextEmbeddings.id) & (Paragraph.dataset == TextEmbeddings.dataset))
+                query.join(
+                    TextEmbeddings,
+                    (Paragraph.id == TextEmbeddings.id)
+                    & (Paragraph.dataset == TextEmbeddings.dataset),
+                )
                 .order_by(TextEmbeddings.embedding.cosine_distance(query_embedding))
                 .limit(2000)
             )
@@ -410,25 +434,26 @@ class Paragraph(Base):
         if sort_by := query_data.get("sort", ""):
             if isinstance(sort_by, str):
                 sort_by = sort_by.split(",")
-            
+
             sorts = []
             for sort_part in sort_by:
                 if not isinstance(sort_part, str):
                     sorts.append(sort_part)
                     continue
-                
+
                 sort_part = sort_part.strip()
-                if not sort_part: continue
-                
+                if not sort_part:
+                    continue
+
                 if sort_part.startswith("-"):
                     col_name, sort_func = sort_part[1:], desc
                 else:
                     col_name, sort_func = sort_part, asc
-                
+
                 col = getattr(Paragraph, col_name, None)
                 if col is not None:
                     sorts.append(sort_func(col))
-            
+
             query = query.order_by(*sorts)
 
         # Pagination
@@ -447,33 +472,38 @@ class Terms(Base):
     }
 
     term: Mapped[str] = mapped_column(String, nullable=False, comment="词汇")
-    
+
     @staticmethod
     async def starting_with(prefix: str) -> List[str]:
-        if not prefix: return []
+        if not prefix:
+            return []
         async with get_db_session() as session:
             q = await session.execute(
-                select(Terms).filter(Terms.term.startswith(prefix)).with_only_columns(Terms.term)
+                select(Terms)
+                .filter(Terms.term.startswith(prefix))
+                .with_only_columns(Terms.term)
             )
             return list(q.scalars())
-        
-    async def store(words: list[str]):# Clean the input to ensure uniqueness in the batch
+
+    async def store(
+        words: list[str],
+    ):  # Clean the input to ensure uniqueness in the batch
         async with get_db_session() as session:
-            async with session.begin(): # Start a transaction
+            async with session.begin():  # Start a transaction
                 # 1. Prepare the data dictionaries
                 data = [{"term": w} for w in words]
-                
+
                 # 2. Execute a bulk insert
-                # Note: This assumes 'term' is a unique column. 
+                # Note: This assumes 'term' is a unique column.
                 # If not, use standard session.execute(insert(Terms), data)
                 stmt = insert(Terms).values(data)
-                
+
                 # If you have a UNIQUE constraint on 'term', use this to skip duplicates:
-                stmt = stmt.on_conflict_do_nothing(index_elements=['term']) 
-                
+                stmt = stmt.on_conflict_do_nothing(index_elements=["term"])
+
                 await session.execute(stmt)
                 # No need for manual commit if using 'async with session.begin()'
-            
+
         return words
 
 
@@ -518,11 +548,13 @@ class TaskDBO(Base):
         """
         async with get_db_session() as session:
             if is_uuid_literal(id_or_name):
-                return session.get(TaskDBO, uuid.UUID(id_or_name))
+                return await session.get(TaskDBO, uuid.UUID(id_or_name))
             else:
-                result = await session.execute(select(TaskDBO).filter(TaskDBO.name.contains(id_or_name)))
+                result = await session.execute(
+                    select(TaskDBO).filter(TaskDBO.name.contains(id_or_name))
+                )
                 return result.scalar_one_or_none()
-            
+
 
 redis_client = redis.Redis.from_url(config.redis.rstrip("/") + "/2")
 
@@ -658,7 +690,7 @@ class TextEmbeddings(Base):
             normalize_embeddings=True,  # 归一化向量，提升检索效果
         )
 
-        return embedding.tolist()        
+        return embedding.tolist()
 
     @staticmethod
     async def get_embedding(text: str):
@@ -715,7 +747,8 @@ class TextEmbeddings(Base):
                 break
 
         # 批量encode，参数与get_embedding完全一致，保证向量格式统一
-        embeddings = await asyncio.to_thread(TextEmbeddings.embedding_model.encode,
+        embeddings = await asyncio.to_thread(
+            TextEmbeddings.embedding_model.encode,
             chunks,
             convert_to_numpy=True,
             normalize_embeddings=True,  # 保持归一化，和单句向量一致性检索
@@ -740,4 +773,3 @@ def is_uuid_literal(val: str) -> bool:
         )
         is not None
     )
-

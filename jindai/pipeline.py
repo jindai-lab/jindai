@@ -9,7 +9,8 @@ from typing import Any, Awaitable, Callable, Dict, Iterable, List, Tuple, Type, 
 import regex as re
 import asyncio
 
-from .app import config, storage
+from .config import instance as config
+from .storage import instance as storage
 from .models import Paragraph
 
 
@@ -162,7 +163,7 @@ class PipelineStage:
     async def parse_paths(val) -> list:
         files = []
         for pattern in PipelineStage.parse_lines(val):
-            files.extend(await storage.glob(pattern))
+            files.extend(storage.glob(pattern))
         return files
 
     @property
