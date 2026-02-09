@@ -246,9 +246,6 @@ class Task:
     def from_dbo(dbo, **kwargs) -> "Task":
         if dbo.pipeline:
             dbo.last_run = datetime.datetime.now()
-            # 假设你已经迁移到了异步数据库驱动
-            # await async_session.merge(dbo)
-            
             return Task(
                 params={},
                 stages=dbo.pipeline,

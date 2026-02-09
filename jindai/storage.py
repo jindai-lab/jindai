@@ -102,7 +102,6 @@ class Storage:
             and filename.rsplit(".", 1)[1].lower() in self.ALLOWED_EXTENSIONS
         )
 
-    # ------------------------------ 文件元信息核心方法 ------------------------------
     def fileinfo(self, file_path: str) -> Dict[str, Any]:
         """Get comprehensive metadata for file or directory
 
@@ -177,7 +176,7 @@ class Storage:
         """
         return self._dir_files(basedir, os.listdir(basedir), detailed)
 
-    async def glob(self, pattern: str, recursive: bool = False) -> List[str]:
+    def glob(self, pattern: str, recursive: bool = False) -> List[str]:
         """Get relative paths matching glob pattern
 
         :param pattern: Glob pattern to match files
@@ -185,7 +184,7 @@ class Storage:
         :return: List of relative paths matching pattern
         :rtype: List[str]
         """
-        results = await asyncio.to_thread(glob.glob, self.safe_join(pattern), recursive=recursive)
+        results = glob.glob(self.safe_join(pattern), recursive=recursive)
         return [self.relative_path(p) for p in results]
 
     def search(self, base_dir: str, search: str, detailed: bool = True) -> Dict[str, Any]:
@@ -247,7 +246,6 @@ class Storage:
         file_obj.save(save_path)
         return self.fileinfo(save_path)
 
-    # ------------------------------ 创建目录 ------------------------------
     def mkdir(self, dir_rel_path: str, dir_name: str) -> Dict[str, Any]:
         """Create empty directory
 
@@ -265,7 +263,6 @@ class Storage:
         os.makedirs(dir_path, exist_ok=True)
         return self.fileinfo(dir_path)
 
-    # ------------------------------ 文件/目录 移动/重命名 ------------------------------
     def mv(
         self, old_rel_path, new_name=None, new_rel_path=None
     ) -> dict[str, bytes | str | dict]:
@@ -297,7 +294,6 @@ class Storage:
             "new_info": self.fileinfo(new_path),
         }
 
-    # ------------------------------ 文件/目录 删除 ------------------------------
     def delete(self, target_rel_path) -> bool:
         """删除文件或空目录"""
         target_path = self.safe_join(target_rel_path)
@@ -312,7 +308,6 @@ class Storage:
             os.rmdir(target_path)
         return True
 
-    # ------------------------------ 文件下载核心 ------------------------------
     def read_file(self, target_rel_path, page=None, format=None) -> tuple:
         """
         读取文件内容，支持PDF分页下载
