@@ -1,260 +1,271 @@
 import asyncio
-from datetime import datetime
 import json
 import re
-from typing import Any, Dict
-from fastapi import APIRouter, Body
-import redis.asyncio as redis
-from taskiq import TaskiqMessage, TaskiqMiddleware, TaskiqResult
-from taskiq_redis import RedisStreamBroker, RedisAsyncResultBackend
+import threading
+from datetime import datetime
+import time
+from typing import Any, Callable, Dict, Optional
+
+import palitra
+from celery import Celery, Task
+from celery.events import EventReceiver
+from celery.exceptions import Ignore, OperationalError
+from celery.result import AsyncResult
+from fastapi import APIRouter, Body, FastAPI
+from redis import Redis as syncredis
+from redis import asyncio as aioredis
+from redis.asyncio import Redis
 
 from .config import instance as config
-import logging
-
-
-logger = logging.getLogger("taskiq_redis_stream_storage")
 
 
 class RedisStorageClient:
-    
     def __init__(self, redis_dsn: str):
-        """
-        初始化Redis存储客户端（复用Taskiq的Redis Broker连接）
-        :param redis_broker: Taskiq的RedisBroker实例
-        """
-        self.redis = redis.from_url(redis_dsn, decode_responses=True)
-        # Redis key 前缀（便于区分任务参数和队列数据）
-        self.key_prefix = "taskiq:task_params:"
+        self.redis = aioredis.from_url(redis_dsn, decode_responses=True)
+        self.prefix = "task_params:"
 
-    async def store_task_data(self, task_data: dict[str, Any]) -> None:
-        """
-        将任务数据存入Redis
-        - 主key：{prefix}{task_id}（哈希结构，存储任务详情）
-        - 辅助key：{prefix}task_names（集合，存储所有任务名）
-        - 辅助key：{prefix}enqueue_times（有序集合，存储任务入队时间）
-        """
-        try:
-            job_id = task_data["job_id"]
-            main_key = f"{self.key_prefix}{job_id}"
-            
-            # 1. 存储任务核心数据（哈希结构，便于单独查询字段）
-            # 将非字符串类型数据序列化
-            serialized_data = {
-                "task_name": task_data["task_name"],
-                "args": json.dumps(task_data["args"]),
-                "kwargs": json.dumps(task_data["kwargs"]),
-                "enqueue_time": task_data["enqueue_time"],
-                "created_at": datetime.now().isoformat()
-            }
-            
-            # 异步写入Redis哈希
-            await self.redis.hset(main_key, mapping=serialized_data)
-            # 设置过期时间（可选，避免Redis数据膨胀，比如7天过期）
-            await self.redis.expire(main_key, 60 * 60 * 24 * 7)  # 7天
+    async def get_task_data(self, job_id: str) -> dict:
+        """获取任务参数"""
+        data = await self.redis.get(f"{self.prefix}{job_id}")
+        return json.loads(data) if data else {}
 
-            # 2. 辅助存储：记录所有任务名（便于统计）
-            await self.redis.sadd(f"{self.key_prefix}task_names", task_data["task_name"])
+    async def set_task_data(self, job_id: str, data: dict):
+        """存储任务参数"""
+        await self.redis.set(f"{self.prefix}{job_id}", json.dumps(data))
 
-            # 3. 辅助存储：记录任务入队时间（有序集合，便于按时间筛选）
-            enqueue_ts = datetime.fromisoformat(task_data["enqueue_time"]).timestamp()
-            await self.redis.zadd(
-                f"{self.key_prefix}enqueue_times",
-                {job_id: enqueue_ts}
-            )
-
-        except Exception as e:
-            logging.error(f"Failed to store task {job_id} params to Redis: {str(e)}", exc_info=e)
-
-    async def get_task_data(self, job_id: str) -> dict[str, Any]:
-        """
-        从Redis查询单个任务的参数（方便后续查询使用）
-        :return: 解析后的任务数据，None表示不存在
-        """
-        try:
-            main_key = f"{self.key_prefix}{job_id}"
-            raw_data = await self.redis.hgetall(main_key)
-            
-            if not raw_data:
-                return {}
-
-            # 反序列化数据
-            return {
-                "job_id": job_id,
-                "task_name": raw_data.get("task_name", ""),
-                "args": json.loads(raw_data.get("args", "[]")),
-                "kwargs": json.loads(raw_data.get("kwargs", "{}")),
-                "enqueue_time": raw_data.get("enqueue_time", ""),
-                "queue_name": raw_data.get("queue_name", ""),
-                "created_at": raw_data.get("created_at", ""),
-            }
-        except Exception as e:
-            logging.error(f"Failed to get task {job_id} params from Redis: {str(e)}", exc_info=e)
-            return {}
-        
     async def remove_task_data(self, job_id: str):
-        
-        try:
-            main_key = f"{self.key_prefix}{job_id}"
-            await self.redis.hdel(main_key)
-        except Exception as e:
-            logging.error(f"Failed to remove task {job_id} params from Redis: {str(e)}", exc_info=e)
-            return {}
+        """删除任务参数"""
+        await self.redis.delete(f"{self.prefix}{job_id}")
+
+    async def close(self):
+        await self.redis.close()
 
 
-class TaskParamsRedisStorageMiddleware(TaskiqMiddleware):
-    """
-    Taskiq中间件：任务入队时将参数和名称存储到Redis
-    """
-    def __init__(self, redis_client: RedisStorageClient):
-        self.redis_client = redis_client
+class AsyncTrackedTask(Task):
+    """自定义任务类，仅保留终止检查，移除统计计数"""
+    abstract = True
 
-    async def pre_send(self, message: TaskiqMessage) -> TaskiqMessage:
-        """
-        任务发送（入队）前触发：解析数据并存储到Redis
-        """
-        # 1. 解析任务元数据
-        task_data = self._parse_task_data(message)
-        
-        # 2. 异步存储到Redis（不阻塞任务发送）
-        # 使用create_task避免阻塞主线程
-        asyncio.create_task(self.redis_client.store_task_data(task_data))
-        
-        # 3. 返回原始消息，不影响任务正常入队
-        return message
-
-    def _parse_task_data(self, message: TaskiqMessage) -> Dict[str, Any]:
-        """解析TaskiqMessage，提取需要存储的字段"""
-        return {
-            "job_id": message.task_id or "unknown_id",
-            "task_name": message.task_name or "unknown_task",
-            "args": message.args or [],
-            "kwargs": message.kwargs or {},
-            "enqueue_time": datetime.now().isoformat(),
-        }
-
-
-class StatsMiddleware(TaskiqMiddleware):
-    def __init__(self, redis_url: str):
-        self.redis = redis.from_url(redis_url, decode_responses=True)
-        self.prefix = "taskiq:stats"
-
-    async def pre_enqueue(self, message: TaskiqMessage) -> TaskiqMessage:
-        # Task added to the queue
-        await self.redis.incr(f"{self.prefix}:queued")
-        return message
-
-    async def pre_execute(self, message: TaskiqMessage) -> TaskiqMessage:
-        # Worker picked up the task
-        await self.redis.decr(f"{self.prefix}:queued")
-        await self.redis.incr(f"{self.prefix}:running")
-        return message
-
-    async def post_execute(self, message: TaskiqMessage, result: TaskiqResult) -> None:
-        # Task finished (Success or Error)
-        await self.redis.decr(f"{self.prefix}:running")
-        if result.is_err:
-            await self.redis.incr(f"{self.prefix}:failed")
-        else:
-            await self.redis.incr(f"{self.prefix}:completed")
-
-    async def post_save(self, message: TaskiqMessage, result: TaskiqResult) -> None:
-        pass
+    def __call__(self, *args, **kwargs):
+        """任务执行入口，检查终止标记"""
+        # 检查是否被终止
+        if AsyncWorkerManager.instance.is_task_aborted_sync(self.request.id):
+            raise Ignore("Task aborted by user")
+        return super().__call__(*args, **kwargs)
 
 
 class AsyncWorkerManager:
-
-    def __init__(self, redis_dsn) -> None:
+    
+    instance = None
+    
+    def __init__(self, redis_dsn: str) -> None:
+        AsyncWorkerManager.instance = self
+        # 初始化 Redis 存储客户端（存储任务参数）
         self.redis_storage_client = RedisStorageClient(redis_dsn)
-
-        result_backend = RedisAsyncResultBackend(
-            redis_url=redis_dsn,
-        )
-        broker = RedisStreamBroker(
-            url=redis_dsn,
-        ).with_result_backend(result_backend).with_middlewares(
-            StatsMiddleware(redis_dsn),
-            TaskParamsRedisStorageMiddleware(self.redis_storage_client)
+        
+        # 初始化 Celery
+        self.celery_app = Celery(
+            "async_worker_manager",
+            broker=redis_dsn,
+            backend=redis_dsn,
+            task_serializer="json",
+            result_serializer="json",
+            accept_content=["json"],
+            result_expires=3600,  # 结果过期时间 1 小时
         )
         
-        self.broker = broker
-        self.redis_stats = redis.from_url(redis_dsn, decode_responses=True)
+        # 配置自定义任务类
+        self.celery_app.Task = AsyncTrackedTask
+        
+        # 初始化统计用 Redis 客户端
+        self.redis_stats = aioredis.from_url(redis_dsn, decode_responses=True)
+        self.sync_redis_stats = syncredis.from_url(redis_dsn, decode_responses=True)
         self.stats_prefix = "taskiq:stats"
         self._started = False
+        
+        # 终止任务的 Redis 键前缀
+        self.abort_prefix = "task_abort:"
 
     async def startup(self):
+        """启动 Celery 连接（模拟原 broker.startup）"""
         if not self._started:
-            await self.broker.startup()
+            self.celery_app.connection().ensure_connection()
         self._started = True
         return True
 
     async def enqueue(self, task_name: str, *args, **kwargs) -> str:
-        """Enqueue a task and increment 'queued' counter"""
-        # We use the broker's formatted task name
+        """入队任务，仅手动维护 queued 计数（核心兼容逻辑）"""
         await self.startup()
-        task = self.broker.find_task(task_name)
-        if task:
-            kiq = await task.kiq(*args, **kwargs)
+        
+        # 查找 Celery 任务
+        try:
+            task = self.celery_app.tasks[task_name]
+        except KeyError:
+            raise ValueError(f"Task {task_name} not found")
+        
+        # 提交异步任务
+        result = task.apply_async(args=args, kwargs=kwargs)
+        job_id = result.id
+        
+        # 仅手动维护 queued 计数（兼容原有逻辑，避免重复）
+        await self.redis_stats.incr(f"{self.stats_prefix}:queued")
+        
+        # 存储任务元信息（保留原需求：task_name + 参数）
+        await self.redis_storage_client.set_task_data(
+            job_id,
+            {
+                "task_name": task_name,
+                "args": args,
+                "kwargs": kwargs,
+                "enqueue_time": datetime.now().isoformat()
+            }
+        )
+        
+        return job_id
 
-            # Atomic increment for stats
-            await self.redis_stats.incr(f"{self.stats_prefix}:queued")
-        return kiq.task_id
-
-    async def get_stats(self, detailed: bool = False) -> dict[str, int]:
-        """Fetch all counters from Redis"""
+    async def get_stats(self, detailed: bool = False) -> dict[str, Any]:
+        """获取任务统计（完全兼容原接口）"""
         await self.startup()
-        keys = ["queued", "running", "completed", "failed"]
-    
-        # Use a pipeline for a single round-trip to Redis
-        async with self.redis_stats.pipeline() as pipe:
-            for key in keys:
-                pipe.get(f"taskiq:stats:{key}")
-            values = await pipe.execute()
-
-        stats = {k: int(v) if v else 0 for k, v in zip(keys, values)}
-        if detailed:
-            ids = await self.redis_stats.keys('*')
-            ids = [_ for _ in ids if re.match(r'^[0-9a-f]+$', _)]
-            stats['results'] = [
-                await self.get_result(jid)
-                for jid in ids
-            ]
+        
+        stats = {
+            "queued": 0,
+            "running": 0,
+            "completed": 0,
+            "failed": 0
+        }
+        
+        # 匹配任务参数的 key，过滤出有效 job_id
+        pattern = f"{self.redis_storage_client.prefix}*"
+        keys = await self.redis_stats.keys(pattern)
+        job_ids = [k.replace(self.redis_storage_client.prefix, "") for k in keys]
+        
+        stats['results'] = [
+            await self.get_result(jid)
+            for jid in job_ids
+        ]
+        for result in stats['results']:
+            if result['status'] == 'PENDING':
+                stats['queued'] += 1
+            elif result['status'] == 'SUCCESS':
+                stats['completed'] += 1
+            elif result['status'] == 'PROCESSING':
+                stats['running'] += 1
+            else:
+                stats['failed'] += 1
+        
         return stats
 
-    async def clear(self):
+    async def clear(self) -> int:
+        """清空所有统计和任务数据（兼容原接口）"""
         patterns = [
-            "*"
+            f"{self.stats_prefix}:*",
+            f"{self.redis_storage_client.prefix}*",
+            f"{self.abort_prefix}*"
         ]
         
         total_deleted = 0
-        for pattern in patterns:
-            keys = await self.redis_stats.keys(pattern)
-            if keys:
-                await self.redis_stats.delete(*keys)
-                total_deleted += len(keys)
+        async with self.redis_stats.pipeline() as pipe:
+            for pattern in patterns:
+                keys = await self.redis_stats.keys(pattern)
+                if keys:
+                    await pipe.delete(*keys)
+                    total_deleted += len(keys)
+            await pipe.execute()
+        
+        # 清空 Celery 结果（可选）
+        self.celery_app.backend.cleanup()
         
         print(f"Purged {total_deleted} Redis keys.")
         return total_deleted
-    
-    async def get_result(self, job_id):
-        result = await self.broker.result_backend.get_result(job_id, True)
-        result = result.__dict__
-        result.update(await self.redis_storage_client.get_task_data(job_id))
-        return result
-    
-    async def remove_result(self, job_id):
+
+    async def get_result(self, job_id: str) -> dict:
+        """获取任务结果（包含参数，兼容原接口）"""
+        # 获取 Celery 任务结果
+        result = AsyncResult(job_id, app=self.celery_app)
+        
+        # 构造结果字典
+        result_dict = {
+            "job_id": job_id,
+            "status": result.status,
+            "result": result.result if result.successful() else None,
+            "error": str(result.result) if result.failed() else None,
+            "traceback": result.traceback,
+            "date_done": result.date_done.isoformat() if result.date_done else None,
+            "aborted": await self.is_task_aborted(job_id)
+        }
+        
+        # 合并任务元信息（task_name + 参数）
+        task_params = await self.redis_storage_client.get_task_data(job_id)
+        result_dict.update(task_params)
+        
+        return result_dict
+
+    async def remove_result(self, job_id: str):
+        """删除任务结果和参数（兼容原接口）"""
+        # 删除任务参数
         await self.redis_storage_client.remove_task_data(job_id)
-        await self.redis_stats.delete(job_id)
+        # 删除终止标记
+        await self.redis_stats.delete(f"{self.abort_prefix}{job_id}")
+        # 删除 Celery 结果
+        self.celery_app.backend.delete_job(job_id)
+
+    async def abort(self, job_id: str):
+        """实现任务终止功能（核心需求）"""
+        await self.startup()
+        
+        # 设置终止标记（供任务执行时检查）
+        await self.redis_stats.set(f"{self.abort_prefix}{job_id}", "1")
+        
+        # 尝试直接终止正在执行的任务
+        try:
+            result = AsyncResult(job_id, app=self.celery_app)
+            
+            # 根据任务状态处理
+            if result.status == "STARTED":
+                # 运行中：强制终止
+                self.celery_app.control.revoke(
+                    job_id, terminate=True, signal='SIGTERM'
+                )
+            elif result.status == "PENDING":
+                # 待执行：从队列移除
+                self.celery_app.control.revoke(job_id, terminate=False)
+            
+        except OperationalError as e:
+            raise RuntimeError(f"Failed to abort task {job_id}: {str(e)}")
+
+    async def is_task_aborted(self, job_id: str) -> bool:
+        """检查任务是否被终止"""
+        abort_flag = await self.redis_stats.get(f"{self.abort_prefix}{job_id}")
+        return abort_flag == "1"
     
-    async def abort(self, job_id):
-        raise NotImplementedError()
+    def is_task_aborted_sync(self, job_id: str) -> bool:
+        abort_flag = self.sync_redis_stats.get(f"{self.abort_prefix}{job_id}")
+        return abort_flag == "1"
 
     async def shutdown(self):
-        """Cleanly close connections"""
+        """优雅关闭连接（兼容原接口）"""
         await self.startup()
-        await self.broker.shutdown()
+        # 关闭 Redis 连接
+        self.sync_redis_stats.close()
         await self.redis_stats.close()
+        await self.redis_storage_client.close()
+        # 关闭 Celery 连接
+        self.celery_app.close()
 
-    def get_router(self):
+    def register_task(self, async_func: Callable, task_name: str):
+        """注册异步任务（兼容原接口）"""
+        @self.celery_app.task(name=task_name, bind=True)
+        def palitra_wrapped(self, *a, **k):
+            async def wrapped_task(self, *args, **kwargs):
+                # 检查终止标记
+                if await AsyncWorkerManager.instance.is_task_aborted(self.request.id):
+                    raise Ignore("Task aborted before execution")
+                return await async_func(*args, **kwargs)
+            palitra.run(wrapped_task(self, *a, **k))    
+        
+        return palitra_wrapped
+
+    def get_router(self) -> APIRouter:
+        """生成 FastAPI 路由（完全兼容原接口）"""
         router = APIRouter(prefix="/worker", tags=["worker"])
 
         @router.get("/")
@@ -270,7 +281,7 @@ class AsyncWorkerManager:
             return await self.enqueue(task_name, **payload)
 
         @router.get("/{job_id}")
-        async def get_result(job_id):
+        async def get_result(job_id: str):
             return await self.get_result(job_id)
 
         @router.delete("/")
@@ -278,17 +289,16 @@ class AsyncWorkerManager:
             return await self.clear()
 
         @router.delete("/{job_id}")
-        async def remove_result(job_id):
+        async def remove_result(job_id: str):
             return await self.remove_result(job_id)
         
+        @router.post("/{job_id}/abort")
+        async def abort_job(job_id: str):
+            await self.abort(job_id)
+            return {"status": "success", "message": f"Task {job_id} aborted"}
+
         return router
-
-    def register_task(self, async_func, task_name):
-        async def wrapped(**kwargs):
-            return await async_func(**kwargs)
-
-        self.broker.register_task(wrapped, task_name)
 
 
 worker_manager = AsyncWorkerManager(config.redis)
-broker = worker_manager.broker
+celery = worker_manager.celery_app
