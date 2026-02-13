@@ -205,9 +205,7 @@ class AsyncWorkerManager:
         await self.redis_storage_client.remove_task_data(job_id)
         # 删除终止标记
         await self.redis_stats.delete(f"{self.abort_prefix}{job_id}")
-        # 删除 Celery 结果
-        self.celery_app.backend.delete_job(job_id)
-
+        
     async def abort(self, job_id: str):
         """实现任务终止功能（核心需求）"""
         await self.startup()

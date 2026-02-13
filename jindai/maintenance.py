@@ -20,7 +20,7 @@ class MaintenanceManager:
                 .subquery()
             )
 
-            # 2. Select unique words that aren't null or empty
+            # Select unique words that aren't null or empty
             distinct_words_stmt = (
                 select(unnested_query.c.word)
                 .distinct()
@@ -35,7 +35,7 @@ class MaintenanceManager:
                 print("No keywords found to sync.")
                 return
 
-            # 3. Perform a Bulk Upsert into the Terms table
+            # Perform a Bulk Upsert into the Terms table
             # We use on_conflict_do_nothing to ignore words already in the Terms table
             data = [{"term": w} for w in unique_words]
 
@@ -52,9 +52,7 @@ class MaintenanceManager:
             )
 
             reg = r"(18|19|20)\d{2}"
-
-            # regexp_matches 在 PostgreSQL 中返回的是数组，所以需要索引 [1]
-            # 在 SQLAlchemy 中可以使用 column_element.get_item(1)
+            
             q = (
                 select(
                     Paragraph.id,
