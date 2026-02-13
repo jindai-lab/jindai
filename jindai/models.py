@@ -490,10 +490,10 @@ class Terms(Base):
     ):  # Clean the input to ensure uniqueness in the batch
         async with get_db_session() as session:
             async with session.begin():  # Start a transaction
-                # 1. Prepare the data dictionaries
+                # Prepare the data dictionaries
                 data = [{"term": w} for w in words]
 
-                # 2. Execute a bulk insert
+                # Execute a bulk insert
                 # Note: This assumes 'term' is a unique column.
                 # If not, use standard session.execute(insert(Terms), data)
                 stmt = insert(Terms).values(data)
