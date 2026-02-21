@@ -18,7 +18,7 @@ import yaml
 from . import Plugin, PluginManager, Task, config, storage
 from .app import app, run_service
 from .helpers import get_context, safe_import
-from .models import (Dataset, Paragraph, TaskDBO, UserInfo, get_db_session)
+from .models import (Dataset, Paragraph, QueryFilters, TaskDBO, UserInfo, get_db_session)
 
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
@@ -200,7 +200,7 @@ def call_ipython() -> None:
     init = _init_plugins
     from jindai import app
     def q(query_str):
-        return Paragraph.build_query({'search': query_str})
+        return Paragraph.build_query(QueryFilters(q=query_str))
 
     async def run(task_name):
         dbo = await TaskDBO.get(task_name)

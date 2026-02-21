@@ -6,39 +6,21 @@ import uuid
 from contextlib import asynccontextmanager
 from datetime import datetime
 from functools import wraps
-from typing import Any, AsyncIterator, Dict, List
+from typing import Any, AsyncIterator, Dict, List, Optional, Union
 
 import redis
 import regex as re
 from pgvector.sqlalchemy import Vector
-from sqlalchemy import (
-    Boolean,
-    DateTime,
-    ForeignKey,
-    Index,
-    Integer,
-    PrimaryKeyConstraint,
-    String,
-    Text,
-    UniqueConstraint,
-    asc,
-    desc,
-    exists,
-    or_,
-    select,
-    text,
-    update,
-)
+from pydantic import BaseModel, Field
+from sqlalchemy import (Boolean, DateTime, ForeignKey, Index, Integer,
+                        PrimaryKeyConstraint, String, Text, UniqueConstraint,
+                        asc, desc, exists, or_, select, text, update)
 from sqlalchemy.dialects.postgresql import ARRAY, JSONB, UUID, insert
-from sqlalchemy.orm import (
-    Mapped,
-    declarative_base,
-    mapped_column,
-    relationship,
-    validates,
-)
+from sqlalchemy.ext.asyncio import (AsyncSession, async_sessionmaker,
+                                    create_async_engine)
+from sqlalchemy.orm import (Mapped, declarative_base, mapped_column,
+                            relationship, validates)
 from sqlalchemy.sql import func
-from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker, AsyncSession
 
 from .config import instance as config
 from .helpers import AutoUnloadSentenceTransformer, jieba
@@ -251,6 +233,28 @@ class History(Base):
     user: Mapped["UserInfo"] = relationship("UserInfo", back_populates="histories")
 
 
+class QueryFilters(BaseModel):
+    # 搜索关键字，默认为 "*"
+    q: str = "*"
+
+    # 基础过滤
+    ids: Optional[List[int]] = None
+    datasets: Optional[List[str]] = None
+    sources: Optional[List[str]] = None
+    sourcePage: Optional[int] = None
+    outline: Optional[List[str]] = None
+    authors: Optional[List[str]] = None
+
+    # 控制逻辑
+    embeddings: Optional[bool] = None  # False 时排除有向量的数据
+    groupBy: Optional[str] = None  # 对应 Paragraph 的字段名
+
+    # 排序与分页
+    sort: Optional[Union[str, List[str]]] = ""
+    offset: int = 0
+    limit: Optional[int] = None
+
+
 class Paragraph(Base):
     __tablename__ = "paragraph"
     __table_args__ = (
@@ -353,13 +357,13 @@ class Paragraph(Base):
         return data
 
     @staticmethod
-    async def build_query(query_data):
+    async def build_query(query_filters: QueryFilters):
         query = select(Paragraph)
         filters = []
         query_embedding = None
-        search = query_data.get("q", "*")
+        search = query_filters.q
 
-        if group_field_name := query_data.get("groupBy"):
+        if group_field_name := query_filters.groupBy:
             group_column = (
                 getattr(Paragraph, group_field_name, None) if group_field_name else None
             )
@@ -369,11 +373,11 @@ class Paragraph(Base):
                 )  # DISTINCT ON requires order_by to start with group column
 
         # Primary Key / ID Filters
-        if ids := query_data.get("ids"):
+        if ids := query_filters.ids:
             filters.append(Paragraph.id.in_(ids))
 
         # Dataset Filters (Optimized logic)
-        if datasets := query_data.get("datasets"):
+        if datasets := query_filters.datasets:
             dataset_filters = [Dataset.name.in_(datasets)]
             for dataset_prefix in datasets:
                 dataset_filters.append(Dataset.name.ilike(f"{dataset_prefix}--%"))
@@ -384,25 +388,25 @@ class Paragraph(Base):
             filters.append(Paragraph.dataset.in_(dataset_ids.scalars()))
 
         # Source URL Filters
-        if sources := query_data.get("sources"):
+        if sources := query_filters.sources:
             source_filters = [Paragraph.source_url.in_(sources)]
             for source in sources:
                 source_filters.append(Paragraph.source_url.ilike(f"{source}%"))
             filters.append(or_(*source_filters))
-            
-        if source_page := query_data.get("sourcePage"):
+
+        if source_page := query_filters.sourcePage:
             filters.append(Paragraph.source_page == source_page)
 
         # Outline Filter
-        if outline := query_data.get("outline"):
+        if outline := query_filters.outline:
             filters.append(Paragraph.outline.in_(outline))
 
         # Author Filter
-        if authors := query_data.get("authors"):
+        if authors := query_filters.authors:
             filters.append(Paragraph.author.in_(authors))
 
         # Embedding Existence Filter
-        if query_data.get("embeddings") is False:
+        if query_filters.embeddings is False:
             filters.append(~exists().where(TextEmbeddings.id == Paragraph.id))
 
         # Search Logic
@@ -412,7 +416,7 @@ class Paragraph(Base):
             search_term = search.strip("*")
             if search_term:
                 filters.append(Paragraph.content.ilike(f"%{search_term}%"))
-        elif search.startswith(":") or query_data.get("embeddings"):
+        elif search.startswith(":") or query_filters.embeddings:
             query_embedding = await TextEmbeddings.get_embedding(search.strip(":"))
         else:
             words = [_.strip().lower() for _ in jieba.cut_query(search) if _.strip()]
@@ -428,23 +432,36 @@ class Paragraph(Base):
 
         # Vector Search Join
         if query_embedding is not None:
-            query = query.join(
-                TextEmbeddings,
-                (Paragraph.id == TextEmbeddings.id)
-                & (Paragraph.dataset == TextEmbeddings.dataset),  # 分片需要
-            ).distinct(
-                Paragraph.id,
-                Paragraph.dataset,
-            ).order_by(
-                Paragraph.id,
-                Paragraph.dataset,
-                TextEmbeddings.embedding.cosine_distance(query_embedding),
-            ).add_columns(TextEmbeddings.embedding).subquery()
-            query = select(query.c.id, query.c.dataset).order_by(query.c.embedding.cosine_distance(query_embedding)).subquery()
-            query = select(Paragraph).join(query, (Paragraph.dataset == query.c.dataset) & (Paragraph.id == query.c.id))
-            
+            query = (
+                query.join(
+                    TextEmbeddings,
+                    (Paragraph.id == TextEmbeddings.id)
+                    & (Paragraph.dataset == TextEmbeddings.dataset),  # 分片需要
+                )
+                .distinct(
+                    Paragraph.id,
+                    Paragraph.dataset,
+                )
+                .order_by(
+                    Paragraph.id,
+                    Paragraph.dataset,
+                    TextEmbeddings.embedding.cosine_distance(query_embedding),
+                )
+                .add_columns(TextEmbeddings.embedding)
+                .subquery()
+            )
+            query = (
+                select(query.c.id, query.c.dataset)
+                .order_by(query.c.embedding.cosine_distance(query_embedding))
+                .subquery()
+            )
+            query = select(Paragraph).join(
+                query,
+                (Paragraph.dataset == query.c.dataset) & (Paragraph.id == query.c.id),
+            )
+
         # Sorting
-        if sort_by := query_data.get("sort", ""):
+        if sort_by := query_filters.sort:
             if isinstance(sort_by, str):
                 sort_by = sort_by.split(",")
 
@@ -470,9 +487,9 @@ class Paragraph(Base):
             query = query.order_by(*sorts)
 
         # Pagination
-        if offset := query_data.get("offset", 0):
+        if offset := query_filters.offset:
             query = query.offset(offset)
-        if limit := query_data.get("limit", 0):
+        if limit := query_filters.limit:
             query = query.limit(limit)
 
         return query

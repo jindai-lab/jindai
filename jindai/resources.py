@@ -27,6 +27,7 @@ from .models import (
     Dataset,
     History,
     Paragraph,
+    QueryFilters,
     TaskDBO,
     TextEmbeddings,
     UserInfo,
@@ -222,29 +223,28 @@ async def post_paragraphs(
 
 @router.post("/paragraphs/search", tags=["Paragraphs"])
 async def search_paragraphs(
-    data: dict = Body(...),
+    filters: QueryFilters,
     paging: dict = Depends(JindaiResource.get_pagination),
     session: AsyncSession = Depends(get_db),
 ):
-    data.pop("offset", 0)
-    data.pop("limit", 0)
-    query = await Paragraph.build_query(data)
+    filters.offset = 0
+    filters.limit = None
+    query = await Paragraph.build_query(filters)
     resp = await JindaiResource.paginate(session, query, Paragraph, paging["offset"], paging["limit"])
     return resp
 
 
 @router.post("/paragraphs/filters/{column}", tags=["Paragraphs"])
 async def filter_paragraphs_items(
-    column: str, data: dict = Body(...), session: AsyncSession = Depends(get_db)
+    column: str, filters: QueryFilters, session: AsyncSession = Depends(get_db)
 ):
+    filters.q = '*'
+    filters.embeddings = None
+    filters.sort = ""
+    filters.groupBy = ""
+    setattr(filters, column, "")
 
-    data.pop("q")
-    data.pop("embeddings")
-    data.pop("sort", "")
-    data.pop("groupBy", "")
-    data.pop(column, "")
-
-    query = await Paragraph.build_query(data)
+    query = await Paragraph.build_query(filters)
     column = getattr(Paragraph, column)
     query = query.with_only_columns(
         column.label("value"), func.count(1).label("count")
