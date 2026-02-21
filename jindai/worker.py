@@ -48,6 +48,7 @@ class AsyncTrackedTask(Task):
     def __call__(self, *args, **kwargs):
         """任务执行入口，检查终止标记"""
         # 检查是否被终止
+        self.update_state(state='PROCESSING')
         if AsyncWorkerManager.instance.is_task_aborted_sync(self.request.id):
             raise Ignore("Task aborted by user")
         return super().__call__(*args, **kwargs)
@@ -261,6 +262,9 @@ class AsyncWorkerManager:
             palitra.run(wrapped_task(self, *a, **k))    
         
         return palitra_wrapped
+    
+    def get_tasks(self):
+        return self.celery_app.tasks
 
     def get_router(self) -> APIRouter:
         """生成 FastAPI 路由（完全兼容原接口）"""
@@ -273,6 +277,10 @@ class AsyncWorkerManager:
         @router.get("/jobs")
         async def list_jobs():
             return await self.get_stats(True)
+        
+        @router.get("/tasks")
+        def list_tasks():
+            return self.get_tasks()
         
         @router.post("/{task_name}")
         async def add_task(task_name: str, payload: dict = Body(...)):

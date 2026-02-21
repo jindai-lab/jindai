@@ -391,6 +391,8 @@ class Pipeline:
 
     @staticmethod
     def instantiate(stage_name: str, args: Dict) -> PipelineStage:
+        if args is None:
+            args = {}
         if args.pop("disabled", False):
             return PipelineStage()
         stage_type = Pipeline.ctx[stage_name]

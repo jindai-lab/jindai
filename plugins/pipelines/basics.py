@@ -18,6 +18,7 @@ from jindai.app import aeval, storage
 from jindai.helpers import WordStemmer as _Stemmer
 from jindai.helpers import jieba, safe_import
 from jindai.models import Paragraph, Terms, get_db_session
+from jindai.maintenance import maintenance_manager
 
 
 class Passthrough(PipelineStage):
@@ -524,7 +525,7 @@ class ArrayAggregation(PipelineStage):
         self.new_field = new_field or field
 
     def resolve(self, paragraph: Paragraph) -> Paragraph:
-        setattr(paragraph, self.new_field, list(chain(*paragraph[self.field])))
+        paragraph[self.new_field] = list(chain(*paragraph[self.field]))
         return paragraph
 
 
@@ -693,14 +694,14 @@ class RegexFilter(PipelineStage):
         self.filter_out = filter_out
 
     def resolve(self, paragraph: Paragraph) -> Paragraph | None:
-        match = self.regexp.search(str(getattr(paragraph, self.source, '')))
+        match = self.regexp.search(str(paragraph[self.source]))
         if match:
             val = self.match.format(match.group(
                 0), *[_ if _ is not None else '' for _ in match.groups()])
-            setattr(paragraph, self.target, val)
+            paragraph[self.target] = val
             self.value = val
         elif self.continuous:
-            setattr(paragraph, self.target, self.value)
+            paragraph[self.target] = self.value
         elif self.filter_out:
             return
         return paragraph
@@ -725,7 +726,7 @@ class RegexMatches(PipelineStage):
         self.regex = regex
 
     def resolve(self, paragraph: Paragraph) -> Paragraph:
-        for m in re.findall(self.regex, str(getattr(paragraph, self.field))):
+        for m in re.findall(self.regex, str(paragraph[self.field])):
             paragraph.extdata[self.field] = m
             yield paragraph
 
@@ -784,13 +785,32 @@ class SaveParagraph(PipelineStage):
         '''
         '''
         super().__init__()
+        self.saved = []
+        
+    async def update_embeddings(self):
+        if self.saved:
+            await maintenance_manager.update_text_embeddings({'ids': self.saved})
+            self.saved.clear()
 
     async def resolve(self, paragraph: Paragraph):
-        if not paragraph.id:
-            async with get_db_session() as session:
+        paragraph.content = re.sub(r'\p{Other}', ' ', paragraph.content)
+        
+        async with get_db_session() as session:
+            if not paragraph.id:
                 session.add(paragraph)
                 await Terms.store(paragraph.keywords)
+                self.saved.append(paragraph.id)
+            else:
+                await session.merge(paragraph)
+                
+        if len(self.saved) >= 100:
+            await self.update_embeddings()
+
         return paragraph
+    
+    async def summarize(self, result) -> Dict:
+        await self.update_embeddings()
+        return result
     
 
 class FieldIncresement(PipelineStage):
@@ -812,9 +832,9 @@ class FieldIncresement(PipelineStage):
         self.inc_value = inc_value
 
     def resolve(self, paragraph: Paragraph):
-        val = getattr(paragraph, self.field)
+        val = paragraph[self.field]
         val += aeval(self.inc_value, paragraph)
-        setattr(paragraph, val)
+        paragraph[self.field] = val
         return paragraph
 
 
@@ -935,8 +955,7 @@ class ConditionalAssignment(PipelineStage):
     def resolve(self, paragraph: Paragraph):
         for cond, val in self.conds:
             if aeval(cond, paragraph):
-                setattr(paragraph, self.field,
-                        aeval(val, paragraph))
+                paragraph[self.field] = aeval(val, paragraph)
                 break
         return paragraph
 

@@ -3,18 +3,36 @@ import uuid
 import httpx
 from typing import Optional, Type
 
-from fastapi import (APIRouter, BackgroundTasks, Body, Depends, File,
-                     HTTPException, Query, UploadFile)
+from fastapi import (
+    APIRouter,
+    BackgroundTasks,
+    Body,
+    Depends,
+    File,
+    HTTPException,
+    Query,
+    UploadFile,
+)
 from fastapi.responses import StreamingResponse
 from sqlalchemy.sql import func, select
 
-from .app import get_current_admin, router
+from .app import get_current_admin, get_current_username, router
 from .config import instance as config
 from .storage import instance as storage
 from .maintenance import maintenance_manager
 from .worker import worker_manager
-from .models import (AsyncSession, Base, Dataset, History, Paragraph, TaskDBO,
-                     TextEmbeddings, UserInfo, get_db_session, is_uuid_literal)
+from .models import (
+    AsyncSession,
+    Base,
+    Dataset,
+    History,
+    Paragraph,
+    TaskDBO,
+    TextEmbeddings,
+    UserInfo,
+    get_db_session,
+    is_uuid_literal,
+)
 from .plugin import plugins
 
 
@@ -23,72 +41,119 @@ async def get_db():
         yield session
 
 
-def get_pagination(offset: int = 0, limit: int = 100):
-    return {"offset": offset, "limit": limit}
+class JindaiResource:
 
+    def __init__(self, cls: Type[Base], prefix: str, tags: list) -> None:
+        self.model = cls
+        self.prefix = prefix
+        self.tags = tags
 
-async def paginate(session, stmt, model_cls, offset, limit):
-    total = await session.execute(select(func.count()).select_from(stmt.subquery()))
-    total = total.scalar()
-    results = await session.execute(stmt.offset(offset).limit(limit))
-    results = results.scalars().all()
-    return {"total": total, "results": [r.as_dict() for r in results]}
-
-
-def create_generic_router(model_cls: Type[Base], prefix: str, tags: list):
-    generic_router = APIRouter(prefix=prefix, tags=tags)
-
-    @generic_router.get("/")
-    async def list_items(
-        paging: dict = Depends(get_pagination), session=Depends(get_db)
-    ):
-        stmt = select(model_cls)
-        return await paginate(
-            session, stmt, model_cls, paging["offset"], paging["limit"]
+    @staticmethod
+    async def paginate(session, stmt, model_cls, offset, limit):
+        total = await session.execute(
+            select(func.count()).select_from(stmt.order_by(None).subquery())
         )
+        total = total.scalar()
+        results = await session.execute(stmt.offset(offset).limit(limit))
+        results = results.scalars().all()
+        return {"total": total, "results": [r.as_dict() for r in results]}
 
-    @generic_router.put("/{resource_id}")
-    async def put_item(
-        resource_id: str, data: dict = Body(...), session=Depends(get_db)
-    ):
-        item = await session.get(
-            model_cls,
-            resource_id if is_uuid_literal(resource_id) else resource_id,
-        )
-        if not item:
-            raise HTTPException(404, detail="Resource not found")
-        for k, v in data.items():
-            setattr(item, k, v)
+    @staticmethod
+    def get_pagination(offset: int = 0, limit: int = 100):
+        return {"offset": offset, "limit": limit}
 
-    @generic_router.get("/{resource_id}")
-    async def get_item(resource_id: str, session=Depends(get_db)):
-        item = await session.get(
-            model_cls,
-            resource_id if is_uuid_literal(resource_id) else resource_id,
-        )
-        if not item:
-            raise HTTPException(404, detail="Resource not found")
-        return item.as_dict()
+    async def auth_filters(self, username: str, permission : str = 'r'):
+        if await get_current_admin({}, username):
+            return True
+        return self.model.user.username == username
 
-    @generic_router.delete("/{resource_id}")
-    async def delete_item(
-        resource_id: str,
-        admin: UserInfo = Depends(get_current_admin),
-        session=Depends(get_db),
-    ):
-        item = await session.get(model_cls, uuid.UUID(resource_id))
-        if not item:
-            raise HTTPException(404)
-        await session.delete(item)
-        return {"message": "Deleted"}
+    def create_router(self):
+        router = APIRouter(prefix=self.prefix, tags=self.tags)
 
-    return generic_router
+        @router.get("/")
+        async def list_items(
+            paging: dict = Depends(JindaiResource.get_pagination),
+            session=Depends(get_db),
+            username=Depends(get_current_username),
+        ):
+            stmt = select(self.model).filter(await self.auth_filters(username))
+            return await JindaiResource.paginate(
+                session, stmt, self.model, paging["offset"], paging["limit"]
+            )
+
+        @router.put("/{resource_id}")
+        async def put_item(
+            resource_id: str, data: dict = Body(...), session=Depends(get_db)
+        ):
+            item = await session.get(
+                self.model,
+                resource_id if is_uuid_literal(resource_id) else resource_id,
+            )
+            if not item:
+                raise HTTPException(404, detail="Resource not found")
+            for k, v in data.items():
+                setattr(item, k, v)
+
+        @router.get("/{resource_id}")
+        async def get_item(resource_id: str, session=Depends(get_db)):
+            item = await session.get(
+                self.model,
+                resource_id if is_uuid_literal(resource_id) else resource_id,
+            )
+            if not item:
+                raise HTTPException(404, detail="Resource not found")
+            return item.as_dict()
+
+        @router.delete("/{resource_id}")
+        async def delete_item(
+            resource_id: str,
+            session=Depends(get_db),
+            username=Depends(get_current_username),
+        ):
+            item = (await session.execute(
+                select(self.model)
+                .filter(await self.auth_filters(username, 'w'))
+                .filter(self.model.id == resource_id)
+            )).first()
+            if not item:
+                raise HTTPException(404)
+            await session.delete(item)
+            return {"message": "Deleted"}
+
+        return router
 
 
-# 注册基础资源 (UserInfo, History, TaskDBO)
-router.include_router(create_generic_router(UserInfo, "/users", ["Users"]))
-router.include_router(create_generic_router(History, "/histories", ["Histories"]))
-router.include_router(create_generic_router(TaskDBO, "/tasks", ["Tasks"]))
+class UserInfoResource(JindaiResource):
+
+    def __init__(self) -> None:
+        super().__init__(UserInfo, "/users", ["Users"])
+
+
+class HistoryResource(JindaiResource):
+
+    def __init__(self) -> None:
+        super().__init__(UserInfo, "/histories", ["Histories"])
+
+
+class TaskDBOResource(JindaiResource):
+
+    def __init__(self) -> None:
+        super().__init__(TaskDBO, "/tasks", ["Tasks"])
+    
+    async def auth_filters(self, username: str, permission = 'r'):
+        filters = await super().auth_filters(username, permission)
+        if filters is not True and permission == 'r':
+            filters |= TaskDBO.shared == True
+        return filters
+
+
+router.include_router(
+    UserInfoResource().create_router(), dependencies=[Depends(get_current_admin)]
+)
+
+router.include_router(HistoryResource().create_router())
+
+router.include_router(TaskDBOResource().create_router())
 
 
 @router.get("/datasets", tags=["Datasets"])
@@ -110,7 +175,7 @@ async def rename_dataset(resource_id: str, name: str):
     return await ds.rename_dataset(name)
 
 
-@router.get("/embeddings", tags=["Embeddings"])
+@router.get("/embeddings/", tags=["Embeddings"])
 async def stat_embeddings(session: AsyncSession = Depends(get_db)):
     result = await session.execute(
         select(TextEmbeddings)
@@ -147,7 +212,6 @@ async def update_embedding(
 @router.post("/paragraphs", tags=["Paragraphs"])
 async def post_paragraphs(
     data: dict = Body(...),
-    paging: dict = Depends(get_pagination),
     session: AsyncSession = Depends(get_db),
 ):
     new_para = Paragraph.from_dict(data)
@@ -159,32 +223,35 @@ async def post_paragraphs(
 @router.post("/paragraphs/search", tags=["Paragraphs"])
 async def search_paragraphs(
     data: dict = Body(...),
-    paging: dict = Depends(get_pagination),
+    paging: dict = Depends(JindaiResource.get_pagination),
     session: AsyncSession = Depends(get_db),
 ):
-    data.pop('offset', 0)
-    data.pop('limit', 0)
+    data.pop("offset", 0)
+    data.pop("limit", 0)
     query = await Paragraph.build_query(data)
-    return await paginate(
-        session, query, Paragraph, paging["offset"], paging["limit"]
-    )
+    resp = await JindaiResource.paginate(session, query, Paragraph, paging["offset"], paging["limit"])
+    return resp
 
 
 @router.post("/paragraphs/filters/{column}", tags=["Paragraphs"])
 async def filter_paragraphs_items(
-    column: str,data: dict = Body(...), session: AsyncSession = Depends(get_db)):
-    
-    data.pop('q')
-    data.pop('embeddings')
-    data.pop('sort', '')
-    data.pop(column, '')
-        
+    column: str, data: dict = Body(...), session: AsyncSession = Depends(get_db)
+):
+
+    data.pop("q")
+    data.pop("embeddings")
+    data.pop("sort", "")
+    data.pop("groupBy", "")
+    data.pop(column, "")
+
     query = await Paragraph.build_query(data)
     column = getattr(Paragraph, column)
-    query = query.with_only_columns(column.label('value'), func.count(1).label('count')).group_by(column)
+    query = query.with_only_columns(
+        column.label("value"), func.count(1).label("count")
+    ).group_by(column)
     results = await session.execute(query)
     return results.mappings().all() or []
-    
+
 
 @router.get("/files/{file_path:path}", tags=["Files"])
 def get_file(
@@ -237,24 +304,25 @@ def upload_file(
 
 
 @router.post("/translator", tags=["Translator"])
-async def translator(params : dict = Body(...)):
+async def translator(params: dict = Body(...)):
     url = "https://open.bigmodel.cn/api/paas/v4/chat/completions"
     payload = {
         "model": "glm-4.7-flash",
         "messages": [
-            {"role": "system", "content": f"你是一个AI翻译器。翻译用户输入的文本为{params['lang']}，只返回翻译后的文本。"},
-            {"role": "user", "content": params['text']}
+            {
+                "role": "system",
+                "content": f"你是一个AI翻译器。翻译用户输入的文本为{params['lang']}，只返回翻译后的文本。",
+            },
+            {"role": "user", "content": params["text"]},
         ],
         "stream": False,
-        "temperature": 1
+        "temperature": 1,
     }
-    headers = {
-        "Authorization": "Bearer " + params['zhipu_api_key']
-    }
+    headers = {"Authorization": "Bearer " + params["zhipu_api_key"]}
 
     async with httpx.AsyncClient() as client:
         response = await client.post(url, json=payload, headers=headers, timeout=30000)
-        return response.json()['choices'][0]['message']['content']
+        return response.json()["choices"][0]["message"]["content"]
 
 
 router.include_router(plugins.get_router())
@@ -262,8 +330,11 @@ router.include_router(maintenance_manager.get_router())
 router.include_router(worker_manager.get_router())
 
 # register worker tasks
-worker_manager.register_task(maintenance_manager.custom_task, 'custom')
-worker_manager.register_task(maintenance_manager.ocr, 'ocr')
-worker_manager.register_task(maintenance_manager.update_text_embeddings, 'text_embedding')
-worker_manager.register_task(maintenance_manager.sync_terms, 'sync_terms')
-worker_manager.register_task(maintenance_manager.update_pdate_from_url, 'sync_pdate')
+worker_manager.register_task(maintenance_manager.custom_task, "custom")
+worker_manager.register_task(maintenance_manager.ocr, "ocr")
+worker_manager.register_task(
+    maintenance_manager.update_text_embeddings, "text_embedding"
+)
+worker_manager.register_task(maintenance_manager.sync_terms, "sync_terms")
+worker_manager.register_task(maintenance_manager.update_pdate_from_url, "sync_pdate")
+worker_manager.register_task(maintenance_manager.sync_sources, "sync_sources")

@@ -2,7 +2,7 @@ import asyncio
 import os
 import tempfile
 from fastapi import APIRouter, BackgroundTasks, Body, Depends
-from sqlalchemy import TIMESTAMP, cast, func, select, text, update
+from sqlalchemy import TIMESTAMP, cast, func, select, text, update, delete
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session
 
@@ -11,6 +11,39 @@ from .models import Dataset, Paragraph, TaskDBO, Terms, TextEmbeddings, get_db_s
 
 
 class MaintenanceManager:
+
+    async def sync_sources(self, dataset="", folder=""):
+
+        async with get_db_session() as session:
+            query = select(Paragraph)
+            if folder:
+                query = query.filter(Paragraph.source_url.startswith(folder))
+            if dataset:
+                query = query.filter(
+                    Paragraph.dataset.in_(
+                        select(Dataset)
+                        .filter(
+                            (Dataset.name == dataset)
+                            | Dataset.name.startswith(dataset + "--")
+                        )
+                        .with_only_columns(Dataset.id)
+                    )
+                )
+
+            query = query.distinct(Paragraph.source_url).with_only_columns(
+                Paragraph.source_url
+            )
+            sources = [_ for _, in await session.execute(query)]
+
+            for source in sources:
+                joined = storage.safe_join(source)
+                if not os.path.exists(joined):
+                    print(
+                        f"{source} does not exist any more. Delete related paragraphs."
+                    )
+                    await session.execute(
+                        delete(Paragraph).filter(Paragraph.source_url == source)
+                    )
 
     async def sync_terms(self):
         async with get_db_session() as session:
@@ -45,6 +78,26 @@ class MaintenanceManager:
             await session.execute(upsert_stmt)
             print(f"Sync complete. Processed {len(unique_words)} unique keywords.")
 
+    async def update_author_from_url(self, pattern):
+        async with get_db_session() as session:
+            sql = text(
+                """
+                WITH extracted_data AS (
+                    SELECT id, substring(source_url FROM :p) AS extracted_author
+                    FROM paragraph
+                    WHERE source_url ~* :p
+                )
+                UPDATE paragraph
+                SET author = extracted_data.extracted_author
+                FROM extracted_data
+                WHERE paragraph.id = extracted_data.id
+                AND (paragraph.author IS NULL OR paragraph.author = '')
+            """
+            )
+
+            result = await session.execute(sql, {"p": pattern})
+            print(f"Successfully updated {result.rowcount} records.")
+
     async def update_pdate_from_url(self, dataset):
         async with get_db_session() as session:
             dataset_id_subquery = (
@@ -52,13 +105,12 @@ class MaintenanceManager:
             )
 
             reg = r"(18|19|20)\d{2}"
-            
+
             q = (
                 select(
                     Paragraph.id,
                     (
-                        func.regexp_matches(Paragraph.source_url, reg)[text("1")]
-                        + "-01-01"
+                        func.regexp_matches(Paragraph.source_url, reg)[1] + "-01-01"
                     ).label("pdate_str"),
                 )
                 .where(Paragraph.dataset == dataset_id_subquery)
@@ -80,60 +132,73 @@ class MaintenanceManager:
             filters = {}
         filters.update(embeddings=False)
         cte = (
-            (await Paragraph.build_query(filters))
-            .with_only_columns(Paragraph.id)
-            .limit(10000)
+            (await Paragraph.build_query(filters)).with_only_columns(Paragraph.id)
         ).cte()
         stmt = (
             select(Paragraph)
             .join(cte, Paragraph.id == cte.c.id)
             .filter(func.length(Paragraph.content) > 10)
             .with_only_columns(Paragraph.id, Paragraph.dataset, Paragraph.content)
+            .limit(10000)
         )
 
-        async with get_db_session() as session:
-            results = await session.execute(stmt)
-            results = results.mappings().all()
+        added = 0
 
-        new_bulk = []
-        for i, p in enumerate(results, start=1):
-            new_bulk.append(
-                {
-                    "id": str(p["id"]),
-                    "dataset": str(p["dataset"]),
-                    "content": p["content"],
-                }
-            )
-            if i % 100 == 0 or i == len(results):
-                await self.update_text_embeddings_do(bulk=new_bulk)
+        while True:
+
+            async with get_db_session() as session:
+                results = await session.execute(stmt)
+                results = results.mappings().all()
+
+            results_len = len(results)
+
+            if not results_len:
+                return added
+
             new_bulk = []
+            for i, p in enumerate(results, start=1):
+                for chunk_id, chunk in enumerate(
+                    TextEmbeddings.get_chunks(p["content"], 200, 50), start=1
+                ):
+                    new_bulk.append(
+                        {
+                            "id": str(p["id"]),
+                            "dataset": str(p["dataset"]),
+                            "chunk_id": chunk_id,
+                            "content": chunk,
+                        }
+                    )
+                if i % 320 == 0 or i == results_len:
+                    added += await self.update_text_embeddings_do(bulk=new_bulk)
+                    new_bulk.clear()
 
     async def update_text_embeddings_do(self, bulk):
         embs = []
-        for i in bulk:
-            for chunk_id, emb in enumerate(
-                await TextEmbeddings.get_embedding_chunks(i["content"], 200, 50),
-                start=1,
-            ):
-                embs.append(
-                    TextEmbeddings(
-                        id=i["id"],
-                        dataset=i["dataset"],
-                        chunk_id=chunk_id,
-                        embedding=emb,
-                    )
+        for p, emb in zip(
+            bulk,
+            await TextEmbeddings.batch_encode([p["content"] for p in bulk]),
+        ):
+            embs.append(
+                TextEmbeddings(
+                    id=p["id"],
+                    dataset=p["dataset"],
+                    chunk_id=p["chunk_id"],
+                    embedding=emb,
                 )
+            )
         async with get_db_session() as session:
             session.add_all(embs)
+        print(f"{len(embs)} added")
         return len(embs)
 
     async def custom_task(self, task_id: str = "", **params):
         from .task import Task
+
         if task_id:
             dbo = await TaskDBO.get(task_id)
         else:
             dbo = TaskDBO(**params)
-        task = Task.from_dbo(dbo, log=print)
+        task = Task.from_dbo(dbo)
         return await task.execute_async()
 
     async def ocr(

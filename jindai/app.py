@@ -105,14 +105,19 @@ def aeval(expr: str, context: Union[Dict[str, Any], Any]) -> Any:
     return result
 
 
+def get_current_username(token_payload: dict = Depends(oidc_validator.validate_token)) -> str:
+    return token_payload.get("preferred_username", "")
+
+
 async def get_current_admin(
     token_payload: dict = Depends(oidc_validator.validate_token),
+    username: str = ''
 ) -> UserInfo:
     """
     验证当前用户是否具有 admin 角色
     """
     # 从 JWT payload 中获取用户名 (对应之前的 preferred_username)
-    username = token_payload.get("preferred_username")
+    username = username or get_current_username(token_payload)
 
     if not username:
         raise HTTPException(

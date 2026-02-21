@@ -194,6 +194,7 @@ def call_ipython() -> None:
     import jindai
     import jindai.models
     import jindai.resources
+    import palitra
 
     tpe = ThreadPoolExecutor(os.cpu_count())
     init = _init_plugins
