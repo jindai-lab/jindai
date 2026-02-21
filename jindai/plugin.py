@@ -148,10 +148,7 @@ class PluginManager:
             result = defaultdict(dict)
 
             for key, val in ctx.items():
-                if key in ("DataSourceStage", "MediaItemStage"):
-                    continue
-
-                # 获取模块文档或模块名作为分类
+                
                 module_doc = (
                     sys.modules[val.__module__].__doc__ if hasattr(val, "__module__") else None
                 )
@@ -163,7 +160,7 @@ class PluginManager:
 
                 result[name][key] = val.get_spec()
 
-                return result
+            return result
 
         return router
 

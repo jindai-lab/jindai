@@ -1,14 +1,15 @@
 """Task processing module"""
 
+import asyncio
 import ctypes
 import datetime
+import logging
 import time
 import traceback
 import uuid
 from collections import deque
-from queue import PriorityQueue
 from threading import Lock, Thread
-from typing import Callable
+from typing import Any, Callable
 
 from tqdm import tqdm
 
@@ -86,15 +87,8 @@ class WorkersPool:
                 print("running threads:", self.count())
                 print(" ", "\n  ".join(map(str, self._threads.keys())))
 
-import asyncio
-import datetime
-import traceback
-from collections import deque
-from typing import Callable, Any
-from tqdm import tqdm
 
 class Task:
-    """异步任务对象 - 针对 FastAPI 优化"""
 
     def __init__(
         self,
@@ -231,7 +225,8 @@ class Task:
         """将 deque 中的日志批量吐出"""
         while self.logs:
             log = self.logs.popleft()
-            print(*log)
+            log = ' '.join(map(str, log))
+            logging.info(log)
 
     def log_exception(self, info: str, exc: Exception) -> None:
         self.log_func(info, type(exc).__name__, exc)

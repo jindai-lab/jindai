@@ -379,8 +379,9 @@ class Paragraph(Base):
                 dataset_filters.append(Dataset.name.ilike(f"{dataset_prefix}--%"))
 
             datasets = select(Dataset.id).where(or_(*dataset_filters))
-            dataset_ids = datasets.scalar_subquery()
-            filters.append(Paragraph.dataset.in_(dataset_ids))
+            async with get_db_session() as session:
+                dataset_ids = await session.execute(datasets)
+            filters.append(Paragraph.dataset.in_(dataset_ids.scalars()))
 
         # Source URL Filters
         if sources := query_data.get("sources"):
@@ -388,10 +389,17 @@ class Paragraph(Base):
             for source in sources:
                 source_filters.append(Paragraph.source_url.ilike(f"{source}%"))
             filters.append(or_(*source_filters))
+            
+        if source_page := query_data.get("sourcePage"):
+            filters.append(Paragraph.source_page == source_page)
 
         # Outline Filter
         if outline := query_data.get("outline"):
             filters.append(Paragraph.outline.in_(outline))
+
+        # Author Filter
+        if authors := query_data.get("authors"):
+            filters.append(Paragraph.author.in_(authors))
 
         # Embedding Existence Filter
         if query_data.get("embeddings") is False:
@@ -420,16 +428,21 @@ class Paragraph(Base):
 
         # Vector Search Join
         if query_embedding is not None:
-            query = (
-                query.join(
-                    TextEmbeddings,
-                    (Paragraph.id == TextEmbeddings.id)
-                    & (Paragraph.dataset == TextEmbeddings.dataset),
-                )
-                .order_by(TextEmbeddings.embedding.cosine_distance(query_embedding))
-                .limit(2000)
-            )
-
+            query = query.join(
+                TextEmbeddings,
+                (Paragraph.id == TextEmbeddings.id)
+                & (Paragraph.dataset == TextEmbeddings.dataset),  # 分片需要
+            ).distinct(
+                Paragraph.id,
+                Paragraph.dataset,
+            ).order_by(
+                Paragraph.id,
+                Paragraph.dataset,
+                TextEmbeddings.embedding.cosine_distance(query_embedding),
+            ).add_columns(TextEmbeddings.embedding).subquery()
+            query = select(query.c.id, query.c.dataset).order_by(query.c.embedding.cosine_distance(query_embedding)).subquery()
+            query = select(Paragraph).join(query, (Paragraph.dataset == query.c.dataset) & (Paragraph.id == query.c.id))
+            
         # Sorting
         if sort_by := query_data.get("sort", ""):
             if isinstance(sort_by, str):
@@ -465,13 +478,15 @@ class Paragraph(Base):
         return query
 
 
-class Terms(Base):
+class Terms(MBase):  # terms has no `id`, and cannot as_dict()
     __tablename__ = "terms"
     __table_args__ = {
         "comment": "词汇表",
     }
 
-    term: Mapped[str] = mapped_column(String, nullable=False, comment="词汇")
+    term: Mapped[str] = mapped_column(
+        String, nullable=False, comment="词汇", primary_key=True
+    )
 
     @staticmethod
     async def starting_with(prefix: str) -> List[str]:
@@ -709,9 +724,9 @@ class TextEmbeddings(Base):
         return await asyncio.to_thread(TextEmbeddings.get_embedding_sync, text)
 
     @staticmethod
-    async def get_embedding_chunks(text: str, chunk_length: int, overlap: int) -> list:
+    def get_chunks(text: str, chunk_length: int, overlap: int) -> list:
         """
-        长文本切分+批量生成embedding向量，带重叠窗口避免语义割裂
+        长文本切分，带重叠窗口避免语义割裂
         Args:
             text: 待切分的长文本（语段/整页文本）
             chunk_length: 每个文本块的字符长度
@@ -746,10 +761,15 @@ class TextEmbeddings(Base):
                 chunks.append(chunk)
                 break
 
+        return chunks
+
+    @staticmethod
+    async def batch_encode(batch):
+
         # 批量encode，参数与get_embedding完全一致，保证向量格式统一
         embeddings = await asyncio.to_thread(
             TextEmbeddings.embedding_model.encode,
-            chunks,
+            batch,
             convert_to_numpy=True,
             normalize_embeddings=True,  # 保持归一化，和单句向量一致性检索
         )
