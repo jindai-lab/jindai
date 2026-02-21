@@ -2,7 +2,7 @@
 Query Database
 @zhs 来自数据库
 """
-from jindai.models import Paragraph, get_db_session
+from jindai.models import Paragraph, QueryFilters, get_db_session
 from jindai.pipeline import DataSourceStage
 
 
@@ -35,9 +35,7 @@ class DBQueryDataSource(DataSourceStage):
                 @choose(|source_url) Groups
                 @zhs @choose(无:none|按组:group|按来源:source|分组和来源:both) 分组
         """
-        self.query = Paragraph.build_query(
-            {"search": query, "sort": sort, "offset": skip, "limit": limit, "groupBy": groups}
-        )
+        self.query = Paragraph.build_query(QueryFilters(q=query, offset=skip, limit=limit, groupBy=groups, sort=sort))
 
     async def fetch(self):
         async with get_db_session() as session:

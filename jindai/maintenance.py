@@ -1,18 +1,18 @@
 import asyncio
 import os
 import tempfile
+from typing import Optional
 from fastapi import APIRouter, BackgroundTasks, Body, Depends
 from sqlalchemy import TIMESTAMP, cast, func, select, text, update, delete
 from sqlalchemy.dialects.postgresql import insert
-from sqlalchemy.orm import Session
 
 from .app import get_current_admin, config, storage
-from .models import Dataset, Paragraph, TaskDBO, Terms, TextEmbeddings, get_db_session
+from .models import Dataset, Paragraph, TaskDBO, Terms, TextEmbeddings, get_db_session, QueryFilters
 
 
 class MaintenanceManager:
 
-    async def sync_sources(self, dataset="", folder=""):
+    async def sync_sources(self, dataset: str="", folder: str=""):
 
         async with get_db_session() as session:
             query = select(Paragraph)
@@ -98,7 +98,7 @@ class MaintenanceManager:
             result = await session.execute(sql, {"p": pattern})
             print(f"Successfully updated {result.rowcount} records.")
 
-    async def update_pdate_from_url(self, dataset):
+    async def update_pdate_from_url(self, dataset: str):
         async with get_db_session() as session:
             dataset_id_subquery = (
                 select(Dataset.id).where(Dataset.name == dataset).scalar_subquery()
@@ -127,10 +127,10 @@ class MaintenanceManager:
 
             await session.execute(stmt)
 
-    async def update_text_embeddings(self, filters=None):
+    async def update_text_embeddings(self, filters: Optional[QueryFilters]=None):
         if not filters:
-            filters = {}
-        filters.update(embeddings=False)
+            filters = QueryFilters()
+        filters.embeddings = False
         cte = (
             (await Paragraph.build_query(filters)).with_only_columns(Paragraph.id)
         ).cte()
@@ -172,7 +172,7 @@ class MaintenanceManager:
                     added += await self.update_text_embeddings_do(bulk=new_bulk)
                     new_bulk.clear()
 
-    async def update_text_embeddings_do(self, bulk):
+    async def update_text_embeddings_do(self, bulk: list):
         embs = []
         for p, emb in zip(
             bulk,
