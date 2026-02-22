@@ -145,4 +145,4 @@ class PDFDataSource(DataSourceStage):
                 )
 
             if not existent.get(filepath) and imported_pages == 0:
-                self.log(filepath, "no sufficient texts found.")
+                self.log(f"no sufficient texts found in {filepath}")

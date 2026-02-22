@@ -1,3 +1,4 @@
+import asyncio
 import inspect
 import json
 from datetime import datetime
@@ -7,12 +8,13 @@ import palitra
 from celery import Celery, Task
 from celery.exceptions import Ignore, OperationalError
 from celery.result import AsyncResult
-from fastapi import APIRouter, Body
+from fastapi import APIRouter, Body, Query, WebSocket, WebSocketDisconnect
 from pydantic import BaseModel
 from redis import Redis as syncredis
 from redis import asyncio as aioredis
 
 from .config import instance as config
+from .config import oidc_validator
 
 
 class RedisStorageClient:
@@ -37,20 +39,6 @@ class RedisStorageClient:
         await self.redis.close()
 
 
-class AsyncTrackedTask(Task):
-    """自定义任务类，仅保留终止检查，移除统计计数"""
-
-    abstract = True
-
-    def __call__(self, *args, **kwargs):
-        """任务执行入口，检查终止标记"""
-        # 检查是否被终止
-        self.update_state(state="PROCESSING")
-        if AsyncWorkerManager.instance.is_task_aborted_sync(self.request.id):
-            raise Ignore("Task aborted by user")
-        return super().__call__(*args, **kwargs)
-
-
 class AsyncWorkerManager:
 
     instance = None
@@ -71,17 +59,10 @@ class AsyncWorkerManager:
             result_expires=3600,  # 结果过期时间 1 小时
         )
 
-        # 配置自定义任务类
-        self.celery_app.Task = AsyncTrackedTask
-
         # 初始化统计用 Redis 客户端
         self.redis_stats = aioredis.from_url(redis_dsn, decode_responses=True)
         self.sync_redis_stats = syncredis.from_url(redis_dsn, decode_responses=True)
-        self.stats_prefix = "taskiq:stats"
         self._started = False
-
-        # 终止任务的 Redis 键前缀
-        self.abort_prefix = "task_abort:"
 
     async def startup(self):
         """启动 Celery 连接（模拟原 broker.startup）"""
@@ -104,9 +85,6 @@ class AsyncWorkerManager:
         result = task.apply_async(args=args, kwargs=kwargs)
         job_id = result.id
 
-        # 仅手动维护 queued 计数（兼容原有逻辑，避免重复）
-        await self.redis_stats.incr(f"{self.stats_prefix}:queued")
-
         # 存储任务元信息（保留原需求：task_name + 参数）
         await self.redis_storage_client.set_task_data(
             job_id,
@@ -120,7 +98,7 @@ class AsyncWorkerManager:
 
         return job_id
 
-    async def get_stats(self, detailed: bool = False) -> dict[str, Any]:
+    async def get_stats(self) -> dict[str, Any]:
         """获取任务统计（完全兼容原接口）"""
         await self.startup()
 
@@ -137,7 +115,7 @@ class AsyncWorkerManager:
                 stats["queued"] += 1
             elif result["status"] == "SUCCESS":
                 stats["completed"] += 1
-            elif result["status"] == "PROCESSING":
+            elif result["status"] == "STARTED":
                 stats["running"] += 1
             else:
                 stats["failed"] += 1
@@ -180,7 +158,6 @@ class AsyncWorkerManager:
             "error": str(result.result) if result.failed() else None,
             "traceback": result.traceback,
             "date_done": result.date_done.isoformat() if result.date_done else None,
-            "aborted": await self.is_task_aborted(job_id),
         }
 
         # 合并任务元信息（task_name + 参数）
@@ -193,15 +170,10 @@ class AsyncWorkerManager:
         """删除任务结果和参数（兼容原接口）"""
         # 删除任务参数
         await self.redis_storage_client.remove_task_data(job_id)
-        # 删除终止标记
-        await self.redis_stats.delete(f"{self.abort_prefix}{job_id}")
 
     async def abort(self, job_id: str):
         """实现任务终止功能（核心需求）"""
         await self.startup()
-
-        # 设置终止标记（供任务执行时检查）
-        await self.redis_stats.set(f"{self.abort_prefix}{job_id}", "1")
 
         # 尝试直接终止正在执行的任务
         try:
@@ -218,15 +190,6 @@ class AsyncWorkerManager:
         except OperationalError as e:
             raise RuntimeError(f"Failed to abort task {job_id}: {str(e)}")
 
-    async def is_task_aborted(self, job_id: str) -> bool:
-        """检查任务是否被终止"""
-        abort_flag = await self.redis_stats.get(f"{self.abort_prefix}{job_id}")
-        return abort_flag == "1"
-
-    def is_task_aborted_sync(self, job_id: str) -> bool:
-        abort_flag = self.sync_redis_stats.get(f"{self.abort_prefix}{job_id}")
-        return abort_flag == "1"
-
     async def shutdown(self):
         """优雅关闭连接（兼容原接口）"""
         await self.startup()
@@ -237,18 +200,14 @@ class AsyncWorkerManager:
         # 关闭 Celery 连接
         self.celery_app.close()
 
-    def register_task(self, async_func: Callable, task_name: str):
+    def register_task(self, async_func: Callable, task_name: str, ignore_result=False):
         """注册异步任务（兼容原接口）"""
 
-        @self.celery_app.task(name=task_name, bind=True)
-        def palitra_wrapped(self, *a, **k):
-            async def wrapped_task(self, *args, **kwargs):
-                # 检查终止标记
-                if await AsyncWorkerManager.instance.is_task_aborted(self.request.id):
-                    raise Ignore("Task aborted before execution")
-                return await async_func(*args, **kwargs)
-
-            palitra.run(wrapped_task(self, *a, **k))
+        @self.celery_app.task(
+            name=task_name, bind=True, ignore_result=ignore_result, track_started=True
+        )
+        def palitra_wrapped(task, *a, **k):
+            return palitra.run(async_func(*a, **k))
 
         palitra_wrapped.__orig__ = async_func
 
@@ -332,19 +291,35 @@ class AsyncWorkerManager:
             ret[name] = _get_task_params_with_types(task)
         return ret
 
+    def get_wsrouter(self) -> APIRouter:
+        wsrouter = APIRouter(prefix="/jobs")
+
+        @wsrouter.websocket("/stats")
+        async def jobs_websocket(websocket: WebSocket, token: str = Query(None)):
+            try:
+                await oidc_validator.validate_token(token)
+            except:
+                await websocket.close()
+                return
+            
+            await websocket.accept()
+            try:
+                while True:                    
+                    stats = await self.get_stats()
+                    await websocket.send_json(stats)
+                    await asyncio.sleep(5)
+            except WebSocketDisconnect:
+                pass
+            except Exception as e:
+                print(f"发生错误: {e}")
+
+        return wsrouter
+
     def get_router(self) -> APIRouter:
         """生成 FastAPI 路由（完全兼容原接口）"""
         router = APIRouter(prefix="/worker", tags=["worker"])
 
         @router.get("/")
-        async def get_stats():
-            return await self.get_stats()
-
-        @router.get("/jobs")
-        async def list_jobs():
-            return await self.get_stats(True)
-
-        @router.get("/tasks")
         def list_tasks():
             return self.get_tasks()
 
@@ -372,5 +347,5 @@ class AsyncWorkerManager:
         return router
 
 
-worker_manager = AsyncWorkerManager(config.redis)
+worker_manager = AsyncWorkerManager(config.redis + "/0")
 celery = worker_manager.celery_app

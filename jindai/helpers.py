@@ -11,7 +11,9 @@ import time
 from threading import Lock
 from typing import Dict, Type
 
+from fastapi import HTTPException
 import jieba3
+from jose import JWTError
 import nltk.stem.snowball
 import numpy as np
 import regex as re
@@ -288,3 +290,4 @@ def get_context(directory: str, parent_class: Type, *sub_dirs: str) -> Dict:
             print("Error while importing", module_name, ":", exception)
 
     return ctx
+

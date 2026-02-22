@@ -219,5 +219,5 @@ def call_ipython() -> None:
 
 
 if __name__ == "__main__":
-    print("* db connection:", config.database, 'redis:', config.redis)
+    print("* db connection:", re.sub(r'://.+?@', '://***@', config.database), 'redis:', config.redis)
     cli()
