@@ -22,7 +22,7 @@ from sqlalchemy.orm import (Mapped, declarative_base, mapped_column,
                             relationship, validates)
 from sqlalchemy.sql import func
 
-from .config import instance as config
+from .config import config
 from .helpers import AutoUnloadSentenceTransformer, jieba
 
 engine = create_async_engine(config.database)
@@ -241,12 +241,14 @@ class QueryFilters(BaseModel):
     q: str = "*"
 
     # 基础过滤
-    ids: Optional[List[str]] = None
+    ids: Optional[List[str|uuid.UUID]] = None
     datasets: Optional[List[str]] = None
     sources: Optional[List[str]] = None
     sourcePage: Optional[int] = None
     outline: Optional[List[str]] = None
     authors: Optional[List[str]] = None
+    author: Optional[str] = None
+    lang: Optional[List[str]] = None
 
     # 控制逻辑
     embeddings: Optional[bool] = None  # False 时排除有向量的数据
@@ -281,8 +283,8 @@ class Paragraph(Base):
     )
     author: Mapped[str | None] = mapped_column(String(128), comment="作者")
     pdate: Mapped[datetime | None] = mapped_column(DateTime, comment="发布日期")
-    outline: Mapped[str | None] = mapped_column(Text, comment="大纲/摘要")
-    content: Mapped[str | None] = mapped_column(Text, comment="段落内容")
+    outline: Mapped[str] = mapped_column(Text, comment="大纲/摘要")
+    content: Mapped[str] = mapped_column(Text, comment="段落内容")
     pagenum: Mapped[str | None] = mapped_column(Text, comment="页码")
     lang: Mapped[str] = mapped_column(String(16), default="zh", comment="语言")
     extdata: Mapped[Dict[str, Any]] = mapped_column(
@@ -298,7 +300,7 @@ class Paragraph(Base):
         primary_key=True,
         comment="关联数据集ID",
     )
-    keywords: Mapped[List[str] | None] = mapped_column(
+    keywords: Mapped[List[str]] = mapped_column(
         ARRAY(Text), comment="关键词列表"
     )
 
@@ -368,16 +370,7 @@ class Paragraph(Base):
         filters = []
         query_embedding = None
         search = query_filters.q
-
-        if group_field_name := query_filters.groupBy:
-            group_column = (
-                getattr(Paragraph, group_field_name, None) if group_field_name else None
-            )
-            if group_column is not None:
-                query = query.distinct(group_column).order_by(
-                    group_column
-                )  # DISTINCT ON requires order_by to start with group column
-
+        
         # Primary Key / ID Filters
         if ids := query_filters.ids:
             filters.append(Paragraph.id.in_(ids))
@@ -407,9 +400,14 @@ class Paragraph(Base):
         if outline := query_filters.outline:
             filters.append(Paragraph.outline.in_(outline))
 
+        if lang := query_filters.lang:
+            filters.append(Paragraph.lang.in_(lang))
+
         # Author Filter
         if authors := query_filters.authors:
             filters.append(Paragraph.author.in_(authors))
+        if author := query_filters.author:
+            filters.append(Paragraph.author == author)
 
         # Embedding Existence Filter
         if query_filters.embeddings is False:
@@ -465,6 +463,15 @@ class Paragraph(Base):
                 query,
                 (Paragraph.dataset == query.c.dataset) & (Paragraph.id == query.c.id),
             )
+
+        if group_field_name := query_filters.groupBy:
+            group_column = (
+                getattr(Paragraph, group_field_name, None) if group_field_name else None
+            )
+            if group_column is not None:
+                query = query.distinct(group_column).order_by(
+                    group_column
+                )  # DISTINCT ON requires order_by to start with group column
 
         # Sorting
         if sort_by := query_filters.sort:
@@ -529,7 +536,7 @@ class Terms(MBase):  # terms has no `id`, and cannot as_dict()
         async with get_db_session() as session:
             async with session.begin():  # Start a transaction
                 # Prepare the data dictionaries
-                data = [{"term": w} for w in words]
+                data = [{"term": w} for w in words if w and len(w) > 1]
 
                 # Execute a bulk insert
                 # Note: This assumes 'term' is a unique column.

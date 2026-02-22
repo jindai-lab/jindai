@@ -3,22 +3,24 @@
 import gc
 import glob
 import importlib
+import inspect
 import os
 import subprocess
 import sys
 import threading
 import time
 from threading import Lock
-from typing import Dict, Type
+from typing import Callable, Dict, Type
+from typing import Any, Callable, Dict, Literal, Union, get_args, get_origin
 
-from fastapi import HTTPException
+from asteval import Interpreter
 import jieba3
-from jose import JWTError
 import nltk.stem.snowball
 import numpy as np
 import regex as re
 import torch
 from sentence_transformers import SentenceTransformer
+from pydantic import BaseModel
 
 jieba = jieba3.jieba3()
 
@@ -290,4 +292,93 @@ def get_context(directory: str, parent_class: Type, *sub_dirs: str) -> Dict:
             print("Error while importing", module_name, ":", exception)
 
     return ctx
+
+
+def inspect_function_signature(func: Callable) -> Dict[str, str]:
+    """
+    从函数中提取参数名和对应的类型名字典
+
+    Args:
+        func: 函数
+
+    Returns:
+        字典，键为参数名，值为类型名称（如 'int', 'str', 'Optional[Dict]'）
+    """
+    # 获取任务函数的签名信息
+    
+    func_signature = inspect.signature(func)
+    params_info = {}
+
+    def parse_type(type_obj):
+        """递归解析类型对象"""
+        origin = get_origin(type_obj)
+        args = get_args(type_obj)
+
+        # 1. 处理 Optional 或 Union
+        if origin is Union:
+            # 过滤掉 NoneType，获取实际类型
+            actual_args = [arg for arg in args if arg is not type(None)]
+            if len(actual_args) == 1:
+                return parse_type(actual_args[0])
+            return "str"  # 复杂的 Union 暂退化为 str
+
+        # 2. 处理 Literal (枚举选项)
+        if origin is Literal:
+            return {"options": args}  # 将枚举值传给前端 Select
+
+        # 3. 处理 Pydantic 模型 (QueryFilters 等)
+        if inspect.isclass(type_obj) and issubclass(type_obj, BaseModel):
+            # 递归获取模型内部所有字段
+            return {
+                name: parse_type(field.annotation)
+                for name, field in type_obj.model_fields.items()
+            }
+
+        # 4. 处理基础列表 List[int] 等
+        if origin is list:
+            return {
+                "isArray": True,
+                "itemType": parse_type(args[0]) if args else "str",
+            }
+
+        # 5. 处理基础类型映射
+        mapping = {int: "int", float: "float", bool: "bool", str: "str"}
+        if type_obj in mapping:
+            return mapping[type_obj]
+
+        # 兜底：处理带 __name__ 的类名
+        if hasattr(type_obj, "__name__"):
+            return type_obj.__name__.lower()
+
+        return "str"
+
+    for param_name, param in func_signature.parameters.items():
+        if param_name in ["self", "cls"]:
+            continue
+
+        param_type = param.annotation
+        if param_type is inspect.Parameter.empty:
+            params_info[param_name] = "str"
+        else:
+            params_info[param_name] = parse_type(param_type)
+
+    return params_info
+
+
+def aeval(expr: str, context: Union[Dict[str, Any], Any]) -> Any:
+    """Evaluate an expression in a safe context
+
+    :param expr: Expression to evaluate
+    :type expr: str
+    :param context: Context object for evaluation
+    :type context: dict or object with as_dict() method
+    :return: Evaluation result
+    :rtype: Any
+    """
+    if not isinstance(context, dict):
+        context = context.as_dict()
+    ee = Interpreter(context)
+    result = ee(expr)
+    # Return result as is, since asteval can return various types
+    return result
 

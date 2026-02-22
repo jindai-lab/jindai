@@ -10,13 +10,13 @@ from fastapi.responses import StreamingResponse
 from sqlalchemy.sql import func, select
 
 from .app import get_current_admin, get_current_username, router, wsrouter
-from .config import instance as config
+from .config import config
 from .maintenance import maintenance_manager
 from .models import (AsyncSession, Base, Dataset, History, Paragraph,
                      QueryFilters, TaskDBO, TextEmbeddings, UserInfo,
                      get_db_session)
 from .plugin import plugins
-from .storage import instance as storage
+from .storage import storage
 from .worker import worker_manager
 
 
@@ -98,8 +98,10 @@ class JindaiResource:
             item = await self.get_item(resource_id, username, permission="w")
             for k, v in data.items():
                 setattr(item, k, v)
-            async with session:
-                session.merge(item)
+            
+            session.merge(item)
+            await session.commit()
+            return item.as_dict()
 
         @router.delete("/{resource_id}")
         async def delete_item(
@@ -254,6 +256,7 @@ async def filter_paragraphs_items(
     setattr(filters, column, "")
 
     query = await Paragraph.build_query(filters)
+    if column == 'sources': column = 'source_url'
     column = getattr(Paragraph, column)
     query = query.with_only_columns(
         column.label("value"), func.count(1).label("count")

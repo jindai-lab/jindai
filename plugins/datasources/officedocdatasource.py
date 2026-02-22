@@ -10,7 +10,7 @@ import pandas as pd
 
 from jindai.models import Dataset, Paragraph
 from jindai.pipeline import DataSourceStage, PipelineStage
-from jindai.storage import instance as storage
+from jindai.storage import storage
 
 
 class WordDataSource(DataSourceStage):

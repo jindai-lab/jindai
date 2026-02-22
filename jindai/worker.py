@@ -2,7 +2,7 @@ import asyncio
 import inspect
 import json
 from datetime import datetime
-from typing import Any, Callable, Dict, Literal, Union, get_args, get_origin
+from typing import Any, Callable
 
 import palitra
 from celery import Celery, Task
@@ -13,8 +13,9 @@ from pydantic import BaseModel
 from redis import Redis as syncredis
 from redis import asyncio as aioredis
 
-from .config import instance as config
+from .config import config
 from .config import oidc_validator
+from .helpers import inspect_function_signature
 
 
 class RedisStorageClient:
@@ -60,8 +61,6 @@ class AsyncWorkerManager:
         )
 
         # 初始化统计用 Redis 客户端
-        self.redis_stats = aioredis.from_url(redis_dsn, decode_responses=True)
-        self.sync_redis_stats = syncredis.from_url(redis_dsn, decode_responses=True)
         self._started = False
 
     async def startup(self):
@@ -106,7 +105,7 @@ class AsyncWorkerManager:
 
         # 匹配任务参数的 key，过滤出有效 job_id
         pattern = f"{self.redis_storage_client.prefix}*"
-        keys = await self.redis_stats.keys(pattern)
+        keys = await self.redis_storage_client.redis.keys(pattern)
         job_ids = [k.replace(self.redis_storage_client.prefix, "") for k in keys]
 
         stats["results"] = [await self.get_result(jid) for jid in job_ids]
@@ -123,27 +122,8 @@ class AsyncWorkerManager:
         return stats
 
     async def clear(self) -> int:
-        """清空所有统计和任务数据（兼容原接口）"""
-        patterns = [
-            f"{self.stats_prefix}:*",
-            f"{self.redis_storage_client.prefix}*",
-            f"{self.abort_prefix}*",
-        ]
-
-        total_deleted = 0
-        async with self.redis_stats.pipeline() as pipe:
-            for pattern in patterns:
-                keys = await self.redis_stats.keys(pattern)
-                if keys:
-                    await pipe.delete(*keys)
-                    total_deleted += len(keys)
-            await pipe.execute()
-
-        # 清空 Celery 结果（可选）
-        self.celery_app.backend.cleanup()
-
-        print(f"Purged {total_deleted} Redis keys.")
-        return total_deleted
+        """清空所有统计和任务数据"""
+        await self.redis_storage_client.redis.delete("celery")
 
     async def get_result(self, job_id: str) -> dict:
         """获取任务结果（包含参数，兼容原接口）"""
@@ -178,15 +158,7 @@ class AsyncWorkerManager:
         # 尝试直接终止正在执行的任务
         try:
             result = AsyncResult(job_id, app=self.celery_app)
-
-            # 根据任务状态处理
-            if result.status == "STARTED":
-                # 运行中：强制终止
-                self.celery_app.control.revoke(job_id, terminate=True, signal="SIGTERM")
-            elif result.status == "PENDING":
-                # 待执行：从队列移除
-                self.celery_app.control.revoke(job_id, terminate=False)
-
+            result.revoke(terminate=True, signal="SIGTERM")
         except OperationalError as e:
             raise RuntimeError(f"Failed to abort task {job_id}: {str(e)}")
 
@@ -194,8 +166,6 @@ class AsyncWorkerManager:
         """优雅关闭连接（兼容原接口）"""
         await self.startup()
         # 关闭 Redis 连接
-        self.sync_redis_stats.close()
-        await self.redis_stats.close()
         await self.redis_storage_client.close()
         # 关闭 Celery 连接
         self.celery_app.close()
@@ -214,81 +184,12 @@ class AsyncWorkerManager:
         return palitra_wrapped
 
     def get_tasks(self):
-
-        def _get_task_params_with_types(task: Task) -> Dict[str, str]:
-            """
-            从 Celery 任务中提取参数名和对应的类型名字典
-
-            Args:
-                task: Celery 任务对象
-
-            Returns:
-                字典，键为参数名，值为类型名称（如 'int', 'str', 'Optional[Dict]'）
-            """
-            # 获取任务函数的签名信息
-            func_signature = inspect.signature(getattr(task, "__orig__", lambda: 0))
-            params_info = {}
-
-            def parse_type(type_obj):
-                """递归解析类型对象"""
-                origin = get_origin(type_obj)
-                args = get_args(type_obj)
-
-                # 1. 处理 Optional 或 Union
-                if origin is Union:
-                    # 过滤掉 NoneType，获取实际类型
-                    actual_args = [arg for arg in args if arg is not type(None)]
-                    if len(actual_args) == 1:
-                        return parse_type(actual_args[0])
-                    return "str"  # 复杂的 Union 暂退化为 str
-
-                # 2. 处理 Literal (枚举选项)
-                if origin is Literal:
-                    return {"options": args}  # 将枚举值传给前端 Select
-
-                # 3. 处理 Pydantic 模型 (QueryFilters 等)
-                if inspect.isclass(type_obj) and issubclass(type_obj, BaseModel):
-                    # 递归获取模型内部所有字段
-                    return {
-                        name: parse_type(field.annotation)
-                        for name, field in type_obj.model_fields.items()
-                    }
-
-                # 4. 处理基础列表 List[int] 等
-                if origin is list:
-                    return {
-                        "isArray": True,
-                        "itemType": parse_type(args[0]) if args else "str",
-                    }
-
-                # 5. 处理基础类型映射
-                mapping = {int: "int", float: "float", bool: "bool", str: "str"}
-                if type_obj in mapping:
-                    return mapping[type_obj]
-
-                # 兜底：处理带 __name__ 的类名
-                if hasattr(type_obj, "__name__"):
-                    return type_obj.__name__.lower()
-
-                return "str"
-
-            for param_name, param in func_signature.parameters.items():
-                if param_name in ["self", "cls"]:
-                    continue
-
-                param_type = param.annotation
-                if param_type is inspect.Parameter.empty:
-                    params_info[param_name] = "str"
-                else:
-                    params_info[param_name] = parse_type(param_type)
-
-            return params_info
-
         ret = {}
         for name, task in self.celery_app.tasks.items():
             if "." in name:
                 continue
-            ret[name] = _get_task_params_with_types(task)
+            func = getattr(task, "__orig__", lambda: 0)
+            ret[name] = inspect_function_signature(func)
         return ret
 
     def get_wsrouter(self) -> APIRouter:

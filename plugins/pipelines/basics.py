@@ -7,17 +7,19 @@ from collections import defaultdict, deque
 from io import BytesIO
 from itertools import chain
 from itertools import count as iter_count
+from typing import Dict, Iterator
 
 import many_stop_words
 import pandas
 import regex as re
 import textrank4zh
 
-from jindai.app import aeval, storage
-from jindai.helpers import WordStemmer as WStemmer, jieba, safe_import
+from jindai.helpers import WordStemmer as WStemmer
+from jindai.helpers import aeval, jieba, safe_import
 from jindai.maintenance import maintenance_manager
 from jindai.models import Paragraph, QueryFilters, Terms, get_db_session
 from jindai.pipeline import PipelineStage, ResolveReturn
+from jindai.storage import storage
 
 
 class Passthrough(PipelineStage):
@@ -41,7 +43,7 @@ class FilterOut(PipelineStage):
         """
         self.cond = cond
 
-    def resolve(self, paragraph) -> None:
+    def resolve(self, paragraph) -> ResolveReturn:
         ee = aeval(self.cond, paragraph)
         if ee:
             return
@@ -134,7 +136,7 @@ class WordStemmer(PipelineStage):
     def stem_words(self, lang, words):
         return self.stemmer.stem_tokens(lang, words)
 
-    def resolve(self, paragraph: Paragraph) -> Paragraph:
+    def resolve(self, paragraph: Paragraph) -> ResolveReturn:
         tokens = self.stem_words(paragraph.lang, paragraph[self.field])
         if self.append:
             paragraph[self.field] += tokens
@@ -305,9 +307,6 @@ class Reparagraph(PipelineStage):
         for text in merge_lines():
             data['content'] = text
             yield Paragraph.from_dict(data)
-
-
-from typing import Iterator
 
 
 class SplitParagraph(PipelineStage):
@@ -562,9 +561,6 @@ class Counter:
         }
 
 
-from typing import Dict
-
-
 class NgramCounter(PipelineStage):
     """N-Gram
     """
@@ -778,9 +774,6 @@ class FieldAssignment(PipelineStage):
         return paragraph
 
 
-from typing import Dict
-
-
 class DeleteParagraph(PipelineStage):
     """Delete Paragraph from Database
     @zhs 从数据库删除段落
@@ -805,7 +798,7 @@ class SaveParagraph(PipelineStage):
         
     async def update_embeddings(self):
         if self.saved:
-            await maintenance_manager.update_text_embeddings(QueryFilters(ids=self.saved))
+            await maintenance_manager.update_text_embeddings(QueryFilters(ids=[p.id for p in self.saved]))
             self.saved.clear()
 
     async def resolve(self, paragraph: Paragraph):
@@ -815,13 +808,11 @@ class SaveParagraph(PipelineStage):
             if not paragraph.id:
                 session.add(paragraph)
                 await Terms.store(paragraph.keywords)
-                print(paragraph.id)
-                self.saved.append(paragraph.id)
-            else:
-                await session.merge(paragraph)
+                self.saved.append(paragraph)
                 
-        if len(self.saved) >= 100:
-            await self.update_embeddings()
+            if len(self.saved) >= 100:
+                await session.flush()
+                await self.update_embeddings()
 
         return paragraph
     
@@ -966,11 +957,11 @@ class ConditionalAssignment(PipelineStage):
                 @zhs 要赋值的字段
         """
         super().__init__()
-        self.conds = aeval(cond)
+        self.conds = cond
         self.field = field
 
     def resolve(self, paragraph: Paragraph):
-        for cond, val in self.conds:
+        for cond, val in aeval(self.conds, paragraph):
             if aeval(cond, paragraph):
                 paragraph[self.field] = aeval(val, paragraph)
                 break
@@ -1027,9 +1018,6 @@ class PDFUnlock(PipelineStage):
         return self.data
 
 
-from typing import Dict
-
-
 class SetNamedResult(Passthrough):
     """Set name for summarization result
     @zhs 为总结阶段的结果设置名称
@@ -1074,7 +1062,7 @@ class FilterStopWords(PipelineStage):
     @zhs 过滤停用词
     """
     
-    _lang_stopwords = {
+    _lang_stopwords: dict[str, set[str]] = {
         l: many_stop_words.get_stop_words(l)
         for l in ['en', 'fr', 'de', 'ru', 'ja', 'zh']
     }
@@ -1082,13 +1070,13 @@ class FilterStopWords(PipelineStage):
     _punctuations = re.compile(r'^[\u3000-\u303F\uFF00-\uFFEF\"\'{}()\[\]\\*&.?!,…:;@#!]$')
     
     @staticmethod
-    def get(lang) -> list:
+    def get(lang) -> set:
         if lang == 'chs':
             return FilterStopWords._lang_stopwords['zh']
         elif lang in FilterStopWords._lang_stopwords:
             return FilterStopWords._lang_stopwords[lang]
         else:
-            return []
+            return set()
 
     def __init__(self, stopwords='') -> None:
         """
@@ -1100,9 +1088,9 @@ class FilterStopWords(PipelineStage):
     
     def resolve(self, paragraph):
         paragraph.keywords = [
-            _ for _ in paragraph.keywords
-            if _ not in self.stopwords and \
-                _ not in FilterStopWords.get(paragraph.lang) and \
-                not FilterStopWords._punctuations.match(_)
+            kw for kw in paragraph.keywords
+            if kw not in self.stopwords and \
+                kw not in FilterStopWords.get(paragraph.lang) and \
+                not FilterStopWords._punctuations.match(kw)
         ]
         return paragraph
