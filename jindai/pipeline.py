@@ -1,18 +1,19 @@
 """Pipeline"""
 
+import asyncio
 import inspect
 import sys
 import traceback
 from collections import defaultdict
 from collections.abc import Iterable as IterableClass
 from typing import Any, Awaitable, Callable, Dict, Iterable, List, Tuple, Type, Union
+
 import regex as re
-import asyncio
 
-from .config import instance as config
-from .storage import instance as storage
+from .config import config
+from .helpers import inspect_function_signature
 from .models import Paragraph
-
+from .storage import storage
 
 ResolveResultType = Paragraph | None
 ResolveResultType |= Tuple[ResolveResultType, "PipelineStage"]
@@ -102,9 +103,13 @@ class PipelineStage:
                                 args_docs[arg_name]["type"] = arg_type.strip()
             return args_docs
 
-        args_docs = _parse_docstring(getattr(stage_cls, method).__doc__ or "")
+        func = getattr(stage_cls, method)
+        args_docs = _parse_docstring(func.__doc__ or "") or {
+            argname: {"type": argtype}
+            for argname, argtype in inspect_function_signature(func).items()
+        }
 
-        args_spec = inspect.getfullargspec(getattr(stage_cls, method))
+        args_spec = inspect.getfullargspec(func)
         args_defaults = dict(
             zip(reversed(args_spec.args), reversed(args_spec.defaults or []))
         )
@@ -227,12 +232,12 @@ class PipelineStage:
         """
         if self.verbose:
             self.log("Processing")
-            
+
         results = self.resolve(paragraph)
-            
+
         if self.verbose:
             self.log("Resolved to", type(results).__name__)
-        
+
         def _handle(result):
             if (
                 isinstance(result, tuple)
@@ -243,7 +248,7 @@ class PipelineStage:
                 return result
             else:
                 return result, self.next
-        
+
         if inspect.isasyncgen(results):
             async for result in results:
                 yield _handle(result)
@@ -413,7 +418,7 @@ class Pipeline:
         :param stages: pipeline stage info in one of the following forms:
                 - Tuple[<PipelineStage name>, <parameters>]
                 - List[<PipelineStage name>, <parameters>]
-                - {$<PipelineStage name> : <parameters>}
+                - {<PipelineStage name> : <parameters>}
         :type stages: List[Union[Tuple[str, Dict], List, Dict, PipelineStage]]
         :param log: Logging method, defaults to print
         :type log: Callable, optional
@@ -432,8 +437,6 @@ class Pipeline:
             for stage in stages:
                 if isinstance(stage, dict):
                     ((name, kwargs),) = stage.items()
-                    if name.startswith("$"):
-                        name = name[1:]
                     stage = (name, kwargs)
 
                 if (
@@ -469,17 +472,17 @@ class Pipeline:
         for stage in self.stages:
             stage.gctx = val
 
-
-    async def summarize(self, result=None):
+    async def summarize(self, result=None) -> dict | None:
         """Summarize pipeline results by calling summarize on each stage
 
         :param result: Result from previous stage, defaults to None
         :type result: dict, optional
         :return: Final summarized result
-        :rtype: dict
+        :rtype: dict | None
         """
         for stage in self.stages:
             result = stage.summarize(result) or result
-            if asyncio.iscoroutine(result): result = await result
+            if asyncio.iscoroutine(result):
+                result = await result
 
         return result

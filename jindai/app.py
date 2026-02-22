@@ -9,11 +9,11 @@ from fastapi import APIRouter, Depends, FastAPI, HTTPException, WebSocket, statu
 from fastapi.responses import FileResponse
 from sqlalchemy import select
 
-from .config import instance as config
+from .config import config
 from .config import oidc_validator
 from .helpers import get_context
 from .models import UserInfo, get_db_session
-from .storage import instance as storage
+from .storage import storage
 
 app = FastAPI(
     docs_url="/api/v2/docs",
@@ -31,24 +31,6 @@ router = APIRouter(
 wsrouter = APIRouter(
     prefix="/api/ws",
 )
-
-
-def aeval(expr: str, context: Union[Dict[str, Any], Any]) -> Any:
-    """Evaluate an expression in a safe context
-
-    :param expr: Expression to evaluate
-    :type expr: str
-    :param context: Context object for evaluation
-    :type context: dict or object with as_dict() method
-    :return: Evaluation result
-    :rtype: Any
-    """
-    if not isinstance(context, dict):
-        context = context.as_dict()
-    ee = Interpreter(context)
-    result = ee(expr)
-    # Return result as is, since asteval can return various types
-    return result
 
 
 def get_current_username(

@@ -240,7 +240,6 @@ class Task:
     @staticmethod
     def from_dbo(dbo, **kwargs) -> "Task":
         if dbo.pipeline:
-            dbo.last_run = datetime.datetime.now()
             return Task(
                 params={},
                 stages=dbo.pipeline,

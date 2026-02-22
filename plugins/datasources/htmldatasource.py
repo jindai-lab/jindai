@@ -16,8 +16,9 @@ import regex as re
 import httpx
 from bs4 import BeautifulSoup as B
 
-from jindai.app import aeval, config, storage
-from jindai.helpers import safe_import
+from jindai.config import config
+from jindai.storage import storage
+from jindai.helpers import safe_import, aeval
 from jindai.models import Paragraph
 from jindai.pipeline import DataSourceStage, PipelineStage
 

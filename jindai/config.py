@@ -88,9 +88,9 @@ def load_config_from_args() -> ConfigObject:
 
 
 # Load configuration instance when module is imported
-instance: ConfigObject = load_config_from_args()
+config: ConfigObject = load_config_from_args()
 
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl=instance.oidc["token_uri"])
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl=config.oidc["token_uri"])
 
 
 class OIDCValidator:
@@ -134,4 +134,4 @@ class OIDCValidator:
 
 
 # 实例化验证器
-oidc_validator = OIDCValidator(instance.oidc)
+oidc_validator = OIDCValidator(config.oidc)

@@ -8,7 +8,7 @@ from typing import Iterable
 
 from jindai.models import Paragraph
 from jindai.pipeline import DataSourceStage, PipelineStage
-from jindai.storage import instance as storage
+from jindai.storage import storage
 
 
 class FilePatternDataSource(DataSourceStage):

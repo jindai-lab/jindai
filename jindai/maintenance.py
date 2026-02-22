@@ -1,4 +1,5 @@
 import asyncio
+import datetime
 import os
 import tempfile
 from typing import Optional
@@ -6,7 +7,9 @@ from fastapi import APIRouter, BackgroundTasks, Body, Depends
 from sqlalchemy import TIMESTAMP, cast, exists, func, select, text, update, delete
 from sqlalchemy.dialects.postgresql import insert
 
-from .app import get_current_admin, config, storage
+from .app import get_current_admin
+from .config import config
+from .storage import storage
 from .models import Dataset, Paragraph, TaskDBO, Terms, TextEmbeddings, get_db_session, QueryFilters
 
 
@@ -59,7 +62,7 @@ class MaintenanceManager:
                 Dataset.id.in_(list(set(datasets)))
             )
             await session.execute(stmt)
-
+            
     async def sync_terms(self):
         async with get_db_session() as session:
             unnested_query = (
@@ -93,6 +96,68 @@ class MaintenanceManager:
             await session.execute(upsert_stmt)
             print(f"Sync complete. Processed {len(unique_words)} unique keywords.")
 
+    async def merge_datasets(self):
+        
+        import re
+        import unicodedata
+
+        def normalize_string(s: str) -> str:
+            """标准化字符串：去变音符号、去点、处理缩写"""
+            if not s:
+                return ""
+            
+            # 分解变音符号并去除 (例如: é -> e)
+            s = unicodedata.normalize('NFD', s)
+            s = "".join([c for c in s if unicodedata.category(c) != 'Mn'])
+            
+            # 将 ". " 替换为空格，处理末尾的点
+            s = re.sub(r'\. +', ' ', s)
+            
+            s = re.sub(r'\s+', ' ', s).strip().lower()
+            
+            return s
+
+        def assess_similarity(str1: str, str2: str):
+            """评估两个字符串是否相同或可能是同一人"""
+            norm1 = normalize_string(str1)
+            norm2 = normalize_string(str2)
+            
+            # 情况 1：完全相同（标准化后）
+            if norm1.lower() == norm2.lower():
+                return "MATCH", norm1
+
+            # 情况 2：检测缩写匹配 (例如 Immanuel Kant vs I Kant)
+            # 我们将字符串拆分为单词，检查是否符合“首字母 + 姓”的模式
+            parts1 = norm1.split()
+            parts2 = norm2.split()
+            
+            if len(parts1) == len(parts2) and len(parts1) > 1:
+                is_potential = True
+                for p1, p2 in zip(parts1, parts2):
+                    p1l, p2l = p1.lower(), p2.lower()
+                    # 如果一个是另一个的首字母，或者两者完全相同，则视为潜在匹配
+                    if not (p1l == p2l or (len(p1) == 1 and p2l.startswith(p1l)) or (len(p2) == 1 and p1l.startswith(p2l))):
+                        is_potential = False
+                        break
+                if is_potential:
+                    return "POTENTIAL", f"'{str1}' and '{str2}' might be the same."
+
+            return "DIFFERENT", None
+
+        async with get_db_session() as session:
+            ds = (await session.execute(select(Dataset))).scalars().all()
+            calibre = [d for d in ds if d.name.startswith('书库--') or '--' not in d.name]
+            noncalibre = [d for d in ds if d not in calibre]
+        for d1 in calibre:
+            n1 = d1.name.split('--')[-1]
+            for d2 in noncalibre:
+                n2 = d2.name.split('--')[-1]
+                cmp, _ = assess_similarity(n2, n1)
+                if cmp == 'MATCH':
+                    await d1.rename_dataset(d2.name)
+                    print(f'[{d1.name}] merged to [{d2.name}]')
+                    break
+            
     async def update_author_from_url(self, pattern):
         async with get_db_session() as session:
             sql = text(
@@ -213,6 +278,11 @@ class MaintenanceManager:
 
         if task_id:
             dbo = await TaskDBO.get(task_id)
+            assert dbo
+            dbo.last_run = datetime.datetime.now()
+            async with get_db_session() as session:
+                await session.merge(dbo)
+                await session.commit()
         else:
             dbo = TaskDBO(**params)
         task = Task.from_dbo(dbo)
@@ -295,6 +365,7 @@ class MaintenanceManager:
                 "text-embeddings": self.update_text_embeddings,
                 "ocr": self.ocr,
                 "custom": self.custom_task,
+                "sync-sources": self.sync_sources,
             }.get(task_name)
             if func:
                 background_tasks.add_task(func, **params)

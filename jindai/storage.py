@@ -384,6 +384,6 @@ class Storage:
 
 # 初始化单例实例 (项目全局唯一)
 # 导入方式：from .storage import instance as storage
-from .config import instance as config
+from .config import config
 
-instance = Storage(config.storage)
+storage = Storage(config.storage)

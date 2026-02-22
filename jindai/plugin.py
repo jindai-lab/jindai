@@ -13,9 +13,9 @@ from fastapi import APIRouter, Depends
 
 from .helpers import get_context
 from .app import get_current_admin
-from .config import instance as config
+from .config import config
 from .pipeline import Pipeline, PipelineStage
-from .storage import instance as storage
+from .storage import storage
 
 
 class Plugin:

@@ -5,7 +5,7 @@
 import asyncio
 from typing import Dict, Iterable, Tuple
 
-from jindai.app import aeval
+from jindai.helpers import aeval
 from jindai.models import TaskDBO
 from jindai.pipeline import Pipeline, PipelineStage
 from jindai.task import Task
