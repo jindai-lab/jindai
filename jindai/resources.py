@@ -1,40 +1,23 @@
+import asyncio
 import os
 import uuid
-import httpx
 from typing import Optional, Type
 
-from fastapi import (
-    APIRouter,
-    BackgroundTasks,
-    Body,
-    Depends,
-    File,
-    HTTPException,
-    Query,
-    UploadFile,
-)
+import httpx
+from fastapi import (APIRouter, BackgroundTasks, Body, Depends, File,
+                     HTTPException, UploadFile)
 from fastapi.responses import StreamingResponse
 from sqlalchemy.sql import func, select
 
-from .app import get_current_admin, get_current_username, router
+from .app import get_current_admin, get_current_username, router, wsrouter
 from .config import instance as config
-from .storage import instance as storage
 from .maintenance import maintenance_manager
-from .worker import worker_manager
-from .models import (
-    AsyncSession,
-    Base,
-    Dataset,
-    History,
-    Paragraph,
-    QueryFilters,
-    TaskDBO,
-    TextEmbeddings,
-    UserInfo,
-    get_db_session,
-    is_uuid_literal,
-)
+from .models import (AsyncSession, Base, Dataset, History, Paragraph,
+                     QueryFilters, TaskDBO, TextEmbeddings, UserInfo,
+                     get_db_session)
 from .plugin import plugins
+from .storage import instance as storage
+from .worker import worker_manager
 
 
 async def get_db():
@@ -50,7 +33,7 @@ class JindaiResource:
         self.tags = tags
 
     @staticmethod
-    async def paginate(session, stmt, model_cls, offset, limit):
+    async def paginate(session, stmt, offset, limit):
         total = await session.execute(
             select(func.count()).select_from(stmt.order_by(None).subquery())
         )
@@ -63,10 +46,25 @@ class JindaiResource:
     def get_pagination(offset: int = 0, limit: int = 100):
         return {"offset": offset, "limit": limit}
 
-    async def auth_filters(self, username: str, permission : str = 'r'):
+    async def auth_filters(self, username: str, permission: str = "r"):
         if await get_current_admin({}, username):
             return True
         return self.model.user.username == username
+
+    async def get_item(
+        self, resource_id, username, filter_cond=None, permission: str = "r"
+    ) -> Base:
+        async with get_db_session() as session:
+            item = (
+                await session.execute(
+                    select(self.model)
+                    .filter(await self.auth_filters(username, permission))
+                    .filter(filter_cond or self.model.id == resource_id)
+                )
+            ).scalar_one_or_none()
+            if not item:
+                raise HTTPException(404, detail="Resource not found")
+            return item
 
     def create_router(self):
         router = APIRouter(prefix=self.prefix, tags=self.tags)
@@ -79,31 +77,29 @@ class JindaiResource:
         ):
             stmt = select(self.model).filter(await self.auth_filters(username))
             return await JindaiResource.paginate(
-                session, stmt, self.model, paging["offset"], paging["limit"]
+                session, stmt, paging["offset"], paging["limit"]
             )
+
+        @router.get("/{resource_id}")
+        async def get_item(
+            resource_id: str,
+            username=Depends(get_current_username),
+        ):
+            item = await self.get_item(resource_id, username, permission="r")
+            return item.as_dict()
 
         @router.put("/{resource_id}")
         async def put_item(
-            resource_id: str, data: dict = Body(...), session=Depends(get_db)
+            resource_id: str,
+            data: dict = Body(...),
+            session=Depends(get_db),
+            username=Depends(get_current_username),
         ):
-            item = await session.get(
-                self.model,
-                resource_id if is_uuid_literal(resource_id) else resource_id,
-            )
-            if not item:
-                raise HTTPException(404, detail="Resource not found")
+            item = await self.get_item(resource_id, username, permission="w")
             for k, v in data.items():
                 setattr(item, k, v)
-
-        @router.get("/{resource_id}")
-        async def get_item(resource_id: str, session=Depends(get_db)):
-            item = await session.get(
-                self.model,
-                resource_id if is_uuid_literal(resource_id) else resource_id,
-            )
-            if not item:
-                raise HTTPException(404, detail="Resource not found")
-            return item.as_dict()
+            async with session:
+                session.merge(item)
 
         @router.delete("/{resource_id}")
         async def delete_item(
@@ -111,13 +107,7 @@ class JindaiResource:
             session=Depends(get_db),
             username=Depends(get_current_username),
         ):
-            item = (await session.execute(
-                select(self.model)
-                .filter(await self.auth_filters(username, 'w'))
-                .filter(self.model.id == resource_id)
-            )).first()
-            if not item:
-                raise HTTPException(404)
+            item = await self.get_item(resource_id, username, permission="w")
             await session.delete(item)
             return {"message": "Deleted"}
 
@@ -140,10 +130,10 @@ class TaskDBOResource(JindaiResource):
 
     def __init__(self) -> None:
         super().__init__(TaskDBO, "/tasks", ["Tasks"])
-    
-    async def auth_filters(self, username: str, permission = 'r'):
+
+    async def auth_filters(self, username: str, permission="r"):
         filters = await super().auth_filters(username, permission)
-        if filters is not True and permission == 'r':
+        if filters is not True and permission == "r":
             filters |= TaskDBO.shared == True
         return filters
 
@@ -158,6 +148,7 @@ router.include_router(TaskDBOResource().create_router())
 
 
 @router.get("/datasets", tags=["Datasets"])
+@router.get("/datasets/{resource_id}", tags=["Datasets"])
 async def get_datasets(resource_id: Optional[str] = None, session=Depends(get_db)):
     if not resource_id:
         return {"results": await Dataset.get_hierarchy()}
@@ -168,12 +159,28 @@ async def get_datasets(resource_id: Optional[str] = None, session=Depends(get_db
     return res.as_dict()
 
 
-@router.put("/datasets/{resource_id}", tags=["Datasets"])
-async def rename_dataset(resource_id: str, name: str):
-    ds = await Dataset.get(resource_id, True)
+@router.put(
+    "/datasets/{resource_id}",
+    tags=["Datasets"],
+    dependencies=[Depends(get_current_admin)],
+)
+async def rename_dataset(resource_id: str, name: str = Body(embed=True)):
+    ds = await Dataset.get(resource_id, False)
     if not ds:
         raise HTTPException(404)
     return await ds.rename_dataset(name)
+
+
+@router.delete(
+    "/datasets/{resource_id}",
+    tags=["Datasets"],
+    dependencies=[Depends(get_current_admin)],
+)
+async def delete_dataset(resource_id: str, session: AsyncSession = Depends(get_db)):
+    ds = await Dataset.get(resource_id, False)
+    if not ds:
+        raise HTTPException(404)
+    return await session.delete(ds)
 
 
 @router.get("/embeddings/", tags=["Embeddings"])
@@ -230,7 +237,9 @@ async def search_paragraphs(
     filters.offset = 0
     filters.limit = None
     query = await Paragraph.build_query(filters)
-    resp = await JindaiResource.paginate(session, query, Paragraph, paging["offset"], paging["limit"])
+    resp = await JindaiResource.paginate(
+        session, query, paging["offset"], paging["limit"]
+    )
     return resp
 
 
@@ -238,7 +247,7 @@ async def search_paragraphs(
 async def filter_paragraphs_items(
     column: str, filters: QueryFilters, session: AsyncSession = Depends(get_db)
 ):
-    filters.q = '*'
+    filters.q = "*"
     filters.embeddings = None
     filters.sort = ""
     filters.groupBy = ""
@@ -328,6 +337,7 @@ async def translator(params: dict = Body(...)):
 router.include_router(plugins.get_router())
 router.include_router(maintenance_manager.get_router())
 router.include_router(worker_manager.get_router())
+wsrouter.include_router(worker_manager.get_wsrouter())
 
 # register worker tasks
 worker_manager.register_task(maintenance_manager.custom_task, "custom")

@@ -3,7 +3,7 @@ import os
 import tempfile
 from typing import Optional
 from fastapi import APIRouter, BackgroundTasks, Body, Depends
-from sqlalchemy import TIMESTAMP, cast, func, select, text, update, delete
+from sqlalchemy import TIMESTAMP, cast, exists, func, select, text, update, delete
 from sqlalchemy.dialects.postgresql import insert
 
 from .app import get_current_admin, config, storage
@@ -34,6 +34,7 @@ class MaintenanceManager:
                 Paragraph.source_url
             )
             sources = [_ for _, in await session.execute(query)]
+            datasets = []
 
             for source in sources:
                 joined = storage.safe_join(source)
@@ -41,9 +42,23 @@ class MaintenanceManager:
                     print(
                         f"{source} does not exist any more. Delete related paragraphs."
                     )
+                    datasets.extend(
+                        (await session.execute(
+                            select(Paragraph)
+                            .filter(Paragraph.source_url == source)
+                            .distinct(Paragraph.dataset)
+                            .with_only_columns(Paragraph.dataset)
+                        )).scalars().all()
+                    )
                     await session.execute(
                         delete(Paragraph).filter(Paragraph.source_url == source)
                     )
+            
+            stmt = delete(Dataset).filter(
+                ~exists().where(Paragraph.dataset == Dataset.id),
+                Dataset.id.in_(list(set(datasets)))
+            )
+            await session.execute(stmt)
 
     async def sync_terms(self):
         async with get_db_session() as session:
@@ -130,6 +145,8 @@ class MaintenanceManager:
     async def update_text_embeddings(self, filters: Optional[QueryFilters]=None):
         if not filters:
             filters = QueryFilters()
+        if isinstance(filters, dict):
+            filters = QueryFilters(**filters)
         filters.embeddings = False
         cte = (
             (await Paragraph.build_query(filters)).with_only_columns(Paragraph.id)

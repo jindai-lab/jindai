@@ -13,12 +13,11 @@ import pandas
 import regex as re
 import textrank4zh
 
-from jindai.pipeline import PipelineStage
 from jindai.app import aeval, storage
-from jindai.helpers import WordStemmer as _Stemmer
-from jindai.helpers import jieba, safe_import
-from jindai.models import Paragraph, Terms, get_db_session
+from jindai.helpers import WordStemmer as WStemmer, jieba, safe_import
 from jindai.maintenance import maintenance_manager
+from jindai.models import Paragraph, QueryFilters, Terms, get_db_session
+from jindai.pipeline import PipelineStage, ResolveReturn
 
 
 class Passthrough(PipelineStage):
@@ -130,7 +129,7 @@ class WordStemmer(PipelineStage):
         super().__init__()
         self.append = append
         self.field = field
-        self.stemmer = _Stemmer()
+        self.stemmer = WStemmer()
         
     def stem_words(self, lang, words):
         return self.stemmer.stem_tokens(lang, words)
@@ -658,7 +657,24 @@ class RegexReplace(PipelineStage):
         paragraph.content = self.regexp.sub(
             self.replacement, paragraph.content)
         return paragraph
+    
 
+class DatasetFromField(PipelineStage):
+    
+    def __init__(self, pattern: str="{author}") -> None:
+        """
+        Args:
+            pattern (str): Formatting string
+                @zhs 格式化字符串
+        """
+        super().__init__()
+        self.pattern = pattern
+        
+    async def resolve(self, paragraph: Paragraph) -> ResolveReturn:
+        replaced = self.pattern.format(**paragraph.as_dict(), **paragraph.extdata or {})
+        if '{' not in replaced:
+            await paragraph.set_dataset_name(replaced)
+        return paragraph
 
 class RegexFilter(PipelineStage):
     """
@@ -789,7 +805,7 @@ class SaveParagraph(PipelineStage):
         
     async def update_embeddings(self):
         if self.saved:
-            await maintenance_manager.update_text_embeddings({'ids': self.saved})
+            await maintenance_manager.update_text_embeddings(QueryFilters(ids=self.saved))
             self.saved.clear()
 
     async def resolve(self, paragraph: Paragraph):
@@ -799,6 +815,7 @@ class SaveParagraph(PipelineStage):
             if not paragraph.id:
                 session.add(paragraph)
                 await Terms.store(paragraph.keywords)
+                print(paragraph.id)
                 self.saved.append(paragraph.id)
             else:
                 await session.merge(paragraph)

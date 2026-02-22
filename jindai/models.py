@@ -110,8 +110,11 @@ class Dataset(Base):
     @staticmethod
     async def get(name, auto_create=True):
         async with get_db_session() as session:
-            ds = await session.execute(select(Dataset).filter(Dataset.name == name))
-            ds = ds.scalar_one_or_none()
+            if is_uuid_literal(name):
+                ds = await session.get(Dataset, name)
+            else:
+                ds = await session.execute(select(Dataset).filter(Dataset.name == name))
+                ds = ds.scalar_one_or_none()
             if ds is None and auto_create:
                 ds = Dataset(name=name)
                 session.add(ds)
@@ -141,7 +144,7 @@ class Dataset(Base):
                 await session.delete(self)
         else:
             self.name = new_name
-        return self.id
+        return ds.id if ds else self.id
 
     @staticmethod
     async def get_hierarchy() -> list:
@@ -238,7 +241,7 @@ class QueryFilters(BaseModel):
     q: str = "*"
 
     # 基础过滤
-    ids: Optional[List[int]] = None
+    ids: Optional[List[str]] = None
     datasets: Optional[List[str]] = None
     sources: Optional[List[str]] = None
     sourcePage: Optional[int] = None
@@ -315,6 +318,9 @@ class Paragraph(Base):
         if val:
             val = list({v.strip().lower() for v in val if v.strip()})
         return val
+    
+    async def set_dataset_name(self, new_name):
+        self.dataset = (await Dataset.get(new_name)).id
 
     @staticmethod
     def from_dict(data, ignored_fields=["id", "dataset_name"], **kwargs) -> "Paragraph":
@@ -588,7 +594,7 @@ class TaskDBO(Base):
                 return result.scalar_one_or_none()
 
 
-redis_client = redis.Redis.from_url(config.redis.rstrip("/") + "/2")
+redis_client = redis.Redis.from_url(config.redis + "/2")
 
 
 # 缓存核心配置（可根据业务灵活修改）

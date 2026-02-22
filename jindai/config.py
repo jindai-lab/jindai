@@ -4,8 +4,12 @@ import os
 import sys
 from typing import Any, Dict, List
 
+from fastapi import Depends, HTTPException, status
+from fastapi.security import OAuth2PasswordBearer
+import httpx
 import yaml
 from pydantic import BaseModel, ConfigDict, Field, field_validator
+from jose import JWTError, jwt
 
 
 class ConfigObject(BaseModel):
@@ -31,12 +35,12 @@ class ConfigObject(BaseModel):
     )
     embedding_dims: int = Field(description="Embedding vector dimensions")
 
-    ui_dist: str = Field(description="Path to UI distribution files")
+    ui_dist: str = Field(description="Path to UI distribution files", default='./dist/')
     paddle_remote: str = Field(description="PaddleOCR remote service URL")
 
     constants: dict = Field(default_factory=dict, description="Application constants")
 
-    @field_validator("redis", mode="after")
+    @field_validator("redis")
     @classmethod
     def strip_trailing_slash(cls, v: str) -> str:
         """Remove trailing slash from Redis URL"""
@@ -86,13 +90,48 @@ def load_config_from_args() -> ConfigObject:
 # Load configuration instance when module is imported
 instance: ConfigObject = load_config_from_args()
 
-
-if "-c" in sys.argv:
-    config_arg = sys.argv.index("-c")
-    config_file = sys.argv[config_arg + 1]
-    sys.argv.pop(config_arg + 1)
-    sys.argv.pop(config_arg)
-    os.environ["CONFIG_FILE"] = config_file
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl=instance.oidc["token_uri"])
 
 
-instance = ConfigObject.load_from_yaml(os.environ.get("CONFIG_FILE", "config.yaml"))
+class OIDCValidator:
+    def __init__(self, config):
+        self.jwks = None
+        self.last_refresh = None
+        self.config = config
+
+    async def get_jwks(self):
+        """动态获取 Authentik 公钥集"""
+        if self.jwks is None:
+            async with httpx.AsyncClient() as client:
+                # 首先获取配置文档
+                config_resp = await client.get(self.config["config_uri"])
+                config_data = config_resp.json()
+                # 得到 jwks_uri
+                jwks_uri = config_data.get("jwks_uri")
+                # 获取实际公钥
+                jwks_resp = await client.get(jwks_uri)
+                self.jwks = jwks_resp.json()
+        return self.jwks
+
+    async def validate_token(self, token: str = Depends(oauth2_scheme)):
+        try:
+            jwks = await self.get_jwks()
+            # 解码并验证
+            # jose 会自动从 jwks 中匹配对应的 kid (Key ID) 并验证签名
+            payload = jwt.decode(
+                token,
+                jwks,
+                algorithms=["RS256"],
+                audience=self.config["client_id"],
+                issuer=self.config["issuer"],
+            )
+            return payload
+        except JWTError as e:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail=f"Token validation failed: {str(e)}",
+            )
+
+
+# 实例化验证器
+oidc_validator = OIDCValidator(instance.oidc)
