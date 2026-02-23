@@ -52,19 +52,18 @@ class JindaiResource:
         return self.model.user.username == username
 
     async def get_item(
-        self, resource_id, username, filter_cond=None, permission: str = "r"
+        self, session, resource_id, username, filter_cond=None, permission: str = "r"
     ) -> Base:
-        async with get_db_session() as session:
-            item = (
-                await session.execute(
-                    select(self.model)
-                    .filter(await self.auth_filters(username, permission))
-                    .filter(filter_cond or self.model.id == resource_id)
-                )
-            ).scalar_one_or_none()
-            if not item:
-                raise HTTPException(404, detail="Resource not found")
-            return item
+        item = (
+            await session.execute(
+                select(self.model)
+                .filter(await self.auth_filters(username, permission))
+                .filter(filter_cond or self.model.id == resource_id)
+            )
+        ).scalar_one_or_none()
+        if not item:
+            raise HTTPException(404, detail="Resource not found")
+        return item
 
     def create_router(self):
         router = APIRouter(prefix=self.prefix, tags=self.tags)
@@ -83,9 +82,10 @@ class JindaiResource:
         @router.get("/{resource_id}")
         async def get_item(
             resource_id: str,
+            session=Depends(get_db),
             username=Depends(get_current_username),
         ):
-            item = await self.get_item(resource_id, username, permission="r")
+            item = await self.get_item(session, resource_id, username, permission="r")
             return item.as_dict()
 
         @router.put("/{resource_id}")
@@ -95,11 +95,9 @@ class JindaiResource:
             session=Depends(get_db),
             username=Depends(get_current_username),
         ):
-            item = await self.get_item(resource_id, username, permission="w")
+            item = await self.get_item(session, resource_id, username, permission="w")
             for k, v in data.items():
                 setattr(item, k, v)
-            
-            session.merge(item)
             await session.commit()
             return item.as_dict()
 
@@ -109,7 +107,7 @@ class JindaiResource:
             session=Depends(get_db),
             username=Depends(get_current_username),
         ):
-            item = await self.get_item(resource_id, username, permission="w")
+            item = await self.get_item(session, resource_id, username, permission="w")
             await session.delete(item)
             return {"message": "Deleted"}
 

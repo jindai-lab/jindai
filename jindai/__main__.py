@@ -202,10 +202,10 @@ def call_ipython() -> None:
     def q(query_str):
         return Paragraph.build_query(QueryFilters(q=query_str))
 
-    async def run(task_name):
+    async def run(task_name, **kwargs):
         dbo = await TaskDBO.get(task_name)
         if dbo:
-            task = Task.from_dbo(dbo, verbose=True)
+            task = Task.from_dbo(dbo, log=print, **kwargs)
             return await task.execute_async()
 
     ns = dict(jindai.__dict__)
