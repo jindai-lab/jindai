@@ -12,7 +12,7 @@ import redis
 import regex as re
 from pgvector.sqlalchemy import Vector
 from pydantic import BaseModel, Field
-from sqlalchemy import (Boolean, DateTime, ForeignKey, Index, Integer,
+from sqlalchemy import (Boolean, Column, DateTime, ForeignKey, Index, Integer,
                         PrimaryKeyConstraint, String, Text, UniqueConstraint,
                         asc, desc, exists, or_, select, text, update)
 from sqlalchemy.dialects.postgresql import ARRAY, JSONB, UUID, insert
@@ -550,6 +550,17 @@ class Terms(MBase):  # terms has no `id`, and cannot as_dict()
                 # No need for manual commit if using 'async with session.begin()'
 
         return words
+
+
+class EmbeddingPendingQueue(Base):
+    __tablename__ = 'embedding_pending_queue'
+
+    # 定义复合主键
+    id : Mapped[uuid.UUID] = mapped_column(UUID, primary_key=True)
+    dataset : Mapped[uuid.UUID] = mapped_column(UUID, primary_key=True)
+    
+    # 记录创建时间，方便排查延迟或按序处理
+    created_at : Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
 class TaskDBO(Base):

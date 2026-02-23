@@ -793,13 +793,7 @@ class SaveParagraph(PipelineStage):
         '''
         '''
         super().__init__()
-        self.saved = []
         
-    async def update_embeddings(self):
-        if self.saved:
-            await maintenance_manager.update_text_embeddings(QueryFilters(ids=[p.id for p in self.saved]))
-            self.saved.clear()
-
     async def resolve(self, paragraph: Paragraph):
         paragraph.content = re.sub(r'\p{Other}', ' ', paragraph.content)
         
@@ -807,16 +801,13 @@ class SaveParagraph(PipelineStage):
             if not paragraph.id:
                 session.add(paragraph)
                 await Terms.store(paragraph.keywords)
-                self.saved.append(paragraph)
-                
-            if len(self.saved) >= 100:
-                await session.flush()
-                await self.update_embeddings()
+            else:
+                session.merge(paragraph)
+            session.commit()
 
         return paragraph
     
     async def summarize(self, result) -> Dict:
-        await self.update_embeddings()
         return result
     
 

@@ -12,6 +12,7 @@ from .config import config
 from .storage import storage
 from .models import (
     Dataset,
+    EmbeddingPendingQueue,
     Paragraph,
     TaskDBO,
     Terms,
@@ -227,28 +228,20 @@ class MaintenanceManager:
 
     async def update_text_embeddings(self, filters: Optional[QueryFilters] = None):
 
-        stmt = (
-            select(Paragraph)
-            .filter(
-                ~exists().where(
-                    (TextEmbeddings.id == Paragraph.id)
-                    & (TextEmbeddings.dataset == Paragraph.dataset)
-                )
-            )
-            .filter(func.length(Paragraph.content) > 10)
-        )
-
         if isinstance(filters, dict):
             filters = QueryFilters(**filters)
 
         if filters:
-            cte = (
-                (await Paragraph.build_query(filters)).with_only_columns(Paragraph.id)
-            ).cte()
-            stmt = stmt.join(cte, Paragraph.id == cte.c.id)
+            stmt = await Paragraph.build_query(filters)
+        else:
+            stmt = select(Paragraph)
 
         stmt = (
-            stmt
+            stmt.join(
+                EmbeddingPendingQueue,
+                (EmbeddingPendingQueue.id == Paragraph.id)
+                & (EmbeddingPendingQueue.dataset == Paragraph.dataset),
+            )
             .with_only_columns(Paragraph.id, Paragraph.dataset, Paragraph.content)
             .limit(10000)
         )
