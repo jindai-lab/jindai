@@ -27,6 +27,7 @@ dependencies = [
     "isort>=7.0.0",
     "jieba3>=1.0.2",
     "langdetect>=1.0.9",
+    "lingua-language-detector>=2.1.1",
     "llama-cpp-python>=0.3.16",
     "many-stop-words>=0.2.2",
     "nltk>=3.9.2",

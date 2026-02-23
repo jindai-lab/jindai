@@ -4,7 +4,6 @@ Data Source from File Patterns
 """
 
 import codecs
-from typing import Iterable
 
 from jindai.models import Paragraph
 from jindai.pipeline import DataSourceStage, PipelineStage
@@ -29,9 +28,6 @@ class FilePatternDataSource(DataSourceStage):
     async def fetch(self):
         for path in await self.paths:
             yield Paragraph(content=path)
-
-
-from typing import Iterable
 
 
 class TextDataSource(DataSourceStage):

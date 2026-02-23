@@ -10,12 +10,20 @@ from sqlalchemy.dialects.postgresql import insert
 from .app import get_current_admin
 from .config import config
 from .storage import storage
-from .models import Dataset, Paragraph, TaskDBO, Terms, TextEmbeddings, get_db_session, QueryFilters
+from .models import (
+    Dataset,
+    Paragraph,
+    TaskDBO,
+    Terms,
+    TextEmbeddings,
+    get_db_session,
+    QueryFilters,
+)
 
 
 class MaintenanceManager:
 
-    async def sync_sources(self, dataset: str="", folder: str=""):
+    async def sync_sources(self, dataset: str = "", folder: str = ""):
 
         async with get_db_session() as session:
             query = select(Paragraph)
@@ -46,23 +54,27 @@ class MaintenanceManager:
                         f"{source} does not exist any more. Delete related paragraphs."
                     )
                     datasets.extend(
-                        (await session.execute(
-                            select(Paragraph)
-                            .filter(Paragraph.source_url == source)
-                            .distinct(Paragraph.dataset)
-                            .with_only_columns(Paragraph.dataset)
-                        )).scalars().all()
+                        (
+                            await session.execute(
+                                select(Paragraph)
+                                .filter(Paragraph.source_url == source)
+                                .distinct(Paragraph.dataset)
+                                .with_only_columns(Paragraph.dataset)
+                            )
+                        )
+                        .scalars()
+                        .all()
                     )
                     await session.execute(
                         delete(Paragraph).filter(Paragraph.source_url == source)
                     )
-            
+
             stmt = delete(Dataset).filter(
                 ~exists().where(Paragraph.dataset == Dataset.id),
-                Dataset.id.in_(list(set(datasets)))
+                Dataset.id.in_(list(set(datasets))),
             )
             await session.execute(stmt)
-            
+
     async def sync_terms(self):
         async with get_db_session() as session:
             unnested_query = (
@@ -97,7 +109,7 @@ class MaintenanceManager:
             print(f"Sync complete. Processed {len(unique_words)} unique keywords.")
 
     async def merge_datasets(self):
-        
+
         import re
         import unicodedata
 
@@ -105,23 +117,23 @@ class MaintenanceManager:
             """标准化字符串：去变音符号、去点、处理缩写"""
             if not s:
                 return ""
-            
+
             # 分解变音符号并去除 (例如: é -> e)
-            s = unicodedata.normalize('NFD', s)
-            s = "".join([c for c in s if unicodedata.category(c) != 'Mn'])
-            
+            s = unicodedata.normalize("NFD", s)
+            s = "".join([c for c in s if unicodedata.category(c) != "Mn"])
+
             # 将 ". " 替换为空格，处理末尾的点
-            s = re.sub(r'\. +', ' ', s)
-            
-            s = re.sub(r'\s+', ' ', s).strip().lower()
-            
+            s = re.sub(r"\. +", " ", s)
+
+            s = re.sub(r"\s+", " ", s).strip().lower()
+
             return s
 
         def assess_similarity(str1: str, str2: str):
             """评估两个字符串是否相同或可能是同一人"""
             norm1 = normalize_string(str1)
             norm2 = normalize_string(str2)
-            
+
             # 情况 1：完全相同（标准化后）
             if norm1.lower() == norm2.lower():
                 return "MATCH", norm1
@@ -130,13 +142,17 @@ class MaintenanceManager:
             # 我们将字符串拆分为单词，检查是否符合“首字母 + 姓”的模式
             parts1 = norm1.split()
             parts2 = norm2.split()
-            
+
             if len(parts1) == len(parts2) and len(parts1) > 1:
                 is_potential = True
                 for p1, p2 in zip(parts1, parts2):
                     p1l, p2l = p1.lower(), p2.lower()
                     # 如果一个是另一个的首字母，或者两者完全相同，则视为潜在匹配
-                    if not (p1l == p2l or (len(p1) == 1 and p2l.startswith(p1l)) or (len(p2) == 1 and p1l.startswith(p2l))):
+                    if not (
+                        p1l == p2l
+                        or (len(p1) == 1 and p2l.startswith(p1l))
+                        or (len(p2) == 1 and p1l.startswith(p2l))
+                    ):
                         is_potential = False
                         break
                 if is_potential:
@@ -146,18 +162,20 @@ class MaintenanceManager:
 
         async with get_db_session() as session:
             ds = (await session.execute(select(Dataset))).scalars().all()
-            calibre = [d for d in ds if d.name.startswith('书库--') or '--' not in d.name]
+            calibre = [
+                d for d in ds if d.name.startswith("书库--") or "--" not in d.name
+            ]
             noncalibre = [d for d in ds if d not in calibre]
         for d1 in calibre:
-            n1 = d1.name.split('--')[-1]
+            n1 = d1.name.split("--")[-1]
             for d2 in noncalibre:
-                n2 = d2.name.split('--')[-1]
+                n2 = d2.name.split("--")[-1]
                 cmp, _ = assess_similarity(n2, n1)
-                if cmp == 'MATCH':
+                if cmp == "MATCH":
                     await d1.rename_dataset(d2.name)
-                    print(f'[{d1.name}] merged to [{d2.name}]')
+                    print(f"[{d1.name}] merged to [{d2.name}]")
                     break
-            
+
     async def update_author_from_url(self, pattern):
         async with get_db_session() as session:
             sql = text(
@@ -207,19 +225,30 @@ class MaintenanceManager:
 
             await session.execute(stmt)
 
-    async def update_text_embeddings(self, filters: Optional[QueryFilters]=None):
-        if not filters:
-            filters = QueryFilters()
-        if isinstance(filters, dict):
-            filters = QueryFilters(**filters)
-        filters.embeddings = False
-        cte = (
-            (await Paragraph.build_query(filters)).with_only_columns(Paragraph.id)
-        ).cte()
+    async def update_text_embeddings(self, filters: Optional[QueryFilters] = None):
+
         stmt = (
             select(Paragraph)
-            .join(cte, Paragraph.id == cte.c.id)
+            .filter(
+                ~exists().where(
+                    (TextEmbeddings.id == Paragraph.id)
+                    & (TextEmbeddings.dataset == Paragraph.dataset)
+                )
+            )
             .filter(func.length(Paragraph.content) > 10)
+        )
+
+        if isinstance(filters, dict):
+            filters = QueryFilters(**filters)
+
+        if filters:
+            cte = (
+                (await Paragraph.build_query(filters)).with_only_columns(Paragraph.id)
+            ).cte()
+            stmt = stmt.join(cte, Paragraph.id == cte.c.id)
+
+        stmt = (
+            stmt
             .with_only_columns(Paragraph.id, Paragraph.dataset, Paragraph.content)
             .limit(10000)
         )

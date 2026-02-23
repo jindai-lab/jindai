@@ -33,9 +33,6 @@ def resolve_range(page_range: str) -> Iterator:
             yield int(rng) - 1
 
 
-from typing import Iterable
-
-
 class PDFDataSource(DataSourceStage):
     """
     Import paragraphs from PDF

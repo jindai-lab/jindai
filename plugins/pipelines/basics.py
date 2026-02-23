@@ -13,6 +13,8 @@ import many_stop_words
 import pandas
 import regex as re
 import textrank4zh
+import hanzidentifier
+from lingua import Language, LanguageDetectorBuilder
 
 from jindai.helpers import WordStemmer as WStemmer
 from jindai.helpers import aeval, jieba, safe_import
@@ -70,6 +72,7 @@ class LanguageDetect(PipelineStage):
     """Simple language detection
     @zhs 简易语言检测
     """
+    detector = LanguageDetectorBuilder.from_all_languages().build()
 
     def resolve(self, paragraph: Paragraph) -> Paragraph:
         if paragraph.lang and paragraph.lang != 'auto':
@@ -89,17 +92,11 @@ class LanguageDetect(PipelineStage):
     def detect(self, sentence) -> str:
         """Detect language"""
 
-        hanzidentifier = safe_import('hanzidentifier')
-        langdetect = safe_import('langdetect')
-
         sentence = re.sub('[0-9]', '', sentence).strip()
 
         if re.search(r"[\uac00-\ud7ff]+", sentence):
             return 'ko'
-
-        if re.search(r"[\u30a0-\u30ff\u3040-\u309f]+", sentence):
-            return 'ja'
-
+        
         if hanzidentifier.has_chinese(sentence):
             if hanzidentifier.is_simplified(sentence):
                 return 'zhs'
@@ -107,8 +104,10 @@ class LanguageDetect(PipelineStage):
                 return 'zht'
 
         try:
-            return langdetect.detect(sentence)
-        except langdetect.lang_detect_exception.LangDetectException:
+            lang = LanguageDetect.detector.detect_language_of(sentence)
+            if lang:
+                return lang.iso_code_639_1.name.lower()
+        except Exception:
             return 'en'
 
 
