@@ -105,8 +105,8 @@ class LanguageDetect(PipelineStage):
 
         try:
             lang = LanguageDetect.detector.detect_language_of(sentence)
-            if lang:
-                return lang.iso_code_639_1.name.lower()
+            assert lang
+            return lang.iso_code_639_1.name.lower()
         except Exception:
             return 'en'
 

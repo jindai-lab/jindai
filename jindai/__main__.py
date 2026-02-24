@@ -14,6 +14,7 @@ import regex as re
 from sqlalchemy import select
 import urllib3
 import yaml
+import logging
 
 from . import Plugin, PluginManager, Task, config, storage
 from .app import app, run_service
@@ -21,7 +22,6 @@ from .helpers import get_context, safe_import
 from .models import (Dataset, Paragraph, QueryFilters, TaskDBO, UserInfo, get_db_session)
 
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
-
 
 def _init_plugins(*paths) -> PluginManager:
     """Inititalize plugins"""
@@ -219,5 +219,5 @@ def call_ipython() -> None:
 
 
 if __name__ == "__main__":
-    print("* db connection:", re.sub(r'://.+?@', '://***@', config.database), 'redis:', config.redis)
+    logging.debug("* db connection:", re.sub(r'://.+?@', '://***@', config.database), 'redis:', config.redis)
     cli()

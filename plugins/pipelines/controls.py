@@ -26,7 +26,7 @@ class FlowControlStage(PipelineStage):
         super().__init__()
 
     @property
-    def log(self):
+    def log(self) -> None:
         """log"""
         return lambda *x: self._log(
             self.instance_name or self.__class__.__name__, "|", *x
@@ -50,7 +50,7 @@ class FlowControlStage(PipelineStage):
 
     @property
     def verbose(self) -> bool:
-        """Print out debug info when verbose is set"""
+        """Show debug info when verbose is set"""
         return self._verbose
 
     @verbose.setter
@@ -60,7 +60,7 @@ class FlowControlStage(PipelineStage):
             pipeline.verbose = val
 
     @property
-    def next(self) -> next:
+    def next(self) -> PipelineStage | None:
         """Next stage in pipeline"""
         return self._next
 

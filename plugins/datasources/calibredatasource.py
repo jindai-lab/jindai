@@ -85,7 +85,7 @@ class CalibreLibraryDataSource(DataSourceStage):
             return books_info
 
         except sqlite3.Error as e:
-            print(f"读取数据库时出错（请检查路径或权限）: {e}")
+            self.log_exception(f"Error while reading from database", e)
             return []
 
     def apply_params(
@@ -94,6 +94,7 @@ class CalibreLibraryDataSource(DataSourceStage):
         lang="auto",
         content="",
         formats="epub,pdf",
+        scan_for_moved=False
     ) -> None:
         """
         Args:
@@ -109,11 +110,15 @@ class CalibreLibraryDataSource(DataSourceStage):
             formats (str):
                 File format
                 @zhs 允许的文件格式
+            scan_for_moved (bool):
+                Scan for moved files
+                @zhs 扫描已移动的文件
         """
         self.dataset_name = dataset_name
         self.lang = lang
         self.paths = content
         self.formats = tuple(formats.lower().split(","))
+        self.scan_for_moved = scan_for_moved
 
     async def fetch(self):
         paths = await PipelineStage.parse_paths(self.paths)
@@ -127,18 +132,14 @@ class CalibreLibraryDataSource(DataSourceStage):
                         book.content = os.path.join(path, book.content)
                         book.dataset = dsid
                         # update moved books
-                        await session.execute(
-                            update(Paragraph)
-                            .filter(
-                                Paragraph.source_url.contains(f' ({book.extdata["book_id"]})/'),
-                                Paragraph.extdata["book_id"] == book.extdata["book_id"],
-                                Paragraph.source_url != book.content,
+                        if self.scan_for_moved:
+                            await session.execute(
+                                update(Paragraph)
+                                .filter(
+                                    Paragraph.source_url.like(f'{path}% ({book.extdata["book_id"]})/%'),
+                                    Paragraph.source_url != book.content,
+                                )
+                                .values(source_url=book.content)
                             )
-                            .values(source_url=book.content)
-                        )
-                        # assign outline and author info
-                        # await session.execute(
-                        #     update(Paragraph).filter(Paragraph.source_url == book.content)
-                        #     .values(outline=book.outline, author=book.author)
-                        # )
+                            
                         yield book

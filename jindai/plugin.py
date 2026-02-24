@@ -1,6 +1,7 @@
 """Plugin platform for jindai"""
 
 import glob
+import logging
 import os
 import shutil
 import sys
@@ -116,15 +117,15 @@ class PluginManager:
                 plugin_cls = plugin_name
 
             if not plugin_cls:
-                print("Plugin", plugin_name, "not found.")
+                logging.info(f"Plugin {plugin_name} not found.")
                 continue
 
             try:
                 plugin_instance = plugin_cls(self, **params)
                 self.plugins.append(plugin_instance)
-                print("Registered plugin:", type(plugin_instance).__name__)
+                logging.info(f"Registered plugin: {type(plugin_instance).__name__}")
             except Exception as ex:
-                print("Error while registering plugin:", plugin_name, ex)
+                logging.error(f"Error while registering plugin: {plugin_name} {ex}")
                 continue
             
     def get_router(self):

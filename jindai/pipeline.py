@@ -2,6 +2,7 @@
 
 import asyncio
 import inspect
+import logging
 import sys
 import traceback
 from collections import defaultdict
@@ -37,7 +38,7 @@ class PipelineStage:
         :param name: Instance name for logging, defaults to empty string
         :type name: str, optional
         """
-        self._log = lambda *x: print(*x, file=sys.stderr)
+        self._log = lambda *x: logging.info(' '.join(map(str, x)))
         self.next = None
         self.gctx = {}
         self.verbose = False
@@ -410,7 +411,7 @@ class Pipeline:
     def __init__(
         self,
         stages: List[Union[Tuple[str, Dict], List, Dict, PipelineStage]],
-        log: Callable = print,
+        log: Callable = lambda *x: logging.info(' '.join(map(str, x))),
         verbose=False,
     ) -> None:
         """Initialize the pipeline
@@ -420,7 +421,7 @@ class Pipeline:
                 - List[<PipelineStage name>, <parameters>]
                 - {<PipelineStage name> : <parameters>}
         :type stages: List[Union[Tuple[str, Dict], List, Dict, PipelineStage]]
-        :param log: Logging method, defaults to print
+        :param log: Logging method, defaults to logging.info
         :type log: Callable, optional
         :param verbose: Enable verbose logging, defaults to False
         :type verbose: bool, optional

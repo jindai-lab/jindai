@@ -2,6 +2,7 @@ import asyncio
 import inspect
 import json
 from datetime import datetime
+import logging
 from typing import Any, Callable
 
 import palitra
@@ -212,7 +213,7 @@ class AsyncWorkerManager:
             except WebSocketDisconnect:
                 pass
             except Exception as e:
-                print(f"发生错误: {e}")
+                logging.error(f"Websocket error: {e}")
 
         return wsrouter
 
