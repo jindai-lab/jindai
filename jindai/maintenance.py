@@ -1,5 +1,6 @@
 import asyncio
 import datetime
+import logging
 import os
 import tempfile
 from typing import Optional
@@ -51,7 +52,7 @@ class MaintenanceManager:
             for source in sources:
                 joined = storage.safe_join(source)
                 if not os.path.exists(joined):
-                    print(
+                    logging.info(
                         f"{source} does not exist any more. Delete related paragraphs."
                     )
                     datasets.extend(
@@ -96,7 +97,7 @@ class MaintenanceManager:
             unique_words = result.scalars().all()
 
             if not unique_words:
-                print("No keywords found to sync.")
+                logging.info("No keywords found to sync.")
                 return
 
             # Perform a Bulk Upsert into the Terms table
@@ -107,7 +108,7 @@ class MaintenanceManager:
             upsert_stmt = insert_stmt.on_conflict_do_nothing(index_elements=["term"])
 
             await session.execute(upsert_stmt)
-            print(f"Sync complete. Processed {len(unique_words)} unique keywords.")
+            logging.info(f"Sync complete. Processed {len(unique_words)} unique keywords.")
 
     async def merge_datasets(self):
 
@@ -174,7 +175,7 @@ class MaintenanceManager:
                 cmp, _ = assess_similarity(n2, n1)
                 if cmp == "MATCH":
                     await d1.rename_dataset(d2.name)
-                    print(f"[{d1.name}] merged to [{d2.name}]")
+                    logging.info(f"[{d1.name}] merged to [{d2.name}]")
                     break
 
     async def update_author_from_url(self, pattern):
@@ -195,7 +196,7 @@ class MaintenanceManager:
             )
 
             result = await session.execute(sql, {"p": pattern})
-            print(f"Successfully updated {result.rowcount} records.")
+            logging.info(f"Successfully updated {result.rowcount} records.")
 
     async def update_pdate_from_url(self, dataset: str):
         async with get_db_session() as session:
@@ -292,7 +293,7 @@ class MaintenanceManager:
             )
         async with get_db_session() as session:
             session.add_all(embs)
-        print(f"{len(embs)} added")
+        logging.info(f"{len(embs)} added")
         return len(embs)
 
     async def custom_task(self, task_id: str = "", **params):

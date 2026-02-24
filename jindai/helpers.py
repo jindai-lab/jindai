@@ -4,6 +4,7 @@ import gc
 import glob
 import importlib
 import inspect
+import logging
 import os
 import subprocess
 import sys
@@ -82,7 +83,7 @@ class AutoUnloadSentenceTransformer:
     def _unload_model(self) -> None:
         """Unload the model to release memory/GPU memory completely."""
         if self.model is not None:
-            print(
+            logging.info(
                 f"[Auto-unload] Model idle for {self.idle_timeout} seconds, releasing resources..."
             )
             # Core: Delete the model object
@@ -97,7 +98,7 @@ class AutoUnloadSentenceTransformer:
                 torch.cuda.empty_cache()
                 torch.cuda.ipc_collect()
 
-            print(f"[Auto-unload] Model resources released")
+            logging.info(f"[Auto-unload] Model resources released")
 
     def encode(self, sentences, **kwargs) -> np.ndarray:
         """
@@ -278,7 +279,7 @@ def get_context(directory: str, parent_class: Type, *sub_dirs: str) -> Dict:
     ctx = {}
     for module_name in modules:
         try:
-            print("Loading", module_name)
+            logging.info("Loading", module_name)
             module = importlib.import_module(module_name)
             for k in module.__dict__:
                 if (
@@ -289,7 +290,7 @@ def get_context(directory: str, parent_class: Type, *sub_dirs: str) -> Dict:
                 ):
                     ctx[k] = module.__dict__[k]
         except Exception as exception:
-            print("Error while importing", module_name, ":", exception)
+            logging.error("Error while importing", module_name, ":", exception)
 
     return ctx
 

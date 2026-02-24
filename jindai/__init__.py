@@ -8,7 +8,3 @@ from .plugin import Plugin, PluginManager
 from .resources import router, wsrouter
 from .storage import storage
 from .task import Task
-
-app.include_router(router)
-app.include_router(wsrouter)
-app.get('/{path:path}')(serve_static)

@@ -1,11 +1,12 @@
 """API Web Service"""
 
+import logging
 import os
 from typing import Any, Dict, Union
 
 import uvicorn
 from asteval import Interpreter
-from fastapi import APIRouter, Depends, FastAPI, HTTPException, WebSocket, status
+from fastapi import APIRouter, Depends, FastAPI, HTTPException, Request, WebSocket, status
 from fastapi.responses import FileResponse
 from sqlalchemy import select
 
@@ -75,27 +76,18 @@ async def get_current_admin(
         return user
 
 
-async def serve_static(path: str = "index.html"):
-    # 过滤 api 请求，防止误触（虽然路由优先级通常能处理，但手动过滤更稳）
-    if path.startswith("api/"):
-        raise HTTPException(status_code=404)
-
-    # 模拟原有的路径尝试逻辑
+async def serve_static(path: str = ""):
     search_paths = [
         path,
-        f"{path}.html",
         os.path.join(config.ui_dist, path),
-        os.path.join(config.ui_dist, f"{path}.html"),
+        os.path.join(config.ui_dist, "index.html"),
     ]
+    
+    logging.info('Searching for: ' + ', '.join(search_paths))
 
     for p in search_paths:
         if os.path.exists(p) and os.path.isfile(p):
             return FileResponse(p)
-
-    # 如果是 SPA（单页应用），通常找不到路径时返回 index.html
-    index_path = os.path.join(config.ui_dist, "index.html")
-    if os.path.exists(index_path):
-        return FileResponse(index_path)
 
     raise HTTPException(status_code=404, detail=f"Not found for {path}")
 
@@ -114,3 +106,9 @@ def run_service(host: str = "0.0.0.0", port: int = 8370) -> None:
         workers=1,  # 开发环境下通常设为 1
         log_level="info",
     )
+
+
+@app.exception_handler(404)
+async def custom_404_handler(request: Request, exc: HTTPException):
+    return await serve_static(request.url.path.lstrip('/'))
+    

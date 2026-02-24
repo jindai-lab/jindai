@@ -1,91 +1,15 @@
 """Task processing module"""
 
 import asyncio
-import ctypes
-import datetime
 import logging
-import time
 import traceback
-import uuid
 from collections import deque
-from threading import Lock, Thread
 from typing import Any, Callable
 
 from tqdm import tqdm
 
 from .models import Paragraph
 from .pipeline import Pipeline
-
-
-class WorkersPool:
-    def __init__(self, workers: int, interval: float = 0.1) -> None:
-        """Initialize workers pool
-
-        :param workers: Number of worker threads
-        :type workers: int
-        :param interval: Sleep interval when pool is full, defaults to 0.1
-        :type interval: float, optional
-        """
-        self.workers = workers
-        self._threads = {}
-        self._lock = Lock()
-        self._read_lock = Lock()
-        self._interval = interval
-
-    def count(self) -> int:
-        """Get current number of running threads
-
-        :return: Number of active threads
-        :rtype: int
-        """
-        return len(self._threads)
-
-    def submit(self, func, *args, **kwargs) -> None:
-            """Submit a function to be executed by a worker thread
-
-            :param func: Function to execute
-            :type func: Callable
-            :param args: Positional arguments for the function
-            :param kwargs: Keyword arguments for the function
-            """
-            tid = uuid.uuid4()
-            
-            def _func():
-                func(*args, **kwargs)
-                self._threads.pop(tid)
-            
-            while self.count() >= self.workers:
-                time.sleep(self._interval)
-                
-            with self._lock:
-                thr = Thread(target=_func)
-                self._threads[tid] = thr
-            
-            thr.start()
-
-    def stop(self) -> None:
-            """Stop all worker threads forcefully"""
-            
-            def _terminate_thread(thread, exc_type = SystemExit):
-                if not thread.is_alive():
-                    return
-
-                exc = ctypes.py_object(exc_type)
-                res = ctypes.pythonapi.PyThreadState_SetAsyncExc(ctypes.c_long(thread.ident), exc)
-
-                if res == 0:
-                    raise ValueError("nonexistent thread id")
-                elif res > 1:
-                    ctypes.pythonapi.PyThreadState_SetAsyncExc(thread.ident, None)
-                    raise SystemError("PyThreadState_SetAsyncExc failed")
-                
-            for thr in list(self._threads.values()):
-                _terminate_thread(thr)
-
-            def debug_print(self) -> None:
-                """Print debug information about running threads"""
-                print("running threads:", self.count())
-                print(" ", "\n  ".join(map(str, self._threads.keys())))
 
 
 class Task:

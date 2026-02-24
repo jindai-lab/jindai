@@ -1,5 +1,6 @@
 """Configuration management for Jindai application"""
 
+import logging
 import os
 import sys
 from typing import Any, Dict, List
@@ -59,7 +60,7 @@ class ConfigObject(BaseModel):
         with open(file_path, "r", encoding="utf-8") as f:
             data = yaml.safe_load(f)
 
-        print("* loaded config from", file_path)
+        logging.debug("* loaded config from", file_path)
         return cls.model_validate(data)
 
     def get_extra(self) -> Dict[str, Any]:
