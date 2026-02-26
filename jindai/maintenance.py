@@ -26,6 +26,7 @@ from .models import (
 class MaintenanceManager:
 
     async def sync_sources(self, dataset: str = "", folder: str = ""):
+        assert dataset or folder, "Must specify at least one condition"
 
         async with get_db_session() as session:
             query = select(Paragraph)
@@ -46,14 +47,16 @@ class MaintenanceManager:
             query = query.distinct(Paragraph.source_url).with_only_columns(
                 Paragraph.source_url
             )
-            sources = [_ for _, in await session.execute(query)]
+            sources : list[str] = [_ for _, in await session.execute(query)]
             datasets = []
 
             for source in sources:
+                if '://' in source: continue
+                if '#' in source: source = source[:source.find('#')]
                 joined = storage.safe_join(source)
                 if not os.path.exists(joined):
                     logging.info(
-                        f"{source} does not exist any more. Delete related paragraphs."
+                        f"{source} does not exist any more. Mark related paragraphs."
                     )
                     datasets.extend(
                         (
@@ -68,7 +71,13 @@ class MaintenanceManager:
                         .all()
                     )
                     await session.execute(
-                        delete(Paragraph).filter(Paragraph.source_url == source)
+                        update(Paragraph)
+                        .filter(Paragraph.source_url == source)
+                        .values(
+                            extdata=Paragraph.extdata.op("||")(
+                                func.json_build_object("offline", True)
+                            )
+                        )
                     )
 
             stmt = delete(Dataset).filter(
@@ -108,7 +117,9 @@ class MaintenanceManager:
             upsert_stmt = insert_stmt.on_conflict_do_nothing(index_elements=["term"])
 
             await session.execute(upsert_stmt)
-            logging.info(f"Sync complete. Processed {len(unique_words)} unique keywords.")
+            logging.info(
+                f"Sync complete. Processed {len(unique_words)} unique keywords."
+            )
 
     async def merge_datasets(self):
 
@@ -369,6 +380,11 @@ class MaintenanceManager:
                 if os.path.exists(f):
                     os.unlink(f)
         return output_path
+
+    async def test_task(self):
+        logging.info("Test Task Started")
+        await asyncio.sleep(10)
+        logging.info("Test Task Ended")
 
     def get_router(self):
 

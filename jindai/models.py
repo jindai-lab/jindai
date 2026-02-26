@@ -229,7 +229,7 @@ class History(Base):
         DateTime, default=func.current_timestamp(), nullable=False, comment="创建时间"
     )
     queries: Mapped[List[Dict[str, Any]]] = mapped_column(
-        JSONB, default=list, nullable=False, comment="查询记录列表（JSON）"
+        JSONB, default=dict, nullable=False, comment="查询记录（JSON）"
     )
 
     # 关联关系：关联到用户
@@ -533,10 +533,12 @@ class Terms(MBase):  # terms has no `id`, and cannot as_dict()
     async def store(
         words: list[str],
     ):  # Clean the input to ensure uniqueness in the batch
+        # Prepare the data dictionaries
+        data = [{"term": w} for w in words if w and len(w) > 1]
+        if not data:
+            return []
         async with get_db_session() as session:
             async with session.begin():  # Start a transaction
-                # Prepare the data dictionaries
-                data = [{"term": w} for w in words if w and len(w) > 1]
 
                 # Execute a bulk insert
                 # Note: This assumes 'term' is a unique column.

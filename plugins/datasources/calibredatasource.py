@@ -4,7 +4,7 @@ import os
 import urllib.parse
 from uuid import UUID
 
-from sqlalchemy import update
+from sqlalchemy import select, update
 
 from jindai.storage import storage
 from jindai.models import Dataset, Paragraph, get_db_session
@@ -94,7 +94,7 @@ class CalibreLibraryDataSource(DataSourceStage):
         lang="auto",
         content="",
         formats="epub,pdf",
-        scan_for_moved=False
+        scan_for_moved=True
     ) -> None:
         """
         Args:
@@ -123,21 +123,32 @@ class CalibreLibraryDataSource(DataSourceStage):
     async def fetch(self):
         paths = await PipelineStage.parse_paths(self.paths)
         dsid = (await Dataset.get(self.dataset_name)).id
-
+        existent = {}
+        
         async with get_db_session() as session:
+        
+            if self.scan_for_moved:
+                existent = dict(
+                    (await session.execute(
+                        select(Paragraph.extdata.op('->>')('book_id'),
+                               Paragraph.source_url)
+                        .distinct(Paragraph.source_url)
+                    )).all()
+                )
+                
             for path in paths:
                 books = self.get_calibre_books_safe(storage.safe_join(path))
                 for book in books:
                     if self.formats and book.content.lower().endswith(self.formats):
                         book.content = os.path.join(path, book.content)
                         book.dataset = dsid
+                        book_id = str(book.extdata['book_id'])
                         # update moved books
-                        if self.scan_for_moved:
+                        if self.scan_for_moved and existent.get(book_id):
                             await session.execute(
                                 update(Paragraph)
                                 .filter(
-                                    Paragraph.source_url.like(f'{path}% ({book.extdata["book_id"]})/%'),
-                                    Paragraph.source_url != book.content,
+                                    Paragraph.source_url == existent[book_id],
                                 )
                                 .values(source_url=book.content)
                             )

@@ -1,4 +1,5 @@
 import asyncio
+import json
 import os
 import httpx
 import logging
@@ -42,8 +43,7 @@ from .worker import worker_manager
 # --- 基础工具与依赖 ---
 
 logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+    level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
 )
 
 
@@ -73,8 +73,9 @@ class ResourceRegistry:
     async def paginate(session: AsyncSession, stmt, offset: int, limit: int):
         total_stmt = select(func.count()).select_from(stmt.order_by(None).subquery())
         total = (await session.execute(total_stmt)).scalar()
+        stmt = stmt.offset(offset).limit(limit)
         results = (
-            (await session.execute(stmt.offset(offset).limit(limit))).scalars().all()
+            (await session.execute(stmt)).scalars().all()
         )
         return {"total": total, "results": [r.as_dict() for r in results]}
 
@@ -180,7 +181,7 @@ class EmbeddingManager:
                         select(EmbeddingPendingQueue).limit(1)
                     )
                     if pending.first():
-                        logging.info('Pending queue not empty')
+                        logging.info("Pending queue not empty")
                         await maintenance_manager.update_text_embeddings()
                 await asyncio.sleep(60)
         except asyncio.CancelledError:
@@ -206,7 +207,9 @@ class EmbeddingManager:
             ).scalar()
             queued = (
                 await session.execute(
-                    select(EmbeddingPendingQueue).with_only_columns(func.count(EmbeddingPendingQueue.id))
+                    select(EmbeddingPendingQueue).with_only_columns(
+                        func.count(EmbeddingPendingQueue.id)
+                    )
                 )
             ).scalar()
             return {"finished": finished, "queued": queued}
@@ -285,13 +288,27 @@ class ContentManager:
         @router.post("/paragraphs/search")
         async def search_paragraphs(
             filters: QueryFilters,
-            offset: int = 0,
-            limit: int = 100,
             session: AsyncSession = Depends(get_db),
+            username: str = Depends(get_current_username),
         ):
-            filters.offset, filters.limit = 0, None
+            limit, offset = filters.limit, filters.offset
+            filters.offset, filters.limit = 0, 0
+            hist = History(
+                user_id=(
+                    await session.execute(
+                        select(UserInfo).filter(UserInfo.username == username)
+                    )
+                )
+                .scalar_one()
+                .id,
+                queries=json.loads(filters.model_dump_json()),
+            )
+            session.add(hist)
+            await session.commit()
             query = await Paragraph.build_query(filters)
-            return await ResourceRegistry.paginate(session, query, offset, limit)
+            resp = await ResourceRegistry.paginate(session, query, offset, limit)
+            resp['query'] = str(query.compile())
+            return resp
 
         @router.post("/paragraphs/filters/{column}")
         async def filter_paragraphs_items(
@@ -362,20 +379,20 @@ class StorageManager:
 emb_manager = EmbeddingManager()
 app.router.lifespan_context = emb_manager.lifespan
 
-# 1. 注册通用 CRUD 资源
+# 注册通用 CRUD 资源
 ResourceRegistry(UserInfo, "/users", ["Users"]).register(
     router, dependencies=[Depends(get_current_admin)]
 )
 ResourceRegistry(History, "/histories", ["Histories"]).register(router)
 TaskResource().register(router)
 
-# 2. 注册业务逻辑模块
+# 注册业务逻辑模块
 ContentManager().register_routes(router)
 emb_manager.register_routes(router)
 StorageManager().register_routes(router)
 
 
-# 3. 辅助功能
+# 辅助功能
 @router.post("/translator", tags=["Translator"])
 async def translator(params: dict = Body(...)):
     url = "https://open.bigmodel.cn/api/paas/v4/chat/completions"
@@ -417,6 +434,7 @@ tasks_to_reg = [
     (maintenance_manager.sync_terms, "sync_terms"),
     (maintenance_manager.update_pdate_from_url, "sync_pdate"),
     (maintenance_manager.sync_sources, "sync_sources"),
+    (maintenance_manager.test_task, "test_task"),
 ]
 for func_ref, name in tasks_to_reg:
     worker_manager.register_task(func_ref, name)
