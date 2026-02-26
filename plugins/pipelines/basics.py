@@ -802,8 +802,8 @@ class SaveParagraph(PipelineStage):
                 session.add(paragraph)
                 await Terms.store(paragraph.keywords)
             else:
-                session.merge(paragraph)
-            session.commit()
+                await session.merge(paragraph)
+            await session.commit()
 
         return paragraph
     
