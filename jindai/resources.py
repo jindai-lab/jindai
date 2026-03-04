@@ -13,6 +13,7 @@ from fastapi import (
     FastAPI,
     File,
     HTTPException,
+    Query,
     UploadFile,
     Request,
 )
@@ -69,11 +70,12 @@ class ResourceRegistry:
             return True
         return self.model.user.username == username
 
-    @staticmethod
-    async def paginate(session: AsyncSession, stmt, offset: int, limit: int):
+    async def paginate(self, session: AsyncSession, stmt, sort : str, offset: int, limit: int):
         total_stmt = select(func.count()).select_from(stmt.order_by(None).subquery())
         total = (await session.execute(total_stmt)).scalar()
         stmt = stmt.offset(offset).limit(limit)
+        if sorts := self.model.parse_sort_string(sort):
+            stmt = stmt.order_by(*sorts)
         results = (
             (await session.execute(stmt)).scalars().all()
         )
@@ -88,11 +90,12 @@ class ResourceRegistry:
         async def list_items(
             offset: int = 0,
             limit: int = 100,
+            sort: str = Query(''),
             session: AsyncSession = Depends(get_db),
             username: str = Depends(get_current_username),
         ):
             stmt = select(self.model).filter(await self.get_auth_filters(username))
-            return await self.paginate(session, stmt, offset, limit)
+            return await self.paginate(session, stmt, sort, offset, limit)
 
         @res_router.get("/{resource_id}")
         async def get_item(
@@ -180,9 +183,10 @@ class EmbeddingManager:
                     pending = await session.execute(
                         select(EmbeddingPendingQueue).limit(1)
                     )
-                    if pending.first():
-                        logging.info("Pending queue not empty")
-                        await maintenance_manager.update_text_embeddings()
+                    has_pending = pending.first() is not None
+                if has_pending:
+                    logging.info("Pending queue not empty")
+                    await maintenance_manager.update_text_embeddings()
                 await asyncio.sleep(60)
         except asyncio.CancelledError:
             logging.info("Embedding Polling Loop is being cancelled.")
@@ -235,8 +239,11 @@ class EmbeddingManager:
             return {"id": resource_id}
 
 
-class ContentManager:
+class ContentManager(ResourceRegistry):
     """处理数据集与段落逻辑"""
+    
+    def __init__(self):
+        super().__init__(Paragraph, '', [])
 
     def register_routes(self, router: APIRouter):
         @router.get("/datasets", tags=["Datasets"])
@@ -306,7 +313,7 @@ class ContentManager:
             session.add(hist)
             await session.commit()
             query = await Paragraph.build_query(filters)
-            resp = await ResourceRegistry.paginate(session, query, offset, limit)
+            resp = await self.paginate(session, query, '', offset or 0, limit or 0)
             resp['query'] = str(query.compile())
             return resp
 

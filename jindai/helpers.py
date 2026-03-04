@@ -197,7 +197,7 @@ class WordStemmer:
         Returns:
             stemmed words
         """
-        tokens = [WordStemmer.get_stemmer(lang).stem(_) for _ in tokens]
+        tokens = [WordStemmer.get_stemmer(lang).stem(_) for _ in tokens if _]
         return tokens
 
     def stem_from_params(self, word, lang="en") -> dict[str, Any]:

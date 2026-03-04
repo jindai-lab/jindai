@@ -69,6 +69,7 @@ dependencies = [
     "transliterate>=1.10.2",
     "uvicorn[standard]>=0.40.0",
     "waitress>=3.0.2",
+    "watchdog>=6.0.0",
     "xlsxwriter>=3.2.9",
     "zhon>=2.1.1",
 ]

@@ -4,13 +4,19 @@ import logging
 import os
 import tempfile
 from typing import Optional
+import hashlib
+from pathlib import Path
 from fastapi import APIRouter, BackgroundTasks, Body, Depends
+from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import TIMESTAMP, cast, exists, func, select, text, update, delete
 from sqlalchemy.dialects.postgresql import insert
+from watchdog.observers import Observer
+from watchdog.events import FileSystemEventHandler
 
 from .app import get_current_admin
 from .config import config
 from .storage import storage
+from .pdfutils import get_pdf_page_count
 from .models import (
     Dataset,
     EmbeddingPendingQueue,
@@ -18,6 +24,7 @@ from .models import (
     TaskDBO,
     Terms,
     TextEmbeddings,
+    FileMetadata,
     get_db_session,
     QueryFilters,
 )
@@ -75,7 +82,7 @@ class MaintenanceManager:
                         .filter(Paragraph.source_url == source)
                         .values(
                             extdata=Paragraph.extdata.op("||")(
-                                func.json_build_object("offline", True)
+                                func.jsonb_build_object("offline", True)
                             )
                         )
                     )
@@ -237,6 +244,171 @@ class MaintenanceManager:
             )
 
             await session.execute(stmt)
+        
+    def _compute_sha1(self, file_path: str) -> str:
+        """Chunked SHA-1 for memory efficiency (works on huge files)."""
+        sha1 = hashlib.sha1()
+        with open(file_path, "rb") as f:
+            while chunk := f.read(16<<10):
+                sha1.update(chunk)
+        return sha1.hexdigest()
+    
+    def _scan_storage(self, storage_root: str):
+        
+        print(f"🚀 Starting thorough scan of: {storage_root}")
+
+        for root, dirs, files in os.walk(storage_root):
+            # You can uncomment to skip hidden directories if you want
+            # dirs[:] = [d for d in dirs if not d.startswith(".")]
+
+            for filename in files:
+                full_path = os.path.join(root, filename)
+
+                # Decide what to store as the primary key "filename"
+                db_filename = storage.relative_path(full_path)
+
+                try:
+                    stat = os.stat(full_path)
+                    size_bytes = stat.st_size
+
+                    sha1 = self._compute_sha1(full_path)
+
+                    # Extension (lowercase, no dot)
+                    ext = Path(filename).suffix.lower().lstrip(".")
+
+                    # PDF page count (only when relevant)
+                    page_count = get_pdf_page_count(full_path) if ext == "pdf" else None
+
+                    # Build model instance (all other fields are auto-managed by SQLAlchemy)
+                    metadata_obj = FileMetadata(
+                        filename=db_filename,
+                        sha1=sha1,
+                        extension=ext,
+                        size_bytes=size_bytes,
+                        page_count=page_count,
+                        extdata={},
+                    )
+                    
+                    yield metadata_obj
+
+                except PermissionError:
+                    print(f"   ⏭️  Permission denied: {full_path}")
+                except Exception as e:
+                    print(f"   ❌ Error processing {full_path}: {e}")
+                    continue
+    
+    def get_storage_handler(self):
+
+        class StorageHandler(FileSystemEventHandler):
+            def __init__(self):
+                self.root = config.storage
+                
+            def on_any_event(self, event):
+                # We ignore directory events for most cases — focus on files
+                if event.is_directory:
+                    return
+
+                path = Path(event.src_path)
+                relative_path = str(path.relative_to(self.root))
+
+                session = self.get_session()
+
+                try:
+                    if event.event_type in ('created', 'modified', 'moved'):
+                        # For moved: we treat it roughly as "new file appeared"
+                        # (you can also handle dest_path if you want precise rename tracking)
+
+                        if not path.exists():
+                            # Race condition — file already gone
+                            return
+
+                        stat = path.stat()
+                        size_bytes = stat.st_size
+
+                        # Compute SHA-1 (same as your initial scanner)
+                        sha1 = self._compute_sha1(path)
+
+                        ext = path.suffix.lower().lstrip('.') or ''
+
+                        # Optional: page_count for PDFs (reuse your logic)
+                        page_count = None
+                        if ext == 'pdf':
+                            page_count = self._get_pdf_page_count(path)  # implement if needed
+
+                        metadata = FileMetadata(
+                            filename=relative_path,     # PK = relative path
+                            sha1=sha1,
+                            extension=ext,
+                            size_bytes=size_bytes,
+                            page_count=page_count,
+                            extdata={},                 # can enrich later
+                        )
+
+                        session.merge(metadata)         # UPSERT
+                        session.commit()
+                        print(f"↑ Updated DB: {relative_path}  ({event.event_type})")
+
+                    elif event.event_type == 'deleted':
+                        # File or directory was deleted → remove from DB if it's a file we track
+                        q = session.query(FileMetadata).filter(FileMetadata.filename == relative_path)
+                        count = q.delete()
+                        if count > 0:
+                            session.commit()
+                            print(f"🗑 Deleted from DB: {relative_path}")
+
+                except Exception as e:
+                    print(f"Error processing {relative_path}: {e}")
+                finally:
+                    session.close()
+    
+        return StorageHandler()
+    
+    async def populate_file_metadata(self):
+
+        async def scan_storage_and_populate_db(
+            session: AsyncSession,
+            commit_every: int = 500,
+        ) -> None:
+            """
+            Thorough recursive scan of /storage (or any path).
+            
+            • Uses os.walk → handles any depth of subdirectories
+            • Computes SHA-1 (content-addressable)
+            • Extracts extension, size, PDF page count
+            • Uses SQLAlchemy .merge() → UPSERT (insert or update on filename PK)
+            • Automatic created_at / modified_at / version handling from your model
+            • extdata starts empty (you can extend later with OCR, title extraction, etc.)
+            """
+
+            storage_root = storage.safe_join('./')
+            if not os.path.isdir(storage_root):
+                raise ValueError(f"❌ Not a directory: {storage_root}")
+
+            print(f"🚀 Starting thorough scan of: {storage_root}")
+            processed = 0
+            
+            for metadata_obj in self._scan_storage(storage_root):
+                
+                await session.merge(metadata_obj)   # UPSERT
+
+                processed += 1
+
+                if processed % commit_every == 0:
+                    await session.commit()
+                    print(f"   ✅ Processed {processed:,} files...")
+
+            # Final commit
+            await session.commit()
+
+            print("\n🎉 Scan finished!")
+            print(f"   Total files processed : {processed:,}")
+            print(f"   Database updated via UPSERT on filename (PK)")
+
+        async with get_db_session() as session:
+            await scan_storage_and_populate_db(
+                session=session,
+                commit_every=500,
+            )
 
     async def update_text_embeddings(self, filters: Optional[QueryFilters] = None):
 
@@ -304,6 +476,7 @@ class MaintenanceManager:
             )
         async with get_db_session() as session:
             session.add_all(embs)
+            await session.commit()
         logging.info(f"{len(embs)} added")
         return len(embs)
 
