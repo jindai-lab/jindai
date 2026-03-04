@@ -12,7 +12,7 @@ import redis
 import regex as re
 from pgvector.sqlalchemy import Vector
 from pydantic import BaseModel, Field
-from sqlalchemy import (Boolean, Column, DateTime, ForeignKey, Index, Integer,
+from sqlalchemy import (BigInteger, Boolean, Column, DateTime, ForeignKey, Index, Integer,
                         PrimaryKeyConstraint, String, Text, UniqueConstraint,
                         asc, desc, exists, or_, select, text, update)
 from sqlalchemy.dialects.postgresql import ARRAY, JSONB, UUID, insert
@@ -84,6 +84,32 @@ class Base(MBase):
             else:
                 data[column.name] = f"<{value} of {column.type}>"
         return data
+    
+    @classmethod
+    def parse_sort_string(cls, sort_by):
+        if isinstance(sort_by, str):
+            sort_by = sort_by.split(",")
+
+        sorts = []
+        for sort_part in sort_by:
+            if not isinstance(sort_part, str):
+                sorts.append(sort_part)
+                continue
+
+            sort_part = sort_part.strip()
+            if not sort_part:
+                continue
+
+            if sort_part.startswith("-"):
+                col_name, sort_func = sort_part[1:], desc
+            else:
+                col_name, sort_func = sort_part, asc
+
+            col = getattr(cls, col_name, None)
+            if col is not None:
+                sorts.append(sort_func(col))
+        
+        return sorts
 
 
 # 基础模型类
@@ -475,28 +501,7 @@ class Paragraph(Base):
 
         # Sorting
         if sort_by := query_filters.sort:
-            if isinstance(sort_by, str):
-                sort_by = sort_by.split(",")
-
-            sorts = []
-            for sort_part in sort_by:
-                if not isinstance(sort_part, str):
-                    sorts.append(sort_part)
-                    continue
-
-                sort_part = sort_part.strip()
-                if not sort_part:
-                    continue
-
-                if sort_part.startswith("-"):
-                    col_name, sort_func = sort_part[1:], desc
-                else:
-                    col_name, sort_func = sort_part, asc
-
-                col = getattr(Paragraph, col_name, None)
-                if col is not None:
-                    sorts.append(sort_func(col))
-
+            sorts = Paragraph.parse_sort_string(sort_by)
             query = query.order_by(*sorts)
 
         # Pagination
@@ -563,6 +568,99 @@ class EmbeddingPendingQueue(Base):
     
     # 记录创建时间，方便排查延迟或按序处理
     created_at : Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class FileMetadata(Base):
+    __tablename__ = "file_metadata"
+
+    # Original filename (with extension)
+    filename: Mapped[str] = mapped_column(
+        String(512),
+        nullable=False,
+        primary_key=True,
+        doc="Original filename as uploaded / stored"
+    )
+    
+    # Primary key – using SHA-1 hash as natural/business key (common in content-addressable systems)
+    sha1: Mapped[str] = mapped_column(
+        String(40),          # SHA-1 is exactly 40 hex characters
+        index=True,
+        doc="SHA-1 hash of the file content (hex digest)"
+    )
+
+    # File extension (normalized, lowercase, without dot)
+    extension: Mapped[str] = mapped_column(
+        String(32),
+        nullable=False,
+        index=True,
+        doc="File extension in lowercase without leading dot (pdf, jpg, docx, ...)"
+    )
+
+    # File size in bytes
+    size_bytes: Mapped[int] = mapped_column(
+        BigInteger,
+        nullable=False,
+        doc="Size of the file in bytes"
+    )
+
+    # For PDFs mostly – number of pages
+    page_count: Mapped[Optional[int]] = mapped_column(
+        Integer,
+        nullable=True,
+        doc="Number of pages (mainly for PDFs & images with multiple frames)"
+    )
+
+    # Flexible metadata stored in JSONB (very powerful with PostgreSQL)
+    extdata: Mapped[dict] = mapped_column(
+        JSONB,
+        nullable=False,
+        default=dict,
+        server_default="{}",
+        doc="""Flexible JSON metadata – examples:
+        {
+          "title": "...",
+          "author": "...",
+          "keywords": ["finance", "2024"],
+          "ocr_text": "...",
+          "has_form_fields": true,
+          "color_space": "CMYK",
+          "embedded_fonts": 12,
+          "is_scanned": true,
+          "scan_dpi": 300
+        }"""
+    )
+
+    # Audit timestamps
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.now(),
+        index=True
+    )
+
+    modified_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.now(),
+        onupdate=func.now(),
+        index=True
+    )
+
+    # Optional: if you want automatic "version" on update (incrementing counter)
+    version: Mapped[int] = mapped_column(
+        Integer,
+        nullable=False,
+        server_default="1",
+        doc="Incremented on each update (optimistic locking possible)",
+        onupdate=text("version + 1")
+    )
+
+    def __repr__(self):
+        return f"<File {self.filename}  sha1:{self.sha1[:12]}…  {self.page_count or '?'} pages>"
+
+    @property
+    def is_pdf(self) -> bool:
+        return self.extension == "pdf"
 
 
 class TaskDBO(Base):
