@@ -1,11 +1,20 @@
-import asyncio
+"""File storage management for Jindai application.
+
+This module provides:
+- Storage: Singleton class for secure file operations
+- Path traversal protection
+- File type validation
+- Size limits
+- Comprehensive file management capabilities
+"""
+
 import glob
 import mimetypes
 import os
 import shutil
 from datetime import datetime
 from io import BytesIO
-from typing import Any, Dict, List, Self, Tuple, Union, BinaryIO
+from typing import Any, Dict, List, Self
 
 from PIL import Image
 from werkzeug.utils import secure_filename
@@ -14,8 +23,7 @@ from .pdfutils import get_pdf_page_count, render_pdf_with_fitz
 
 
 class Storage:
-    """
-    Singleton file storage manager for Jindai application.
+    """Singleton file storage manager for Jindai application.
 
     Provides secure file operations with path traversal protection,
     file type validation, size limits, and comprehensive
@@ -32,25 +40,29 @@ class Storage:
     __initialized: bool = False
 
     def __new__(cls, *args, **kwargs) -> Self:
-        """Implement singleton pattern for Storage
+        """Implement singleton pattern for Storage.
 
-        :return: Singleton instance
-        :rtype: Self
+        Args:
+            *args: Variable length arguments.
+            **kwargs: Keyword arguments.
+
+        Returns:
+            Singleton instance.
         """
         if cls.__instance is None:
             cls.__instance = super().__new__(cls)
         return cls.__instance
 
     def __init__(self, storage_root: str) -> None:
-        """Initialize storage with root directory
+        """Initialize storage with root directory.
 
-        :param storage_root: Root directory for file storage
-        :type storage_root: str
+        Args:
+            storage_root: Root directory for file storage.
         """
-        # 防止重复初始化
+        # Prevent duplicate initialization
         if Storage.__initialized:
             return
-        # 核心配置
+        # Core configuration
         self.FILE_STORAGE_ROOT: str = os.path.abspath(storage_root)
         self.MAX_FILE_SIZE: int = 1024  # MB
         self.ALLOWED_EXTENSIONS: List[str] = [
@@ -64,18 +76,21 @@ class Storage:
             "csv",
             "xlsx",
         ]
-        # 初始化存储目录
+        # Initialize storage directory
         os.makedirs(self.FILE_STORAGE_ROOT, exist_ok=True)
         Storage.__initialized = True
 
     def safe_join(self, *segs: str) -> str:
-        """Securely join path segments to prevent directory traversal attacks
+        """Securely join path segments to prevent directory traversal attacks.
 
-        :param segs: Path segments to join
-        :type segs: str
-        :return: Safe joined absolute path
-        :rtype: str
-        :raises ValueError: If path would escape storage root directory
+        Args:
+            *segs: Path segments to join.
+
+        Returns:
+            Safe joined absolute path.
+
+        Raises:
+            ValueError: If path would escape storage root directory.
         """
         segs = "/".join(segs).lstrip("/").replace("../", "/")
         if segs.startswith(self.FILE_STORAGE_ROOT.lstrip("/")):
@@ -83,17 +98,18 @@ class Storage:
         joined_path = os.path.abspath(os.path.join(self.FILE_STORAGE_ROOT, segs))
         if not joined_path.startswith(self.FILE_STORAGE_ROOT):
             raise ValueError(
-                f"访问的路径不在允许范围内，疑似路径穿越攻击 {segs} -> {joined_path}"
+                f"Access path is not within allowed range, possible path traversal attack {segs} -> {joined_path}"
             )
         return joined_path
 
     def allowed_file(self, filename: str) -> bool:
-        """Check if file extension is in allowed list
+        """Check if file extension is in allowed list.
 
-        :param filename: Name of file to check
-        :type filename: str
-        :return: True if file extension is allowed
-        :rtype: bool
+        Args:
+            filename: Name of file to check.
+
+        Returns:
+            True if file extension is allowed.
         """
         if not self.ALLOWED_EXTENSIONS:
             return True
@@ -103,12 +119,13 @@ class Storage:
         )
 
     def fileinfo(self, file_path: str) -> Dict[str, Any]:
-        """Get comprehensive metadata for file or directory
+        """Get comprehensive metadata for file or directory.
 
-        :param file_path: Path to file or directory
-        :type file_path: str
-        :return: Dictionary containing file metadata
-        :rtype: Dict[str, Any]
+        Args:
+            file_path: Path to file or directory.
+
+        Returns:
+            Dictionary containing file metadata.
         """
         if not os.path.exists(file_path):
             return {}
@@ -127,26 +144,25 @@ class Storage:
             if is_dir
             else mimetypes.guess_type(file_path)[0] or "application/octet-stream",
         }
-        # 额外追加PDF页数信息
+        # Append PDF page count information
         if not is_dir and file_info["mime_type"] == "application/pdf":
             file_info["page_count"] = get_pdf_page_count(file_path)
         return file_info
 
     def _dir_files(self, basedir: str, filenames: List[str], detailed: bool = True) -> Dict[str, Any]:
-        """Process files in directory and return file information
+        """Process files in directory and return file information.
 
-        :param basedir: Base directory path
-        :type basedir: str
-        :param filenames: List of filenames to process
-        :type filenames: List[str]
-        :param detailed: Whether to include detailed file info, defaults to True
-        :type detailed: bool, optional
-        :return: Directory information with items
-        :rtype: Dict[str, Any]
+        Args:
+            basedir: Base directory path.
+            filenames: List of filenames to process.
+            detailed: Whether to include detailed file info.
+
+        Returns:
+            Directory information with items.
         """
         items = []
         for item in filenames:
-            if item.startswith('.'): 
+            if item.startswith('.'):
                 continue
             item_path = os.path.join(basedir, item)
             if detailed:
@@ -157,7 +173,7 @@ class Storage:
                     "is_directory": os.path.isdir(item_path),
                     "relative_path": os.path.relpath(item_path, self.FILE_STORAGE_ROOT),
                 })
-            
+
         return {
             "directory": basedir,
             "relative_directory": os.path.relpath(basedir, self.FILE_STORAGE_ROOT),
@@ -165,42 +181,43 @@ class Storage:
         }
 
     def ls(self, basedir: str, detailed: bool = True) -> Dict[str, Any]:
-        """List all files/directories in directory, filtering hidden files
+        """List all files/directories in directory, filtering hidden files.
 
-        :param basedir: Directory path to list
-        :type basedir: str
-        :param detailed: Whether to include detailed file info, defaults to True
-        :type detailed: bool, optional
-        :return: Directory information with items
-        :rtype: Dict[str, Any]
+        Args:
+            basedir: Directory path to list.
+            detailed: Whether to include detailed file info.
+
+        Returns:
+            Directory information with items.
         """
         return self._dir_files(basedir, os.listdir(basedir), detailed)
 
     def glob(self, pattern: str, recursive: bool = False) -> List[str]:
-        """Get relative paths matching glob pattern
+        """Get relative paths matching glob pattern.
 
-        :param pattern: Glob pattern to match files
-        :type pattern: str
-        :return: List of relative paths matching pattern
-        :rtype: List[str]
+        Args:
+            pattern: Glob pattern to match files.
+            recursive: Whether to search recursively.
+
+        Returns:
+            List of relative paths matching pattern.
         """
         results = glob.glob(self.safe_join(pattern), recursive=recursive)
         return [self.relative_path(p) for p in results]
 
     def search(self, base_dir: str, search: str, detailed: bool = True) -> Dict[str, Any]:
-        """Search for files/directories matching pattern in directory tree
+        """Search for files/directories matching pattern in directory tree.
 
-        :param base_dir: Base directory to search in
-        :type base_dir: str
-        :param search: Search pattern (space-separated terms)
-        :type search: str
-        :param detailed: Whether to include detailed file info, defaults to True
-        :type detailed: bool, optional
-        :return: Search results with matching items
-        :rtype: Dict[str, Any]
+        Args:
+            base_dir: Base directory to search in.
+            search: Search pattern (space-separated terms).
+            detailed: Whether to include detailed file info.
+
+        Returns:
+            Search results with matching items.
         """
         pattern = search.split()
-        
+
         def _match_pattern(fn: str) -> bool:
             return all(pat in fn for pat in pattern)
 
@@ -209,7 +226,7 @@ class Storage:
             fs = [f for f in fs if _match_pattern(f)]
             ds = [d for d in ds if _match_pattern(d)]
             items.extend(self._dir_files(pwd, fs, detailed)['items'] + self._dir_files(pwd, ds, detailed)['items'])
-            
+
         return {
             "directory": base_dir,
             "relative_directory": os.path.relpath(base_dir, self.FILE_STORAGE_ROOT),
@@ -217,67 +234,74 @@ class Storage:
         }
 
     def save(self, file_obj, save_rel_path: str) -> Dict[str, Any]:
-        """Save uploaded file with streaming size validation
+        """Save uploaded file with streaming size validation.
 
-        :param file_obj: File object
-        :type file_obj: file
-        :param save_rel_path: Relative path where to save the file
-        :type save_rel_path: str
-        :return: File information dictionary
-        :rtype: Dict[str, Any]
-        :raises ValueError: If file type not allowed or size exceeds limit
+        Args:
+            file_obj: File object.
+            save_rel_path: Relative path where to save the file.
+
+        Returns:
+            File information dictionary.
+
+        Raises:
+            ValueError: If file type not allowed or size exceeds limit.
         """
-        # 安全校验文件名和路径
+        # Securely validate filename and path
         filename = secure_filename(file_obj.filename)
         save_path = self.safe_join(save_rel_path, filename)
-        # 校验文件类型
+        # Validate file type
         if not self.allowed_file(filename):
             raise ValueError(
-                f"不允许上传该类型文件，支持的类型：{self.ALLOWED_EXTENSIONS}"
+                f"File type not allowed, supported types: {self.ALLOWED_EXTENSIONS}"
             )
-        # 流式校验文件大小（不加载全文件到内存）
+        # Stream file size validation (doesn't load full file into memory)
         max_size_bytes = self.MAX_FILE_SIZE * 1024 * 1024
         file_obj.seek(0, os.SEEK_END)
         file_size = file_obj.tell()
         file_obj.seek(0)
         if file_size > max_size_bytes:
-            raise ValueError(f"文件大小超过限制（最大{self.MAX_FILE_SIZE}MB）")
-        # 保存文件
+            raise ValueError(f"File size exceeds limit (max {self.MAX_FILE_SIZE}MB)")
+        # Save file
         file_obj.save(save_path)
         return self.fileinfo(save_path)
 
     def mkdir(self, dir_rel_path: str, dir_name: str) -> Dict[str, Any]:
-        """Create empty directory
+        """Create empty directory.
 
-        :param dir_rel_path: Parent directory path relative to storage root
-        :type dir_rel_path: str
-        :param dir_name: Name of directory to create
-        :type dir_name: str
-        :return: Directory information dictionary
-        :rtype: Dict[str, Any]
-        :raises ValueError: If directory already exists
+        Args:
+            dir_rel_path: Parent directory path relative to storage root.
+            dir_name: Name of directory to create.
+
+        Returns:
+            Directory information dictionary.
+
+        Raises:
+            ValueError: If directory already exists.
         """
         dir_path = self.safe_join(dir_rel_path, dir_name)
         if os.path.exists(dir_path):
-            raise ValueError("目录已存在")
+            raise ValueError("Directory already exists")
         os.makedirs(dir_path, exist_ok=True)
         return self.fileinfo(dir_path)
 
     def mv(
         self, old_rel_path, new_name=None, new_rel_path=None
     ) -> dict[str, bytes | str | dict]:
-        """
-        移动或重命名文件/目录
-        :param old_rel_path: 原文件相对路径
-        :param new_name: 新文件名（重命名用）
-        :param new_rel_path: 新完整相对路径（移动用）
-        :return: 新文件信息
+        """Move or rename file/directory.
+
+        Args:
+            old_rel_path: Original relative path.
+            new_name: New filename (for rename).
+            new_rel_path: New full relative path (for move).
+
+        Returns:
+            Dictionary with old path info and new file info.
         """
         old_path = self.safe_join(old_rel_path)
         if not os.path.exists(old_path):
-            raise ValueError("文件/目录不存在")
+            raise ValueError("File/directory does not exist")
 
-        # 计算新路径
+        # Calculate new path
         if new_name:
             new_name = secure_filename(new_name)
             new_path = os.path.join(os.path.dirname(old_path), new_name)
@@ -285,9 +309,9 @@ class Storage:
             new_path = self.safe_join(new_rel_path)
 
         if os.path.exists(new_path):
-            raise ValueError("目标路径已存在")
+            raise ValueError("Target path already exists")
 
-        # 执行移动/重命名
+        # Execute move/rename
         shutil.move(old_path, new_path)
         return {
             "old_relative_path": os.path.relpath(old_path, self.FILE_STORAGE_ROOT),
@@ -295,27 +319,43 @@ class Storage:
         }
 
     def delete(self, target_rel_path) -> bool:
-        """删除文件或空目录"""
+        """Delete file or empty directory.
+
+        Args:
+            target_rel_path: Relative path to delete.
+
+        Returns:
+            True if deletion succeeded.
+
+        Raises:
+            ValueError: If file/directory doesn't exist or directory not empty.
+        """
         target_path = self.safe_join(target_rel_path)
         if not os.path.exists(target_path):
-            raise ValueError("文件/目录不存在")
+            raise ValueError("File/directory does not exist")
 
         if os.path.isfile(target_path):
             os.remove(target_path)
         elif os.path.isdir(target_path):
             if len(os.listdir(target_path)) > 0:
-                raise ValueError("无法删除非空目录")
+                raise ValueError("Cannot delete non-empty directory")
             os.rmdir(target_path)
         return True
 
     def read_file(self, target_rel_path, page=None, format=None) -> tuple:
-        """
-        读取文件内容，支持PDF分页下载
-        :return: (BytesIO流, MIME类型, 下载文件名)
+        """Read file content, supporting PDF page download.
+
+        Args:
+            target_rel_path: Relative path to file.
+            page: Page number for PDF (optional).
+            format: Output format for conversion.
+
+        Returns:
+            Tuple of (BytesIO stream, MIME type, download filename).
         """
         target_path = self.safe_join(target_rel_path)
         if not os.path.exists(target_path):
-            raise ValueError("文件不存在")
+            raise ValueError("File does not exist")
 
         mime_type, _ = mimetypes.guess_type(target_path) or (
             "application/octet-stream",
@@ -325,15 +365,15 @@ class Storage:
 
         buf = None
 
-        # 处理 PDF 页面
+        # Handle PDF pages
         if mime_type == "application/pdf":
             if page:
-                # PDF按页码下载
+                # PDF page download
                 from PyPDF2 import PdfReader, PdfWriter
 
                 reader = PdfReader(target_path)
                 if page < 0 or page >= len(reader.pages):
-                    raise ValueError("页码超出范围")
+                    raise ValueError("Page number out of range")
                 writer = PdfWriter()
                 writer.add_page(reader.pages[page])
                 buf = BytesIO()
@@ -344,7 +384,7 @@ class Storage:
         if buf is None:
             buf = open(target_path, "rb")
 
-        # 检查format参数
+        # Check format parameter
         if format:
             file_name = file_name.rsplit(".", 1)[0] + "." + format
             if mime_type.startswith("image/"):
@@ -360,30 +400,31 @@ class Storage:
         return buf, mime_type, file_name
 
     def relative_path(self, p) -> bytes | str:
-        """Get path relative to storage root
+        """Get path relative to storage root.
 
-        :param p: Full path
-        :type p: str
-        :return: Relative path
-        :rtype: bytes | str
+        Args:
+            p: Full path.
+
+        Returns:
+            Relative path.
         """
         return os.path.relpath(p, self.FILE_STORAGE_ROOT)
 
-    def open(self, relpath, mode="rb") -> open:
-        """Open file with safe path joining
+    def open(self, relpath: str, mode: str = "rb") -> open:
+        """Open file with safe path joining.
 
-        :param relpath: Relative path from storage root
-        :type relpath: str
-        :param mode: File open mode, defaults to "rb"
-        :type mode: str, optional
-        :return: File object
-        :rtype: file
+        Args:
+            relpath: Relative path from storage root.
+            mode: File open mode.
+
+        Returns:
+            File object.
         """
         return open(self.safe_join(relpath), mode)
 
 
-# 初始化单例实例 (项目全局唯一)
-# 导入方式：from .storage import instance as storage
+# Initialize singleton instance (global unique)
+# Import方式: from .storage import instance as storage
 from .config import config
 
 storage = Storage(config.storage)

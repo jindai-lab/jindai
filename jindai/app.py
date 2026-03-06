@@ -44,9 +44,9 @@ async def get_current_admin(
     token_payload: dict = Depends(oidc_validator.validate_token), username: str = ""
 ) -> UserInfo:
     """
-    验证当前用户是否具有 admin 角色
+    Verify if the current user has the admin role
     """
-    # 从 JWT payload 中获取用户名 (对应之前的 preferred_username)
+    # Retrieve username from JWT payload (corresponds to preferred_username)
     username = username or get_current_username(token_payload)
 
     if not username:
@@ -56,7 +56,7 @@ async def get_current_admin(
         )
 
     async with get_db_session() as session:
-        # 查询数据库校验角色
+        # Query database to verify role
         user = (
             await session.execute(
                 select(UserInfo)
@@ -93,17 +93,17 @@ async def serve_static(path: str = ""):
 
 
 def run_service(host: str = "0.0.0.0", port: int = 8370) -> None:
-    """运行 FastAPI Web 服务。必须先运行 `prepare_plugins`。"""
+    """Run the FastAPI web service. Must run `prepare_plugins` first."""
 
     if port is None:
         port = config.port
 
     uvicorn.run(
-        "jindai:app",  # 建议使用 字符串导入路径 以支持热重载 (reload)
+        "jindai:app",  # Use string import path to support hot reload (reload)
         host=host,
         port=int(port),
-        reload=True,  # 相当于 debug=True
-        workers=1,  # 开发环境下通常设为 1
+        reload=True,  # Equivalent to debug=True
+        workers=1,  # Typically set to 1 in development environment
         log_level="info",
     )
 

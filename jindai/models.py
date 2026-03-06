@@ -1,4 +1,16 @@
-"""DB Objects"""
+"""Database models for Jindai application.
+
+This module provides SQLAlchemy ORM models for:
+- Dataset: Data organization unit
+- UserInfo: User authentication and authorization
+- History: User query history
+- Paragraph: Text content storage
+- Terms: Vocabulary/keyword storage
+- EmbeddingPendingQueue: Embedding processing queue
+- FileMetadata: File metadata tracking
+- TaskDBO: Task definition storage
+- TextEmbeddings: Vector embeddings for semantic search
+"""
 
 import asyncio
 import json
@@ -34,6 +46,14 @@ session_factory = async_sessionmaker(
 
 @asynccontextmanager
 async def get_db_session() -> AsyncIterator[AsyncSession]:
+    """Get an async database session with automatic commit/rollback.
+
+    Yields:
+        AsyncSession: Database session.
+
+    Raises:
+        Exception: Any exception during session execution.
+    """
     session = session_factory()
     try:
         yield session
@@ -49,44 +69,62 @@ MBase = declarative_base()
 
 
 class Base(MBase):
-    """所有 ORM 模型的基类"""
+    """Base class for all ORM models.
 
-    # 为所有表添加默认的 created_at 字段（如果表中没有则自动忽略）
+    Provides common functionality:
+    - UUID primary keys
+    - created_at/modified_at timestamps
+    - as_dict() method for serialization
+    - parse_sort_string() for query sorting
+    """
+
+    # Add default created_at field for all tables (ignored if table already has it)
     __abstract__ = True
     __table_args__ = {"schema": "public"}
 
-    # 通用字段配置：主键 ID 统一使用 UUID
+    # Common field configuration: Primary key ID uses UUID
     id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4, comment="主键ID"
+        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4, comment="Primary Key ID"
     )
 
     def as_dict(self) -> dict:
+        """Convert model instance to dictionary.
+
+        Returns:
+            Dictionary with column names as keys and values.
+        """
         data = {}
         for column in self.__table__.columns:
             value = getattr(self, column.name)
-            # 处理 UUID 类型
+            # Handle UUID type
             if value is None:
                 data[column.name] = None
             elif isinstance(value, uuid.UUID):
                 data[column.name] = str(value)
-            # 处理 datetime 类型
+            # Handle datetime type
             elif isinstance(value, datetime):
                 data[column.name] = value.isoformat()
-            # 处理数组/JSONB/向量类型
+            # Handle nested Base models
             elif isinstance(value, Base):
                 data[column.name] = value.as_dict()
             elif isinstance(value, (int, str, float, list)):
                 data[column.name] = value
-            elif isinstance(value, datetime):
-                data[column.name] = value.isoformat()
             elif isinstance(column.type, JSONB):
                 data[column.name] = value
             else:
                 data[column.name] = f"<{value} of {column.type}>"
         return data
-    
+
     @classmethod
-    def parse_sort_string(cls, sort_by):
+    def parse_sort_string(cls, sort_by: Any) -> List[Any]:
+        """Parse sort string into SQLAlchemy order_by expressions.
+
+        Args:
+            sort_by: Sort specification as string or list.
+
+        Returns:
+            List of SQLAlchemy order_by expressions.
+        """
         if isinstance(sort_by, str):
             sort_by = sort_by.split(",")
 
@@ -108,33 +146,48 @@ class Base(MBase):
             col = getattr(cls, col_name, None)
             if col is not None:
                 sorts.append(sort_func(col))
-        
+
         return sorts
 
 
-# 基础模型类
+# Base model class
 class Dataset(Base):
+    """Dataset model for organizing paragraphs.
+
+    Datasets are used to group related paragraphs together.
+    Supports hierarchical organization using "--" separator in names.
+    """
+
     __tablename__ = "dataset"
     __table_args__ = (
-        UniqueConstraint("name", name="dataset_name_key"),  # 唯一约束
+        UniqueConstraint("name", name="dataset_name_key"),  # Unique constraint
         {
-            "comment": "数据集信息表",
-        },  # 表注释 + 指定模式
+            "comment": "Dataset information table",
+        },  # Table comment + schema specification
     )
 
     order_weight: Mapped[int] = mapped_column(
-        Integer, default=0, nullable=False, comment="排序权重"
+        Integer, default=0, nullable=False, comment="Sort weight"
     )
-    name: Mapped[str] = mapped_column(String(128), nullable=False, comment="数据集名称")
-    tags: Mapped[List[str] | None] = mapped_column(ARRAY(Text), comment="标签列表")
+    name: Mapped[str] = mapped_column(String(128), nullable=False, comment="Dataset name")
+    tags: Mapped[List[str] | None] = mapped_column(ARRAY(Text), comment="Tag list")
 
-    # 关联关系：一个数据集对应多个段落
+    # Relationship: One dataset has many paragraphs
     paragraphs: Mapped[List["Paragraph"]] = relationship(
         "Paragraph", back_populates="dataset_obj", cascade="all, delete-orphan"
     )
 
     @staticmethod
-    async def get(name, auto_create=True):
+    async def get(name: str, auto_create: bool = True) -> "Dataset":
+        """Get or create a dataset by name.
+
+        Args:
+            name: Dataset name or UUID.
+            auto_create: Create dataset if not found.
+
+        Returns:
+            Dataset instance.
+        """
         async with get_db_session() as session:
             if is_uuid_literal(name):
                 ds = await session.get(Dataset, name)
@@ -148,13 +201,14 @@ class Dataset(Base):
 
         return ds
 
-    async def rename_dataset(self, new_name):
-        """Rename dataset and update all related paragraphs
+    async def rename_dataset(self, new_name: str) -> Optional[uuid.UUID]:
+        """Rename dataset and update all related paragraphs.
 
-        :param new_name: New dataset name
-        :type new_name: str
-        :return: Dataset ID
-        :rtype: uuid.UUID
+        Args:
+            new_name: New dataset name.
+
+        Returns:
+            Dataset ID of the new dataset if renamed, or current ID if unchanged.
         """
         if self.name == new_name:
             return None
@@ -174,12 +228,11 @@ class Dataset(Base):
 
     @staticmethod
     async def get_hierarchy() -> list:
-        """Get hierarchical structure of datasets
+        """Get hierarchical structure of datasets.
 
-        :return: Nested list representing dataset hierarchy
-        :rtype: list
+        Returns:
+            Nested list representing dataset hierarchy with children.
         """
-
         def _dataset_sort_key(ds: Dataset):
             return len(ds.name.split("--")), ds.order_weight, ds.name
 
@@ -214,23 +267,28 @@ class Dataset(Base):
 
 
 class UserInfo(Base):
+    """User information model for authentication and authorization.
+
+    Stores user credentials, roles, and dataset permissions.
+    """
+
     __tablename__ = "user_info"
     __table_args__ = (
-        UniqueConstraint("username", name="user_info_username_key"),  # 用户名唯一
+        UniqueConstraint("username", name="user_info_username_key"),  # Username unique
         {
-            "comment": "用户表",
+            "comment": "User table",
         },
     )
 
-    username: Mapped[str] = mapped_column(String(64), nullable=False, comment="用户名")
+    username: Mapped[str] = mapped_column(String(64), nullable=False, comment="Username")
     roles: Mapped[List[str]] = mapped_column(
-        ARRAY(Text), default=list, nullable=False, comment="用户角色列表"
+        ARRAY(Text), default=list, nullable=False, comment="User role list"
     )
     datasets: Mapped[List[UUID] | None] = mapped_column(
-        ARRAY(Text), default=list, comment="有权限的数据集列表"
+        ARRAY(Text), default=list, comment="List of accessible dataset IDs"
     )
 
-    # 关联关系：一个用户对应多个操作历史/任务
+    # Relationships
     histories: Mapped[List["History"]] = relationship(
         "History", back_populates="user", cascade="all, delete-orphan"
     )
@@ -240,33 +298,50 @@ class UserInfo(Base):
 
 
 class History(Base):
+    """User query history model.
+
+    Stores user search queries for audit and analytics purposes.
+    """
+
     __tablename__ = "history"
     __table_args__ = {
-        "comment": "用户操作历史表",
+        "comment": "User operation history table",
     }
 
     user_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
         ForeignKey("user_info.id", ondelete="CASCADE"),
         nullable=False,
-        comment="关联用户ID",
+        comment="Related user ID",
     )
     created_at: Mapped[datetime] = mapped_column(
-        DateTime, default=func.current_timestamp(), nullable=False, comment="创建时间"
+        DateTime, default=func.current_timestamp(), nullable=False, comment="Creation time"
     )
     queries: Mapped[List[Dict[str, Any]]] = mapped_column(
-        JSONB, default=dict, nullable=False, comment="查询记录（JSON）"
+        JSONB, default=dict, nullable=False, comment="Query records (JSON)"
     )
 
-    # 关联关系：关联到用户
+    # Relationship to user
     user: Mapped["UserInfo"] = relationship("UserInfo", back_populates="histories")
 
 
 class QueryFilters(BaseModel):
-    # 搜索关键字，默认为 "*"
+    """Query filters for paragraph search.
+
+    Provides a flexible filtering interface for searching paragraphs
+    with support for:
+    - Text search
+    - ID/dataset/source filtering
+    - Author/language filtering
+    - Vector embedding search
+    - Grouping and sorting
+    - Pagination
+    """
+
+    # Search keyword, default "*"
     q: str = "*"
 
-    # 基础过滤
+    # Basic filtering
     ids: Optional[List[str|uuid.UUID]] = None
     datasets: Optional[List[str]] = None
     sources: Optional[List[str]] = None
@@ -276,20 +351,26 @@ class QueryFilters(BaseModel):
     author: Optional[str] = None
     lang: Optional[List[str]] = None
 
-    # 控制逻辑
-    embeddings: Optional[bool] = None  # False 时排除有向量的数据
-    groupBy: Optional[str] = None  # 对应 Paragraph 的字段名
+    # Control logic
+    embeddings: Optional[bool] = None  # False excludes data with vectors
+    groupBy: Optional[str] = None  # Corresponds to Paragraph field name
 
-    # 排序与分页
+    # Sorting and pagination
     sort: Optional[Union[str, List[str]]] = ""
     offset: int = 0
     limit: Optional[int] = None
 
 
 class Paragraph(Base):
+    """Paragraph model for storing text content.
+
+    Represents individual text segments with metadata including
+    source information, author, date, and keywords.
+    """
+
     __tablename__ = "paragraph"
     __table_args__ = (
-        # 索引定义（与原表一致）
+        # Index definitions (same as original table)
         PrimaryKeyConstraint("id", "dataset", name="paragraph_part_pk"),
         Index("fki_dataset", "dataset"),
         Index("idx_paragraph_author", "author"),
@@ -299,35 +380,35 @@ class Paragraph(Base):
         Index("idx_paragraph_pdate", "pdate"),
         Index("idx_paragraph_source", "source_url", "source_page", "pagenum"),
         {
-            "comment": "段落表",
+            "comment": "Paragraph table",
         },
     )
 
-    source_url: Mapped[str | None] = mapped_column(String(1024), comment="源URL地址")
+    source_url: Mapped[str | None] = mapped_column(String(1024), comment="Source URL")
     source_page: Mapped[int | None] = mapped_column(
-        Integer, comment="源文件页码（如PDF页码）"
+        Integer, comment="Source file page number (e.g., PDF page)"
     )
-    author: Mapped[str | None] = mapped_column(String(128), comment="作者")
-    pdate: Mapped[datetime | None] = mapped_column(DateTime, comment="发布日期")
-    outline: Mapped[str] = mapped_column(Text, comment="大纲/摘要")
-    content: Mapped[str] = mapped_column(Text, comment="段落内容")
-    pagenum: Mapped[str | None] = mapped_column(Text, comment="页码")
-    lang: Mapped[str] = mapped_column(String(16), default="zh", comment="语言")
+    author: Mapped[str | None] = mapped_column(String(128), comment="Author")
+    pdate: Mapped[datetime | None] = mapped_column(DateTime, comment="Publication date")
+    outline: Mapped[str] = mapped_column(Text, comment="Outline/summary")
+    content: Mapped[str] = mapped_column(Text, comment="Paragraph content")
+    pagenum: Mapped[str | None] = mapped_column(Text, comment="Page number")
+    lang: Mapped[str] = mapped_column(String(16), default="zh", comment="Language")
     extdata: Mapped[Dict[str, Any]] = mapped_column(
         JSONB,
         default=dict,
         nullable=False,
-        comment="扩展元数据（自定义JSON字段）",
+        comment="Extended metadata (custom JSON field)",
     )
     dataset: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
         ForeignKey("dataset.id"),
         nullable=False,
         primary_key=True,
-        comment="关联数据集ID",
+        comment="Related dataset ID",
     )
     keywords: Mapped[List[str]] = mapped_column(
-        ARRAY(Text), comment="关键词列表"
+        ARRAY(Text), comment="Keyword list"
     )
 
     dataset_obj: Mapped["Dataset"] = relationship(
@@ -338,20 +419,55 @@ class Paragraph(Base):
     )
 
     @validates("content")
-    def normalize_content(self, key, val):
+    def normalize_content(self, key: str, val: str) -> str:
+        """Normalize content by removing null bytes.
+
+        Args:
+            key: Field name.
+            val: Content value.
+
+        Returns:
+            Normalized content.
+        """
         return val.replace("\x00", "")
 
     @validates("keywords")
-    def normalize_keywords(self, key, val) -> list:
+    def normalize_keywords(self, key: str, val: list) -> list:
+        """Normalize keywords by stripping whitespace and lowercasing.
+
+        Args:
+            key: Field name.
+            val: List of keywords.
+
+        Returns:
+            Normalized list of unique keywords.
+        """
         if val:
             val = list({v.strip().lower() for v in val if v.strip()})
         return val
-    
-    async def set_dataset_name(self, new_name):
+
+    async def set_dataset_name(self, new_name: str) -> None:
+        """Set dataset by name.
+
+        Args:
+            new_name: New dataset name.
+        """
         self.dataset = (await Dataset.get(new_name)).id
 
     @staticmethod
-    def from_dict(data, ignored_fields=["id", "dataset_name"], **kwargs) -> "Paragraph":
+    def from_dict(data: dict, ignored_fields: list = None, **kwargs) -> "Paragraph":
+        """Create Paragraph instance from dictionary.
+
+        Args:
+            data: Dictionary with field values.
+            ignored_fields: Fields to ignore (default: ["id", "dataset_name"]).
+            **kwargs: Additional field values.
+
+        Returns:
+            Paragraph instance.
+        """
+        if ignored_fields is None:
+            ignored_fields = ["id", "dataset_name"]
         p = Paragraph()
         data.update(kwargs)
         for k, v in data.items():
@@ -365,7 +481,15 @@ class Paragraph(Base):
                 p.extdata[k] = v
         return p
 
-    def __getitem__(self, key):
+    def __getitem__(self, key: str) -> Any:
+        """Get attribute or extdata value.
+
+        Args:
+            key: Field name.
+
+        Returns:
+            Field value or extdata value.
+        """
         if hasattr(self, key):
             return getattr(self, key)
         else:
@@ -373,7 +497,13 @@ class Paragraph(Base):
                 self.extdata = {}
             return self.extdata.get(key)
 
-    def __setitem__(self, key, val) -> None:
+    def __setitem__(self, key: str, val: Any) -> None:
+        """Set attribute or extdata value.
+
+        Args:
+            key: Field name.
+            val: Value to set.
+        """
         if hasattr(self, key):
             setattr(self, key, val)
         else:
@@ -381,22 +511,40 @@ class Paragraph(Base):
                 self.extdata = {}
             self.extdata[key] = val
 
-    def __delitem__(self, key) -> None:
+    def __delitem__(self, key: str) -> None:
+        """Delete extdata key.
+
+        Args:
+            key: Key to delete from extdata.
+        """
         if key in self.extdata:
             del self.extdata[key]
 
     def as_dict(self) -> dict:
+        """Convert to dictionary with dataset name.
+
+        Returns:
+            Dictionary with all fields including dataset_name.
+        """
         data = super().as_dict()
         data["dataset_name"] = self.dataset_obj.name if self.dataset_obj else None
         return data
 
     @staticmethod
     async def build_query(query_filters: QueryFilters):
+        """Build SQLAlchemy query from QueryFilters.
+
+        Args:
+            query_filters: QueryFilters instance with search parameters.
+
+        Returns:
+            SQLAlchemy select query with filters applied.
+        """
         query = select(Paragraph)
         filters = []
         query_embedding = None
         search = query_filters.q
-        
+
         # Primary Key / ID Filters
         if ids := query_filters.ids:
             filters.append(Paragraph.id.in_(ids))
@@ -466,7 +614,7 @@ class Paragraph(Base):
                 query.join(
                     TextEmbeddings,
                     (Paragraph.id == TextEmbeddings.id)
-                    & (Paragraph.dataset == TextEmbeddings.dataset),  # 分片需要
+                    & (Paragraph.dataset == TextEmbeddings.dataset),  # Chunking requires
                 )
                 .distinct(
                     Paragraph.id,
@@ -514,17 +662,30 @@ class Paragraph(Base):
 
 
 class Terms(MBase):  # terms has no `id`, and cannot as_dict()
+    """Terms/vocabulary table.
+
+    Stores unique terms extracted from paragraphs for search indexing.
+    """
+
     __tablename__ = "terms"
     __table_args__ = {
-        "comment": "词汇表",
+        "comment": "Vocabulary table",
     }
 
     term: Mapped[str] = mapped_column(
-        String, nullable=False, comment="词汇", primary_key=True
+        String, nullable=False, comment="Term", primary_key=True
     )
 
     @staticmethod
     async def starting_with(prefix: str) -> List[str]:
+        """Get terms starting with prefix.
+
+        Args:
+            prefix: Term prefix to match.
+
+        Returns:
+            List of matching terms.
+        """
         if not prefix:
             return []
         async with get_db_session() as session:
@@ -535,10 +696,17 @@ class Terms(MBase):  # terms has no `id`, and cannot as_dict()
             )
             return list(q.scalars())
 
-    async def store(
-        words: list[str],
-    ):  # Clean the input to ensure uniqueness in the batch
-        # Prepare the data dictionaries
+    @staticmethod
+    async def store(words: list[str]) -> list[str]:
+        """Store words in terms table.
+
+        Args:
+            words: List of words to store.
+
+        Returns:
+            List of stored words.
+        """
+        # Clean the input to ensure uniqueness in the batch
         data = [{"term": w} for w in words if w and len(w) > 1]
         if not data:
             return []
@@ -560,17 +728,27 @@ class Terms(MBase):  # terms has no `id`, and cannot as_dict()
 
 
 class EmbeddingPendingQueue(Base):
+    """Queue for pending text embeddings.
+
+    Tracks paragraphs that need embedding processing.
+    """
+
     __tablename__ = 'embedding_pending_queue'
 
-    # 定义复合主键
-    id : Mapped[uuid.UUID] = mapped_column(UUID, primary_key=True)
-    dataset : Mapped[uuid.UUID] = mapped_column(UUID, primary_key=True)
-    
-    # 记录创建时间，方便排查延迟或按序处理
-    created_at : Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    # Define composite primary key
+    id: Mapped[uuid.UUID] = mapped_column(UUID, primary_key=True)
+    dataset: Mapped[uuid.UUID] = mapped_column(UUID, primary_key=True)
+
+    # Record creation time for debugging delays or ordered processing
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
 class FileMetadata(Base):
+    """File metadata model for tracking stored files.
+
+    Provides content-addressable storage tracking using SHA-1 hashes.
+    """
+
     __tablename__ = "file_metadata"
 
     # Original filename (with extension)
@@ -580,7 +758,7 @@ class FileMetadata(Base):
         primary_key=True,
         doc="Original filename as uploaded / stored"
     )
-    
+
     # Primary key – using SHA-1 hash as natural/business key (common in content-addressable systems)
     sha1: Mapped[str] = mapped_column(
         String(40),          # SHA-1 is exactly 40 hex characters
@@ -660,47 +838,58 @@ class FileMetadata(Base):
 
     @property
     def is_pdf(self) -> bool:
+        """Check if file is a PDF.
+
+        Returns:
+            True if file extension is 'pdf'.
+        """
         return self.extension == "pdf"
 
 
 class TaskDBO(Base):
+    """Task definition model.
+
+    Stores task configurations including pipeline stages and parameters.
+    """
+
     __tablename__ = "task_dbo"
     __table_args__ = {
-        "comment": "任务表",
+        "comment": "Task table",
     }
 
-    name: Mapped[str] = mapped_column(String(128), nullable=False, comment="任务名称")
+    name: Mapped[str] = mapped_column(String(128), nullable=False, comment="Task name")
     pipeline: Mapped[List[Dict[str, Any]]] = mapped_column(
-        JSONB, default=list, nullable=False, comment="任务流水线（JSON）"
+        JSONB, default=list, nullable=False, comment="Task pipeline (JSON)"
     )
     resume_next: Mapped[bool] = mapped_column(
-        Boolean, default=False, comment="是否忽略错误继续运行"
+        Boolean, default=False, comment="Whether to continue on error"
     )
-    last_run: Mapped[datetime | None] = mapped_column(DateTime, comment="最后运行时间")
-    concurrent: Mapped[int] = mapped_column(Integer, default=3, comment="并发数")
+    last_run: Mapped[datetime | None] = mapped_column(DateTime, comment="Last run time")
+    concurrent: Mapped[int] = mapped_column(Integer, default=3, comment="Concurrency level")
     shortcut_map: Mapped[Dict[str, Any]] = mapped_column(
-        JSONB, default=dict, nullable=False, comment="快捷方式映射（JSON）"
+        JSONB, default=dict, nullable=False, comment="Shortcut mapping (JSON)"
     )
 
     user_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
         ForeignKey("user_info.id", ondelete="CASCADE"),
         nullable=False,
-        comment="关联用户ID",
+        comment="Related user ID",
     )
-    shared: Mapped[bool] = mapped_column(Boolean, default=False, comment="是否共享")
+    shared: Mapped[bool] = mapped_column(Boolean, default=False, comment="Whether shared")
 
-    # 关联关系：关联到用户
+    # Relationship to user
     user: Mapped["UserInfo"] = relationship("UserInfo", back_populates="tasks")
 
     @staticmethod
-    async def get(id_or_name):
-        """Get TaskDBO by ID or name
+    async def get(id_or_name: str) -> Optional["TaskDBO"]:
+        """Get TaskDBO by ID or name.
 
-        :param id_or_name: UUID string or name to search for
-        :type id_or_name: str
-        :return: TaskDBO instance or None
-        :rtype: TaskDBO | None
+        Args:
+            id_or_name: UUID string or name to search for.
+
+        Returns:
+            TaskDBO instance or None.
         """
         async with get_db_session() as session:
             if is_uuid_literal(id_or_name):
@@ -715,74 +904,54 @@ class TaskDBO(Base):
 redis_client = redis.Redis.from_url(config.redis + "/2")
 
 
-# 缓存核心配置（可根据业务灵活修改）
-CACHE_EXPIRE_SECONDS = 60 * 10  # 缓存默认过期时间：5分钟
-CACHE_KEY_PREFIX = "query_cache:"  # 缓存key前缀，方便redis中区分缓存数据
+# Cache core configuration (can be flexibly modified according to business needs)
+CACHE_EXPIRE_SECONDS = 60 * 10  # Cache default expiration: 5 minutes
+CACHE_KEY_PREFIX = "query_cache:"  # Cache key prefix for Redis
 
 
 def redis_auto_renew_cache(cache_key=None):
-    """
-    Redis 自动续期缓存的装饰器工厂函数，为业务函数提供自动缓存/访问续期/自动过期的缓存能力。
-    核心特性：每次命中缓存时，自动刷新缓存的过期时间，实现「热点数据永不失效、冷数据自动过期」。
+    """Decorator factory for automatic Redis cache renewal.
 
-    :param cache_key: 可选，自定义缓存key的生成方法/函数，接收被装饰函数的*args和**kwargs作为入参，
-                      需返回字符串类型的缓存key片段；为None时，自动拼接函数入参生成缓存key
-    :type cache_key: callable | None
+    Provides automatic caching with access-based expiration.
+    Key features:
+    - Automatically refreshes cache expiration on each access
+    - Hot data never expires, cold data auto-expires
+    - Supports custom cache key generation
 
-    :return: 实际作用于业务函数的装饰器函数
-    :rtype: function
+    Args:
+        cache_key: Optional custom cache key function receiving *args and **kwargs.
 
-    缓存key生成规则优先级 & 拼接规则：
-        1. 传参指定cache_key函数 → 缓存key = 全局前缀 + 被装饰函数名 + 自定义函数返回的key片段
-        2. 未指定cache_key → 缓存key = 全局前缀 + 被装饰函数名 + 有序拼接的位置参数+关键字参数
-        3. 空key场景：若生成的key片段为空，则不会执行任何缓存相关逻辑，直接执行原函数
-
-    核心执行逻辑流程：
-        1. 调用被装饰函数前，先根据规则生成完整缓存key；
-        2. 若缓存key有效，从Redis查询缓存数据，命中则自动续期并直接返回缓存结果；
-        3. 缓存未命中/无有效key时，执行原业务函数获取执行结果；
-        4. 若函数返回有效结果+存在有效缓存key，将结果序列化后写入Redis并设置过期时间；
-        5. 统一返回业务函数执行结果/缓存结果。
-
-    依赖说明：
-        - 全局常量 CACHE_KEY_PREFIX: 所有缓存key的统一前缀，用于Redis key的命名隔离
-        - 全局常量 CACHE_EXPIRE_SECONDS: 缓存默认过期时长，单位为秒
-        - 全局实例 redis_client: 已初始化的Redis客户端，需支持 get/expire/setex 方法
-        - 序列化方式：统一使用json.dumps/json.loads，支持所有可JSON序列化的返回结果
-
-    使用限制：
-        1. 被装饰函数的返回值必须是可JSON序列化的对象（dict/list/str/int等）；
-        2. 关键字参数拼接时会做排序，保证入参顺序不同但内容一致时生成相同key；
-        3. 若自定义cache_key函数返回空值，则跳过缓存逻辑，直接执行原函数。
+    Returns:
+        Decorator function for the decorated function.
     """
 
     def decorator(func):
         func.cache_key_method = cache_key
 
-        @wraps(func)  # 保留原函数的属性（函数名、注释等）
+        @wraps(func)  # Preserve original function attributes (name, docstring, etc.)
         def wrapper(*args, **kwargs):
             if func.cache_key_method is not None:
-                cache_key = f"{func.cache_key_method(*args, **kwargs) or ''}"
+                cache_key_str = f"{func.cache_key_method(*args, **kwargs) or ''}"
             else:
                 args_str = "_".join(map(str, args))
                 kwargs_str = "_".join([f"{k}_{v}" for k, v in sorted(kwargs.items())])
-                cache_key = f"{args_str}_{kwargs_str}"
+                cache_key_str = f"{args_str}_{kwargs_str}"
 
-            if cache_key:
-                cache_key = f"{CACHE_KEY_PREFIX}{func.__name__}_{cache_key}"
-                cached_data = redis_client.get(cache_key)
+            if cache_key_str:
+                cache_key_full = f"{CACHE_KEY_PREFIX}{func.__name__}_{cache_key_str}"
+                cached_data = redis_client.get(cache_key_full)
                 if cached_data is not None:
-                    redis_client.expire(cache_key, CACHE_EXPIRE_SECONDS)
+                    redis_client.expire(cache_key_full, CACHE_EXPIRE_SECONDS)
                     return json.loads(cached_data)
 
             result = func(*args, **kwargs)
 
-            if result is not None and cache_key:
-                # 写入缓存+设置过期时间，实现「自动过期」
+            if result is not None and cache_key_str:
+                # Write to cache + set expiration,实现「自动过期」
                 redis_client.setex(
-                    name=cache_key,
+                    name=cache_key_full,
                     time=CACHE_EXPIRE_SECONDS,
-                    value=json.dumps(result),  # 统一转字符串，支持任意可序列化结果
+                    value=json.dumps(result),  # Unified to string, supports any JSON-serializable result
                 )
 
             return result
@@ -793,6 +962,11 @@ def redis_auto_renew_cache(cache_key=None):
 
 
 class TextEmbeddings(Base):
+    """Text embeddings model for semantic search.
+
+    Stores vector embeddings of text chunks for similarity search.
+    """
+
     embedding_model = AutoUnloadSentenceTransformer(config.embedding_model)
 
     __tablename__ = "text_embeddings"
@@ -805,7 +979,7 @@ class TextEmbeddings(Base):
             postgresql_ops={"embedding": "vector_cosine_ops"},
         ),
         {
-            "comment": "文本嵌入表",
+            "comment": "Text embeddings table",
         },
     )
 
@@ -813,24 +987,24 @@ class TextEmbeddings(Base):
         UUID(as_uuid=True),
         ForeignKey("paragraph.id", ondelete="CASCADE"),
         primary_key=True,
-        comment="段落ID",
+        comment="Paragraph ID",
     )
 
     dataset: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
         ForeignKey("dataset.id", ondelete="CASCADE"),
         primary_key=True,
-        comment="数据集ID",
+        comment="Dataset ID",
     )
 
     chunk_id: Mapped[int] = mapped_column(
         Integer,
         primary_key=True,
-        comment="分块ID",
+        comment="Chunk ID",
     )
 
     embedding: Mapped[Vector] = mapped_column(
-        Vector(config.embedding_dims), nullable=False, comment="文本嵌入向量"
+        Vector(config.embedding_dims), nullable=False, comment="Text embedding vector"
     )
 
     paragraph: Mapped["Paragraph"] = relationship(
@@ -839,45 +1013,48 @@ class TextEmbeddings(Base):
 
     @staticmethod
     @redis_auto_renew_cache()
-    def get_embedding_sync(text: str):
+    def get_embedding_sync(text: str) -> list:
+        """Get embedding for text synchronously.
+
+        Args:
+            text: Input text to embed.
+
+        Returns:
+            Embedding as list of floats.
+        """
         embedding = TextEmbeddings.embedding_model.encode(
             text.strip(),
-            convert_to_numpy=True,  # 返回numpy数组，方便后续处理
-            normalize_embeddings=True,  # 归一化向量，提升检索效果
+            convert_to_numpy=True,  # Return numpy array for easier processing
+            normalize_embeddings=True,  # Normalize vectors for better retrieval
         )
 
         return embedding.tolist()
 
     @staticmethod
-    async def get_embedding(text: str):
-        """
-        将多语言文本转换为embedding向量
+    async def get_embedding(text: str) -> list:
+        """Get embedding for text asynchronously.
 
         Args:
-            text: 输入的多语言文本（支持中文、英文、日文等100+种语言）
+            text: Input text to embed (supports 100+ languages).
 
         Returns:
-            np.ndarray: 生成的embedding向量（维度为384）
-
-        Raises:
-            ValueError: 输入文本为空时抛出异常
+            Embedding as list of floats (dimension: 384).
         """
         return await asyncio.to_thread(TextEmbeddings.get_embedding_sync, text)
 
     @staticmethod
     def get_chunks(text: str, chunk_length: int, overlap: int) -> list:
-        """
-        长文本切分，带重叠窗口避免语义割裂
+        """Split long text into chunks with overlapping windows.
+
         Args:
-            text: 待切分的长文本（语段/整页文本）
-            chunk_length: 每个文本块的字符长度
-            overlap: 相邻文本块的重叠字符长度
+            text: Long text to split (paragraph/page text).
+            chunk_length: Character length per chunk.
+            overlap: Overlapping character length between chunks.
+
         Returns:
-            list: 二维列表，每个元素为 单文本块的embedding向量(list格式)，与你get_embedding返回格式一致
-        Raises:
-            ValueError: 输入文本为空/切分参数非法时抛出异常
+            List of text chunks.
         """
-        # 基础校验
+        # Basic validation
         if not text.strip():
             return []
         if chunk_length <= 0 or overlap < 0 or overlap >= chunk_length:
@@ -888,15 +1065,15 @@ class TextEmbeddings(Base):
         start_idx = 0
         text_total_len = len(text)
 
-        # 滑动窗口切分长文本：核心重叠分块逻辑
+        # Sliding window split: core overlapping chunk logic
         while start_idx < text_total_len:
-            # 计算当前块的结束下标
+            # Calculate end index for current chunk
             end_idx = start_idx + chunk_length
             chunk = text[start_idx:end_idx]
             chunks.append(chunk)
-            # 步进 = 块长度 - 重叠长度，实现滑动重叠
+            # Step = chunk_length - overlap,实现滑动重叠
             start_idx += chunk_length - overlap
-            # 兜底：处理最后一个不足长度的块，避免遗漏文本
+            # Fallback: handle last chunk that doesn't reach full length
             if start_idx + chunk_length > text_total_len and start_idx < text_total_len:
                 chunk = text[-chunk_length:]
                 chunks.append(chunk)
@@ -905,27 +1082,35 @@ class TextEmbeddings(Base):
         return chunks
 
     @staticmethod
-    async def batch_encode(batch):
+    async def batch_encode(batch: list) -> list:
+        """Encode a batch of texts.
 
-        # 批量encode，参数与get_embedding完全一致，保证向量格式统一
+        Args:
+            batch: List of texts to encode.
+
+        Returns:
+            List of embeddings as lists of floats.
+        """
+        # Batch encode, same parameters as get_embedding for consistent vector format
         embeddings = await asyncio.to_thread(
             TextEmbeddings.embedding_model.encode,
             batch,
             convert_to_numpy=True,
-            normalize_embeddings=True,  # 保持归一化，和单句向量一致性检索
+            normalize_embeddings=True,  # Keep normalized for consistent retrieval
         )
 
-        # 统一返回list格式，与get_embedding的return embedding.tolist()完全对齐
+        # Unified return as list format, consistent with get_embedding's return embedding.tolist()
         return embeddings.tolist()
 
 
 def is_uuid_literal(val: str) -> bool:
-    """Check if string is a valid UUID literal
+    """Check if string is a valid UUID literal.
 
-    :param val: String to check
-    :type val: str
-    :return: True if string is valid UUID format
-    :rtype: bool
+    Args:
+        val: String to check.
+
+    Returns:
+        True if string is valid UUID format.
     """
     return (
         re.match(

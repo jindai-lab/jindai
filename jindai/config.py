@@ -1,4 +1,10 @@
-"""Configuration management for Jindai application"""
+"""Configuration management for Jindai application.
+
+This module provides:
+- ConfigObject: Pydantic model for configuration validation
+- load_config_from_args: Load config from command line arguments
+- OIDCValidator: JWT token validation using OIDC
+"""
 
 import logging
 import os
@@ -18,7 +24,22 @@ class ConfigObject(BaseModel):
 
     Supports additional fields beyond the defined ones for extensibility.
     Extra fields are accessible via the model_extra attribute.
+
+    Attributes:
+        concurrent: Default concurrency level for operations.
+        storage: Storage root directory path.
+        database: Database connection string.
+        redis: Redis connection string.
+        plugins: List of plugins to load (default: ["*"] for all).
+        oidc: OIDC configuration dictionary.
+        port: Default port for web server (default: 8370).
+        embedding_model: Sentence transformer model name for embeddings.
+        embedding_dims: Embedding vector dimensions.
+        ui_dist: Path to UI distribution files (default: './dist/').
+        paddle_remote: PaddleOCR remote service URL.
+        constants: Application constants dictionary.
     """
+
     model_config = ConfigDict(extra="allow")
 
     # defined fields
@@ -44,18 +65,28 @@ class ConfigObject(BaseModel):
     @field_validator("redis")
     @classmethod
     def strip_trailing_slash(cls, v: str) -> str:
-        """Remove trailing slash from Redis URL"""
+        """Remove trailing slash from Redis URL.
+
+        Args:
+            v: Redis URL string.
+
+        Returns:
+            Redis URL with trailing slash removed.
+        """
         return v.rstrip("/")
 
     @classmethod
     def load_from_yaml(cls, file_path: str) -> "ConfigObject":
-        """Load and parse configuration from YAML file
+        """Load and parse configuration from YAML file.
 
-        :param file_path: Path to YAML configuration file
-        :type file_path: str
-        :return: Validated configuration object
-        :rtype: ConfigObject
-        :raises: ValidationError if YAML contains invalid configuration
+        Args:
+            file_path: Path to YAML configuration file.
+
+        Returns:
+            Validated configuration object.
+
+        Raises:
+            ValidationError: If YAML contains invalid configuration.
         """
         with open(file_path, "r", encoding="utf-8") as f:
             data = yaml.safe_load(f)
@@ -64,19 +95,21 @@ class ConfigObject(BaseModel):
         return cls.model_validate(data)
 
     def get_extra(self) -> Dict[str, Any]:
-        """Get all extra configuration fields not defined in the class
+        """Get all extra configuration fields not defined in the class.
 
-        :return: Dictionary of extra configuration fields
-        :rtype: Dict[str, Any]
+        Returns:
+            Dictionary of extra configuration fields.
         """
         return self.model_extra or {}
 
 
 def load_config_from_args() -> ConfigObject:
-    """Load configuration from command line arguments
+    """Load configuration from command line arguments.
 
-    :return: Loaded configuration instance
-    :rtype: ConfigObject
+    Parses command line for -c flag to specify config file path.
+
+    Returns:
+        Loaded configuration instance.
     """
     if "-c" in sys.argv:
         config_arg = sys.argv.index("-c")
@@ -95,30 +128,62 @@ oauth2_scheme = OAuth2PasswordBearer(tokenUrl=config.oidc["token_uri"])
 
 
 class OIDCValidator:
-    def __init__(self, config):
+    """Validator for OIDC (OpenID Connect) tokens.
+
+    Handles JWT token validation using JWKS (JSON Web Key Set) from
+    the OIDC provider (Authentik).
+    """
+
+    def __init__(self, config: dict) -> None:
+        """Initialize OIDC validator.
+
+        Args:
+            config: OIDC configuration dictionary containing:
+                - config_uri: OIDC configuration endpoint
+                - client_id: OAuth2 client ID
+                - issuer: Token issuer URL
+        """
         self.jwks = None
         self.last_refresh = None
         self.config = config
 
-    async def get_jwks(self):
-        """动态获取 Authentik 公钥集"""
+    async def get_jwks(self) -> dict:
+        """Dynamically fetch Authentik public key set.
+
+        Retrieves the JWKS (JSON Web Key Set) from the OIDC provider
+        to validate JWT signatures.
+
+        Returns:
+            Dictionary containing the JWKS.
+        """
         if self.jwks is None:
             async with httpx.AsyncClient() as client:
-                # 首先获取配置文档
+                # First get the configuration document
                 config_resp = await client.get(self.config["config_uri"])
                 config_data = config_resp.json()
-                # 得到 jwks_uri
+                # Get the jwks_uri
                 jwks_uri = config_data.get("jwks_uri")
-                # 获取实际公钥
+                # Get actual public keys
                 jwks_resp = await client.get(jwks_uri)
                 self.jwks = jwks_resp.json()
         return self.jwks
 
-    async def validate_token(self, token: str = Depends(oauth2_scheme)):
+    async def validate_token(self, token: str = Depends(oauth2_scheme)) -> dict:
+        """Validate JWT token using OIDC provider's public keys.
+
+        Args:
+            token: JWT token to validate (injected by FastAPI dependency).
+
+        Returns:
+            Decoded JWT payload if validation succeeds.
+
+        Raises:
+            HTTPException: If token validation fails.
+        """
         try:
             jwks = await self.get_jwks()
-            # 解码并验证
-            # jose 会自动从 jwks 中匹配对应的 kid (Key ID) 并验证签名
+            # Decode and verify
+            # jose automatically matches the kid (Key ID) from jwks and validates the signature
             payload = jwt.decode(
                 token,
                 jwks,
@@ -134,5 +199,5 @@ class OIDCValidator:
             )
 
 
-# 实例化验证器
+# Instantiate validator
 oidc_validator = OIDCValidator(config.oidc)

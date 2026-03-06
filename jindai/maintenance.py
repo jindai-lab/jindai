@@ -1,3 +1,14 @@
+"""Maintenance and administrative tasks for Jindai application.
+
+This module provides:
+- MaintenanceManager: Class for database maintenance operations
+- File metadata synchronization
+- Dataset merging and cleanup
+- Text embedding updates
+- OCR processing
+- Background task management
+"""
+
 import asyncio
 import datetime
 import logging
@@ -31,8 +42,28 @@ from .models import (
 
 
 class MaintenanceManager:
+    """Manager for database and file maintenance operations.
 
-    async def sync_sources(self, dataset: str = "", folder: str = ""):
+    Provides methods for:
+    - Synchronizing data sources
+    - Syncing terms/keywords
+    - Merging datasets
+    - Updating metadata from URLs
+    - File metadata population
+    - Text embedding updates
+    - OCR processing
+    """
+
+    async def sync_sources(self, dataset: str = "", folder: str = "") -> None:
+        """Synchronize data sources by checking file existence.
+
+        Marks paragraphs as offline if their source files no longer exist,
+        and removes datasets with no associated paragraphs.
+
+        Args:
+            dataset: Optional dataset name to filter.
+            folder: Optional folder path to filter.
+        """
         assert dataset or folder, "Must specify at least one condition"
 
         async with get_db_session() as session:
@@ -54,12 +85,14 @@ class MaintenanceManager:
             query = query.distinct(Paragraph.source_url).with_only_columns(
                 Paragraph.source_url
             )
-            sources : list[str] = [_ for _, in await session.execute(query)]
+            sources: list[str] = [_ for _, in await session.execute(query)]
             datasets = []
 
             for source in sources:
-                if '://' in source: continue
-                if '#' in source: source = source[:source.find('#')]
+                if '://' in source:
+                    continue
+                if '#' in source:
+                    source = source[:source.find('#')]
                 joined = storage.safe_join(source)
                 if not os.path.exists(joined):
                     logging.info(
@@ -93,7 +126,12 @@ class MaintenanceManager:
             )
             await session.execute(stmt)
 
-    async def sync_terms(self):
+    async def sync_terms(self) -> None:
+        """Synchronize terms/keywords from paragraphs to the terms table.
+
+        Extracts unique keywords from all paragraphs and upserts them
+        into the Terms table.
+        """
         async with get_db_session() as session:
             unnested_query = (
                 select(text("unnest(keywords)").label("word"))
@@ -128,38 +166,52 @@ class MaintenanceManager:
                 f"Sync complete. Processed {len(unique_words)} unique keywords."
             )
 
-    async def merge_datasets(self):
+    async def merge_datasets(self) -> None:
+        """Merge datasets with similar names.
 
+        Identifies datasets with matching or similar names (e.g., "Book--Title"
+        and "Title") and merges them by renaming the source dataset to the
+        target dataset name.
+        """
         import re
         import unicodedata
 
         def normalize_string(s: str) -> str:
-            """标准化字符串：去变音符号、去点、处理缩写"""
+            """Normalize string: remove diacritics, dots, and standardize."""
             if not s:
                 return ""
 
-            # 分解变音符号并去除 (例如: é -> e)
+            # Decompose diacritics and remove them (e.g., é -> e)
             s = unicodedata.normalize("NFD", s)
             s = "".join([c for c in s if unicodedata.category(c) != "Mn"])
 
-            # 将 ". " 替换为空格，处理末尾的点
+            # Replace ". " with space, handle trailing dots
             s = re.sub(r"\. +", " ", s)
 
             s = re.sub(r"\s+", " ", s).strip().lower()
 
             return s
 
-        def assess_similarity(str1: str, str2: str):
-            """评估两个字符串是否相同或可能是同一人"""
+        def assess_similarity(str1: str, str2: str) -> tuple[str, Optional[str]]:
+            """Assess if two strings are the same or possibly the same person.
+
+            Args:
+                str1: First string to compare.
+                str2: Second string to compare.
+
+            Returns:
+                Tuple of (comparison result, message).
+                Result is "MATCH", "POTENTIAL", or "DIFFERENT".
+            """
             norm1 = normalize_string(str1)
             norm2 = normalize_string(str2)
 
-            # 情况 1：完全相同（标准化后）
+            # Case 1: Exactly the same (after normalization)
             if norm1.lower() == norm2.lower():
                 return "MATCH", norm1
 
-            # 情况 2：检测缩写匹配 (例如 Immanuel Kant vs I Kant)
-            # 我们将字符串拆分为单词，检查是否符合“首字母 + 姓”的模式
+            # Case 2: Detect abbreviation matching (e.g., Immanuel Kant vs I Kant)
+            # Split into words and check if it matches "initial + last name" pattern
             parts1 = norm1.split()
             parts2 = norm2.split()
 
@@ -167,7 +219,7 @@ class MaintenanceManager:
                 is_potential = True
                 for p1, p2 in zip(parts1, parts2):
                     p1l, p2l = p1.lower(), p2.lower()
-                    # 如果一个是另一个的首字母，或者两者完全相同，则视为潜在匹配
+                    # If one is the initial of the other, or both are identical, consider potential match
                     if not (
                         p1l == p2l
                         or (len(p1) == 1 and p2l.startswith(p1l))
@@ -196,7 +248,12 @@ class MaintenanceManager:
                     logging.info(f"[{d1.name}] merged to [{d2.name}]")
                     break
 
-    async def update_author_from_url(self, pattern):
+    async def update_author_from_url(self, pattern: str) -> None:
+        """Update author field from URL using regex pattern.
+
+        Args:
+            pattern: Regex pattern to extract author from source_url.
+        """
         async with get_db_session() as session:
             sql = text(
                 """
@@ -216,7 +273,12 @@ class MaintenanceManager:
             result = await session.execute(sql, {"p": pattern})
             logging.info(f"Successfully updated {result.rowcount} records.")
 
-    async def update_pdate_from_url(self, dataset: str):
+    async def update_pdate_from_url(self, dataset: str) -> None:
+        """Update publication date from URL using regex pattern.
+
+        Args:
+            dataset: Dataset name to filter.
+        """
         async with get_db_session() as session:
             dataset_id_subquery = (
                 select(Dataset.id).where(Dataset.name == dataset).scalar_subquery()
@@ -236,7 +298,7 @@ class MaintenanceManager:
                 .cte("q")
             )
 
-            # 执行 UPDATE ... FROM
+            # Execute UPDATE ... FROM
             stmt = (
                 update(Paragraph)
                 .where(Paragraph.id == q.c.id)
@@ -244,17 +306,31 @@ class MaintenanceManager:
             )
 
             await session.execute(stmt)
-        
+
     def _compute_sha1(self, file_path: str) -> str:
-        """Chunked SHA-1 for memory efficiency (works on huge files)."""
+        """Compute SHA-1 hash of a file in chunks for memory efficiency.
+
+        Args:
+            file_path: Path to the file.
+
+        Returns:
+            Hexadecimal SHA-1 hash string.
+        """
         sha1 = hashlib.sha1()
         with open(file_path, "rb") as f:
-            while chunk := f.read(16<<10):
+            while chunk := f.read(16 << 10):
                 sha1.update(chunk)
         return sha1.hexdigest()
-    
+
     def _scan_storage(self, storage_root: str):
-        
+        """Scan storage directory and yield file metadata objects.
+
+        Args:
+            storage_root: Root directory to scan.
+
+        Yields:
+            FileMetadata objects for each file found.
+        """
         print(f"🚀 Starting thorough scan of: {storage_root}")
 
         for root, dirs, files in os.walk(storage_root):
@@ -288,7 +364,7 @@ class MaintenanceManager:
                         page_count=page_count,
                         extdata={},
                     )
-                    
+
                     yield metadata_obj
 
                 except PermissionError:
@@ -296,13 +372,17 @@ class MaintenanceManager:
                 except Exception as e:
                     print(f"   ❌ Error processing {full_path}: {e}")
                     continue
-    
-    def get_storage_handler(self):
 
+    def get_storage_handler(self):
+        """Get a file system event handler for storage monitoring.
+
+        Returns:
+            StorageHandler: FileSystemEventHandler for monitoring storage changes.
+        """
         class StorageHandler(FileSystemEventHandler):
             def __init__(self):
                 self.root = config.storage
-                
+
             def on_any_event(self, event):
                 # We ignore directory events for most cases — focus on files
                 if event.is_directory:
@@ -360,35 +440,34 @@ class MaintenanceManager:
                     print(f"Error processing {relative_path}: {e}")
                 finally:
                     session.close()
-    
-        return StorageHandler()
-    
-    async def populate_file_metadata(self):
 
+        return StorageHandler()
+
+    async def populate_file_metadata(self) -> None:
+        """Populate file metadata table by scanning storage directory.
+
+        Performs a thorough recursive scan of the storage directory and
+        upserts file metadata into the database.
+        """
         async def scan_storage_and_populate_db(
             session: AsyncSession,
             commit_every: int = 500,
         ) -> None:
-            """
-            Thorough recursive scan of /storage (or any path).
-            
-            • Uses os.walk → handles any depth of subdirectories
-            • Computes SHA-1 (content-addressable)
-            • Extracts extension, size, PDF page count
-            • Uses SQLAlchemy .merge() → UPSERT (insert or update on filename PK)
-            • Automatic created_at / modified_at / version handling from your model
-            • extdata starts empty (you can extend later with OCR, title extraction, etc.)
-            """
+            """Thorough recursive scan of storage directory.
 
+            Args:
+                session: Async database session.
+                commit_every: Number of files to process before committing.
+            """
             storage_root = storage.safe_join('./')
             if not os.path.isdir(storage_root):
                 raise ValueError(f"❌ Not a directory: {storage_root}")
 
             print(f"🚀 Starting thorough scan of: {storage_root}")
             processed = 0
-            
+
             for metadata_obj in self._scan_storage(storage_root):
-                
+
                 await session.merge(metadata_obj)   # UPSERT
 
                 processed += 1
@@ -410,8 +489,15 @@ class MaintenanceManager:
                 commit_every=500,
             )
 
-    async def update_text_embeddings(self, filters: Optional[QueryFilters] = None):
+    async def update_text_embeddings(self, filters: Optional[QueryFilters] = None) -> int:
+        """Update text embeddings for paragraphs.
 
+        Args:
+            filters: Optional QueryFilters to limit which paragraphs to process.
+
+        Returns:
+            Number of embeddings added.
+        """
         if isinstance(filters, dict):
             filters = QueryFilters(**filters)
 
@@ -460,7 +546,15 @@ class MaintenanceManager:
                     added += await self.update_text_embeddings_do(bulk=new_bulk)
                     new_bulk.clear()
 
-    async def update_text_embeddings_do(self, bulk: list):
+    async def update_text_embeddings_do(self, bulk: list) -> int:
+        """Process a batch of embeddings.
+
+        Args:
+            bulk: List of paragraph data dictionaries.
+
+        Returns:
+            Number of embeddings added.
+        """
         embs = []
         for p, emb in zip(
             bulk,
@@ -480,7 +574,16 @@ class MaintenanceManager:
         logging.info(f"{len(embs)} added")
         return len(embs)
 
-    async def custom_task(self, task_id: str = "", **params):
+    async def custom_task(self, task_id: str = "", **params) -> dict:
+        """Execute a custom task.
+
+        Args:
+            task_id: Optional task ID to load from database.
+            **params: Task parameters if task_id not provided.
+
+        Returns:
+            Task execution result.
+        """
         from .task import Task
 
         if task_id:
@@ -497,7 +600,18 @@ class MaintenanceManager:
 
     async def ocr(
         self, input_path: str, output_path: str, lang: str, monochrome: bool = False
-    ):
+    ) -> str:
+        """Perform OCR on a PDF file.
+
+        Args:
+            input_path: Path to input PDF file.
+            output_path: Path to output OCR'd PDF file.
+            lang: Language code for OCR.
+            monochrome: Convert to black and white before OCR.
+
+        Returns:
+            Path to the output OCR'd PDF file.
+        """
         from .pdfutils import convert_pdf_to_tiff_group4, merge_images_from_folder
 
         temps = []
@@ -554,13 +668,18 @@ class MaintenanceManager:
                     os.unlink(f)
         return output_path
 
-    async def test_task(self):
+    async def test_task(self) -> None:
+        """Test task for debugging."""
         logging.info("Test Task Started")
         await asyncio.sleep(10)
         logging.info("Test Task Ended")
 
-    def get_router(self):
+    def get_router(self) -> APIRouter:
+        """Get FastAPI router for maintenance endpoints.
 
+        Returns:
+            APIRouter with maintenance endpoints.
+        """
         router = APIRouter(
             prefix="/maintenance",
             tags=["Maintenance"],
@@ -571,6 +690,16 @@ class MaintenanceManager:
         async def call_task_in_background(
             task_name: str, background_tasks: BackgroundTasks, params: dict = Body(...)
         ):
+            """Schedule a maintenance task to run in the background.
+
+            Args:
+                task_name: Name of the maintenance task.
+                background_tasks: FastAPI BackgroundTasks.
+                params: Task parameters.
+
+            Returns:
+                Task scheduling confirmation.
+            """
             func = {
                 "sync-pdate": self.update_pdate_from_url,
                 "sync-terms": self.sync_terms,
