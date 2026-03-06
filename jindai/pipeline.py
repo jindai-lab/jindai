@@ -1,4 +1,10 @@
-"""Pipeline"""
+"""Pipeline processing system for Jindai application.
+
+This module provides:
+- PipelineStage: Base class for pipeline processing stages
+- DataSourceStage: Base class for data source stages
+- Pipeline: Orchestrator for processing paragraphs through stages
+"""
 
 import asyncio
 import inspect
@@ -27,16 +33,24 @@ ResolveReturn = (
 
 
 class PipelineStage:
-    """Stages of the process.
-    Note that processing against paragraphs may take place concurrently and
-    that process processing stages should be stateless as far as possible.
+    """Base class for pipeline processing stages.
+
+    Pipeline stages process paragraphs sequentially or concurrently.
+    Stages should be stateless where possible to enable concurrent processing.
+
+    Attributes:
+        _log: Logging function.
+        next: Next stage in the pipeline.
+        gctx: Global context dictionary.
+        verbose: Enable verbose logging.
+        instance_name: Name for logging identification.
     """
 
-    def __init__(self, name="") -> None:
-        """Initialize pipeline stage
+    def __init__(self, name: str = "") -> None:
+        """Initialize pipeline stage.
 
-        :param name: Instance name for logging, defaults to empty string
-        :type name: str, optional
+        Args:
+            name: Instance name for logging (default: empty string).
         """
         self._log = lambda *x: logging.info(' '.join(map(str, x)))
         self.next = None
@@ -46,7 +60,11 @@ class PipelineStage:
 
     @classmethod
     def get_spec(cls) -> dict[str, str]:
-        """Get specification info of the current stage"""
+        """Get specification info of the current stage.
+
+        Returns:
+            Dictionary with name, docstring, and argument info.
+        """
         return {
             "name": cls.__name__,
             "doc": (cls.__doc__ or "").strip(),
@@ -54,13 +72,16 @@ class PipelineStage:
         }
 
     @staticmethod
-    def _spec(stage_cls: Type, method="__init__") -> list:
-        """Get argument info for method of stage_cls
+    def _spec(stage_cls: Type, method: str = "__init__") -> list:
+        """Get argument info for a method of stage_cls.
 
-        :param stage_cls: a class
-        :type stage_cls: Type
+        Args:
+            stage_cls: A class to inspect.
+            method: Method name to inspect (default: "__init__").
+
+        Returns:
+            List of argument specifications with name, type, description, and default.
         """
-
         def _parse_docstring(docstring):
             args_docs = defaultdict(dict)
 
@@ -134,14 +155,15 @@ class PipelineStage:
 
     @staticmethod
     def return_file(ext: str, data: bytes, **kwargs) -> dict:
-        """Make a dict to represent file in PipelineStage
+        """Create a dict to represent a file in PipelineStage.
 
-        :param ext: extension name
-        :type ext: str
-        :param data: data
-        :type data: bytes
-        :return: dict representing the file
-        :rtype: dict
+        Args:
+            ext: File extension name.
+            data: File data as bytes.
+            **kwargs: Additional file metadata.
+
+        Returns:
+            Dictionary with file information.
         """
         file_dict = {"__file_ext__": ext, "data": data}
         file_dict.update(**kwargs)
@@ -149,35 +171,52 @@ class PipelineStage:
 
     @staticmethod
     def return_redirect(dest: str) -> dict:
-        """Make a dict to represent redirection directive
+        """Create a dict to represent a redirection directive.
 
-        :param dest: destination url
-        :type dest: str
-        :return: dict representing the redirection
-        :rtype: dict
+        Args:
+            dest: Destination URL.
+
+        Returns:
+            Dictionary with redirect information.
         """
         return {"__redirect__": dest}
 
     @staticmethod
-    def parse_lines(val) -> list:
+    def parse_lines(val: Any) -> list:
+        """Parse value into a list of lines.
+
+        Args:
+            val: String or list to parse.
+
+        Returns:
+            List of lines.
+        """
         if isinstance(val, list):
             return val
         else:
             return [ele for ele in str(val).split("\n") if ele]
 
     @staticmethod
-    async def parse_paths(val) -> list:
+    async def parse_paths(val: Any) -> list:
+        """Parse value into a list of file paths using glob patterns.
+
+        Args:
+            val: String or list of glob patterns.
+
+        Returns:
+            List of matching file paths.
+        """
         files = []
         for pattern in PipelineStage.parse_lines(val):
             files.extend(storage.glob(pattern))
         return files
 
     @property
-    def log(self):
-        """Get logging method
+    def log(self) -> Callable:
+        """Get logging method with instance name prefix.
 
-        :return: logging method
-        :rtype: Callable
+        Returns:
+            Logging function.
         """
         return lambda *x: self._log(
             self.instance_name or self.__class__.__name__, "|", *x
@@ -185,51 +224,58 @@ class PipelineStage:
 
     @log.setter
     def log(self, val: Callable) -> None:
-        """Setting logging method
+        """Set the logging method.
 
-        :param val: logging method
-        :type val: Callable
+        Args:
+            val: Logging function to use.
         """
         self._log = val
 
-    def log_exception(self, info, exc) -> None:
+    def log_exception(self, info: str, exc: Exception) -> None:
+        """Log an exception with traceback.
+
+        Args:
+            info: Information about the error.
+            exc: Exception instance.
+        """
         self.log(info, type(exc).__name__, exc)
         self.log("\n".join(traceback.format_tb(exc.__traceback__)))
 
     def resolve(self, paragraph: Paragraph) -> ResolveReturn:
-        """Map period, handling paragraph.
+        """Process a paragraph and return result(s).
 
-        :param paragraph: Paragraph to process
-        :type paragraph: Paragraph
-        :return: None if excluded from further processing;
+        Args:
+            paragraph: Paragraph to process.
+
+        Returns:
+            None if excluded from further processing;
             A Paragraph object (which may not match the one in the database),
             or iterable multiple objects for next stage.
-        :rtype: Paragraph | Iterable[Paragraph] | None
         """
         return paragraph
 
-    def summarize(self, result) -> Dict:
-        """Reduce period, handling result from the last stage
+    def summarize(self, result: dict) -> Dict:
+        """Reduce/aggregate results from the last stage.
 
-        :param result: result from the last stage, None if the current stage
-            is placed at the first place
-        :type result: dict
-        :return: Summarized reuslt, None for default.
-        :rtype: dict | None
+        Args:
+            result: Result from the last stage, None if current stage
+                is placed at the first place.
+
+        Returns:
+            Summarized result, None for default.
         """
         return result
 
     async def flow(
         self, paragraph: Paragraph
     ) -> Iterable[Tuple[ResolveReturn, "PipelineStage | None"]]:
-        """Flow control
+        """Flow control for pipeline processing.
 
-        :param paragraph: Paragraph to process
-        :type paragraph: Paragraph
-        :return: Iterator
-        :rtype: Tuple
-        :yield: a tuple in form of (<result/iterable multiple results>, next pipeline stage)
-        :rtype: Iterator[Tuple]
+        Args:
+            paragraph: Paragraph to process.
+
+        Yields:
+            Tuples of (<result/iterable results>, next pipeline stage).
         """
         if self.verbose:
             self.log("Processing")
@@ -264,25 +310,29 @@ class PipelineStage:
 
 
 class DataSourceStage(PipelineStage):
-    """PipelineStage for data sources"""
+    """Base class for data source pipeline stages.
+
+    Data source stages fetch data from external sources and
+    yield paragraphs for further processing.
+    """
 
     mappings = {}
 
     def __init__(self, **params) -> None:
-        """Initialize data source stage
+        """Initialize data source stage.
 
-        :param params: Parameters for data source
-        :type params: dict
+        Args:
+            **params: Parameters for data source.
         """
         super().__init__()
         self.params = params
 
     @classmethod
     def get_spec(cls) -> dict[str, str]:
-        """Overwrite the method for getting specifications
+        """Overwrite the method for getting specifications.
 
-        :return: Name, docstring and argument info
-        :rtype: dict
+        Returns:
+            Name, docstring and argument info.
         """
         return {
             "name": cls.__name__,
@@ -290,41 +340,39 @@ class DataSourceStage(PipelineStage):
             "args": PipelineStage._spec(cls, "apply_params"),
         }
 
-    def before_fetch(self, instance):
-        """Called before fetching data from data source
+    def before_fetch(self, instance: "DataSourceStage") -> None:
+        """Called before fetching data from data source.
 
-        :param instance: Data source instance
-        :type instance: DataSourceStage
+        Args:
+            instance: Data source instance.
         """
         pass
 
-    def apply_params(self, **params):
-        """Apply parameters to data source
+    def apply_params(self, **params) -> None:
+        """Apply parameters to data source.
 
-        :param params: Parameters to apply
-        :type params: dict
+        Args:
+            **params: Parameters to apply.
         """
         pass
 
     async def fetch(self):
-        """Fetch data from data source
+        """Fetch data from data source.
 
-        :return: Iterator of paragraphs
-        :rtype: Iterable[Paragraph]
+        Yields:
+            Paragraphs from the data source.
         """
         yield
 
     async def resolve(self, paragraph: Paragraph):
-        """Update the parameters of the data source with
-            the input paragraph
+        """Update the parameters of the data source with the input paragraph.
 
-        :param paragraph: Paragraph object containing parameters for data source
-        :type paragraph: Paragraph
-        :return: an iterator
-        :yield: Paragraphs from the data source
-        :rtype: Paragraph
+        Args:
+            paragraph: Paragraph object containing parameters for data source.
+
+        Yields:
+            Paragraphs from the data source.
         """
-
         args = paragraph.as_dict()
         for k, mapped in self.mappings.items():
             if k in args:
@@ -348,18 +396,21 @@ class DataSourceStage(PipelineStage):
 
 
 class Pipeline:
-    """Pipeline"""
+    """Pipeline orchestrator for processing paragraphs through stages.
+
+    Manages the execution flow of multiple pipeline stages,
+    handling concurrent processing and result aggregation.
+    """
 
     ctx = {}
 
     @staticmethod
     def ensure_args(stage_type: Type, args: Dict) -> None:
-        """Ensure arguments are in compliance with definition
+        """Ensure arguments are in compliance with stage definition.
 
-        :param stage_type: the class to in compliance with
-        :type stage_type: Type
-        :param args: a dictionary containing arguments
-        :type args: Dict
+        Args:
+            stage_type: The class to validate against.
+            args: Dictionary containing arguments.
         """
         argnames = {_["name"]: _["type"] for _ in stage_type.get_spec()["args"]}
 
@@ -397,6 +448,15 @@ class Pipeline:
 
     @staticmethod
     def instantiate(stage_name: str, args: Dict) -> PipelineStage:
+        """Instantiate a pipeline stage by name.
+
+        Args:
+            stage_name: Name of the stage class.
+            args: Arguments for stage initialization.
+
+        Returns:
+            PipelineStage instance.
+        """
         if args is None:
             args = {}
         if args.pop("disabled", False):
@@ -412,21 +472,18 @@ class Pipeline:
         self,
         stages: List[Union[Tuple[str, Dict], List, Dict, PipelineStage]],
         log: Callable = lambda *x: logging.info(' '.join(map(str, x))),
-        verbose=False,
+        verbose: bool = False,
     ) -> None:
-        """Initialize the pipeline
+        """Initialize the pipeline.
 
-        :param stages: pipeline stage info in one of the following forms:
+        Args:
+            stages: Pipeline stage info in one of the following forms:
                 - Tuple[<PipelineStage name>, <parameters>]
                 - List[<PipelineStage name>, <parameters>]
                 - {<PipelineStage name> : <parameters>}
-        :type stages: List[Union[Tuple[str, Dict], List, Dict, PipelineStage]]
-        :param log: Logging method, defaults to logging.info
-        :type log: Callable, optional
-        :param verbose: Enable verbose logging, defaults to False
-        :type verbose: bool, optional
+            log: Logging method (default: logging.info).
+            verbose: Enable verbose logging (default: False).
         """
-
         self.stages = []
         self.log = log
         self.verbose = verbose
@@ -465,21 +522,32 @@ class Pipeline:
 
     @property
     def gctx(self) -> dict:
+        """Get global context dictionary.
+
+        Returns:
+            Global context dictionary.
+        """
         return self._gctx
 
     @gctx.setter
-    def gctx(self, val) -> None:
+    def gctx(self, val: dict) -> None:
+        """Set global context dictionary.
+
+        Args:
+            val: Global context dictionary.
+        """
         self._gctx = val
         for stage in self.stages:
             stage.gctx = val
 
-    async def summarize(self, result=None) -> dict | None:
-        """Summarize pipeline results by calling summarize on each stage
+    async def summarize(self, result: dict = None) -> dict | None:
+        """Summarize pipeline results by calling summarize on each stage.
 
-        :param result: Result from previous stage, defaults to None
-        :type result: dict, optional
-        :return: Final summarized result
-        :rtype: dict | None
+        Args:
+            result: Result from previous stage (default: None).
+
+        Returns:
+            Final summarized result.
         """
         for stage in self.stages:
             result = stage.summarize(result) or result

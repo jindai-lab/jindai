@@ -1,4 +1,13 @@
-"""Helper functions"""
+"""Helper functions for Jindai application.
+
+This module provides utility classes and functions for:
+- Automatic model unloading to manage memory
+- Word stemming for text processing
+- Safe module importing with auto-install
+- Context discovery for plugins
+- Function signature inspection
+- Safe expression evaluation
+"""
 
 import gc
 import glob
@@ -27,21 +36,24 @@ jieba = jieba3.jieba3()
 
 
 class AutoUnloadSentenceTransformer:
-    """
-    SentenceTransformer model automatic loading/unloading helper class.
+    """SentenceTransformer model automatic loading/unloading helper.
 
-    Automatically unload the model to release memory/GPU memory when idle
-    for a specified timeout period (default 5 minutes).
+    Automatically unloads the model to release memory/GPU memory when idle
+    for a specified timeout period (default 5 minutes). This helps manage
+    memory usage in long-running applications.
+
+    Attributes:
+        model_name_or_path: Model name or path for SentenceTransformer.
+        idle_timeout: Seconds of inactivity before unloading (default: 300).
     """
 
     def __init__(self, model_name_or_path: str, idle_timeout: int = 300) -> None:
-        """
-        Initialize the model manager.
+        """Initialize the model manager.
 
         Args:
             model_name_or_path: Model name (e.g., all-MiniLM-L6-v2) or local model path,
-                consistent with SentenceTransformer
-            idle_timeout: Idle timeout in seconds, default 300 seconds (5 minutes)
+                consistent with SentenceTransformer.
+            idle_timeout: Idle timeout in seconds, default 300 seconds (5 minutes).
         """
         self.model_name_or_path = model_name_or_path
         self.idle_timeout = idle_timeout  # Idle timeout threshold
@@ -56,9 +68,8 @@ class AutoUnloadSentenceTransformer:
 
     def _start_monitor(self) -> None:
         """Start the model idle monitoring background thread."""
-
         def monitor_loop():
-            """Monitor model usage and unload when idle timeout is reached"""
+            """Monitor model usage and unload when idle timeout is reached."""
             while not self._stop_monitor:
                 time.sleep(10)  # Check every 10 seconds to reduce CPU usage
                 with self.lock:
@@ -74,7 +85,7 @@ class AutoUnloadSentenceTransformer:
         self._monitor_thread.start()
 
     def _load_model(self) -> None:
-        """Load the model."""
+        """Load the model if not already loaded."""
         if self.model is None:
             self.model = SentenceTransformer(self.model_name_or_path)
         # Update last used time on each load/reuse
@@ -101,15 +112,14 @@ class AutoUnloadSentenceTransformer:
             logging.info(f"[Auto-unload] Model resources released")
 
     def encode(self, sentences, **kwargs) -> np.ndarray:
-        """
-        Wrap the native encode method for seamless usage.
+        """Wrap the native encode method for seamless usage.
 
         Args:
-            sentences: Single sentence or list of sentences, consistent with native method
+            sentences: Single sentence or list of sentences, consistent with native method.
             kwargs: Other encode parameters such as convert_to_tensor, normalize_embeddings, etc.
 
         Returns:
-            Sentence embeddings
+            Sentence embeddings as numpy array.
         """
         with self.lock:
             self._load_model()  # Load if not present, reuse and update time
@@ -120,15 +130,14 @@ class AutoUnloadSentenceTransformer:
             return embeddings
 
     def encode_batch(self, sentences, **kwargs):
-        """
-        Wrap the native encode_batch method for efficient batch encoding.
+        """Wrap the native encode_batch method for efficient batch encoding.
 
         Args:
-            sentences: 2D list of sentences
-            kwargs: Other parameters
+            sentences: 2D list of sentences.
+            kwargs: Other parameters.
 
         Returns:
-            Batch sentence embeddings
+            Batch sentence embeddings as numpy array.
         """
         with self.lock:
             self._load_model()
@@ -149,8 +158,10 @@ from nltk.stem.snowball import SnowballStemmer
 
 
 class WordStemmer:
-    """
-    Stemming words
+    """Word stemming utility for text processing.
+
+    Provides stemming functionality for multiple languages using
+    the Snowball stemmer from NLTK.
     """
 
     _language_stemmers = {"en": nltk.stem.snowball.SnowballStemmer("english")}
@@ -177,7 +188,14 @@ class WordStemmer:
 
     @staticmethod
     def get_stemmer(lang: str) -> SnowballStemmer:
-        """Get stemmer for language"""
+        """Get stemmer for a language.
+
+        Args:
+            lang: Language code (ISO-639-1) or language name.
+
+        Returns:
+            SnowballStemmer instance for the language.
+        """
         stemmer = nltk.stem.snowball.SnowballStemmer
         lang = WordStemmer._language_names.get(lang, lang)
         if lang not in WordStemmer._language_stemmers:
@@ -187,29 +205,28 @@ class WordStemmer:
             WordStemmer._language_stemmers[lang] = stemmer
         return WordStemmer._language_stemmers[lang]
 
-    def stem_tokens(self, lang, tokens):
-        """
-        Stem words
+    def stem_tokens(self, lang: str, tokens: list) -> list:
+        """Stem a list of tokens.
 
         Args:
-            tokens: list of words
+            lang: Language code for stemming.
+            tokens: List of words to stem.
 
         Returns:
-            stemmed words
+            List of stemmed words.
         """
         tokens = [WordStemmer.get_stemmer(lang).stem(_) for _ in tokens if _]
         return tokens
 
-    def stem_from_params(self, word, lang="en") -> dict[str, Any]:
-        """
-        Add stem() function for query
+    def stem_from_params(self, word: str, lang: str = "en") -> dict[str, Any]:
+        """Add stem() function for query processing.
 
         Args:
-            word: word to stem
-            lang: language code
+            word: Word to stem.
+            lang: Language code (default: "en").
 
         Returns:
-            dictionary with stemmed keywords
+            Dictionary with stemmed keyword under 'keywords' key.
         """
         assert isinstance(lang, str) and isinstance(word, str), (
             f"Parameter type error for stem function: got {type(word)} and {type(lang)}"
@@ -221,16 +238,14 @@ _pip_lock = Lock()
 
 
 def safe_import(module_name: str, package_name: str = ""):
-    """
-    Import a module and install it if not installed.
+    """Import a module and install it if not installed.
 
     Args:
-        module_name: Name of the module to import
-        package_name: Name of the package to import the module from.
-            Defaults to module name if not specified.
+        module_name: Name of the module to import.
+        package_name: Name of the package to install. Defaults to module_name.
 
     Returns:
-        Imported module object
+        Imported module object.
     """
     try:
         importlib.import_module(module_name)
@@ -246,20 +261,21 @@ RE_DIGITS = re.compile(r"[\+\-]?\d+")
 
 
 def get_context(directory: str, parent_class: Type, *sub_dirs: str) -> Dict:
-    """
-    Get context for given directory and parent class.
+    """Get context dictionary for given directory and parent class.
+
+    Scans the directory for Python files and returns a dictionary of
+    class names to class objects that inherit from the specified parent class.
 
     Args:
-        directory: Directory path relative to the working directory
-        parent_class: Parent class of all defined classes to include
-        sub_dirs: Subdirectories to search (optional)
+        directory: Directory path relative to the working directory.
+        parent_class: Parent class of all defined classes to include.
+        sub_dirs: Subdirectories to search (optional).
 
     Returns:
-        Dictionary in form of {"ClassName": Class}
+        Dictionary in form of {"ClassName": Class}.
     """
-
     def _prefix(sub_dir, name):
-        """Prefixing module name"""
+        """Prefixing module name for import."""
         dirpath = directory
         if sub_dir and sub_dir != ".":
             dirpath += os.sep + sub_dir
@@ -296,58 +312,56 @@ def get_context(directory: str, parent_class: Type, *sub_dirs: str) -> Dict:
 
 
 def inspect_function_signature(func: Callable) -> Dict[str, str]:
-    """
-    从函数中提取参数名和对应的类型名字典
+    """Extract parameter names and types from a function signature.
 
     Args:
-        func: 函数
+        func: Function to inspect.
 
     Returns:
-        字典，键为参数名，值为类型名称（如 'int', 'str', 'Optional[Dict]'）
+        Dictionary mapping parameter names to type names (e.g., 'int', 'str', 'Optional[Dict]').
     """
-    # 获取任务函数的签名信息
-    
+    # Get function signature information
     func_signature = inspect.signature(func)
     params_info = {}
 
     def parse_type(type_obj):
-        """递归解析类型对象"""
+        """Recursively parse type objects."""
         origin = get_origin(type_obj)
         args = get_args(type_obj)
 
-        # 1. 处理 Optional 或 Union
+        # 1. Handle Optional or Union
         if origin is Union:
-            # 过滤掉 NoneType，获取实际类型
+            # Filter out NoneType, get actual types
             actual_args = [arg for arg in args if arg is not type(None)]
             if len(actual_args) == 1:
                 return parse_type(actual_args[0])
-            return "str"  # 复杂的 Union 暂退化为 str
+            return "str"  # Complex Union defaults to str
 
-        # 2. 处理 Literal (枚举选项)
+        # 2. Handle Literal (enum options)
         if origin is Literal:
-            return {"options": args}  # 将枚举值传给前端 Select
+            return {"options": args}  # Pass enum values to frontend Select
 
-        # 3. 处理 Pydantic 模型 (QueryFilters 等)
+        # 3. Handle Pydantic models (QueryFilters, etc.)
         if inspect.isclass(type_obj) and issubclass(type_obj, BaseModel):
-            # 递归获取模型内部所有字段
+            # Recursively get all fields in the model
             return {
                 name: parse_type(field.annotation)
                 for name, field in type_obj.model_fields.items()
             }
 
-        # 4. 处理基础列表 List[int] 等
+        # 4. Handle basic list types List[int], etc.
         if origin is list:
             return {
                 "isArray": True,
                 "itemType": parse_type(args[0]) if args else "str",
             }
 
-        # 5. 处理基础类型映射
+        # 5. Handle basic type mapping
         mapping = {int: "int", float: "float", bool: "bool", str: "str"}
         if type_obj in mapping:
             return mapping[type_obj]
 
-        # 兜底：处理带 __name__ 的类名
+        # Fallback: handle class names with __name__
         if hasattr(type_obj, "__name__"):
             return type_obj.__name__.lower()
 
@@ -367,14 +381,14 @@ def inspect_function_signature(func: Callable) -> Dict[str, str]:
 
 
 def aeval(expr: str, context: Union[Dict[str, Any], Any]) -> Any:
-    """Evaluate an expression in a safe context
+    """Evaluate an expression in a safe context.
 
-    :param expr: Expression to evaluate
-    :type expr: str
-    :param context: Context object for evaluation
-    :type context: dict or object with as_dict() method
-    :return: Evaluation result
-    :rtype: Any
+    Args:
+        expr: Expression to evaluate.
+        context: Context object for evaluation (dict or object with as_dict() method).
+
+    Returns:
+        Evaluation result of any type.
     """
     if not isinstance(context, dict):
         context = context.as_dict()
@@ -382,4 +396,3 @@ def aeval(expr: str, context: Union[Dict[str, Any], Any]) -> Any:
     result = ee(expr)
     # Return result as is, since asteval can return various types
     return result
-

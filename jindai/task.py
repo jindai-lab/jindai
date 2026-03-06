@@ -1,4 +1,12 @@
-"""Task processing module"""
+"""Task processing module for Jindai application.
+
+This module provides:
+- Task: Main class for executing pipeline tasks
+- Async execution with concurrent workers
+- Priority queue for processing order
+- Progress tracking with tqdm
+- Error handling and resume capabilities
+"""
 
 import asyncio
 import logging
@@ -13,6 +21,12 @@ from .pipeline import Pipeline
 
 
 class Task:
+    """Task executor for pipeline processing.
+
+    Manages the execution of pipeline stages on paragraphs
+    with support for concurrent processing, progress tracking,
+    and error recovery.
+    """
 
     def __init__(
         self,
@@ -24,38 +38,49 @@ class Task:
         verbose: bool = False,
         use_tqdm: bool = True,
     ) -> None:
+        """Initialize task.
+
+        Args:
+            params: Task parameters for initial paragraph.
+            stages: List of pipeline stages.
+            concurrent: Number of concurrent workers.
+            log: Logging function.
+            resume_next: Continue on error if True.
+            verbose: Enable verbose logging.
+            use_tqdm: Show progress bar.
+        """
         self.alive = True
         self.resume_next = resume_next
         self.concurrent = concurrent
         self.verbose = verbose
         self.params = params
 
-        # 日志处理
+        # Logging
         self.log_func = log or self.default_log
         self.logs = deque()
 
-        # 核心组件 (注意：Pipeline 内部的方法也需要是 async 的)
+        # Core components (note: Pipeline methods also need to be async)
         self.pipeline = Pipeline(stages, self.log_func, verbose)
-        
-        # 异步优先级队列
+
+        # Async priority queue
         self._queue = asyncio.PriorityQueue()
         self._pbar = tqdm(disable=not use_tqdm)
         self._worker_tasks = []
 
     def default_log(self, *args) -> None:
-        """非阻塞地记录日志"""
+        """Non-blocking log recording."""
         self.logs.append(args)
 
     async def _worker(self):
-        """消费者协程：替代原本的线程池 worker"""
+        """Consumer coroutine: replaces thread pool worker."""
         while self.alive:
             try:
-                # 异步获取任务，队列为空时会自动挂起不占 CPU
+                # Async get task, automatically suspends when queue is empty
                 priority, _, job = await self._queue.get()
-                
+
                 await self._async_execute(priority, job)
-                
-                # 必须调用 task_done 才能配合后续的 queue.join()
+
+                # Must call task_done to配合后续的 queue.join()
                 self._queue.task_done()
             except asyncio.CancelledError:
                 break
@@ -63,43 +88,57 @@ class Task:
                 self.log_exception("Worker Error", e)
 
     async def _async_execute(self, priority: int, fc: tuple) -> None:
-        """异步执行逻辑，替代原 _thread_execute"""
+        """Async execution logic, replaces _thread_execute.
+
+        Args:
+            priority: Task priority.
+            fc: Tuple of (paragraph, stage).
+        """
         input_paragraph, stage = fc
 
         self._pbar.update(1)
         if self.verbose:
             self.log_func(type(stage).__name__, getattr(input_paragraph, 'id', '%x' % id(input_paragraph)))
-        
+
         if stage is None:
             return
 
         try:
-            # 优先级处理
+            # Priority handling
             new_priority = priority - 1
-            
-            # 使用 async for 驱动异步生成器 
+
+            # Use async for to drive async generator
             async for next_fc in stage.flow(input_paragraph):
                 if next_fc[1] is None:
                     continue
-                
-                # 异步入队：(优先级, 唯一ID, 数据)
-                # 使用 id() 作为排序占位符防止元组比较结果数据导致报错
+
+                # Async enqueue: (priority, unique ID, data)
+                # Use id() as sorting placeholder to prevent tuple comparison errors
                 await self._queue.put((new_priority, id(next_fc[0]), next_fc))
-                
+
                 if not self.alive:
                     break
-                    
+
             self._pbar.n = (self._pbar.n or 0) + 1
         except Exception as ex:
             self.log_exception('Error while executing', ex)
             if not self.resume_next:
                 self.alive = False
-                
+
     def execute(self):
+        """Synchronous execution entry point.
+
+        Returns:
+            Task result.
+        """
         return asyncio.run(self.execute_async())
 
     async def execute_async(self) -> dict[str, Any] | None:
-        """主入口：替代原有的 execute"""
+        """Main entry point: replaces execute.
+
+        Returns:
+            Task result or None.
+        """
         self.pipeline.gctx = {}
         self._pbar.reset()
 
@@ -115,11 +154,12 @@ class Task:
                 ]
 
                 log_monitor = asyncio.create_task(self._log_monitor())
-                
+
                 await self._queue.join()
-                
+
                 self.alive = False
-                for t in self._worker_tasks: t.cancel()
+                for t in self._worker_tasks:
+                    t.cancel()
                 log_monitor.cancel()
 
             if self.alive:
@@ -140,29 +180,45 @@ class Task:
         return None
 
     async def _log_monitor(self):
-        """异步监控并打印日志"""
+        """Async log monitoring and printing."""
         while self.alive:
             self._flush_logs()
             await asyncio.sleep(0.1)
 
     def _flush_logs(self):
-        """将 deque 中的日志批量吐出"""
+        """Batch flush logs from deque."""
         while self.logs:
             log = self.logs.popleft()
             log = ' '.join(map(str, log))
             logging.info(log)
 
     def log_exception(self, info: str, exc: Exception) -> None:
+        """Log exception with traceback.
+
+        Args:
+            info: Error information.
+            exc: Exception instance.
+        """
         self.log_func(info, type(exc).__name__, exc)
         self.log_func("".join(traceback.format_exception(type(exc), exc, exc.__traceback__)))
 
     def stop(self) -> None:
+        """Stop task execution."""
         self.alive = False
         for t in self._worker_tasks:
             t.cancel()
 
     @staticmethod
     def from_dbo(dbo, **kwargs) -> "Task":
+        """Create task from TaskDBO.
+
+        Args:
+            dbo: TaskDBO instance.
+            **kwargs: Additional keyword arguments.
+
+        Returns:
+            Task instance.
+        """
         if dbo.pipeline:
             return Task(
                 params={},

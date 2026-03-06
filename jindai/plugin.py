@@ -1,4 +1,10 @@
-"""Plugin platform for jindai"""
+"""Plugin platform for Jindai application.
+
+This module provides:
+- Plugin: Base class for plugins
+- PluginManager: Manager for loading and managing plugins
+- prepare_plugins: Function to initialize the plugin system
+"""
 
 import glob
 import logging
@@ -20,9 +26,19 @@ from .storage import storage
 
 
 class Plugin:
-    """Base class for plugins"""
+    """Base class for plugins.
 
-    def __init__(self, pmanager, **conf) -> None:
+    Plugins can register filters, callbacks, and pipeline stages
+    to extend the functionality of the Jindai application.
+    """
+
+    def __init__(self, pmanager: "PluginManager", **conf) -> None:
+        """Initialize plugin.
+
+        Args:
+            pmanager: Plugin manager instance.
+            **conf: Plugin configuration.
+        """
         self.config = conf
         self.pmanager = pmanager
 
@@ -34,18 +50,14 @@ class Plugin:
         icon: str = "",
         handler: Callable = lambda *_: list(),
     ) -> None:
-        """Register filter
+        """Register a filter for the UI.
 
-        :param name: filter name
-        :type name: str
-        :param keybind: keybind for ui
-        :type keybind: str
-        :param format_string: format string
-        :type format_string: str
-        :param icon: mdi icon for ui button
-        :type icon: str
-        :param handler: handler function
-        :type handler: Callable
+        Args:
+            name: Filter name.
+            keybind: Keyboard shortcut for UI.
+            format_string: Format string for filter display.
+            icon: MDI icon for UI button.
+            handler: Handler function that returns a list.
         """
         self.pmanager.filters[name] = {
             "name": name,
@@ -56,17 +68,20 @@ class Plugin:
         }
 
     def register_callback(self, name: str, handler: Callable) -> None:
-        """Register callback function
+        """Register a callback function.
 
-        :param name: callback name
-        :type name: str
-        :param handler: handler function
-        :type handler: Callable
+        Args:
+            name: Callback name.
+            handler: Handler function.
         """
         self.pmanager.callbacks[name].append(handler)
 
     def register_pipelines(self, pipeline_classes) -> None:
-        """Register pipeline stage"""
+        """Register pipeline stage classes.
+
+        Args:
+            pipeline_classes: Pipeline stage class or iterable of classes.
+        """
         if isinstance(pipeline_classes, dict):
             pipeline_classes = pipeline_classes.values()
 
@@ -81,13 +96,17 @@ class Plugin:
 
 
 class PluginManager:
-    """Plugin manager"""
+    """Manager for loading and managing plugins.
+
+    Handles plugin discovery, loading, and provides
+    FastAPI routes for plugin management.
+    """
 
     def __init__(self, plugin_ctx: dict) -> None:
-        """Initialize plugin manager
+        """Initialize plugin manager.
 
-        :param plugin_ctx: Plugin context dictionary
-        :type plugin_ctx: dict 
+        Args:
+            plugin_ctx: Plugin context dictionary mapping names to classes.
         """
         self.plugins = []
         self.filters = {}
@@ -127,29 +146,51 @@ class PluginManager:
             except Exception as ex:
                 logging.error(f"Error while registering plugin: {plugin_name} {ex}")
                 continue
-            
-    def get_router(self):
+
+    def get_router(self) -> APIRouter:
+        """Get FastAPI router for plugin management endpoints.
+
+        Returns:
+            APIRouter with plugin endpoints.
+        """
         router = APIRouter(prefix='/plugins', tags=['Plugins'], dependencies=[Depends(get_current_admin)])
-               
+
         @router.get("/")
         def plugin_list():
+            """List all registered plugins.
+
+            Returns:
+                List of plugin class names.
+            """
             return [type(pl).__name__ for pl in self.plugins]
 
         @router.post("/")
-        def plugin_install(url):
+        def plugin_install(url: str):
+            """Install a plugin from URL.
+
+            Args:
+                url: URL to plugin zip file.
+
+            Returns:
+                True if installation succeeded.
+            """
             self.install(url)
             return True
-        
+
         @router.get("/pipeline", tags=["Plugins"])
         async def get_pipeline_info():
-            """提供流水线帮助信息"""
+            """Get pipeline stage information.
+
+            Returns:
+                Dictionary mapping module names to pipeline stage specs.
+            """
             from .pipeline import Pipeline
 
             ctx = Pipeline.ctx
             result = defaultdict(dict)
 
             for key, val in ctx.items():
-                
+
                 module_doc = (
                     sys.modules[val.__module__].__doc__ if hasattr(val, "__module__") else None
                 )
@@ -166,19 +207,21 @@ class PluginManager:
         return router
 
     def __iter__(self) -> Iterator:
-        """Iterate through loaded plugins
+        """Iterate through loaded plugins.
 
-        :return: Iterator over loaded plugin instances
-        :rtype: Iterator
+        Yields:
+            Plugin instances.
         """
         yield from self.plugins
 
     def install(self, file_or_url: str) -> None:
-        """Install plugin from local file storage or URL
+        """Install plugin from local file storage or URL.
 
-        :param file_or_url: Path to local file or URL to download plugin
-        :type file_or_url: str
-        :raises ValueError: If no main directory found in plugin package
+        Args:
+            file_or_url: Path to local file or URL to download plugin.
+
+        Raises:
+            ValueError: If no main directory found in plugin package.
         """
         if file_or_url.startswith('https://github.com/') and not file_or_url.endswith('.zip'):
             file_or_url += '/archive/refs/heads/main.zip'
@@ -226,9 +269,13 @@ class PluginManager:
 
 
 def prepare_plugins() -> 'PluginManager':
-    """Prepare plugins"""
+    """Prepare and load all plugins.
+
+    Returns:
+        PluginManager instance with loaded plugins.
+    """
     from .plugin import Plugin, PluginManager
-    
+
     if os.path.exists("restarting"):
         os.unlink("restarting")
     plugin_ctx = get_context("plugins", Plugin)

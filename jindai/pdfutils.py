@@ -1,3 +1,14 @@
+"""PDF utilities for Jindai application.
+
+This module provides functions for:
+- PDF page count extraction
+- PDF rendering to images
+- PDF conversion to TIFF
+- Image merging into PDF
+- PDF text extraction
+- PDF merging operations
+"""
+
 import os
 from io import BytesIO
 from typing import Iterator
@@ -5,11 +16,17 @@ from typing import Iterator
 import fitz
 from PIL import Image
 from PyPDF2 import PdfReader, PdfWriter
-from werkzeug.wrappers.response import Response
 
 
-def get_pdf_page_count(pdf_path) -> int | None:
-    """私有方法：获取PDF文件页数"""
+def get_pdf_page_count(pdf_path: str) -> int | None:
+    """Get the number of pages in a PDF file.
+
+    Args:
+        pdf_path: Path to the PDF file.
+
+    Returns:
+        Number of pages, or None if the file cannot be read.
+    """
     try:
         from PyPDF2 import PdfReader
 
@@ -19,41 +36,39 @@ def get_pdf_page_count(pdf_path) -> int | None:
         return None
 
 
-def render_pdf_with_fitz(pdf_path, page_num=0, format="png") -> BytesIO:
-    """Render PDF page to image using PyMuPDF (fitz)
+def render_pdf_with_fitz(pdf_path: str | bytes, page_num: int = 0, format: str = "png") -> BytesIO:
+    """Render a PDF page to an image using PyMuPDF (fitz).
 
-    :param pdf_path: Path to PDF file or bytes
-    :type pdf_path: str | bytes
-    :param page_num: Page number to render, defaults to 0
-    :type page_num: int, optional
-    :param format: Output image format, defaults to "png"
-    :type format: str, optional
-    :return: Image data as BytesIO
-    :rtype: BytesIO
+    Args:
+        pdf_path: Path to PDF file or bytes.
+        page_num: Page number to render (0-indexed).
+        format: Output image format (default: "png").
+
+    Returns:
+        Image data as BytesIO.
     """
-    # 打开 PDF
+    # Open PDF
     if isinstance(pdf_path, str):
         doc = fitz.open(pdf_path)
     else:
         doc = fitz.open(stream=pdf_path)
-    # 获取指定页（注意：fitz 从 0 开始计数）
+    # Get specified page (note: fitz is 0-indexed)
     page = doc.load_page(page_num)
 
-    # 将页面渲染为像素图 (PixMap)
-    pix = page.get_pixmap(matrix=fitz.Matrix(2, 2))  # 2倍缩放相当于提高清晰度
+    # Render page to pixel map (PixMap)
+    pix = page.get_pixmap(matrix=fitz.Matrix(2, 2))  # 2x zoom for higher resolution
 
-    # 转换为字节流
+    # Convert to byte stream
     img_data = pix.tobytes(format)
     return BytesIO(img_data)
 
 
 def convert_pdf_to_tiff_group4(pdf, outp) -> None:
-    """
-    Converts a PDF file to a multi-page Group 4 compressed TIFF file.
+    """Convert a PDF file to a multi-page Group 4 compressed TIFF file.
 
     Args:
-        pdf_path (str): The path to the input PDF file.
-        output_path (str): The path where the output TIFF file will be saved.
+        pdf: PDF file object or path.
+        outp: Output file object for the TIFF.
     """
     doc = fitz.open(pdf)
     image_list = []
@@ -88,13 +103,15 @@ def convert_pdf_to_tiff_group4(pdf, outp) -> None:
         )
 
 
-def merge_images_from_folder(folderpath, outp) -> int:
-    """Merge images from folder into a single PDF
+def merge_images_from_folder(folderpath: str, outp) -> int:
+    """Merge images from a folder into a single PDF.
 
-    :param folderpath: Path to folder containing images
-    :type folderpath: str
-    :param outp: Output file object
-    :type outp: file-like object
+    Args:
+        folderpath: Path to folder containing images.
+        outp: Output file object.
+
+    Returns:
+        Number of images merged.
     """
     image_list = []
     for f in sorted(os.listdir(folderpath)):
@@ -113,78 +130,97 @@ def merge_images_from_folder(folderpath, outp) -> int:
     return len(image_list)
 
 
-def read_pdf_pages(path, reverse=False) -> list:
-    """Read pages from PDF file
+def read_pdf_pages(path: str, reverse: bool = False) -> list:
+    """Read pages from a PDF file.
 
-    :param path: Path to PDF file
-    :type path: str
-    :param reverse: Whether to reverse page order, defaults to False
-    :type reverse: bool, optional
-    :return: List of page objects
-    :rtype: list
+    Args:
+        path: Path to PDF file.
+        reverse: Whether to reverse page order.
+
+    Returns:
+        List of page objects.
     """
     reader = PdfReader(path)
     return list(reversed(reader.pages) if reverse else reader.pages)
 
 
-def cross_merge_pdf(outp, pdf1, pdf2, reversed1, reversed2) -> None:
-    """合并PDF文件，返回合并后的临时文件路径"""
+def cross_merge_pdf(outp, pdf1, pdf2, reversed1: bool, reversed2: bool) -> None:
+    """Cross merge two PDF files (alternating pages).
+
+    Args:
+        outp: Output file object.
+        pdf1: First PDF file path.
+        pdf2: Second PDF file path.
+        reversed1: Whether to reverse first PDF.
+        reversed2: Whether to reverse second PDF.
+
+    Raises:
+        ValueError: If PDFs have different page counts.
+    """
     try:
         pdf1_pages, pdf2_pages = (
             read_pdf_pages(pdf1, reversed1),
             read_pdf_pages(pdf2, reversed2),
         )
 
-        # 检查页数是否匹配
+        # Check if page counts match
         if len(pdf1_pages) != len(pdf2_pages):
-            raise ValueError("两个PDF文件的页数不匹配，无法合并")
+            raise ValueError("Two PDF files have different page counts and cannot be merged")
 
-        # 创建输出PDF
+        # Create output PDF
         pdf_writer = PdfWriter()
 
-        # 交叉合并页面
+        # Cross merge pages
         for page1, page2 in zip(pdf1_pages, pdf2_pages):
             pdf_writer.add_page(page1)
             pdf_writer.add_page(page2)
 
-        # 创建临时文件保存合并结果
+        # Write to output
         pdf_writer.write(outp)
 
     except Exception as e:
         raise e
 
 
-def sequential_merge_pdf(outp, pdf1, pdf2, reversed1, reversed2) -> None:
-    """顺序合并PDF文件，返回合并后的临时文件路径"""
+def sequential_merge_pdf(outp, pdf1, pdf2, reversed1: bool, reversed2: bool) -> None:
+    """Sequentially merge two PDF files.
+
+    Args:
+        outp: Output file object.
+        pdf1: First PDF file path.
+        pdf2: Second PDF file path.
+        reversed1: Whether to reverse first PDF.
+        reversed2: Whether to reverse second PDF.
+    """
     try:
         pdf1_pages, pdf2_pages = (
             read_pdf_pages(pdf1, reversed1),
             read_pdf_pages(pdf2, reversed2),
         )
 
-        # 创建输出PDF
+        # Create output PDF
         pdf_writer = PdfWriter()
 
-        # 交叉合并页面
+        # Sequential merge pages
         for page in pdf1_pages + pdf2_pages:
             pdf_writer.add_page(page)
 
-        # 创建临时文件保存合并结果
+        # Write to output
         pdf_writer.write(outp)
 
     except Exception as e:
         raise e
 
 
-def extract_pdf_texts(filename, since=0) -> Iterator:
-    """Extract text from PDF pages
+def extract_pdf_texts(filename: str, since: int = 0) -> Iterator:
+    """Extract text from PDF pages.
 
-    :param filename: Path to PDF file
-    :type filename: str
-    :param since: Start page number, defaults to 0
-    :type since: int, optional
-    :return: Iterator of (page, label, content) tuples
-    :rtype: Iterator
+    Args:
+        filename: Path to PDF file.
+        since: Start page number (0-indexed).
+
+    Yields:
+        Tuples of (page_number, label, content).
     """
     doc = fitz.open(filename)
 
@@ -200,26 +236,3 @@ def extract_pdf_texts(filename, since=0) -> Iterator:
             content = ""
 
         yield page, label, content
-
-
-def requestio(func, **kwargs) -> Response:
-    """Handle file I/O from HTTP request and call function
-
-    :param func: Function to call with file objects
-    :type func: Callable
-    :param kwargs: Additional keyword arguments for function
-    :type kwargs: dict
-    :return: File download response
-    :rtype: Response
-    """
-    files = {}
-    for key, file in request.files.items():
-        inp = BytesIO()
-        file.save(inp)
-        inp.seek(0)
-        files[key] = inp
-
-    outp = BytesIO()
-    func(**files, **kwargs, outp=outp)
-    outp.seek(0)
-    return send_file(outp, as_attachment=True, mimetype="")
