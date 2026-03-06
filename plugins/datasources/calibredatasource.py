@@ -1,7 +1,14 @@
+"""Calibre Library Data Source
+
+This module provides a data source implementation for importing book metadata
+from Calibre library databases (metadata.db SQLite files).
+"""
+
 import datetime
 import sqlite3
 import os
 import urllib.parse
+from typing import List, Optional
 from uuid import UUID
 
 from sqlalchemy import select, update
@@ -12,28 +19,57 @@ from jindai.pipeline import DataSourceStage, PipelineStage
 
 
 class CalibreLibraryDataSource(DataSourceStage):
-    """
-    Import paragraphs from PDF
-    @zhs 从 PDF 中导入语段
+    """Import book metadata from Calibre library databases.
+    
+    This data source reads from Calibre's metadata.db SQLite database to extract
+    information about books (PDF and EPUB formats). It creates Paragraph objects
+    containing book metadata such as title, author, publication date, and file paths.
+    
+    The data source supports scanning for moved files to update source URLs when
+    books are relocated within the library.
+    
+    Attributes:
+        dataset_name: The name of the target dataset.
+        lang: Language code for imported paragraphs.
+        paths: List of Calibre library paths to scan.
+        formats: Tuple of allowed file extensions (default: ('epub', 'pdf')).
+        scan_for_moved: Whether to update source URLs for moved books.
     """
 
-    def get_calibre_books_safe(self, library_path: str) -> list[Paragraph]:
-        # 将路径转换为 SQLite URI 格式，以确保只读打开
+    def get_calibre_books_safe(self, library_path: str) -> List[Paragraph]:
+        """Safely read book metadata from a Calibre library database.
+        
+        Opens the metadata.db file in read-only mode to extract book information.
+        Handles database errors gracefully and returns an empty list on failure.
+        
+        Args:
+            library_path: Path to the Calibre library directory containing metadata.db.
+            
+        Returns:
+            A list of Paragraph objects, each containing:
+                - author: Book authors joined with ' & '
+                - pdate: Publication date (year only) or None if unknown
+                - outline: Book title
+                - content: Relative file path within the library
+                - extdata: Dictionary with 'book_id' key containing the database ID
+        """
+        # Convert path to absolute path for SQLite URI
         db_path = os.path.abspath(os.path.join(library_path, "metadata.db"))
         if not os.path.exists(db_path):
             return []
 
-        # 构造只读 URI (Windows 下需要处理驱动器号)
+        # Construct read-only URI (handles Windows drive letters)
         db_uri = f"file:{urllib.parse.quote(db_path)}?mode=ro"
 
         try:
-            # 使用 uri=True 开启只读连接
+            # Open database in read-only mode
             conn = sqlite3.connect(db_uri, uri=True)
             cursor = conn.cursor()
 
-            # SQL 查询：
-            # 1. 增加了 WHERE 子句过滤后缀
-            # 2. 使用 LOWER() 确保不区分大小写
+            # SQL Query:
+            # 1. Filters by PDF and EPUB formats (case-insensitive)
+            # 2. Joins books with data table for file information
+            # 3. Aggregates author names from the authors table
             query = """
             SELECT 
                 b.id,
@@ -54,19 +90,19 @@ class CalibreLibraryDataSource(DataSourceStage):
             cursor.execute(query)
             rows = cursor.fetchall()
 
-            books_info = []
+            books_info: List[Paragraph] = []
             for row in rows:
                 book_id, title, folder_path, file_name, ext, pub_date, authors = row
 
-                # 处理年份：Calibre 的空年份通常是 '0101-01-01'
-                year = (
+                # Parse publication year (Calibre uses '0101-01-01' for unknown dates)
+                year: Optional[int] = (
                     int(pub_date[:4])
                     if pub_date and not pub_date.startswith("0101")
-                    else ""
+                    else None
                 )
 
-                # 拼接相对路径
-                # Calibre 存储的 path 是相对于书库根目录的目录路径
+                # Construct relative file path
+                # Calibre stores path as directory relative to library root
                 relative_file_path = os.path.join(
                     folder_path, f"{file_name}.{ext.lower()}"
                 )
@@ -90,29 +126,20 @@ class CalibreLibraryDataSource(DataSourceStage):
 
     def apply_params(
         self,
-        dataset_name="",
-        lang="auto",
-        content="",
-        formats="epub,pdf",
-        scan_for_moved=True
+        dataset_name: str = "",
+        lang: str = "auto",
+        content: str = "",
+        formats: str = "epub,pdf",
+        scan_for_moved: bool = True
     ) -> None:
-        """
+        """Configure the data source parameters.
+        
         Args:
-            dataset_name (DATASET):
-                Dataset name
-                @zhs 数据集名称
-            lang (LANG):
-                Language
-                @zhs 语言标识
-            content (FILES):
-                Calibre Library Path
-                @zhs Calibre 书库路径
-            formats (str):
-                File format
-                @zhs 允许的文件格式
-            scan_for_moved (bool):
-                Scan for moved files
-                @zhs 扫描已移动的文件
+            dataset_name: Name of the target dataset for imported paragraphs.
+            lang: Language code for imported paragraphs ('auto' for automatic detection).
+            content: Path(s) to Calibre library directory(s), one per line.
+            formats: Comma-separated list of allowed file extensions.
+            scan_for_moved: If True, update source URLs for books that have been moved.
         """
         self.dataset_name = dataset_name
         self.lang = lang
@@ -121,29 +148,40 @@ class CalibreLibraryDataSource(DataSourceStage):
         self.scan_for_moved = scan_for_moved
 
     async def fetch(self):
+        """Fetch book metadata from configured Calibre libraries.
+        
+        Yields:
+            Paragraph objects containing book metadata with absolute file paths.
+            When scan_for_moved is enabled, also updates existing records for
+            books whose source URLs have changed.
+        """
         paths = await PipelineStage.parse_paths(self.paths)
         dsid = (await Dataset.get(self.dataset_name)).id
-        existent = {}
+        existent: dict = {}
         
         async with get_db_session() as session:
         
             if self.scan_for_moved:
+                # Build mapping of book_id -> current source_url for existing books
                 existent = dict(
                     (await session.execute(
                         select(Paragraph.extdata.op('->>')('book_id'),
                                Paragraph.source_url)
-                        .distinct(Paragraph.source_url)
+                               .distinct(Paragraph.source_url)
                     )).all()
                 )
                 
             for path in paths:
                 books = self.get_calibre_books_safe(storage.safe_join(path))
                 for book in books:
+                    # Filter by allowed formats
                     if self.formats and book.content.lower().endswith(self.formats):
+                        # Convert to absolute path
                         book.content = os.path.join(path, book.content)
                         book.dataset = dsid
                         book_id = str(book.extdata['book_id'])
-                        # update moved books
+                        
+                        # Update source URL for moved books
                         if self.scan_for_moved and existent.get(book_id):
                             await session.execute(
                                 update(Paragraph)

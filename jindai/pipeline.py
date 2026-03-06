@@ -75,6 +75,11 @@ class PipelineStage:
     def _spec(stage_cls: Type, method: str = "__init__") -> list:
         """Get argument info for a method of stage_cls.
 
+        This method combines type hints from the function signature with
+        docstring descriptions to produce comprehensive argument specifications.
+        It supports both the new Google-style docstrings with Args sections
+        and the legacy :param: style.
+
         Args:
             stage_cls: A class to inspect.
             method: Method name to inspect (default: "__init__").
@@ -82,55 +87,214 @@ class PipelineStage:
         Returns:
             List of argument specifications with name, type, description, and default.
         """
-        def _parse_docstring(docstring):
+        def _parse_google_style_docstring(docstring: str) -> dict:
+            """Parse Google-style docstrings with Args: section.
+            
+            Format:
+                Args:
+                    arg_name (Type): Description of the argument.
+                        Additional description lines.
+            """
             args_docs = defaultdict(dict)
 
-            if "Args:" in docstring:
-                arg_name, arg_type, arg_doc = "", "", ""
-                for line in docstring.strip().split("\n"):
-                    line = line.lstrip()
-                    match = re.search(r"(\w+)\s+\((.+?)\):(.*)", line)
+            if "Args:" not in docstring:
+                return args_docs
+
+            # Split docstring into lines and find Args section
+            lines = docstring.strip().split("\n")
+            in_args = False
+            current_arg = ""
+            current_type = ""
+            current_desc = []
+
+            for line in lines:
+                stripped = line.lstrip()
+                
+                # Check if we're entering Args section
+                if stripped.startswith("Args:"):
+                    in_args = True
+                    continue
+                    
+                if in_args:
+                    # Check for new argument definition
+                    match = re.search(r"^(\w+)\s*\(([^)]+)\):\s*(.*)", stripped)
                     if match:
-                        arg_name, arg_type, arg_doc = match.groups()
-                        arg_doc = arg_doc.strip()
+                        # Save previous argument if exists
+                        if current_arg:
+                            args_docs[current_arg] = {
+                                "type": current_type.strip(),
+                                "description": "\n".join(current_desc).strip()
+                            }
+                        
+                        current_arg, current_type, desc = match.groups()
+                        current_desc = [desc.strip()]
+                    elif stripped and not stripped.startswith(":"):
+                        # Continuation of previous argument description
+                        current_desc.append(stripped)
+                    elif not stripped:
+                        current_desc.append("")
                     else:
-                        arg_doc += "\n" + line
+                        # New section started
+                        if current_arg:
+                            args_docs[current_arg] = {
+                                "type": current_type.strip(),
+                                "description": "\n".join(current_desc).strip()
+                            }
+                        break
 
-                    if arg_name:
-                        args_docs[arg_name] = {
-                            "type": arg_type.split(", ")[0],
-                            "description": arg_doc,
-                        }
-            elif ":param " in docstring:
-                doc_directive, arg_type, arg_name, arg_doc = "", "", "", ""
-                for line in docstring.split("\n"):
-                    line = line.lstrip()
-                    match = re.search(r":(param|type)(\s+\w+)?\s+(\w+):(.*)$", line)
+            # Save last argument
+            if current_arg:
+                args_docs[current_arg] = {
+                    "type": current_type.strip(),
+                    "description": "\n".join(current_desc).strip()
+                }
+
+            return args_docs
+
+        def _parse_sphinx_style_docstring(docstring: str) -> dict:
+            """Parse Sphinx-style docstrings with :param: and :type: directives.
+            
+            Format:
+                :param arg_name: Description of the argument.
+                :type arg_name: Type
+            """
+            args_docs = defaultdict(dict)
+
+            lines = docstring.split("\n")
+            current_param = ""
+            current_type = ""
+            current_desc = []
+            in_params = False
+
+            for line in lines:
+                stripped = line.lstrip()
+                
+                # Check if we're in a param/type directive
+                match = re.search(r":(param|type)\s+(\w+)(?:\s*:\s*(.*))?", stripped)
+                if match:
+                    directive, param_name, desc = match.groups()
+                    desc = desc.strip() if desc else ""
+                    
+                    # Save previous parameter if exists
+                    if current_param:
+                        if current_type:
+                            args_docs[current_param]["type"] = current_type.strip()
+                        if current_desc:
+                            args_docs[current_param]["description"] = "\n".join(current_desc).strip()
+                    
+                    if directive == "type":
+                        current_type = desc
+                        current_param = param_name
+                        current_desc = []
+                    else:
+                        current_param = param_name
+                        current_type = ""
+                        current_desc = [desc] if desc else []
+                elif stripped.startswith(":"):
+                    # New non-param directive, save current
+                    if current_param:
+                        if current_type:
+                            args_docs[current_param]["type"] = current_type.strip()
+                        if current_desc:
+                            args_docs[current_param]["description"] = "\n".join(current_desc).strip()
+                    current_param = ""
+                    current_type = ""
+                    current_desc = []
+                elif stripped:
+                    # Continuation of description
+                    if current_param:
+                        current_desc.append(stripped)
+
+            # Save last parameter
+            if current_param:
+                if current_type:
+                    args_docs[current_param]["type"] = current_type.strip()
+                if current_desc:
+                    args_docs[current_param]["description"] = "\n".join(current_desc).strip()
+
+            return args_docs
+
+        def _parse_numpy_style_docstring(docstring: str) -> dict:
+            """Parse NumPy-style docstrings.
+            
+            Format:
+                Parameters
+                ----------
+                arg_name : Type
+                    Description of the argument.
+            """
+            args_docs = defaultdict(dict)
+
+            lines = docstring.split("\n")
+            in_params = False
+            current_arg = ""
+            current_type = ""
+            current_desc = []
+
+            for line in lines:
+                stripped = line.strip()
+                
+                if stripped.startswith("Parameters"):
+                    in_params = True
+                    continue
+                    
+                if in_params:
+                    # Check for argument definition (name : type pattern)
+                    match = re.search(r"^(\w+)\s*:\s*(.+)$", stripped)
                     if match:
-                        doc_directive, arg_type, arg_name, arg_doc = match.groups()
-                        arg_doc = arg_doc.lstrip()
-                    else:
-                        if line.startswith(":"):
-                            arg_name = ""
-                            continue
+                        # Save previous argument
+                        if current_arg:
+                            args_docs[current_arg] = {
+                                "type": current_type.strip(),
+                                "description": "\n".join(current_desc).strip()
+                            }
+                        current_arg, current_type = match.groups()
+                        current_desc = []
+                    elif stripped and not stripped.startswith("-") and current_arg:
+                        # Description line
+                        current_desc.append(stripped)
+                    elif not stripped and current_arg:
+                        # Empty line, might be end of description
+                        if current_desc and current_desc[-1]:
+                            current_desc.append("")
 
-                        arg_doc += "\n" + line
+            # Save last argument
+            if current_arg:
+                args_docs[current_arg] = {
+                    "type": current_type.strip(),
+                    "description": "\n".join(current_desc).strip()
+                }
 
-                    if arg_name:
-                        if doc_directive == "type":
-                            args_docs[arg_name]["type"] = arg_doc
-                        else:
-                            args_docs[arg_name]["description"] = arg_doc
-                            if arg_type:
-                                args_docs[arg_name]["type"] = arg_type.strip()
             return args_docs
 
         func = getattr(stage_cls, method)
-        args_docs = _parse_docstring(func.__doc__ or "") or {
-            argname: {"type": argtype}
-            for argname, argtype in inspect_function_signature(func).items()
-        }
+        docstring = func.__doc__ or ""
+        
+        # Try to parse docstring in various formats
+        args_docs = defaultdict(dict)
+        
+        # Try Google-style first (most common in our codebase)
+        google_docs = _parse_google_style_docstring(docstring)
+        args_docs.update(google_docs)
+        
+        # Fall back to Sphinx-style if Google-style didn't find Args:
+        if not google_docs and ":param " in docstring:
+            sphinx_docs = _parse_sphinx_style_docstring(docstring)
+            args_docs.update(sphinx_docs)
+        
+        # Fall back to NumPy-style
+        if not google_docs and "Parameters" in docstring:
+            numpy_docs = _parse_numpy_style_docstring(docstring)
+            args_docs.update(numpy_docs)
+        
+        # If no docstring found, use type hints from signature
+        if not args_docs:
+            args_docs = {
+                argname: {"type": argtype}
+                for argname, argtype in inspect_function_signature(func).items()
+            }
 
+        # Get function signature for defaults and to ensure all args are included
         args_spec = inspect.getfullargspec(func)
         args_defaults = dict(
             zip(reversed(args_spec.args), reversed(args_spec.defaults or []))
@@ -150,7 +314,7 @@ class PipelineStage:
                 "default": val.get("default"),
             }
             for key, val in args_docs.items()
-            if "type" in val
+            if "type" in val or "default" in val
         ]
 
     @staticmethod

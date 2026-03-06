@@ -20,8 +20,19 @@ import sys
 import threading
 import time
 from threading import Lock
-from typing import Callable, Dict, Type
-from typing import Any, Callable, Dict, Literal, Union, get_args, get_origin
+from typing import (
+    Callable,
+    Dict,
+    Type,
+    List,
+    Any,
+    Callable,
+    Dict,
+    Literal,
+    Union,
+    get_args,
+    get_origin,
+)
 
 from asteval import Interpreter
 import jieba3
@@ -68,6 +79,7 @@ class AutoUnloadSentenceTransformer:
 
     def _start_monitor(self) -> None:
         """Start the model idle monitoring background thread."""
+
         def monitor_loop():
             """Monitor model usage and unload when idle timeout is reached."""
             while not self._stop_monitor:
@@ -228,9 +240,9 @@ class WordStemmer:
         Returns:
             Dictionary with stemmed keyword under 'keywords' key.
         """
-        assert isinstance(lang, str) and isinstance(word, str), (
-            f"Parameter type error for stem function: got {type(word)} and {type(lang)}"
-        )
+        assert isinstance(lang, str) and isinstance(
+            word, str
+        ), f"Parameter type error for stem function: got {type(word)} and {type(lang)}"
         return {"keywords": self.stem_tokens(lang, [word])[0]}
 
 
@@ -274,6 +286,7 @@ def get_context(directory: str, parent_class: Type, *sub_dirs: str) -> Dict:
     Returns:
         Dictionary in form of {"ClassName": Class}.
     """
+
     def _prefix(sub_dir, name):
         """Prefixing module name for import."""
         dirpath = directory
@@ -314,18 +327,34 @@ def get_context(directory: str, parent_class: Type, *sub_dirs: str) -> Dict:
 def inspect_function_signature(func: Callable) -> Dict[str, str]:
     """Extract parameter names and types from a function signature.
 
+    This function uses Python's type hints to determine parameter types.
+    It supports:
+    - Basic types: int, float, str, bool
+    - Optional types: Optional[T] -> T
+    - Union types: Union[A, B] -> str (complex unions default to str)
+    - List types: List[T] -> {isArray: True, itemType: T}
+    - Literal types: Literal['a', 'b'] -> {options: ['a', 'b']}
+    - Pydantic models: Extracts all fields recursively
+    - Callable types: Returns 'Callable'
+    - Any type: Returns 'Any'
+
     Args:
         func: Function to inspect.
 
     Returns:
-        Dictionary mapping parameter names to type names (e.g., 'int', 'str', 'Optional[Dict]').
+        Dictionary mapping parameter names to type information.
+        Type information can be:
+        - Simple string for basic types (e.g., 'int', 'str')
+        - Dict with 'isArray' and 'itemType' for lists
+        - Dict with 'options' for Literal types
+        - Dict with field names for Pydantic models
     """
     # Get function signature information
     func_signature = inspect.signature(func)
     params_info = {}
 
-    def parse_type(type_obj):
-        """Recursively parse type objects."""
+    def parse_type(type_obj) -> Union[str, Dict]:
+        """Recursively parse type objects into JSON-serializable format."""
         origin = get_origin(type_obj)
         args = get_args(type_obj)
 
@@ -335,11 +364,12 @@ def inspect_function_signature(func: Callable) -> Dict[str, str]:
             actual_args = [arg for arg in args if arg is not type(None)]
             if len(actual_args) == 1:
                 return parse_type(actual_args[0])
-            return "str"  # Complex Union defaults to str
+            # For complex unions, return a descriptive format
+            return {"union": [parse_type(arg) for arg in actual_args]}
 
         # 2. Handle Literal (enum options)
         if origin is Literal:
-            return {"options": args}  # Pass enum values to frontend Select
+            return {"options": list(args)}
 
         # 3. Handle Pydantic models (QueryFilters, etc.)
         if inspect.isclass(type_obj) and issubclass(type_obj, BaseModel):
@@ -349,21 +379,42 @@ def inspect_function_signature(func: Callable) -> Dict[str, str]:
                 for name, field in type_obj.model_fields.items()
             }
 
-        # 4. Handle basic list types List[int], etc.
-        if origin is list:
+        # 4. Handle Callable types
+        if origin is Callable or type_obj is Callable:
+            return "Callable"
+
+        # 5. Handle Any type
+        if type_obj is Any:
+            return "Any"
+
+        # 6. Handle basic list types List[int], etc.
+        if origin is list or origin is List:
             return {
                 "isArray": True,
                 "itemType": parse_type(args[0]) if args else "str",
             }
 
-        # 5. Handle basic type mapping
+        # 7. Handle basic type mapping
         mapping = {int: "int", float: "float", bool: "bool", str: "str"}
         if type_obj in mapping:
             return mapping[type_obj]
 
-        # Fallback: handle class names with __name__
+        # 8. Handle class names with __name__
         if hasattr(type_obj, "__name__"):
-            return type_obj.__name__.lower()
+            name = type_obj.__name__
+            # Convert to lowercase for consistency
+            return name.lower() if name != "Type" else name
+
+        # 9. Handle generic types (e.g., Dict[str, int])
+        if origin is not None:
+            origin_name = getattr(origin, "__name__", str(origin))
+            if origin_name in ("dict", "Dict"):
+                return {
+                    "type": "dict",
+                    "keyType": parse_type(args[0]) if len(args) > 0 else "str",
+                    "valueType": parse_type(args[1]) if len(args) > 1 else "Any",
+                }
+            return str(origin_name)
 
         return "str"
 
@@ -373,7 +424,13 @@ def inspect_function_signature(func: Callable) -> Dict[str, str]:
 
         param_type = param.annotation
         if param_type is inspect.Parameter.empty:
-            params_info[param_name] = "str"
+            # No type hint - use default based on default value if available
+            if param.default is inspect.Parameter.empty:
+                params_info[param_name] = "str"
+            else:
+                # Infer type from default value
+                default_type = type(param.default).__name__.lower()
+                params_info[param_name] = default_type
         else:
             params_info[param_name] = parse_type(param_type)
 
