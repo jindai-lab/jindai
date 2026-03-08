@@ -10,6 +10,7 @@ This module provides SQLAlchemy ORM models for:
 - FileMetadata: File metadata tracking
 - TaskDBO: Task definition storage
 - TextEmbeddings: Vector embeddings for semantic search
+- APIKey: User API key management
 """
 
 import asyncio
@@ -1103,6 +1104,31 @@ class TextEmbeddings(Base):
         return embeddings.tolist()
 
 
+import hashlib
+import secrets
+
+
+def generate_api_key() -> str:
+    """Generate a secure random API key.
+
+    Returns:
+        Random API key string.
+    """
+    return f"sk_{secrets.token_urlsafe(32)}"
+
+
+def hash_api_key(key: str) -> str:
+    """Hash an API key using SHA-256.
+
+    Args:
+        key: Plain API key to hash.
+
+    Returns:
+        SHA-256 hash as hex string.
+    """
+    return hashlib.sha256(key.encode("utf-8")).hexdigest()
+
+
 def is_uuid_literal(val: str) -> bool:
     """Check if string is a valid UUID literal.
 
@@ -1118,4 +1144,55 @@ def is_uuid_literal(val: str) -> bool:
             val.lower(),
         )
         is not None
+    )
+
+
+class APIKey(Base):
+    """API key model for user authentication.
+
+    Stores user API keys that can be used as an alternative to OAuth tokens.
+    Each API key is associated with a user and has a hashed version for secure lookup.
+    """
+
+    __tablename__ = "api_keys"
+    __table_args__ = {
+        "comment": "API keys table for user authentication",
+    }
+
+    # The actual API key (stored as hashed in database)
+    key_hash: Mapped[str] = mapped_column(
+        String(128), nullable=False, comment="SHA-256 hash of the API key"
+    )
+
+    # User who owns this API key
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("user_info.id", ondelete="CASCADE"),
+        nullable=False,
+        comment="Owner user ID",
+    )
+
+    # Optional name/description for the API key
+    name: Mapped[str] = mapped_column(
+        String(64), nullable=True, comment="API key name/description"
+    )
+
+    # Whether the key is active
+    is_active: Mapped[bool] = mapped_column(
+        Boolean, default=True, nullable=False, comment="Whether API key is active"
+    )
+
+    # Expiration time (optional)
+    expires_at: Mapped[datetime | None] = mapped_column(
+        DateTime, nullable=True, comment="Expiration time"
+    )
+
+    # Expiration time (optional)
+    created_at: Mapped[datetime | None] = mapped_column(
+        DateTime, nullable=False, default=func.now(), comment="Creation time"
+    )
+
+    # Track last used time
+    last_used_at: Mapped[datetime | None] = mapped_column(
+        DateTime, nullable=True, comment="Last used time"
     )

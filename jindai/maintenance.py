@@ -126,6 +126,25 @@ class MaintenanceManager:
             )
             await session.execute(stmt)
 
+    async def cleanup_unused_datasets(self) -> None:
+        """Clean up unused datasets.
+
+        Deletes all datasets that have no associated paragraphs,
+        except for the default dataset with name='' (empty string).
+        """
+        async with get_db_session() as session:
+            # Find datasets with no paragraphs, excluding the default dataset with name=''
+            stmt = delete(Dataset).filter(
+                ~exists().where(Paragraph.dataset == Dataset.id),
+                Dataset.name != ''  # Exclude default dataset
+            )
+            result = await session.execute(stmt)
+            deleted_count = result.rowcount
+            if deleted_count > 0:
+                logging.info(f"Cleaned up {deleted_count} unused datasets.")
+            else:
+                logging.info("No unused datasets found.")
+
     async def sync_terms(self) -> None:
         """Synchronize terms/keywords from paragraphs to the terms table.
 
@@ -707,6 +726,7 @@ class MaintenanceManager:
                 "ocr": self.ocr,
                 "custom": self.custom_task,
                 "sync-sources": self.sync_sources,
+                "cleanup-unused-datasets": self.cleanup_unused_datasets,
             }.get(task_name)
             if func:
                 background_tasks.add_task(func, **params)
