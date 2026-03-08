@@ -9,6 +9,7 @@ This module provides utility classes and functions for:
 - Safe expression evaluation
 """
 
+import ast
 import gc
 import glob
 import importlib
@@ -20,28 +21,18 @@ import sys
 import threading
 import time
 from threading import Lock
-from typing import (
-    Callable,
-    Dict,
-    Type,
-    List,
-    Any,
-    Callable,
-    Dict,
-    Literal,
-    Union,
-    get_args,
-    get_origin,
-)
+from typing import (Any, Callable, Dict, List, Literal, Type, Union, get_args,
+                    get_origin)
 
-from asteval import Interpreter
 import jieba3
 import nltk.stem.snowball
 import numpy as np
 import regex as re
 import torch
-from sentence_transformers import SentenceTransformer
+from asteval import Interpreter
+from nltk.stem.snowball import SnowballStemmer
 from pydantic import BaseModel
+from sentence_transformers import SentenceTransformer
 
 jieba = jieba3.jieba3()
 
@@ -162,11 +153,6 @@ class AutoUnloadSentenceTransformer:
         self._stop_monitor = True
         with self.lock:
             self._unload_model()
-
-
-from typing import Any
-
-from nltk.stem.snowball import SnowballStemmer
 
 
 class WordStemmer:
@@ -437,6 +423,25 @@ def inspect_function_signature(func: Callable) -> Dict[str, str]:
     return params_info
 
 
+class UndefinedNameTransformer(ast.NodeTransformer):
+    """Transformer that wraps undefined names in auto() calls."""
+    
+    def __init__(self, defined_names):
+        self.defined_names = defined_names
+    
+    def visit_Name(self, node):
+        if isinstance(node.ctx, ast.Load):
+            # 对于加载操作，检查是否是预定义变量
+            if node.id not in self.defined_names:
+                # 将未定义的名称节点转换为 auto("name") 调用
+                return ast.Call(
+                    func=ast.Name(id='auto', ctx=ast.Load()),
+                    args=[ast.Constant(value=node.id)],
+                    keywords=[]
+                )
+        return node
+
+
 def aeval(expr: str, context: Union[Dict[str, Any], Any]) -> Any:
     """Evaluate an expression in a safe context.
 
@@ -447,9 +452,25 @@ def aeval(expr: str, context: Union[Dict[str, Any], Any]) -> Any:
     Returns:
         Evaluation result of any type.
     """
-    if not isinstance(context, dict):
+    if hasattr(context, 'as_dict'):
         context = context.as_dict()
-    ee = Interpreter(context)
-    result = ee(expr)
-    # Return result as is, since asteval can return various types
-    return result
+    if 'auto' not in context:
+        context['auto'] = lambda x: x
+    
+    # Parse expression to AST
+    tree = ast.parse(expr, mode='eval')
+    
+    # Get names already defined in context
+    defined_names = set(context.keys()) if isinstance(context, dict) else set(dir(context))
+    # Add Python built-in names that should not be wrapped
+    defined_names.update(['True', 'False', 'None'])
+    
+    # Transform the AST to wrap undefined names in auto() calls
+    transformer = UndefinedNameTransformer(defined_names)
+    transformed_tree = transformer.visit(tree)
+    
+    # Convert back to source code
+    transformed_expr = ast.unparse(transformed_tree)
+    
+    interp = Interpreter(context)
+    return interp(transformed_expr)
