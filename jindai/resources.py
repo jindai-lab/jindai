@@ -32,10 +32,11 @@ from sqlalchemy.sql import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 # Import existing components
-from .app import get_current_admin, get_current_username, router, wsrouter, app
+from .app import get_current_admin, get_current_admin_user, get_current_user, get_current_username, router, wsrouter, app
 from .config import config
 from .maintenance import maintenance_manager
 from .models import (
+    APIKey,
     Base,
     Dataset,
     EmbeddingPendingQueue,
@@ -101,9 +102,20 @@ class ResourceRegistry:
         Returns:
             SQLAlchemy filter expression.
         """
+        from .models import UserInfo
+        
+        # Admin has full access
         if await get_current_admin({}, username):
             return True
-        return self.model.user.username == username
+        
+        # Check if model has user relationship
+        if hasattr(self.model, 'user'):
+            return self.model.user.username == username
+        elif hasattr(self.model, 'user_id'):
+            return self.model.user_id == UserInfo.id
+        else:
+            # For models without user relationship, allow access
+            return True
 
     async def paginate(
         self,
@@ -365,6 +377,110 @@ class EmbeddingManager:
             ).scalar()
             return {"finished": finished, "queued": queued}
 
+        @router.post("/embeddings", tags=["Embeddings"])
+        async def create_embeddings(
+            data: dict = Body(...),
+            session: AsyncSession = Depends(get_db),
+        ):
+            """Create embeddings for input text(s) using configured model.
+            
+            This endpoint follows OpenAI's embeddings API style:
+            https://platform.openai.com/docs/api-reference/embeddings
+            
+            Args:
+                data: Request body with:
+                    - model: Model name to use for embeddings (optional, uses config model)
+                    - input: Text or list of texts to embed
+                    - encoding_format: Output format ("float" or "base64")
+                session: Database session.
+
+            Returns:
+                Dictionary with embeddings in OpenAI format:
+                {
+                    "object": "list",
+                    "data": [
+                        {
+                            "object": "embedding",
+                            "embedding": [float, float, ...],
+                            "index": 0
+                        }
+                    ],
+                    "model": "model-name",
+                    "usage": {"prompt_tokens": int, "total_tokens": int}
+                }
+            """
+            # Extract input texts (can be string or list of strings)
+            input_data = data.get("input", [])
+            if isinstance(input_data, str):
+                input_texts = [input_data]
+            elif isinstance(input_data, list):
+                input_texts = input_data
+            else:
+                raise HTTPException(
+                    status_code=400,
+                    detail="Invalid input: must be a string or list of strings"
+                )
+            
+            if not input_texts:
+                raise HTTPException(
+                    status_code=400,
+                    detail="Invalid input: empty list"
+                )
+            
+            # Get model name (use config if not provided)
+            model_name = data.get("model", config.embedding_model)
+            
+            # Compute embeddings using the configured model
+            embeddings = []
+            for text in input_texts:
+                if not isinstance(text, str):
+                    raise HTTPException(
+                        status_code=400,
+                        detail=f"Invalid input: expected string, got {type(text).__name__}"
+                    )
+                # Use the existing get_embedding method from TextEmbeddings
+                embedding = await TextEmbeddings.get_embedding(text)
+                embeddings.append(embedding)
+            
+            # Determine encoding format (default to float)
+            encoding_format = data.get("encoding_format", "float")
+            
+            # Build response in OpenAI format
+            data_entries = []
+            for i, embedding in enumerate(embeddings):
+                # Convert to base64 if requested
+                if encoding_format == "base64":
+                    import base64
+                    import struct
+                    # Pack floats as binary and encode as base64
+                    packed = struct.pack(f'{len(embedding)}f', *embedding)
+                    embedding_b64 = base64.b64encode(packed).decode('utf-8')
+                    data_entries.append({
+                        "object": "embedding",
+                        "embedding": embedding_b64,
+                        "index": i
+                    })
+                else:
+                    # Default: return as float list
+                    data_entries.append({
+                        "object": "embedding",
+                        "embedding": embedding,
+                        "index": i
+                    })
+            
+            # Calculate token usage (approximate: 1 token ~ 4 characters)
+            total_tokens = sum(len(text) // 4 for text in input_texts)
+            
+            return {
+                "object": "list",
+                "data": data_entries,
+                "model": model_name,
+                "usage": {
+                    "prompt_tokens": total_tokens,
+                    "total_tokens": total_tokens
+                }
+            }
+
         @router.post("/embeddings/{resource_id}", status_code=201, tags=["Embeddings"])
         async def update_single_embedding(
             resource_id: str, session: AsyncSession = Depends(get_db)
@@ -396,6 +512,245 @@ class EmbeddingManager:
                 session.add(TextEmbeddings(id=resource_id, embedding=emb_val))
             await session.commit()
             return {"id": resource_id}
+
+
+class APIKeyManager:
+    """Handles API key management operations."""
+
+    def register_routes(self, router: APIRouter):
+        """Register API key management routes.
+
+        Args:
+            router: APIRouter to register routes with.
+        """
+        @router.get("/apikeys", tags=["API Keys"])
+        async def list_api_keys(
+            session: AsyncSession = Depends(get_db),
+            username: str = Depends(get_current_username),
+        ):
+            """List all API keys for the current user.
+            
+            Args:
+                session: Database session.
+                username: Current username.
+                
+            Returns:
+                List of API keys with metadata.
+            """
+            from .models import UserInfo, hash_api_key
+            print('APIKEY')
+            
+            # Get user ID from username
+            result = await session.execute(
+                select(UserInfo).filter(UserInfo.username == username)
+            )
+            user = result.scalar_one_or_none()
+            if not user:
+                raise HTTPException(404, detail="User not found")
+            
+            # Query API keys for this user
+            result = await session.execute(
+                select(APIKey).filter(APIKey.user_id == user.id)
+            )
+            api_keys = result.scalars().all()
+            
+            return {
+                "object": "list",
+                "data": [
+                    {
+                        "id": str(api_key.id),
+                        "object": "api_key",
+                        "name": api_key.name,
+                        "is_active": api_key.is_active,
+                        "expires_at": api_key.expires_at.isoformat() if api_key.expires_at else None,
+                        "last_used_at": api_key.last_used_at.isoformat() if api_key.last_used_at else None,
+                        "created_at": api_key.created_at.isoformat(),
+                    }
+                    for api_key in api_keys
+                ],
+            }
+
+        @router.post("/apikeys", status_code=201, tags=["API Keys"])
+        async def create_api_key(
+            data: dict = Body(...),
+            session: AsyncSession = Depends(get_db),
+            username: str = Depends(get_current_username),
+        ):
+            """Create a new API key for the current user.
+            
+            Args:
+                data: Request body with optional 'name' field.
+                session: Database session.
+                username: Current username.
+                
+            Returns:
+                Dictionary with the plain API key (only shown once!) and metadata.
+            """
+            from .models import UserInfo, generate_api_key, hash_api_key
+            
+            # Get user ID from username
+            result = await session.execute(
+                select(UserInfo).filter(UserInfo.username == username)
+            )
+            user = result.scalar_one_or_none()
+            if not user:
+                raise HTTPException(404, detail="User not found")
+            
+            # Generate new API key
+            plain_key = generate_api_key()
+            key_hash = hash_api_key(plain_key)
+            
+            # Create API key record
+            api_key = APIKey(
+                user_id=user.id,
+                key_hash=key_hash,
+                name=data.get("name"),
+                is_active=True,
+            )
+            session.add(api_key)
+            await session.commit()
+            
+            return {
+                "id": str(api_key.id),
+                "object": "api_key",
+                "name": api_key.name,
+                "is_active": api_key.is_active,
+                "created_at": api_key.created_at.isoformat(),
+                # Only show the plain key once!
+                "plain_key": plain_key,
+            }
+
+        @router.delete("/apikeys/{resource_id}", tags=["API Keys"])
+        async def delete_api_key(
+            resource_id: str,
+            session: AsyncSession = Depends(get_db),
+            username: str = Depends(get_current_username),
+        ):
+            """Delete an API key for the current user.
+            
+            Args:
+                resource_id: API key ID.
+                session: Database session.
+                username: Current username.
+                
+            Returns:
+                Deletion confirmation.
+                
+            Raises:
+                HTTPException: If API key not found or doesn't belong to user.
+            """
+            from .models import UserInfo
+            
+            # Get user ID from username
+            result = await session.execute(
+                select(UserInfo).filter(UserInfo.username == username)
+            )
+            user = result.scalar_one_or_none()
+            if not user:
+                raise HTTPException(404, detail="User not found")
+            
+            # Get API key
+            api_key = await session.get(APIKey, resource_id)
+            if not api_key:
+                raise HTTPException(404, detail="API key not found")
+            
+            # Verify ownership
+            if api_key.user_id != user.id:
+                raise HTTPException(403, detail="API key does not belong to user")
+            
+            # Soft delete by setting is_active to False
+            await session.delete(api_key)
+            await session.commit()
+            
+            return {"message": "API key deleted"}
+
+        @router.post("/apikeys/{resource_id}/revoke", tags=["API Keys"])
+        async def revoke_api_key(
+            resource_id: str,
+            session: AsyncSession = Depends(get_db),
+            username: str = Depends(get_current_username),
+        ):
+            """Revoke an API key (soft delete).
+            
+            Args:
+                resource_id: API key ID.
+                session: Database session.
+                username: Current username.
+                
+            Returns:
+                Revocation confirmation.
+                
+            Raises:
+                HTTPException: If API key not found or doesn't belong to user.
+            """
+            from .models import UserInfo
+            
+            # Get user ID from username
+            result = await session.execute(
+                select(UserInfo).filter(UserInfo.username == username)
+            )
+            user = result.scalar_one_or_none()
+            if not user:
+                raise HTTPException(404, detail="User not found")
+            
+            # Get API key
+            api_key = await session.get(APIKey, resource_id)
+            if not api_key:
+                raise HTTPException(404, detail="API key not found")
+            
+            # Verify ownership
+            if api_key.user_id != user.id:
+                raise HTTPException(403, detail="API key does not belong to user")
+            
+            # Soft delete by setting is_active to False
+            api_key.is_active = False
+            await session.commit()
+            
+            return {"message": "API key revoked"}
+
+        @router.post("/apikeys/{resource_id}/activate", tags=["API Keys"])
+        async def activate_api_key(
+            resource_id: str,
+            session: AsyncSession = Depends(get_db),
+            username: str = Depends(get_current_username),
+        ):
+            """Activate a revoked API key.
+            
+            Args:
+                resource_id: API key ID.
+                session: Database session.
+                username: Current username.
+                
+            Returns:
+                Activation confirmation.
+                
+            Raises:
+                HTTPException: If API key not found or doesn't belong to user.
+            """
+            from .models import UserInfo
+            
+            # Get user ID from username
+            result = await session.execute(
+                select(UserInfo).filter(UserInfo.username == username)
+            )
+            user = result.scalar_one_or_none()
+            if not user:
+                raise HTTPException(404, detail="User not found")
+            
+            # Get API key
+            api_key = await session.get(APIKey, resource_id)
+            if not api_key:
+                raise HTTPException(404, detail="API key not found")
+            
+            # Verify ownership
+            if api_key.user_id != user.id:
+                raise HTTPException(403, detail="API key does not belong to user")
+            
+            # Activate the key
+            api_key.is_active = True
+            await session.commit()
+            
+            return {"message": "API key activated"}
 
 
 class ContentManager(ResourceRegistry):
@@ -645,6 +1000,7 @@ class StorageManager:
 
 emb_manager = EmbeddingManager()
 app.router.lifespan_context = emb_manager.lifespan
+api_key_manager = APIKeyManager()
 
 # Register common CRUD resources
 ResourceRegistry(UserInfo, "/users", ["Users"]).register(
@@ -656,6 +1012,7 @@ TaskResource().register(router)
 # Register business logic modules
 ContentManager().register_routes(router)
 emb_manager.register_routes(router)
+api_key_manager.register_routes(router)
 StorageManager().register_routes(router)
 
 
@@ -709,6 +1066,7 @@ tasks_to_reg = [
     (maintenance_manager.sync_terms, "sync_terms"),
     (maintenance_manager.update_pdate_from_url, "sync_pdate"),
     (maintenance_manager.sync_sources, "sync_sources"),
+    (maintenance_manager.cleanup_unused_datasets, "cleanup_datasets"),
     (maintenance_manager.test_task, "test_task"),
 ]
 for func_ref, name in tasks_to_reg:
