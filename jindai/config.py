@@ -59,6 +59,9 @@ class ConfigObject(BaseModel):
 
     ui_dist: str = Field(description="Path to UI distribution files", default='./dist/')
     paddle_remote: str = Field(description="PaddleOCR remote service URL")
+    cors_origins: List[str] = Field(
+        default_factory=list, description="List of allowed CORS origins"
+    )
 
     constants: dict = Field(default_factory=dict, description="Application constants")
 

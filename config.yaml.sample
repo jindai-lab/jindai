@@ -18,3 +18,7 @@ embdding_dims: 1024
 
 ui_dist: ./dist/
 paddle_remote: http://paddle-ocr:8080/
+
+# CORS configuration - list of allowed origins (use "*" to allow all)
+cors_origins:
+  - "*"
