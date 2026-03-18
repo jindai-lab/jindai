@@ -13,7 +13,7 @@ from asteval import Interpreter
 from fastapi import APIRouter, Depends, FastAPI, HTTPException, Request, WebSocket, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
-from sqlalchemy import select
+from sqlalchemy import func, select
 
 from .config import config
 from .config import oidc_validator
@@ -25,7 +25,7 @@ app = FastAPI(
     docs_url="/api/v2/docs",
     openapi_url="/api/v2/openapi.json",
     title="Jindai",
-    version="2.0.679",
+    version="2.0.680",
 )
 
 # CORS middleware configuration
@@ -85,10 +85,22 @@ async def get_current_user(request: Request) -> Dict[str, Any]:
                 )
                 user = result.scalar_one_or_none()
                 if not user:
-                    raise HTTPException(
-                        status_code=status.HTTP_401_UNAUTHORIZED,
-                        detail="User not found",
-                    )
+                    # Check if this is the first user (table is empty)
+                    count_result = await session.execute(select(func.count(UserInfo.id)))
+                    total_count = count_result.scalar_one()
+                    
+                    # Create new user with appropriate roles
+                    new_user = UserInfo(username=username)
+                    if total_count == 0:
+                        # First user gets admin role
+                        new_user.roles = ["admin"]
+                    else:
+                        # Regular user gets default roles
+                        new_user.roles = ["user"]
+                    session.add(new_user)
+                    await session.commit()
+                    await session.refresh(new_user)
+                    user = new_user
                 return {
                     "username": username,
                     "roles": user.roles,
@@ -171,30 +183,6 @@ async def get_current_user(request: Request) -> Dict[str, Any]:
     )
 
 
-async def get_current_admin_user(request: Request) -> Dict[str, Any]:
-    """Verify if the current user has the admin role.
-    Supports both OAuth token and API key authentication.
-    
-    Args:
-        request: FastAPI request object.
-        
-    Returns:
-        Dict with user info if user is admin.
-        
-    Raises:
-        HTTPException: If authentication fails or user is not admin.
-    """
-    user = await get_current_user(request)
-    
-    if "admin" not in user.get("roles", []):
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail=f"Must be admin. You are logged in as: {user.get('username')}",
-        )
-    
-    return user
-
-
 async def get_current_username(request: Request) -> str:
     """Get current username from either OAuth token or API key.
     
@@ -240,13 +228,13 @@ async def get_current_admin(request: Request = None, username: str = "") -> Dict
                     )
                     .limit(1)
                 )
-            ).scalar_one_or_none()
+            ).scalar()
             if not user:
                 raise HTTPException(
                     status_code=status.HTTP_403_FORBIDDEN,
                     detail=f"Must be admin. You are logged in as: {username}",
                 )
-            return {"username": username, "roles": user.roles, "user_id": str(user.id)}
+            return user.as_dict()
     
     # New signature: request is a Request object
     if not username:
@@ -268,7 +256,7 @@ async def get_current_admin(request: Request = None, username: str = "") -> Dict
                 )
                 .limit(1)
             )
-        ).first()
+        ).scalar_one_or_none()
 
         if not user:
             raise HTTPException(

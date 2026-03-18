@@ -198,10 +198,8 @@ class PluginManager:
                     module_doc or val.__module__.split(".")[-1]
                     if hasattr(val, "__module__")
                     else key
-                ).strip()
+                ).strip().split('\n')[0]
                 
-                if name.endswith('Base'): continue
-
                 result[name][key] = val.get_spec()
 
             return result

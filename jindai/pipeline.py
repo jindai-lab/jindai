@@ -309,7 +309,7 @@ class PipelineStage:
         return [
             {
                 "name": key,
-                "type": val.get("type", "").strip(),
+                "type": val.get("type", ""),
                 "description": val.get("description"),
                 "default": val.get("default"),
             }
