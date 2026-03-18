@@ -32,7 +32,7 @@ from sqlalchemy.sql import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 # Import existing components
-from .app import get_current_admin, get_current_admin_user, get_current_user, get_current_username, router, wsrouter, app
+from .app import get_current_admin, get_current_username, router, wsrouter, app
 from .config import config
 from .maintenance import maintenance_manager
 from .models import (
