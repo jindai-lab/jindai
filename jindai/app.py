@@ -11,6 +11,7 @@ from typing import Any, Dict, Optional, Union
 import uvicorn
 from asteval import Interpreter
 from fastapi import APIRouter, Depends, FastAPI, HTTPException, Request, WebSocket, status
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
 from sqlalchemy import select
 
@@ -25,6 +26,15 @@ app = FastAPI(
     openapi_url="/api/v2/openapi.json",
     title="Jindai",
     version="2.0.679",
+)
+
+# CORS middleware configuration
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=config.cors_origins if config.cors_origins else ["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
 
