@@ -80,3 +80,8 @@ default = true
 
 [tool.uv.sources]
 ocrmypdf-paddleocr-remote = { git = "https://github.com/zhuth/ocrmypdf-paddleocr-remote" }
+
+[dependency-groups]
+dev = [
+    "sqlacodegen>=4.0.3",
+]

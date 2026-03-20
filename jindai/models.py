@@ -1,3 +1,4 @@
+
 """Database models for Jindai application.
 
 This module provides SQLAlchemy ORM models for:

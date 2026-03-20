@@ -12,7 +12,7 @@ This package provides the main application components including:
 from . import helpers, models
 from .app import app, serve_static
 from .config import config
-from .models import Dataset, Paragraph, TaskDBO, UserInfo, get_db_session
+from .models import Dataset, Paragraph, TaskDBO, UserInfo, get_db_session, is_uuid_literal
 from .pipeline import Pipeline, PipelineStage
 from .plugin import Plugin, PluginManager
 from .resources import router, wsrouter
