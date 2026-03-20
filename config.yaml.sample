@@ -22,3 +22,12 @@ paddle_remote: http://paddle-ocr:8080/
 # CORS configuration - list of allowed origins (use "*" to allow all)
 cors_origins:
   - "*"
+
+# Bibliography plugin configuration
+# BibliographyPlugin:
+#   calibre_library_paths:
+#     - /path/to/calibre/library1
+#     - /path/to/calibre/library2
+#   zotero_api_key: your_zotero_api_key_here
+#   zotero_library_id: your_zotero_library_id_here
+#   zotero_library_type: user  # or 'group' for group libraries
