@@ -15,7 +15,7 @@ from .config import config
 from .models import Dataset, Paragraph, TaskDBO, UserInfo, get_db_session, is_uuid_literal
 from .pipeline import Pipeline, PipelineStage
 from .plugin import Plugin, PluginManager
-from .resources import router, wsrouter
+from .resources import router
 from .storage import storage
 from .task import Task
 
@@ -24,7 +24,6 @@ __all__ = [
     "config",
     "storage",
     "router",
-    "wsrouter",
     "Pipeline",
     "PipelineStage",
     "Plugin",

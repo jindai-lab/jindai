@@ -10,6 +10,8 @@ This module provides:
 
 import asyncio
 import json
+import base64
+import struct
 import os
 import httpx
 import logging
@@ -32,7 +34,7 @@ from sqlalchemy.sql import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 # Import existing components
-from .app import get_current_admin, get_current_username, router, wsrouter, app
+from .app import get_current_admin, get_current_username, router, app
 from .config import config
 from .maintenance import maintenance_manager
 from .models import (
@@ -47,10 +49,11 @@ from .models import (
     TextEmbeddings,
     UserInfo,
     get_db_session,
+    generate_api_key,
+    hash_api_key
 )
 from .plugin import plugins
 from .storage import storage
-from .worker import worker_manager
 
 # --- Basic utilities and dependencies ---
 
@@ -102,7 +105,6 @@ class ResourceRegistry:
         Returns:
             SQLAlchemy filter expression.
         """
-        from .models import UserInfo
         
         # Admin has full access
         if await get_current_admin({}, username):
@@ -450,8 +452,6 @@ class EmbeddingManager:
             for i, embedding in enumerate(embeddings):
                 # Convert to base64 if requested
                 if encoding_format == "base64":
-                    import base64
-                    import struct
                     # Pack floats as binary and encode as base64
                     packed = struct.pack(f'{len(embedding)}f', *embedding)
                     embedding_b64 = base64.b64encode(packed).decode('utf-8')
@@ -537,9 +537,6 @@ class APIKeyManager:
             Returns:
                 List of API keys with metadata.
             """
-            from .models import UserInfo, hash_api_key
-            print('APIKEY')
-            
             # Get user ID from username
             result = await session.execute(
                 select(UserInfo).filter(UserInfo.username == username)
@@ -586,8 +583,7 @@ class APIKeyManager:
             Returns:
                 Dictionary with the plain API key (only shown once!) and metadata.
             """
-            from .models import UserInfo, generate_api_key, hash_api_key
-            
+                        
             # Get user ID from username
             result = await session.execute(
                 select(UserInfo).filter(UserInfo.username == username)
@@ -638,9 +634,7 @@ class APIKeyManager:
                 
             Raises:
                 HTTPException: If API key not found or doesn't belong to user.
-            """
-            from .models import UserInfo
-            
+            """ 
             # Get user ID from username
             result = await session.execute(
                 select(UserInfo).filter(UserInfo.username == username)
@@ -683,8 +677,6 @@ class APIKeyManager:
             Raises:
                 HTTPException: If API key not found or doesn't belong to user.
             """
-            from .models import UserInfo
-            
             # Get user ID from username
             result = await session.execute(
                 select(UserInfo).filter(UserInfo.username == username)
@@ -727,8 +719,6 @@ class APIKeyManager:
             Raises:
                 HTTPException: If API key not found or doesn't belong to user.
             """
-            from .models import UserInfo
-            
             # Get user ID from username
             result = await session.execute(
                 select(UserInfo).filter(UserInfo.username == username)
@@ -1052,22 +1042,4 @@ async def translator(params: dict = Body(...)):
 # 4. External manager integration
 router.include_router(plugins.get_router())
 router.include_router(maintenance_manager.get_router())
-router.include_router(worker_manager.get_router())
-wsrouter.include_router(worker_manager.get_wsrouter())
 app.include_router(router)
-app.include_router(wsrouter)
-
-
-# 5. Worker task registration
-tasks_to_reg = [
-    (maintenance_manager.custom_task, "custom"),
-    (maintenance_manager.ocr, "ocr"),
-    (maintenance_manager.update_text_embeddings, "text_embedding"),
-    (maintenance_manager.sync_terms, "sync_terms"),
-    (maintenance_manager.update_pdate_from_url, "sync_pdate"),
-    (maintenance_manager.sync_sources, "sync_sources"),
-    (maintenance_manager.cleanup_unused_datasets, "cleanup_datasets"),
-    (maintenance_manager.test_task, "test_task"),
-]
-for func_ref, name in tasks_to_reg:
-    worker_manager.register_task(func_ref, name)

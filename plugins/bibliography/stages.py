@@ -194,6 +194,10 @@ class BibItemSave(PipelineStage):
                             bibitem.file_attachments.append(path)
                 else:
                     bibitem.file_attachments = new_attachments
+                    
+            # Cover
+            if "cover" in extdata:
+                bibitem.cover = extdata["cover"]
 
 
 class BibItemDeduplicate(PipelineStage):
