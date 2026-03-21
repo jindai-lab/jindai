@@ -18,11 +18,10 @@ from sqlalchemy import (
     or_,
     select,
 )
-from sqlalchemy.dialects.postgresql import JSONB, UUID as PGUUID, ARRAY
+from sqlalchemy.dialects.postgresql import JSONB, ARRAY
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
-from jindai.models import Base, Dataset, get_db_session
-from uuid import UUID
+from jindai.models import Base
 
 
 class BibItem(Base):
@@ -123,19 +122,6 @@ class BibItem(Base):
         JSONB, default=dict, comment="Extra fields (JSONB)"
     )
     
-    # ========== Relationships ==========
-    # Link to dataset for organizational purposes
-    dataset: Mapped[UUID] = mapped_column(
-        PGUUID(as_uuid=True),
-        ForeignKey("dataset.id"),
-        nullable=False,
-        comment="Associated dataset ID",
-    )
-    
-    dataset_obj: Mapped["Dataset"] = relationship(
-        "Dataset", backref="bib_items", lazy="joined"
-    )
-    
     def as_dict(self) -> dict:
         """Convert model instance to dictionary.
         
@@ -163,7 +149,6 @@ class BibItem(Base):
         Returns:
             BibItem if found, None otherwise.
         """
-        from sqlalchemy import select
         stmt = select(cls).where(cls.doi == doi)
         result = await session.execute(stmt)
         return result.scalar_one_or_none()
@@ -179,8 +164,26 @@ class BibItem(Base):
         Returns:
             BibItem if found, None otherwise.
         """
-        from sqlalchemy import select
         stmt = select(cls).where(cls.url == url)
+        result = await session.execute(stmt)
+        return result.scalar_one_or_none()
+
+    @classmethod
+    async def get_by_catalog(cls, session, library_catalog: str, call_number: str) -> Optional["BibItem"]:
+        """Get a BibItem by library catalog and call number.
+        
+        Args:
+            session: SQLAlchemy session.
+            library_catalog: Name of the library catalog.
+            call_number: Call number / shelf location.
+            
+        Returns:
+            BibItem if found, None otherwise.
+        """
+        stmt = select(cls).where(
+            cls.library_catalog == library_catalog,
+            cls.call_number == call_number
+        ).limit(1)
         result = await session.execute(stmt)
         return result.scalar_one_or_none()
     
@@ -198,7 +201,6 @@ class BibItem(Base):
         Returns:
             List of matching BibItems.
         """
-        from sqlalchemy import select
         stmt = select(cls).where(
             cls.title.ilike(f"%{title}%"),
             cls.author.ilike(f"%{author}%")

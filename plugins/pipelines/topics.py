@@ -54,7 +54,7 @@ class LDA(PipelineStage):
     def resolve(self, paragraph: Paragraph) -> Paragraph:
         self.mat[str(paragraph.id)] = paragraph.tokens
 
-    def summarize(self, *_) -> dict[str, dict]:
+    async def summarize(self, *_) -> dict[str, dict]:
         model = safe_import('gensim.models_ldamodel').LdaModel
 
         for sent_vec in self.mat.values():
@@ -176,7 +176,7 @@ class CosSimFSClassifier(AccumulateParagraphs):
             self.vecs_cnt[label] += 1
         return label
 
-    def summarize(self, *_):
+    async def summarize(self, *_):
         for dim in self.vecs:
             self.vecs[dim] = self.vecs[dim] / np.linalg.norm(self.vecs[dim])
         for para in self.paragraphs:
@@ -210,7 +210,7 @@ class CosSimClustering(AccumulateParagraphs):
         self.vecs.append(paragraph.vec)
         return paragraph
 
-    def summarize(self, *_):
+    async def summarize(self, *_):
         vecs = np.array(self.vecs)
         clusters = util.community_detection(
             vecs, min_community_size=self.min_community_size, threshold=self.threshold)
@@ -247,7 +247,7 @@ class KmeansClustering(PipelineStage):
         vec = getattr(self.paragraphs[i], self.vector_field)
         return vec
 
-    def summarize(self, _) -> list:
+    async def summarize(self, _) -> list:
         if len(self.paragraphs) == 0:
             return []
         mat = np.zeros((len(self.paragraphs), len(self._get_vec(0))), 'float')
@@ -292,7 +292,7 @@ class DrawClusters(PipelineStage):
                 getattr(paragraph, self.coordinates_field),
                 getattr(paragraph, self.notation_field, '')[:self.notation_length])
 
-    def summarize(self, result) -> dict:
+    async def summarize(self, result) -> dict:
         buf = BytesIO()
         clusters = defaultdict(list)
 
@@ -339,7 +339,7 @@ class GenerateCooccurance(PipelineStage):
             self.token(paragraph)
         return paragraph
 
-    def summarize(self, _) -> Dict:
+    async def summarize(self, _) -> Dict:
         if self.method == 'vec_cos':
             from sentence_transformers.util import cos_sim
             sim_result = {}
@@ -368,7 +368,7 @@ class GraphicClustering(PipelineStage):
         self.paragraphs = []
         super().__init__()
 
-    def summarize(self, result) -> dict:
+    async def summarize(self, result) -> dict:
         nx = safe_import('networkx')
         graph = nx.Graph()
         for (node_a, node_b), val in sorted(result, key=lambda x: x[1], reverse=True)[:self.topk]:
@@ -418,7 +418,7 @@ class SentenceTransformer(PipelineStage):
             if len(self.buffer) >= self.n:
                 self.process_buffer()
 
-    def summarize(self, result) -> Dict:
+    async def summarize(self, result) -> Dict:
         self.process_buffer()
         return result
     

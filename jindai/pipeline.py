@@ -19,7 +19,7 @@ import regex as re
 
 from .config import config
 from .helpers import inspect_function_signature
-from .models import Paragraph
+from .models import Paragraph, session_factory
 from .storage import storage
 
 ResolveResultType = Paragraph | None
@@ -57,6 +57,13 @@ class PipelineStage:
         self.gctx = {}
         self.verbose = False
         self.instance_name = name
+        self._dbsession = None
+        
+    @property
+    def dbsession(self):
+        if self._dbsession is None:
+            self._dbsession = session_factory()
+        return self._dbsession
 
     @classmethod
     def get_spec(cls) -> dict[str, str]:
@@ -164,7 +171,6 @@ class PipelineStage:
             current_param = ""
             current_type = ""
             current_desc = []
-            in_params = False
 
             for line in lines:
                 stripped = line.lstrip()
@@ -418,7 +424,7 @@ class PipelineStage:
         """
         return paragraph
 
-    def summarize(self, result: dict) -> Dict:
+    async def summarize(self, result: dict) -> Dict:
         """Reduce/aggregate results from the last stage.
 
         Args:
@@ -428,6 +434,18 @@ class PipelineStage:
         Returns:
             Summarized result, None for default.
         """
+        print(self._dbsession)
+        
+        if self._dbsession is not None:
+            try:
+                await self._dbsession.commit()
+            except Exception as e:
+                await self._dbsession.rollback()
+                raise e
+            finally:
+                await self._dbsession.close()
+                self._dbsession = None
+            self.log('commtted to database and closed session')
         return result
 
     async def flow(
@@ -714,8 +732,5 @@ class Pipeline:
             Final summarized result.
         """
         for stage in self.stages:
-            result = stage.summarize(result) or result
-            if asyncio.iscoroutine(result):
-                result = await result
-
+            result = await stage.summarize(result) or result
         return result

@@ -350,7 +350,7 @@ class WebPageListingDataSource(DataSourceStage):
                 self.log('parse detail', url)
                 yield self.parse_detail(url, para, b)
 
-    def summarize(self, result: Dict) -> Dict:
+    async def summarize(self, result: Dict) -> Dict:
         """Clean up visited and queued URL sets after processing.
         
         Args:
@@ -362,7 +362,6 @@ class WebPageListingDataSource(DataSourceStage):
         self.log('clear visited & queued urls')
         self.visited.clear()
         self.queued.clear()
-        return result
 
 
 class JSONDataSource(DataSourceStage):

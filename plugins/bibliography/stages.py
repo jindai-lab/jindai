@@ -5,12 +5,8 @@ records and other bibliography-related operations.
 """
 
 import logging
-from typing import Optional, Dict, Any, List
-from uuid import UUID
 
-from sqlalchemy import select, update
-
-from jindai.models import Dataset, Paragraph, get_db_session
+from jindai.models import Paragraph
 from jindai.pipeline import PipelineStage
 from .models import BibItem
 
@@ -30,20 +26,17 @@ class BibItemSave(PipelineStage):
     
     def __init__(
         self,
-        dataset_name: str = "",
         update_existing: bool = True,
         merge_attachments: bool = True
     ) -> None:
         """Initialize BibItemSave stage.
         
         Args:
-            dataset_name: Target dataset name for BibItems.
             update_existing: If True, update existing BibItems by DOI/URL.
                 If False, always create new records.
             merge_attachments: If True, merge file attachments from multiple sources.
         """
-        super().__init__(name="BibItemSave")
-        self.dataset_name = dataset_name
+        super().__init__()
         self.update_existing = update_existing
         self.merge_attachments = merge_attachments
         self._log = lambda *x: logging.info(' '.join(map(str, x)))
@@ -61,55 +54,55 @@ class BibItemSave(PipelineStage):
             return None
         
         try:
-            async with get_db_session() as session:
-                # Get dataset
-                from jindai.models import Dataset
-                if self.dataset_name:
-                    ds = await Dataset.get(self.dataset_name, auto_create=True)
-                else:
-                    ds = await session.get(Dataset, paragraph.dataset)
-                
-                # Check for existing BibItem by DOI or URL
-                existing = None
-                if self.update_existing:
-                    # Try DOI first
-                    if paragraph.extdata and "doi" in paragraph.extdata:
-                        doi = paragraph.extdata["doi"]
-                        if isinstance(doi, str):
-                            existing = await BibItem.get_by_doi(session, doi)
+            # Check for existing BibItem by DOI or URL
+            existing = None
+            if self.update_existing:
                     
-                    # Try URL if no DOI match
-                    if existing is None and paragraph.source_url:
-                        existing = await BibItem.get_by_url(session, paragraph.source_url)
+                if existing is None and paragraph.extdata:
+                    # Try DOI first
+                    doi = paragraph.extdata.get("doi")
+                    if doi and isinstance(doi, str):
+                        existing = await BibItem.get_by_doi(self.dbsession, doi)
+                    
+                    # Try catalog & call_number combination
+                    library_catalog, call_number = paragraph.extdata.get('library_catalog'), paragraph.extdata.get('call_number')
+                    if library_catalog and call_number:
+                        existing = await BibItem.get_by_catalog(self.dbsession, library_catalog, call_number)
                 
-                if existing:
-                    # Update existing BibItem
-                    self.log(f"Updating existing BibItem: {existing.title}")
-                    self._update_bibitem_from_paragraph(existing, paragraph, ds)
-                    await session.flush()
-                    result_item = existing
-                else:
-                    # Create new BibItem
-                    self.log(f"Creating new BibItem from Paragraph: {paragraph.outline}")
-                    new_item = BibItem(dataset=ds.id)
-                    self._update_bibitem_from_paragraph(new_item, paragraph, ds)
-                    session.add(new_item)
-                    await session.flush()
+                # Try URL if no DOI match
+                if existing is None and paragraph.source_url:
+                    existing = await BibItem.get_by_url(self.dbsession, paragraph.source_url)
+            
+            if existing:
+                # Update existing BibItem
+                self.log(f"Updating existing BibItem: {existing.title}")
+                self._update_bibitem_from_paragraph(existing, paragraph)
+                result_item = existing
+            else:
+                # Create new BibItem
+                self.log(f"Creating new BibItem from Paragraph: {paragraph.outline}")
+                try:
+                    new_item = BibItem()
+                    self._update_bibitem_from_paragraph(new_item, paragraph)
+                    self.dbsession.add(new_item)
                     result_item = new_item
-                
-                # Store BibItem ID in Paragraph extdata for reference
-                if paragraph.extdata is None:
-                    paragraph.extdata = {}
-                paragraph.extdata["bibitem_id"] = str(result_item.id)
-                
-                return paragraph
+                except Exception as e:
+                    self.log_exception('BibItem creation failure', e)
+                    raise e
+            
+            # Store BibItem ID in Paragraph extdata for reference
+            if paragraph.extdata is None:
+                paragraph.extdata = {}
+            paragraph.extdata["bibitem_id"] = str(result_item.id)
+            
+            return paragraph
         
         except Exception as e:
             self.log_exception("Error saving BibItem from Paragraph", e)
-            return paragraph  # Continue pipeline even on error
+            raise e
     
     def _update_bibitem_from_paragraph(
-        self, bibitem: BibItem, paragraph: Paragraph, dataset: Dataset
+        self, bibitem: BibItem, paragraph: Paragraph
     ) -> None:
         """Update BibItem fields from Paragraph data.
         
@@ -195,27 +188,12 @@ class BibItemSave(PipelineStage):
                     bibitem.file_attachments
                 ):
                     # Merge attachments, avoiding duplicates by path
-                    existing_paths = {a.get("path", "") for a in bibitem.file_attachments}
-                    for attachment in new_attachments:
-                        path = attachment.get("path", "")
+                    existing_paths = {a for a in bibitem.file_attachments}
+                    for path in new_attachments:
                         if path not in existing_paths:
-                            bibitem.file_attachments.append(attachment)
+                            bibitem.file_attachments.append(path)
                 else:
                     bibitem.file_attachments = new_attachments
-        
-        # Set dataset
-        bibitem.dataset = dataset.id
-    
-    def summarize(self, result: dict) -> dict:
-        """Summarize the pipeline stage results.
-        
-        Args:
-            result: Result from previous stage.
-        
-        Returns:
-            Summarized result.
-        """
-        return result
 
 
 class BibItemDeduplicate(PipelineStage):
@@ -225,7 +203,6 @@ class BibItemDeduplicate(PipelineStage):
     It can be configured to use different strategies for handling conflicts.
     
     Attributes:
-        dataset_name: Target dataset name for BibItems.
         keep: Strategy for handling conflicts:
             - "latest": Keep the most recently modified item's values
             - "earliest": Keep the earliest item's values
@@ -234,17 +211,14 @@ class BibItemDeduplicate(PipelineStage):
     
     def __init__(
         self,
-        dataset_name: str = "",
         keep: str = "latest"
     ) -> None:
         """Initialize BibItemDeduplicate stage.
         
         Args:
-            dataset_name: Target dataset name for BibItems.
             keep: Strategy for handling conflicts.
         """
         super().__init__(name="BibItemDeduplicate")
-        self.dataset_name = dataset_name
         self.keep = keep
         self._log = lambda *x: logging.info(' '.join(map(str, x)))
     
@@ -265,7 +239,7 @@ class BibItemDeduplicate(PipelineStage):
         """Process a Paragraph and deduplicate BibItems.
         
         This stage doesn't modify the input paragraph but triggers
-        deduplication of all BibItems in the dataset.
+        deduplication of all BibItems.
         
         Args:
             paragraph: Paragraph to process (not modified).
@@ -277,44 +251,20 @@ class BibItemDeduplicate(PipelineStage):
             return None
         
         try:
-            async with get_db_session() as session:
-                # Get dataset
-                from jindai.models import Dataset
-                if self.dataset_name:
-                    ds = await Dataset.get(self.dataset_name, auto_create=True)
-                else:
-                    ds = await session.get(Dataset, paragraph.dataset)
-                
-                # Import deduplicator
-                from .deduplicator import BibItemDeduplicator
-                deduplicator = BibItemDeduplicator(log_func=self.log)
-                
-                # Get items for this dataset
-                from sqlalchemy import select
-                stmt = select(BibItem).where(BibItem.dataset == ds.id)
-                result = await session.execute(stmt)
-                items = result.scalars().all()
-                
-                # Deduplicate
-                stats = await deduplicator.deduplicate_all(
-                    session, dataset_id=ds.id, keep=self.keep
-                )
-                
-                self.log(f"Deduplication complete: {stats}")
-                
-                return paragraph
+            # Import deduplicator
+            from .deduplicator import BibItemDeduplicator
+            deduplicator = BibItemDeduplicator(log_func=self.log)
+
+            # Deduplicate
+            stats = await deduplicator.deduplicate_all(
+                self.dbsession, keep=self.keep
+            )
+            
+            self.log(f"Deduplication complete: {stats}")
+            
+            return paragraph
         
         except Exception as e:
             self.log_exception("Error during BibItem deduplication", e)
-            return paragraph  # Continue pipeline even on error
+            raise e
     
-    def summarize(self, result: dict) -> dict:
-        """Summarize the pipeline stage results.
-        
-        Args:
-            result: Result from previous stage.
-        
-        Returns:
-            Summarized result.
-        """
-        return result

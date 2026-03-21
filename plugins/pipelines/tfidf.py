@@ -23,7 +23,7 @@ class TermFreq(PipelineStage):
         for w in p.tokens:
             self.tf[w].append(p)
 
-    def summarize(self, returned) -> Dict:
+    async def summarize(self, returned) -> Dict:
         final_words = sorted([{'word': k, 'count': len(v), 'paragraphs': v}
                              for k, v in self.tf.items()], key=lambda x: x['count'], reverse=True)
         return final_words
@@ -55,7 +55,7 @@ class TFIDFWordFetch(PipelineStage):
         for w in set(p.tokens):
             self.df[w].append(p)
 
-    def summarize(self, returned) -> Dict:
+    async def summarize(self, returned) -> Dict:
         self.tf = self.tf.as_dict()
         num_docs = self.docs.as_dict()['']
         min_df = self.min_df * num_docs

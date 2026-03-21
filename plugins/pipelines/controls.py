@@ -114,8 +114,8 @@ class RepeatWhile(FlowControlStage):
             del paragraph[self.times_key]
             yield paragraph, self.next
 
-    def summarize(self, result) -> Dict:
-        return self.pipeline.summarize(result)
+    async def summarize(self, result) -> Dict:
+        return await self.pipeline.summarize(result)
 
 
 from typing import Iterator
@@ -282,7 +282,7 @@ class RunTask(CallTask):
         self.gctx = gctx
         yield paragraph, self.next
 
-    def summarize(self, _) -> Dict:
+    async def summarize(self, _) -> Dict:
         return self.task.execute()
 
 

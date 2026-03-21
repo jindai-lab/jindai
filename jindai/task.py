@@ -162,9 +162,7 @@ class Task:
                     t.cancel()
                 log_monitor.cancel()
 
-            if self.alive:
                 return await self.pipeline.summarize()
-
         except asyncio.CancelledError:
             self.alive = False
         except Exception as ex:
