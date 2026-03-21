@@ -368,7 +368,7 @@ class AccumulateParagraphs(PipelineStage):
                     
         return [_rev(obj.get(k.strip('-'), ''), k.startswith('-')) for k in self.sort]
 
-    def summarize(self, _) -> list:
+    async def summarize(self, result) -> list:
         results = list(self.paragraphs)
         if self.sort:
             results = sorted(results, key=self.sorter)
@@ -397,8 +397,8 @@ class Export(PipelineStage):
         self.format = {'xlsx': 'excel'}.get(output_format, output_format)
         self.limit = limit
 
-    def summarize(self, result) -> dict:
-        
+    async def summarize(self, result) -> dict:
+
         def json_dump(val):
             return json.dumps(val)
 
@@ -595,7 +595,7 @@ class NgramCounter(PipelineStage):
                     self.ngrams_lefts[word][left].inc()
                     self.ngrams_rights[word][right].inc()
 
-    def summarize(self, _) -> Dict:
+    async def summarize(self, result) -> Dict:
         self.ngrams = self.ngrams.as_dict()
         self.ngrams_lefts = {k: v.as_dict()
                              for k, v in self.ngrams_lefts.items()}
@@ -780,9 +780,8 @@ class DeleteParagraph(PipelineStage):
 
     async def resolve(self, paragraph: Paragraph) -> None:
         if paragraph.id:
-            async with get_db_session() as session:
-                await session.delete(paragraph)
-            
+            await self.dbsession.delete(paragraph)
+        
 
 class SaveParagraph(PipelineStage):
     """Save
@@ -797,18 +796,17 @@ class SaveParagraph(PipelineStage):
     async def resolve(self, paragraph: Paragraph):
         paragraph.content = re.sub(r'\p{Other}', ' ', paragraph.content)
         
-        async with get_db_session() as session:
+        try:
             if not paragraph.id:
-                session.add(paragraph)
+                self.dbsession.add(paragraph)
                 await Terms.store(paragraph.keywords)
             else:
-                await session.merge(paragraph)
-            await session.commit()
-
+                await self.dbsession.merge(paragraph)
+        except:
+            self.dbsession.rollback()
+            raise
+        
         return paragraph
-    
-    async def summarize(self, result) -> Dict:
-        return result
     
 
 class FieldIncresement(PipelineStage):
@@ -1004,7 +1002,7 @@ class PDFUnlock(PipelineStage):
         pike.open(storage.open(file, 'rb')).save(buf)
         self.data = PipelineStage.return_file('pdf', buf.getvalue())
 
-    def summarize(self, _) -> dict:
+    async def summarize(self, result) -> dict:
         return self.data
 
 
@@ -1022,7 +1020,7 @@ class SetNamedResult(Passthrough):
         super().__init__()
         self.name = name
 
-    def summarize(self, result) -> Dict:
+    async def summarize(self, result) -> Dict:
         self.gctx[self.name] = result
         return result
 
@@ -1041,7 +1039,7 @@ class LoadNamedResult(Passthrough):
         super().__init__()
         self.name = name
 
-    def summarize(self, _) -> dict:
+    async def summarize(self, _) -> dict:
         if self.name == '':
             return self.gctx
         return self.gctx.get(self.name)

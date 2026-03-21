@@ -38,7 +38,7 @@ class PMILREntropyWordFetcher(NgramCounter):
         self.text_length[paragraph.id] = len(paragraph.content)
         super().resolve(paragraph)
 
-    def summarize(self, _):
+    async def summarize(self, _):
         self.text_length = sum(self.text_length.values())
         result = self.pmient()
         if self.min_lr_ent > 0:

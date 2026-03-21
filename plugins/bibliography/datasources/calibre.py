@@ -11,7 +11,7 @@ import urllib.parse
 from typing import List, Optional, Dict, Any
 from uuid import UUID
 
-from sqlalchemy import distinct, select, update, func
+from sqlalchemy import distinct, select, update, func, create_engine
 from sqlalchemy.orm import Session
 
 from jindai.storage import storage
@@ -81,10 +81,9 @@ class CalibreDataSource(DataSourceStage):
         if not os.path.exists(db_path):
             return []
 
-        db_uri = f"sqlite:///{urllib.parse.quote(db_path)}?mode=ro"
+        db_uri = f"sqlite:///{urllib.parse.quote(db_path)}?mode=ro&nolock=1&immutable=1"
         
         # Create engine with read-only URI
-        from sqlalchemy import create_engine
         engine = create_engine(db_uri, echo=False)
         
         with engine.connect() as connection:
@@ -103,7 +102,7 @@ class CalibreDataSource(DataSourceStage):
                     Books.pubdate,
                     Books.author_sort,
                     Books.series_index,
-                    func.group_concat(distinct(Authors.name), ' & ').label('authors'),
+                    func.group_concat(Authors.name, '&').label('authors'),
                     Publishers.name.label('publisher'),
                     func.group_concat(Tags.name, ', ').label('tags'),
                     Series.name.label('series_name'),
@@ -142,6 +141,8 @@ class CalibreDataSource(DataSourceStage):
                 relative_file_path = os.path.join(
                     folder_path, f"{file_name}.{ext.lower()}"
                 )
+                
+                authors = ' & '.join(set([_.strip() for _ in authors.split('&')]))
 
                 # Build file attachments as array of relative paths
                 file_attachments = []
@@ -154,7 +155,7 @@ class CalibreDataSource(DataSourceStage):
                     tags = [t.strip() for t in tag_names.split(',') if t.strip()]
 
                 books_info.append({
-                    "book_id": book_id,
+                    "book_id": str(book_id),
                     "title": title,
                     "authors": authors or "",
                     "pubdate": pubdate,
@@ -241,7 +242,7 @@ class CalibreDataSource(DataSourceStage):
                             outline=book["title"],
                             content=absolute_path,
                             extdata={
-                                "book_id": book["book_id"],
+                                "call_number": book["book_id"],
                                 "file_attachments": book["file_attachments"],
                                 "publisher": book["publisher"],
                                 "series": book["series_name"],

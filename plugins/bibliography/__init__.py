@@ -5,27 +5,22 @@ This module provides:
 - BibliographyPlugin: Plugin with CRUD API endpoints for BibItem management
 - CalibreDataSource: DataSourceStage for importing from Calibre library
 - ZoteroDataSource: DataSourceStage for importing from Zotero API
-- BibItemDeduplicator: Utility class for merging duplicate entries
 - BibItemSave: Pipeline stage to save Paragraph information to BibItem
 """
 
 import os
-from typing import Optional, Dict, Any
-import traceback
+from typing import Dict, Any
 
-from fastapi import Depends
 from sqlalchemy import select, func
 
 from jindai.pipeline import PipelineStage
+from jindai.task import Task
 from jindai.plugin import Plugin
 from jindai.helpers import get_context
 from jindai.models import get_db_session
 from jindai.storage import storage
 
 # Import all components for registration
-from .datasources import CalibreDataSource, ZoteroDataSource
-from .deduplicator import BibItemDeduplicator
-from .stages import BibItemSave
 from .models import BibItem
 
 
@@ -64,6 +59,9 @@ class BibliographyPlugin(Plugin):
         
         # Register plugin routes
         self._register_routes()
+        
+        # Register task
+        self._register_tasks()
     
     def _load_config(self, config_dict) -> None:
         """Load configuration from dict."""
@@ -88,51 +86,25 @@ class BibliographyPlugin(Plugin):
             - count: Number of items imported
             - message: Status message
         """
-        try:
-            from .datasources import CalibreDataSource
-            from .stages import BibItemSave
-            
-            paths = self._config.get('calibre_library_paths', [])
-            if not paths:
-                return {
-                    'success': False,
-                    'count': 0,
-                    'message': 'No Calibre library paths configured'
-                }
-            
-            # Create a temporary dataset for imported items
-            from jindai.models import Dataset
-            ds = await Dataset.get('书库', auto_create=True)
-            
-            # Create and configure data source
-            ds_instance = CalibreDataSource(
-                dataset_name=ds.name,
-                content='\n'.join(paths),
-                scan_for_moved=False
-            )
-            ds_instance.apply_params(content='\n'.join(paths))
-            
-            # Create pipeline stage to save to BibItem
-            save_stage = BibItemSave(dataset_name=ds.name)
-            
-            # Fetch and process items
-            count = 0
-            async for paragraph in ds_instance.fetch():
-                await save_stage.resolve(paragraph)
-                count += 1
-            
-            return {
-                'success': True,
-                'count': count,
-                'message': f'Imported {count} items from Calibre'
-            }
-        except Exception as e:
+        
+        paths = self._config.get('calibre_library_paths', [])
+        if not paths:
             return {
                 'success': False,
                 'count': 0,
-                'message': f'Error importing from Calibre: {str(e)}',
-                'traceback': traceback.format_exc()
+                'message': 'No Calibre library paths configured'
             }
+        
+        # Create pipeline
+        task = Task({}, [
+            ('CalibreDataSource', {
+                'content': '\n'.join(paths),
+                'scan_for_moved': False,
+            }),
+            ('BibItemSave', {})
+        ], log=print)
+        await task.execute_async()
+        return True
     
     async def _sync_from_zotero(self) -> Dict[str, Any]:
         """Internal method to synchronize bibliographic data from Zotero.
@@ -143,54 +115,34 @@ class BibliographyPlugin(Plugin):
             - count: Number of items imported
             - message: Status message
         """
-        try:
-            from .datasources import ZoteroDataSource
-            from .stages import BibItemSave
-            
-            api_key = self._config.get('zotero_api_key', '')
-            library_id = self._config.get('zotero_library_id', '')
-            library_type = self._config.get('zotero_library_type', 'user')
-            
-            if not api_key or not library_id:
-                return {
-                    'success': False,
-                    'count': 0,
-                    'message': 'Zotero API key or library ID not configured'
-                }
-            
-            # Create a temporary dataset for imported items
-            from jindai.models import Dataset
-            async with get_db_session() as session:
-                ds = await Dataset.get('Zotero Import', auto_create=True)
-            
-            # Create and configure data source
-            ds_instance = ZoteroDataSource(
-                dataset_name=ds.name,
-                api_key=api_key,
-                library_id=library_id,
-                library_type=library_type,
-            )
-            
-            # Create pipeline stage to save to BibItem
-            save_stage = BibItemSave(dataset_name=ds.name)
-            
-            # Fetch and process items
-            count = 0
-            async for paragraph in ds_instance.fetch():
-                await save_stage.resolve(paragraph)
-                count += 1
-            
-            return {
-                'success': True,
-                'count': count,
-                'message': f'Imported {count} items from Zotero'
-            }
-        except Exception as e:
+        
+        api_key = self._config.get('zotero_api_key', '')
+        library_id = self._config.get('zotero_library_id', '')
+        library_type = self._config.get('zotero_library_type', 'user')
+        
+        if not api_key or not library_id:
             return {
                 'success': False,
                 'count': 0,
-                'message': f'Error importing from Zotero: {str(e)}'
+                'message': 'Zotero API key or library ID not configured'
             }
+        
+        # Create pipeline
+        task = Task({}, [
+            ('ZoteroDataSource', {
+                'api_key': api_key,
+                'library_id': library_id,
+                'library_type': library_type,
+            }),
+            ('BibItemSave', {})
+        ])
+        await task.execute_async()
+        return True
+            
+    def _register_tasks(self) -> None:
+        from jindai.worker import worker_manager
+        worker_manager.register_task(self._sync_from_calibre, 'sync_calibre')
+        worker_manager.register_task(self._sync_from_zotero, 'sync_zotero')
     
     def _register_routes(self) -> None:
         """Register plugin-specific API routes."""
@@ -200,7 +152,7 @@ class BibliographyPlugin(Plugin):
         router = APIRouter(prefix='/bibliography', tags=['Bibliography'])
         
         @router.get("/")
-        async def list_bibitem(offset: int = 0, limit: int = 10):
+        async def list_bibitem(offset: int = 0, limit: int = 100):
             """List out BibItems
             Returns:
                 Updated configuration dictionary
@@ -238,13 +190,11 @@ class BibliographyPlugin(Plugin):
         @router.post("/import/bibtex")
         async def import_bibtex(
             bibtex_text: str,
-            dataset_name: str = "BibTeX Import"
         ):
             """Import bibliographic items from bibtex text.
             
             Args:
                 bibtex_text: Raw bibtex text containing one or more entries
-                dataset_name: Name of the dataset to import items into
             
             Returns:
                 Dictionary with import results:
@@ -254,11 +204,8 @@ class BibliographyPlugin(Plugin):
                 - items: List of imported item IDs
             """
             try:
-                from jindai.models import Dataset
-                
                 # Get or create dataset
                 async with get_db_session() as session:
-                    ds = await Dataset.get(dataset_name, auto_create=True)
                     
                     # Parse bibtex text
                     items = BibItem.parse_bibtex(bibtex_text)
@@ -266,7 +213,6 @@ class BibliographyPlugin(Plugin):
                     # Save items to database
                     imported_ids = []
                     for item in items:
-                        item.dataset = ds.id
                         session.add(item)
                         await session.flush()
                         imported_ids.append(str(item.id))
