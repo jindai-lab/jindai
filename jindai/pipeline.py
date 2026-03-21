@@ -434,8 +434,6 @@ class PipelineStage:
         Returns:
             Summarized result, None for default.
         """
-        print(self._dbsession)
-        
         if self._dbsession is not None:
             try:
                 await self._dbsession.commit()

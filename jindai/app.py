@@ -15,8 +15,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
 from sqlalchemy import func, select
 
-from .config import config
-from .config import oidc_validator
+from .config import config, oidc_validator
 from .helpers import get_context
 from .models import APIKey, UserInfo, get_db_session, redis_client
 from .storage import storage
@@ -25,7 +24,7 @@ app = FastAPI(
     docs_url="/api/v2/docs",
     openapi_url="/api/v2/openapi.json",
     title="Jindai",
-    version="2.0.683",
+    version="2.0.684",
 )
 
 # CORS middleware configuration
@@ -36,12 +35,6 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
-
-router = APIRouter(prefix="/api/v2")
-
-
-wsrouter = APIRouter(prefix="/api/ws")
 
 
 # API Key authentication constants
@@ -65,6 +58,8 @@ async def get_current_user(request: Request) -> Dict[str, Any]:
         HTTPException: If authentication fails.
     """
     auth_header = request.headers.get("Authorization", "")
+    if not auth_header and request.get('token'):
+        auth_header = 'Bearer ' + request.get('token')
     
     # Check for Bearer token (OAuth)
     if auth_header.startswith("Bearer "):
@@ -313,3 +308,6 @@ async def custom_404_handler(request: Request, exc: HTTPException):
             status_code=exc.status_code,
             content={"detail": exc.detail}
         )
+        
+
+router = APIRouter(prefix="/api/v2")

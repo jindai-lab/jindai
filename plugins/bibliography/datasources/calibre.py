@@ -231,9 +231,14 @@ class CalibreDataSource(DataSourceStage):
                 books = self.get_calibre_books_safe(storage.safe_join(path))
                 for book in books:
                     # Filter by allowed formats
-                    if self.formats and book["file_path"].lower().endswith(self.formats):
+                    if not self.formats or book["file_path"].lower().endswith(self.formats):
                         # Convert to absolute path
                         absolute_path = os.path.join(path, book["file_path"])
+                        
+                        # Check if cover.jpg exists
+                        cover_path = os.path.join(path, book["file_path"], "./cover.jpg")
+                        if not os.path.exists(storage.safe_join(cover_path)):
+                            cover_path = None
                         
                         # Create Paragraph with rich metadata
                         paragraph = Paragraph(
@@ -251,6 +256,7 @@ class CalibreDataSource(DataSourceStage):
                                 "item_type": "book",
                                 "archive": "Calibre",
                                 "library_catalog": path,
+                                "cover": cover_path
                             },
                         )
                         paragraph.dataset = dsid

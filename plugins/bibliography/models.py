@@ -17,6 +17,7 @@ from sqlalchemy import (
     desc,
     or_,
     select,
+    func,
 )
 from sqlalchemy.dialects.postgresql import JSONB, ARRAY
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -65,6 +66,9 @@ class BibItem(Base):
     date: Mapped[datetime | None] = mapped_column(
         DateTime, comment="Publication date"
     )
+    date_added: Mapped[datetime | None] = mapped_column(
+        DateTime, comment="Added date", server_default=func.now(),
+    )
     volume: Mapped[str | None] = mapped_column(String(32), comment="Volume number")
     issue: Mapped[str | None] = mapped_column(String(32), comment="Issue number")
     pages: Mapped[str | None] = mapped_column(String(64), comment="Page range")
@@ -106,17 +110,19 @@ class BibItem(Base):
     place: Mapped[str | None] = mapped_column(
         String(256), comment="Publication place"
     )
-    
+    cover: Mapped[str | None] = mapped_column(
+        String(1024), comment="Cover file path"
+    )
     # ========== Additional Information ==========
     notes: Mapped[str | None] = mapped_column(Text, comment="User notes")
     tags: Mapped[List[str] | None] = mapped_column(
-        ARRAY(Text), default=list, comment="Tag list (JSON array)"
+        ARRAY(Text), default=list, comment="Tag list"
     )
     related: Mapped[str | None] = mapped_column(
         Text, comment="Related items/links"
     )
     file_attachments: Mapped[List[str] | None] = mapped_column(
-        ARRAY(Text), default=list, comment="File attachments metadata (JSON)"
+        ARRAY(Text), default=list, comment="File attachment paths"
     )
     extra: Mapped[Dict[str, Any] | None] = mapped_column(
         JSONB, default=dict, comment="Extra fields (JSONB)"
