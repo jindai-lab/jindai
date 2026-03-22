@@ -59,6 +59,7 @@ class CalibreDataSource(DataSourceStage):
         
         Args:
             library_path: Path to the Calibre library directory containing metadata.db.
+                          It is an absolute path.
             
         Returns:
             A list of dictionaries, each containing:
@@ -138,10 +139,9 @@ class CalibreDataSource(DataSourceStage):
                 year: Optional[int] = pubdate.year
 
                 # Construct relative file path
-                relative_file_path = os.path.join(
-                    folder_path, f"{file_name}.{ext.lower()}"
-                )
-                
+                relative_file_path = storage.relative_path(os.path.join(
+                    library_path, folder_path, f"{file_name}.{ext.lower()}"
+                ))
                 authors = ' & '.join(set([_.strip() for _ in authors.split('&')]))
 
                 # Build file attachments as array of relative paths
@@ -233,19 +233,21 @@ class CalibreDataSource(DataSourceStage):
                     # Filter by allowed formats
                     if not self.formats or book["file_path"].lower().endswith(self.formats):
                         # Convert to absolute path
-                        absolute_path = os.path.join(path, book["file_path"])
+                        file_path = book["file_path"]
                         
                         # Check if cover.jpg exists
-                        cover_path = os.path.join(path, book["file_path"], "./cover.jpg")
-                        if not os.path.exists(storage.safe_join(cover_path)):
-                            cover_path = None
+                        cover_path = storage.safe_join(file_path).rsplit('/', 1)[0] + "/cover.jpg"
+                        if os.path.exists(cover_path):
+                            cover_path = storage.relative_path(cover_path)
+                        else:
+                            cover_path = ''
                         
                         # Create Paragraph with rich metadata
                         paragraph = Paragraph(
                             author=book["authors"],
                             pdate=datetime.datetime(book["year"], 1, 1) if book["year"] else None,
                             outline=book["title"],
-                            content=absolute_path,
+                            content='',
                             extdata={
                                 "call_number": book["book_id"],
                                 "file_attachments": book["file_attachments"],
@@ -256,7 +258,7 @@ class CalibreDataSource(DataSourceStage):
                                 "item_type": "book",
                                 "archive": "Calibre",
                                 "library_catalog": path,
-                                "cover": cover_path
+                                "cover": cover_path or ''
                             },
                         )
                         paragraph.dataset = dsid
@@ -269,7 +271,7 @@ class CalibreDataSource(DataSourceStage):
                                 .filter(
                                     Paragraph.source_url == existent[book_id],
                                 )
-                                .values(source_url=absolute_path)
+                                .values(source_url=storage.relative_path(file_path))
                             )
                             
                         yield paragraph

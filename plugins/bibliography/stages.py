@@ -27,7 +27,7 @@ class BibItemSave(PipelineStage):
     def __init__(
         self,
         update_existing: bool = True,
-        merge_attachments: bool = True
+        merge_attachments: bool = False
     ) -> None:
         """Initialize BibItemSave stage.
         
@@ -78,6 +78,7 @@ class BibItemSave(PipelineStage):
                 self.log(f"Updating existing BibItem: {existing.title}")
                 self._update_bibitem_from_paragraph(existing, paragraph)
                 result_item = existing
+                await self.dbsession.merge(existing)
             else:
                 # Create new BibItem
                 self.log(f"Creating new BibItem from Paragraph: {paragraph.outline}")

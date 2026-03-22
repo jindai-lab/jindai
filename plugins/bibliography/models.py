@@ -110,8 +110,8 @@ class BibItem(Base):
     place: Mapped[str | None] = mapped_column(
         String(256), comment="Publication place"
     )
-    cover: Mapped[str | None] = mapped_column(
-        String(1024), comment="Cover file path"
+    cover: Mapped[str] = mapped_column(
+        String(1024), default='', nullable=False, comment="Cover file path"
     )
     # ========== Additional Information ==========
     notes: Mapped[str | None] = mapped_column(Text, comment="User notes")
