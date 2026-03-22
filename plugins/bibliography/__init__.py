@@ -19,8 +19,7 @@ from jindai.plugin import Plugin
 from jindai.helpers import get_context, jieba
 from jindai.models import get_db_session
 from jindai.storage import storage
-
-from ..workermanager import worker_manager
+from jindai.worker import worker_manager
 
 
 # Import all components for registration
@@ -316,13 +315,13 @@ class BibliographyPlugin(Plugin):
                 - count: Total number of matching results
             """
             
-            def build_cond(type, word):
+            def build_cond(field, word):
                 # Build search query based on type
-                if type == "title":
+                if field == "title":
                     cond = BibItem.title.ilike(f"%{word}%")
-                elif type == "author":
+                elif field == "author":
                     cond = BibItem.author.ilike(f"%{word}%")
-                elif type == 'tag':
+                elif field == 'tag':
                     cond = BibItem.tags.contains([word])
                 else:  # 'all' - search all fields
                     cond = or_(
@@ -347,7 +346,6 @@ class BibliographyPlugin(Plugin):
                         BibItem.archive_location.ilike(f"%{word}%"),
                         BibItem.library_catalog.ilike(f"%{word}%"),
                         BibItem.call_number.ilike(f"%{word}%"),
-                        BibItem.extra.ilike(f"%{word}%"),
                         BibItem.tags.contains([word]),
                     )
                 return cond
@@ -364,7 +362,7 @@ class BibliographyPlugin(Plugin):
                     else:
                         words = jieba.cut_text(query)
                     cond = and_(*[build_cond(type, word) for word in words])
-                         
+                    
                     stmt = select(BibItem).where(cond).order_by(BibItem.date_added.desc()).offset(offset).limit(limit)
                     count_stmt = select(func.count()).select_from(BibItem).where(cond)
                     # Execute search

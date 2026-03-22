@@ -3,8 +3,10 @@
 import asyncio
 import json
 import uuid
+from contextlib import asynccontextmanager
 from datetime import datetime
 from typing import Any, Callable, Dict, List, Optional
+from fastapi import FastAPI
 
 import redis
 
@@ -322,7 +324,7 @@ class WorkerManager:
             
             await asyncio.sleep(poll_interval)
     
-    def start_worker(
+    async def start_worker(
         self,
         task_names: Optional[List[str]] = None,
         concurrency: int = 1,
@@ -342,24 +344,12 @@ class WorkerManager:
         self._running = True
         task_names = task_names or list(self.tasks.keys())
         
-        async def run_workers():
-            """Run multiple workers concurrently."""
-            worker_tasks = []
-            for _ in range(concurrency):
-                task = asyncio.create_task(
-                    self._worker_loop(task_names, poll_interval)
-                )
-                worker_tasks.append(task)
-            
-            self._workers = worker_tasks
-            
-            # Wait for all workers
-            try:
-                await asyncio.gather(*worker_tasks)
-            except asyncio.CancelledError:
-                pass
-        
-        asyncio.run(run_workers())
+        # Create worker tasks directly (non-blocking)
+        for _ in range(concurrency):
+            task = asyncio.create_task(
+                self._worker_loop(task_names, poll_interval)
+            )
+            self._workers.append(task)
     
     def stop_worker(self) -> None:
         """Stop the worker gracefully."""
@@ -372,11 +362,34 @@ class WorkerManager:
         for task in self._workers:
             task.cancel()
         
+        # Wait for all workers to finish
+        if self._workers:
+            import asyncio
+            asyncio.gather(*self._workers, return_exceptions=True)
+        
         self._workers.clear()
     
     def is_running(self) -> bool:
         """Check if worker is running."""
         return self._running
+    
+    @asynccontextmanager
+    async def lifespan(self, app: FastAPI) -> Any:
+        """Lifespan context for worker management.
+        
+        Starts the worker when the app starts and stops it when the app shuts down.
+        
+        Args:
+            app: FastAPI application.
+        
+        Yields:
+            None.
+        """
+        # Start the worker
+        await self.start_worker()
+        yield
+        # Stop the worker on shutdown
+        self.stop_worker()
     
     def get_registered_tasks(self) -> List[str]:
         """Get list of registered task names."""
