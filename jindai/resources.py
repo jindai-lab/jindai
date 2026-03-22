@@ -37,6 +37,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from .app import get_current_admin, get_current_username, router, app
 from .config import config
 from .maintenance import maintenance_manager
+from .worker import worker_manager
 from .models import (
     APIKey,
     Base,
@@ -989,7 +990,28 @@ class StorageManager:
 # --- Router assembly and lifecycle binding ---
 
 emb_manager = EmbeddingManager()
-app.router.lifespan_context = emb_manager.lifespan
+
+# Combined lifespan that runs both embedding polling and worker
+@asynccontextmanager
+async def combined_lifespan(app: FastAPI):
+    """Combined lifespan for embedding polling and worker management."""
+    # Start embedding polling task
+    emb_manager.polling_task = asyncio.create_task(emb_manager.polling_loop())
+    
+    # Start worker
+    await worker_manager.start_worker()
+    
+    yield
+    
+    # Stop worker
+    worker_manager.stop_worker()
+    
+    # Stop embedding polling task
+    if emb_manager.polling_task:
+        emb_manager.polling_task.cancel()
+        await asyncio.gather(emb_manager.polling_task, return_exceptions=True)
+
+app.router.lifespan_context = combined_lifespan
 api_key_manager = APIKeyManager()
 
 # Register common CRUD resources
