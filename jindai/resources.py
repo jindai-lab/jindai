@@ -50,6 +50,7 @@ from .models import (
     TextEmbeddings,
     UserInfo,
     get_db_session,
+    get_db,
     generate_api_key,
     hash_api_key
 )
@@ -61,16 +62,6 @@ from .storage import storage
 logging.basicConfig(
     level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
 )
-
-
-async def get_db():
-    """Get database session dependency.
-
-    Yields:
-        AsyncSession: Database session.
-    """
-    async with get_db_session() as session:
-        yield session
 
 
 # --- Resource management base class ---

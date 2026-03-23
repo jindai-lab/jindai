@@ -114,7 +114,7 @@ class BibItemSave(PipelineStage):
         """
         # Basic mapping
         bibitem.title = paragraph.outline or ""
-        bibitem.author = paragraph.author or ""
+        bibitem.authors = (paragraph.author or "").split(' & ')
         bibitem.abstract_note = paragraph.content or ""
         bibitem.date = paragraph.pdate
         bibitem.language = paragraph.lang or "zh"

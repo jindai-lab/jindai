@@ -24,7 +24,7 @@ app = FastAPI(
     docs_url="/api/v2/docs",
     openapi_url="/api/v2/openapi.json",
     title="Jindai",
-    version="2.0.686",
+    version="2.0.687",
 )
 
 # CORS middleware configuration
@@ -42,7 +42,7 @@ API_KEY_CACHE_PREFIX = "api_key:"
 API_KEY_CACHE_TTL = 3600  # 1 hour in seconds
 
 
-async def get_current_user(request: Request) -> Dict[str, Any]:
+async def get_current_user(request: Request = None, websocket: WebSocket = None) -> Dict[str, Any]:
     """Get current user from either OAuth token or API key.
     
     Checks Authorization header for Bearer token (OAuth) or plain API key.
@@ -57,10 +57,10 @@ async def get_current_user(request: Request) -> Dict[str, Any]:
     Raises:
         HTTPException: If authentication fails.
     """
-    auth_header = request.headers.get("Authorization", "")
-    if not auth_header and request.get('token'):
-        auth_header = 'Bearer ' + request.get('token')
-    
+    if websocket is not None:
+        auth_header = 'Bearer ' + websocket.query_params.get("token")
+    else:
+        auth_header = request.headers.get("Authorization", "")   
     # Check for Bearer token (OAuth)
     if auth_header.startswith("Bearer "):
         token = auth_header[7:]
@@ -310,4 +310,4 @@ async def custom_404_handler(request: Request, exc: HTTPException):
         )
         
 
-router = APIRouter(prefix="/api/v2")
+router = APIRouter(prefix="/api/v2", dependencies=[Depends(get_current_user)])

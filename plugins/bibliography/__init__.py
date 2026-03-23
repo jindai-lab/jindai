@@ -11,15 +11,18 @@ This module provides:
 import os
 from typing import Dict, Any
 
+from fastapi import APIRouter, Depends
 from sqlalchemy import select, func, or_, and_
+from uuid import UUID
 
 from jindai.pipeline import PipelineStage
 from jindai.task import Task
 from jindai.plugin import Plugin
 from jindai.helpers import get_context, jieba
-from jindai.models import get_db_session
+from jindai.models import get_db_session, get_db
 from jindai.storage import storage
 from jindai.worker import worker_manager
+from jindai.app import router as api_router
 
 
 # Import all components for registration
@@ -160,8 +163,6 @@ class BibliographyPlugin(Plugin):
 
     def _register_routes(self) -> None:
         """Register plugin-specific API routes."""
-        from jindai.app import router as api_router
-        from fastapi import APIRouter
 
         router = APIRouter(prefix="/bibliography", tags=["Bibliography"])
 
@@ -320,13 +321,13 @@ class BibliographyPlugin(Plugin):
                 if field == "title":
                     cond = BibItem.title.ilike(f"%{word}%")
                 elif field == "author":
-                    cond = BibItem.author.ilike(f"%{word}%")
+                    cond = func.array_to_string(BibItem.authors, ' & ').ilike(f"%{word}%")
                 elif field == 'tag':
                     cond = BibItem.tags.contains([word])
                 else:  # 'all' - search all fields
                     cond = or_(
                         BibItem.title.ilike(f"%{word}%"),
-                        BibItem.author.ilike(f"%{word}%"),
+                        func.array_to_string(BibItem.authors, ' & ').ilike(f"%{word}%"),
                         BibItem.abstract_note.ilike(f"%{word}%"),
                         BibItem.publication.ilike(f"%{word}%"),
                         BibItem.doi.ilike(f"%{word}%"),
@@ -379,6 +380,143 @@ class BibliographyPlugin(Plugin):
                     "results": [],
                     "count": 0,
                     "message": f"Error searching bibliography: {str(e)}",
+                }
+
+        @router.get("/{item_id}")
+        async def get_bibitem(item_id: int, session=Depends(get_db)):
+            """Get a single BibItem by ID.
+
+            Args:
+                item_id: BibItem ID
+                session: Database session (injected via Depends)
+
+            Returns:
+                Dictionary with BibItem data if found, error otherwise
+            """
+            try:
+                stmt = select(BibItem).where(BibItem.id == item_id)
+                result = await session.execute(stmt)
+                item = result.scalar_one_or_none()
+                
+                if not item:
+                    return {
+                        "success": False,
+                        "message": f"BibItem with id {item_id} not found",
+                    }
+                
+                return {
+                    "success": True,
+                    "result": item.as_dict(),
+                }
+            except Exception as e:
+                return {
+                    "success": False,
+                    "message": f"Error retrieving BibItem: {str(e)}",
+                }
+
+        @router.post("/")
+        async def create_bibitem(item_data: dict, session=Depends(get_db)):
+            """Create a new BibItem.
+
+            Args:
+                item_data: Dictionary with BibItem fields
+                session: Database session (injected via Depends)
+
+            Returns:
+                Dictionary with created BibItem data
+            """
+            try:
+                item = BibItem(**item_data)
+                session.add(item)
+                await session.flush()
+                await session.refresh(item)
+                
+                return {
+                    "success": True,
+                    "result": item.as_dict(),
+                    "message": "BibItem created successfully",
+                }
+            except Exception as e:
+                return {
+                    "success": False,
+                    "message": f"Error creating BibItem: {str(e)}",
+                }
+
+        @router.put("/{item_id}")
+        async def update_bibitem(item_id: UUID, item_data: dict, session=Depends(get_db)):
+            """Update an existing BibItem.
+
+            Args:
+                item_id: BibItem ID to update
+                item_data: Dictionary with fields to update
+                session: Database session (injected via Depends)
+
+            Returns:
+                Dictionary with updated BibItem data
+            """
+            try:
+                stmt = select(BibItem).where(BibItem.id == item_id)
+                result = await session.execute(stmt)
+                item = result.scalar_one_or_none()
+                
+                if not item:
+                    return {
+                        "success": False,
+                        "message": f"BibItem with id {item_id} not found",
+                    }
+                
+                # Update fields
+                for key, value in item_data.items():
+                    if hasattr(item, key):
+                        setattr(item, key, value)
+                
+                await session.flush()
+                await session.refresh(item)
+                
+                return {
+                    "success": True,
+                    "result": item.as_dict(),
+                    "message": "BibItem updated successfully",
+                }
+            except Exception as e:
+                return {
+                    "success": False,
+                    "message": f"Error updating BibItem: {str(e)}",
+                }
+
+        @router.delete("/{item_id}")
+        async def delete_bibitem(item_id: UUID, session=Depends(get_db)):
+            """Delete a BibItem.
+
+            Args:
+                item_id: BibItem ID to delete
+                session: Database session (injected via Depends)
+
+            Returns:
+                Dictionary with deletion result
+            """
+            try:
+                stmt = select(BibItem).where(BibItem.id == item_id)
+                result = await session.execute(stmt)
+                item = result.scalar_one_or_none()
+                
+                if not item:
+                    return {
+                        "success": False,
+                        "message": f"BibItem with id {item_id} not found",
+                    }
+                
+                await session.delete(item)
+                await session.flush()
+                
+                return {
+                    "success": True,
+                    "message": "BibItem deleted successfully",
+                }
+            except Exception as e:
+                return {
+                    "success": False,
+                    "message": f"Error deleting BibItem: {str(e)}",
                 }
 
         # Register routes with the app

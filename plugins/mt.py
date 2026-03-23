@@ -9,7 +9,9 @@ import urllib
 import uuid
 from hashlib import md5
 from typing import Iterator
-
+from fastapi import APIRouter, FastAPI, HTTPException
+from pydantic import BaseModel
+import httpx
 import regex as re
 import httpx
 from opencc import OpenCC
@@ -377,6 +379,12 @@ class MachineTranslation(PipelineStage):
         return paragraph
 
 
+class TranslateRequest(BaseModel):
+    text: str          # 待翻译文本
+    from_lang: str     # 源语言，如 en / zh
+    to_lang: str       # 目标语言，如 zh / en
+    
+
 class MachineTranslationPlugin(Plugin):
     """Plugin for machin translations
     """
@@ -384,3 +392,97 @@ class MachineTranslationPlugin(Plugin):
     def __init__(self, pmanager, **config) -> None:
         super().__init__(pmanager, **config)
         self.register_pipelines(globals())
+           
+    async def tencent_transmart_translate(self, text: str, from_lang: str, to_lang: str):
+        url = "https://transmart.qq.com/api/imt"
+        
+        # 简化语言码（zh-CN → zh）
+        from_lang = from_lang.split("-")[0]
+        to_lang = to_lang.split("-")[0]
+
+        payload = {
+            "header": {
+                "fn": "auto_translation",
+                "client_key": "browser-chrome-110.0.0-Mac OS-df4bd4c5-a65d-44b2-a40f-42f34f3535f2-1677486696487"
+            },
+            "type": "plain",
+            "model_category": "normal",
+            "source": {
+                "lang": from_lang,
+                "text_list": [text]
+            },
+            "target": {
+                "lang": to_lang
+            }
+        }
+
+        headers = {
+            "Content-Type": "application/json",
+            "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/110.0.0.0 Safari/537.36",
+            "Referer": "https://transmart.qq.com/zh-CN/index"
+        }
+
+        try:
+            async with httpx.AsyncClient() as client:
+                resp = await client.post(url, json=payload, headers=headers, timeout=10)
+            
+            if resp.status_code != 200:
+                raise Exception(f"HTTP {resp.status_code}")
+
+            data = resp.json()
+            result = data.get("auto_translation")
+            if not result:
+                raise Exception(f"返回异常：{data}")
+
+            return "\n".join(result).strip()
+
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"腾讯翻译失败：{str(e)}")
+
+    async def huoshan_web_translate(self, text: str, from_lang: str, to_lang: str):
+        url = "https://translate.volcengine.com/crx/translate/v1"
+        
+        from_lang = from_lang.split("-")[0]
+        to_lang = to_lang.split("-")[0]
+
+        payload = {
+            "source_language": from_lang,
+            "target_language": to_lang,
+            "text": text
+        }
+
+        headers = {
+            "Content-Type": "application/json"
+        }
+
+        try:
+            async with httpx.AsyncClient() as client:
+                resp = await client.post(url, json=payload, headers=headers, timeout=10)
+            
+            if resp.status_code != 200:
+                raise Exception(f"HTTP {resp.status_code}")
+
+            data = resp.json()
+            result = data.get("translation")
+            if not result:
+                raise Exception(f"返回异常：{data}")
+
+            return result
+
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"火山翻译失败：{str(e)}")
+
+    def get_router(self):
+        router = APIRouter(prefix='/translate')
+        
+        @router.post("/tencent")
+        async def api_tencent(req: TranslateRequest):
+            result = await self.tencent_transmart_translate(req.text, req.from_lang, req.to_lang)
+            return {"code": 200, "result": result}
+
+        @router.post("/huoshan")
+        async def api_huoshan(req: TranslateRequest):
+            result = await self.huoshan_web_translate(req.text, req.from_lang, req.to_lang)
+            return {"code": 200, "result": result}
+
+        return router
