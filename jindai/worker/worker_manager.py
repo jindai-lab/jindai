@@ -237,9 +237,9 @@ class WorkerManager:
         try:
             # Execute the task
             if asyncio.iscoroutinefunction(func):
-                result = await func(*metadata.args, **metadata.kwargs, logger=logger_adapter)
+                result = await func(*metadata.args, **metadata.kwargs)
             else:
-                result = func(*metadata.args, **metadata.kwargs, logger=logger_adapter)
+                result = func(*metadata.args, **metadata.kwargs)
             
             # Store result
             self._update_task_status(
@@ -479,6 +479,7 @@ class WorkerManager:
             "processing": 0,
             "success": 0,
             "failed": 0,
+            "results": []
         }
         
         # Scan all task metadata keys
@@ -491,6 +492,7 @@ class WorkerManager:
                     status = data["status"]
                     if status in summary:
                         summary[status] += 1
+                summary['results'].append(data)
             
             if cursor == 0:
                 break
