@@ -9,7 +9,7 @@ import urllib
 import uuid
 from hashlib import md5
 from typing import Iterator
-from fastapi import APIRouter, FastAPI, HTTPException
+from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 import httpx
 import regex as re
