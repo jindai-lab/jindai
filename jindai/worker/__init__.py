@@ -110,6 +110,12 @@ async def get_task(
     return metadata.to_dict()
 
 
+@router.delete("/tasks")
+async def delete_queue() -> Dict[str, bool]:
+    success = manager.clear_tasks()
+    return {"success": success}
+
+
 @router.delete("/tasks/{task_id}")
 async def delete_task(
     task_id: str,
@@ -123,7 +129,8 @@ async def delete_task(
     Returns:
         Dictionary with success flag
     """
-    success = manager.delete_task(task_id)
+    if task_id:
+        success = manager.delete_task(task_id)
     if not success:
         raise HTTPException(status_code=404, detail=f"Task '{task_id}' not found")
     return {"success": True}
@@ -214,7 +221,7 @@ async def clear_queue(
     Returns:
         Dictionary with number of tasks cleared
     """
-    cleared = manager.clear_queue(task_name)
+    cleared = manager.clear_tasks(task_name)
     return {"cleared": cleared}
 
 

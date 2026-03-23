@@ -67,6 +67,16 @@ async def get_db_session() -> AsyncIterator[AsyncSession]:
         await session.close()
 
 
+async def get_db():
+    """Get database session dependency.
+
+    Yields:
+        AsyncSession: Database session.
+    """
+    async with get_db_session() as session:
+        yield session
+
+
 MBase = declarative_base()
 
 

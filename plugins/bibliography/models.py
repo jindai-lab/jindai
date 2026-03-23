@@ -39,7 +39,7 @@ class BibItem(Base):
     __tablename__ = "bib_items"
     __table_args__ = (
         Index("idx_bibitem_title", "title"),
-        Index("idx_bibitem_author", "author"),
+        Index("idx_bibitem_author", "authors"),
         Index("idx_bibitem_doi", "doi"),
         Index("idx_bibitem_url", "url"),
         Index("idx_bibitem_item_type", "item_type"),
@@ -54,8 +54,8 @@ class BibItem(Base):
         String(64), comment="Item type (e.g., book, journalArticle, conferencePaper)"
     )
     title: Mapped[str] = mapped_column(Text, comment="Publication title")
-    author: Mapped[str | None] = mapped_column(
-        String(512), comment="Author(s) / Creator(s)"
+    authors: Mapped[List[str] | None] = mapped_column(
+        ARRAY(Text), comment="Author(s) / Creator(s)"
     )
     abstract_note: Mapped[str | None] = mapped_column(
         Text, comment="Abstract or summary"
@@ -209,7 +209,7 @@ class BibItem(Base):
         """
         stmt = select(cls).where(
             cls.title.ilike(f"%{title}%"),
-            cls.author.ilike(f"%{author}%")
+            func.aggregate_strings(cls.authors, ' & ').ilike(f"%{author}%")
         )
         result = await session.execute(stmt)
         return result.scalars().all()

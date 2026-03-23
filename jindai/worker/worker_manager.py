@@ -45,7 +45,7 @@ class WorkerManager:
             redis_url: Redis URL (overrides host/port/db)
         """
         if redis_url:
-            self.redis = redis.from_url(redis_url)
+            self.redis = redis.from_url(redis_url, decode_responses=True)
         else:
             self.redis = redis.Redis(
                 host=redis_host,
@@ -63,6 +63,9 @@ class WorkerManager:
         # Worker state
         self._running = False
         self._workers: List[asyncio.Task] = []
+        
+        # Queue key
+        self._queue_key = "task:queue"
         
         # Default logger (can be overridden per task)
         self.logger = RedisLogger(self.redis)
@@ -140,9 +143,8 @@ class WorkerManager:
         # Store metadata in Redis
         self._set_task_metadata(task_id, metadata)
         
-        # Push to Redis queue
-        queue_key = f"task:queue:{name}"
-        self.redis.rpush(queue_key, task_id)
+        # Push to Redis queue (single global queue)
+        self.redis.rpush(self._queue_key, task_id)
         
         return task_id
     
@@ -312,15 +314,15 @@ class WorkerManager:
             poll_interval: Polling interval in seconds
         """
         while self._running:
-            for task_name in task_names:
-                queue_key = f"task:queue:{task_name}"
-                
-                # Blocking pop from queue
-                result = self.redis.blpop(queue_key, timeout=1)
-                
-                if result:
-                    _, task_id = result
-                    await self._process_task(task_id, task_name)
+            # Blocking pop from single global queue
+            result = self.redis.blpop(self._queue_key, timeout=1)
+            
+            if result:
+                _, task_id = result
+                # Get task name from metadata
+                metadata = self._get_task_metadata(task_id)
+                if metadata:
+                    await self._process_task(task_id, metadata.task_name)
             
             await asyncio.sleep(poll_interval)
     
@@ -398,31 +400,31 @@ class WorkerManager:
             for k, v in self.tasks.items()
         }
     
-    def get_queue_length(self, task_name: str) -> int:
+    def get_queue_length(self, task_name: Optional[str] = None) -> int:
         """
-        Get the length of a task queue.
+        Get the length of the task queue.
         
         Args:
-            task_name: Task name
+            task_name: Optional task name (ignored, kept for backward compatibility)
             
         Returns:
             Number of tasks in the queue
         """
-        queue_key = f"task:queue:{task_name}"
-        return self.redis.llen(queue_key)
+        return self.redis.llen(self._queue_key)
     
-    def clear_queue(self, task_name: str) -> int:
+    def clear_tasks(self) -> bool:
         """
-        Clear a task queue.
+        Clear the task queue.
         
-        Args:
-            task_name: Task name
-            
         Returns:
             Number of tasks cleared
         """
-        queue_key = f"task:queue:{task_name}"
-        return self.redis.delete(queue_key)
+        self.redis.delete(self._queue_key)
+    
+        for task_id in self.list_tasks():
+            self.delete_task(task_id)
+        
+        return True
     
     def delete_task(self, task_id: str) -> bool:
         """
@@ -454,9 +456,7 @@ class WorkerManager:
             )
         
         # Remove from queue if queued
-        task_name = metadata.task_name
-        queue_key = f"task:queue:{task_name}"
-        self.redis.lrem(queue_key, 0, task_id)
+        self.redis.lrem(self._queue_key, 0, task_id)
         
         # Delete metadata and result
         meta_key = f"task:meta:{task_id}"
@@ -496,3 +496,26 @@ class WorkerManager:
                 break
         
         return summary
+    
+    def list_tasks(self) -> List[str]:
+        """
+        List all task IDs from task:meta keys.
+        
+        Returns:
+            List of task IDs (UUID strings)
+        """
+        task_ids = []
+        
+        # Scan all task metadata keys
+        cursor = 0
+        while True:
+            cursor, keys = self.redis.scan(cursor, match="task:meta:*", count=100)
+            for key in keys:
+                # Extract task_id from key pattern "task:meta:{task_id}"
+                task_id = key.replace("task:meta:", "")
+                task_ids.append(task_id)
+            
+            if cursor == 0:
+                break
+        
+        return task_ids
