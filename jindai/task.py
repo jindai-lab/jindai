@@ -56,8 +56,7 @@ class Task:
         self.params = params
 
         # Logging
-        self.log_func = log or self.default_log
-        self.logs = deque()
+        self.log_func = log or print
 
         # Core components (note: Pipeline methods also need to be async)
         self.pipeline = Pipeline(stages, self.log_func, verbose)
@@ -66,10 +65,6 @@ class Task:
         self._queue = asyncio.PriorityQueue()
         self._pbar = tqdm(disable=not use_tqdm)
         self._worker_tasks = []
-
-    def default_log(self, *args) -> None:
-        """Non-blocking log recording."""
-        self.logs.append(args)
 
     async def _worker(self):
         """Consumer coroutine: replaces thread pool worker."""
@@ -153,14 +148,11 @@ class Task:
                     asyncio.create_task(self._worker()) for _ in range(self.concurrent)
                 ]
 
-                log_monitor = asyncio.create_task(self._log_monitor())
-
                 await self._queue.join()
 
                 self.alive = False
                 for t in self._worker_tasks:
                     t.cancel()
-                log_monitor.cancel()
 
                 return await self.pipeline.summarize()
         except asyncio.CancelledError:
@@ -173,22 +165,8 @@ class Task:
                 "__tracestack__": "".join(traceback.format_exception(type(ex), ex, ex.__traceback__)),
             }
         finally:
-            self._flush_logs()
             self._pbar.close()
         return None
-
-    async def _log_monitor(self):
-        """Async log monitoring and printing."""
-        while self.alive:
-            self._flush_logs()
-            await asyncio.sleep(0.1)
-
-    def _flush_logs(self):
-        """Batch flush logs from deque."""
-        while self.logs:
-            log = self.logs.popleft()
-            log = ' '.join(map(str, log))
-            logging.info(log)
 
     def log_exception(self, info: str, exc: Exception) -> None:
         """Log exception with traceback.

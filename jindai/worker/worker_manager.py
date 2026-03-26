@@ -234,6 +234,11 @@ class WorkerManager:
         task_logger = RedisLogger(self.redis, task_id=task_id)
         logger_adapter = TaskLoggerAdapter(task_logger)
         
+        # Override print to use logger
+        import builtins
+        original_print = builtins.print
+        builtins.print = lambda *args, **kwargs: logger_adapter.info(" ".join(str(a) for a in args))
+        
         try:
             # Execute the task
             if asyncio.iscoroutinefunction(func):
@@ -259,6 +264,9 @@ class WorkerManager:
                 error=error_msg,
                 completed_at=datetime.now(),
             )
+        finally:
+            # Restore original print
+            builtins.print = original_print
     
     def _update_task_status(
         self,
