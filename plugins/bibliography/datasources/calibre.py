@@ -50,6 +50,28 @@ class CalibreDataSource(DataSourceStage):
         formats: Tuple of allowed file extensions (default: ('epub', 'pdf')).
         scan_for_moved: Whether to update source URLs for moved books.
     """
+    def apply_params(
+        self,
+        dataset_name: str = "",
+        lang: str = "auto",
+        content: str = "",
+        formats: str = "epub,pdf",
+        scan_for_moved: bool = True
+    ) -> None:
+        """Configure the data source parameters.
+        
+        Args:
+            dataset_name: Name of the target dataset for imported paragraphs.
+            lang: Language code for imported paragraphs ('auto' for automatic detection).
+            content: Path(s) to Calibre library directory(s), one per line.
+            formats: Comma-separated list of allowed file extensions.
+            scan_for_moved: If True, update source URL for books that have been moved.
+        """
+        self.dataset_name = dataset_name
+        self.lang = lang
+        self.paths = content
+        self.formats = tuple(formats.lower().split(","))
+        self.scan_for_moved = scan_for_moved
 
     def get_calibre_books_safe(self, library_path: str) -> List[Dict[str, Any]]:
         """Safely read book metadata from a Calibre library database.
@@ -121,7 +143,7 @@ class CalibreDataSource(DataSourceStage):
                 .outerjoin(Tags, BooksTagsLink.tag == Tags.id)
                 .outerjoin(BooksLanguagesLink, Books.id == BooksLanguagesLink.book)
                 .outerjoin(Languages, BooksLanguagesLink.lang_code == Languages.id)
-                .where(Data.format.in_(['PDF', 'EPUB', 'pdf', 'epub']))
+                .where(Data.format.in_(['PDF', 'EPUB', 'pdf', 'epub']), Data.uncompressed_size > 0)
                 .group_by(Books.id, Data.id)
             )
             
@@ -145,10 +167,8 @@ class CalibreDataSource(DataSourceStage):
                 authors = ' & '.join(set([_.strip() for _ in authors.split('&')]))
 
                 # Build file attachments as array of relative paths
-                file_attachments = []
-                if size:
-                    file_attachments.append(relative_file_path)
-
+                file_attachments = [relative_file_path]
+                
                 # Build tags list
                 tags = []
                 if tag_names:
@@ -174,29 +194,6 @@ class CalibreDataSource(DataSourceStage):
             session.close()
             return books_info
 
-    def apply_params(
-        self,
-        dataset_name: str = "",
-        lang: str = "auto",
-        content: str = "",
-        formats: str = "epub,pdf",
-        scan_for_moved: bool = True
-    ) -> None:
-        """Configure the data source parameters.
-        
-        Args:
-            dataset_name: Name of the target dataset for imported paragraphs.
-            lang: Language code for imported paragraphs ('auto' for automatic detection).
-            content: Path(s) to Calibre library directory(s), one per line.
-            formats: Comma-separated list of allowed file extensions.
-            scan_for_moved: If True, update source URL for books that have been moved.
-        """
-        self.dataset_name = dataset_name
-        self.lang = lang
-        self.paths = content
-        self.formats = tuple(formats.lower().split(","))
-        self.scan_for_moved = scan_for_moved
-
     async def fetch(self):
         """Fetch book metadata from configured Calibre libraries.
         
@@ -205,7 +202,7 @@ class CalibreDataSource(DataSourceStage):
             - author: Book authors joined with ' & '
             - pdate: Publication date (year only) or None if unknown
             - outline: Book title
-            - content: Absolute file path
+            - source_url = content: Absolute file path
             - extdata: Dictionary with comprehensive book metadata including:
                 - book_id: Database ID
                 - file_attachments: Array of relative file paths
@@ -247,7 +244,7 @@ class CalibreDataSource(DataSourceStage):
                             author=book["authors"],
                             pdate=datetime.datetime(book["year"], 1, 1) if book["year"] else None,
                             outline=book["title"],
-                            content='',
+                            content=book["file_path"],
                             extdata={
                                 "call_number": book["book_id"],
                                 "file_attachments": book["file_attachments"],
@@ -260,6 +257,7 @@ class CalibreDataSource(DataSourceStage):
                                 "library_catalog": path,
                                 "cover": cover_path or ''
                             },
+                            source_url=book["file_path"]
                         )
                         paragraph.dataset = dsid
                         book_id = str(book["book_id"])

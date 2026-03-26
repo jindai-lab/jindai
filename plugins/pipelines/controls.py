@@ -3,7 +3,8 @@
 """
 
 import asyncio
-from typing import Dict, Iterable, Tuple
+from typing import Dict, Iterable, Tuple, Iterator
+
 
 from jindai.helpers import aeval
 from jindai.models import TaskDBO
@@ -21,7 +22,7 @@ class FlowControlStage(PipelineStage):
         self._pipelines = [
             getattr(self, a)
             for a in dir(self)
-            if isinstance(getattr(self, a), Pipeline)
+            if a != 'dbsession' and isinstance(getattr(self, a), Pipeline)
         ]
         super().__init__()
 
@@ -72,9 +73,6 @@ class FlowControlStage(PipelineStage):
                 pipeline.stages[-1].next = val
 
 
-from typing import Dict, Iterator
-
-
 class RepeatWhile(FlowControlStage):
     """Repeat loops
     @zhs 重复"""
@@ -116,9 +114,6 @@ class RepeatWhile(FlowControlStage):
 
     async def summarize(self, result) -> Dict:
         return await self.pipeline.summarize(result)
-
-
-from typing import Iterator
 
 
 class ForEach(FlowControlStage):
