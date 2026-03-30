@@ -803,7 +803,7 @@ class SaveParagraph(PipelineStage):
             else:
                 await self.dbsession.merge(paragraph)
         except:
-            self.dbsession.rollback()
+            await self.dbsession.rollback()
             raise
         
         return paragraph
