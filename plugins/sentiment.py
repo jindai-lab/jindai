@@ -1,6 +1,6 @@
 """
 Sentiment Analysis
-@zhs 情感分析
+@zhs Sentiment analysis
 """
 
 from jindai.pipeline import PipelineStage
@@ -12,7 +12,7 @@ from jindai.models import Paragraph
 class AutoSentimentAnalysis(PipelineStage):
     """
     Automatic Sentiment Analysis
-    @zhs 根据语种标识自动进行情感分析
+    @zhs Automatic sentiment analysis based on language code
     """
 
     def resolve(self, paragraph: Paragraph) -> Paragraph:

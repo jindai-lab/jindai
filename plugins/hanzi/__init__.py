@@ -1,4 +1,4 @@
-"""汉字拆字处理"""
+"""Chinese character decomposition processing"""
 
 import os
 import pickle
@@ -9,8 +9,8 @@ from jindai.models import Paragraph
 
 
 class HanziChaizi(PipelineStage):
-    """汉字拆字，写入 chaizi 字段
-    数据来源：https://github.com/howl-anderson/hanzi_chaizi/
+    """Chinese character decomposition, write to chaizi field
+    Data source: https://github.com/howl-anderson/hanzi_chaizi/
     """
 
     def __init__(self) -> None:
@@ -28,7 +28,7 @@ class HanziChaizi(PipelineStage):
 
 
 class ChaiziPlugin(Plugin):
-    """汉字部首拆字插件"""
+    """Chinese character radical decomposition plugin"""
 
     def __init__(self, pmanager, **config) -> None:
         super().__init__(pmanager, **config)
