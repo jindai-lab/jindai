@@ -8,20 +8,20 @@ from jindai.pipeline import PipelineStage
 
 # adapted from https://www.cnblogs.com/i-love-python/p/12763063.html
 
-# 匹配正则表达式
+# Match regular expressions
 matchs = {
     1: (r'\d{4}%s\d{1,2}%s\d{1,2}%s \d{1,2}%s\d{1,2}%s\d{1,2}%s', '%%Y%s%%m%s%%d%s %%H%s%%M%s%%S%s'),
     2: (r'\d{4}%s\d{1,2}%s\d{1,2}%s \d{1,2}%s\d{1,2}%s', '%%Y%s%%m%s%%d%s %%H%s%%M%s'),
     3: (r'\d{4}%s\d{1,2}%s\d{1,2}%s', '%%Y%s%%m%s%%d%s'),
     4: (r'\d{2}%s\d{1,2}%s\d{1,2}%s', '%%y%s%%m%s%%d%s'),
 
-    # 没有年份
+    # No year
     5: (r'\d{1,2}%s\d{1,2}%s \d{1,2}%s\d{1,2}%s\d{1,2}%s', '%%m%s%%d%s %%H%s%%M%s%%S%s'),
     6: (r'\d{1,2}%s\d{1,2}%s \d{1,2}%s\d{1,2}%s', '%%m%s%%d%s %%H%s%%M%s'),
     7: (r'\d{1,2}%s\d{1,2}%s', '%%m%s%%d%s'),
 
 
-    # 没有年月日
+    # No year/month/day
     8: (r'\d{1,2}%s\d{1,2}%s\d{1,2}%s', '%%H%s%%M%s%%S%s'),
     9: (r'\d{1,2}%s\d{1,2}%s', '%%H%s%%M%s'),
 }

@@ -959,7 +959,7 @@ def redis_auto_renew_cache(cache_key=None):
             result = func(*args, **kwargs)
 
             if result is not None and cache_key_str:
-                # Write to cache + set expiration,实现「自动过期」
+                # Write to cache + set expiration, implements "auto-expiration"
                 redis_client.setex(
                     name=cache_key_full,
                     time=CACHE_EXPIRE_SECONDS,

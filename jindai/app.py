@@ -24,7 +24,7 @@ app = FastAPI(
     docs_url="/api/v2/docs",
     openapi_url="/api/v2/openapi.json",
     title="Jindai",
-    version="2.0.690",
+    version="2.0.691",
 )
 
 # CORS middleware configuration
@@ -296,13 +296,13 @@ def run_service(host: str = "0.0.0.0", port: int = 8370) -> None:
 
 @app.exception_handler(404)
 async def custom_404_handler(request: Request, exc: HTTPException):
-    # FastAPI 路由匹配失败的 404，detail 固定为 "Not Found"
+    # 404 when FastAPI route matching fails, detail is fixed to "Not Found"
     DEFAULT_404_DETAIL = "Not Found"
     
-    # 1. 仅处理路由匹配失败的 404（detail 为默认值）
+    # 1. Only handle 404 from route matching failure (detail is default value)
     if exc.detail == DEFAULT_404_DETAIL:
         return await serve_static(request.url.path.lstrip('/'))
-    # 2. 手动抛出的 404（自定义 detail），保留原生 404 行为
+    # 2. Manually raised 404 (custom detail), preserve original 404 behavior
     else:
         return JSONResponse(
             status_code=exc.status_code,
