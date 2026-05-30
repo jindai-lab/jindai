@@ -18,6 +18,7 @@ from sqlalchemy import func, select
 from jindai.app import storage
 from jindai.models import Dataset, Paragraph, get_db_session
 from jindai.pipeline import DataSourceStage, PipelineStage
+from plugins.pipelines.pdf_stages import TextCleaner, PDFLanguageDetect, CrossPageReparagraphizer
 
 
 def resolve_range(page_range: str) -> Iterator[int]:
@@ -124,6 +125,8 @@ class PDFDataSource(DataSourceStage):
         self.lang = lang
         self.skip_existed = skip_existed
         self.page_range = sorted(resolve_range(page_range))
+        
+        print(f'File Paths: {content}')
         self.files = PipelineStage.parse_paths(content)
         
         # Text processing options
@@ -156,11 +159,11 @@ class PDFDataSource(DataSourceStage):
                 - dataset: Target dataset ID
                 - lang: Language code (optionally auto-detected)
         """
-        from jindai.plugins.pipelines.pdf_stages import TextCleaner, PDFLanguageDetect, CrossPageReparagraphizer
         
         dataset = await Dataset.get(self.dataset_name)
         lang = self.lang
         files = await self.files
+        self.log(f'{len(files)} files resolved')
 
         # Build mapping of file -> last imported page (0-indexed)
         if self.skip_existed:

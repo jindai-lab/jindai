@@ -33,7 +33,9 @@ class ConfigObject(BaseModel):
         plugins: List of plugins to load (default: ["*"] for all).
         oidc: OIDC configuration dictionary.
         port: Default port for web server (default: 8370).
-        embedding_model: Sentence transformer model name for embeddings.
+        embedding_api_base: OpenAI-compatible embedding API base URL.
+        embedding_api_key: API key for embedding service.
+        embedding_model: Model name for embeddings (used with external API).
         embedding_dims: Embedding vector dimensions.
         ui_dist: Path to UI distribution files (default: './dist/').
         paddle_remote: PaddleOCR remote service URL.
@@ -52,10 +54,19 @@ class ConfigObject(BaseModel):
     )
     oidc: dict = Field(description="OIDC config")
     port: int = Field(default=8370, description="Default port for web server")
+    embedding_api_base: str = Field(
+        description="OpenAI-compatible embedding API base URL"
+    )
+    embedding_api_key: str = Field(
+        default="", description="API key for embedding service"
+    )
     embedding_model: str = Field(
-        description="Sentence transformer model name for embeddings"
+        default="", description="Model name for embeddings (used with external API)"
     )
     embedding_dims: int = Field(description="Embedding vector dimensions")
+    rerank_model: str = Field(
+        default="", description="Model name for reranking (used with external API)"
+    )
 
     ui_dist: str = Field(description="Path to UI distribution files", default='./dist/')
     paddle_remote: str = Field(description="PaddleOCR remote service URL")
@@ -64,6 +75,7 @@ class ConfigObject(BaseModel):
     )
 
     constants: dict = Field(default_factory=dict, description="Application constants")
+    mineru: str = Field(description="MinerU API Endpoint")
 
     @field_validator("redis")
     @classmethod

@@ -279,7 +279,7 @@ class PDFLanguageDetect(PipelineStage):
         Language.JAPANESE,
         Language.RUSSIAN,
     ]
-    detector = LanguageDetectorBuilder.from_languages(_lingua_languages).build()
+    detector = LanguageDetectorBuilder.from_languages(*_lingua_languages).build()
     
     # Unicode ranges for script detection
     CJK_RANGE = re.compile(r'[\u4e00-\u9fff\u3400-\u4dbf\uf900-\ufaff]')
@@ -375,7 +375,7 @@ class PDFLanguageDetect(PipelineStage):
             return paragraph
         
         if not paragraph.content:
-            paragraph.lang = 'unknown'
+            paragraph.lang = 'en'
             return paragraph
         
         # Detect language

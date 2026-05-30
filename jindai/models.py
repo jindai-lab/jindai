@@ -21,7 +21,9 @@ from contextlib import asynccontextmanager
 from datetime import datetime
 from functools import wraps
 from typing import Any, AsyncIterator, Dict, List, Optional, Union
+import logging
 
+import httpx
 import redis
 import regex as re
 from pgvector.sqlalchemy import Vector
@@ -37,7 +39,7 @@ from sqlalchemy.orm import (Mapped, declarative_base, mapped_column,
 from sqlalchemy.sql import func
 
 from .config import config
-from .helpers import AutoUnloadSentenceTransformer, jieba
+from .helpers import jieba
 
 engine = create_async_engine(config.database)
 session_factory = async_sessionmaker(
@@ -977,9 +979,8 @@ class TextEmbeddings(Base):
     """Text embeddings model for semantic search.
 
     Stores vector embeddings of text chunks for similarity search.
+    Uses external OpenAI-compatible API for embedding generation.
     """
-
-    embedding_model = AutoUnloadSentenceTransformer(config.embedding_model)
 
     __tablename__ = "text_embeddings"
     __table_args__ = (
@@ -1024,9 +1025,91 @@ class TextEmbeddings(Base):
     )
 
     @staticmethod
+    async def rerank_by_embedding(query: str, items: List[Dict[str, Any]]):
+        """Rerank items by embedding similarity to query.
+
+        Args:
+            query: Input query string.
+            items: List of items with 'embedding' field to rerank.
+
+        Returns:
+            Reranked list of items based on cosine similarity.
+        """
+        api_base = config.embedding_api_base.rstrip("/")
+        api_key = config.embedding_api_key
+
+        headers = {
+            "Content-Type": "application/json",
+        }
+        if api_key:
+            headers["Authorization"] = f"Bearer {api_key}"
+
+        payload = {
+            "model": config.rerank_model,
+            "query": query.strip(),
+            "documents": [item.get("content", "") for item in items],
+            "return_documents": False,
+            "top_n": len(items)
+        }
+
+        async with httpx.AsyncClient() as client:
+            response = await client.post(
+                f"{api_base}/rerank",
+                headers=headers,
+                json=payload,
+                timeout=30.0,
+            )
+            response.raise_for_status()
+            results = [result["index"] for result in response.json()["results"]]
+
+        return [items[i] for i in results]
+
+    @staticmethod
+    async def get_embedding(text: str) -> list:
+        """Get embedding for text asynchronously using external API.
+
+        Args:
+            text: Input text to embed (supports 100+ languages).
+
+        Returns:
+            Embedding as list of floats.
+        """
+        logging.info(f'Get embedding for {text[:10]}...')
+        
+        api_base = config.embedding_api_base.rstrip("/")
+        api_key = config.embedding_api_key
+        model = config.embedding_model
+
+        headers = {
+            "Content-Type": "application/json",
+        }
+        if api_key:
+            headers["Authorization"] = f"Bearer {api_key}"
+
+        payload = {
+            "model": model,
+            "input": text.strip(),
+        }
+
+        async with httpx.AsyncClient() as client:
+            response = await client.post(
+                f"{api_base}/embeddings",
+                headers=headers,
+                json=payload,
+                timeout=30.0,
+            )
+            response.raise_for_status()
+            result = response.json()
+            
+        logging.info(f'Got embedding: {str(result)[:20]}...')
+
+        # Extract embedding from OpenAI-compatible response
+        return result["data"][0]["embedding"]
+
+    @staticmethod
     @redis_auto_renew_cache()
     def get_embedding_sync(text: str) -> list:
-        """Get embedding for text synchronously.
+        """Get embedding for text synchronously (wrapper for async method).
 
         Args:
             text: Input text to embed.
@@ -1034,25 +1117,7 @@ class TextEmbeddings(Base):
         Returns:
             Embedding as list of floats.
         """
-        embedding = TextEmbeddings.embedding_model.encode(
-            text.strip(),
-            convert_to_numpy=True,  # Return numpy array for easier processing
-            normalize_embeddings=True,  # Normalize vectors for better retrieval
-        )
-
-        return embedding.tolist()
-
-    @staticmethod
-    async def get_embedding(text: str) -> list:
-        """Get embedding for text asynchronously.
-
-        Args:
-            text: Input text to embed (supports 100+ languages).
-
-        Returns:
-            Embedding as list of floats (dimension: 384).
-        """
-        return await asyncio.to_thread(TextEmbeddings.get_embedding_sync, text)
+        return asyncio.run(TextEmbeddings.get_embedding(text))
 
     @staticmethod
     def get_chunks(text: str, chunk_length: int, overlap: int) -> list:
@@ -1095,7 +1160,7 @@ class TextEmbeddings(Base):
 
     @staticmethod
     async def batch_encode(batch: list) -> list:
-        """Encode a batch of texts.
+        """Encode a batch of texts using external API.
 
         Args:
             batch: List of texts to encode.
@@ -1103,16 +1168,33 @@ class TextEmbeddings(Base):
         Returns:
             List of embeddings as lists of floats.
         """
-        # Batch encode, same parameters as get_embedding for consistent vector format
-        embeddings = await asyncio.to_thread(
-            TextEmbeddings.embedding_model.encode,
-            batch,
-            convert_to_numpy=True,
-            normalize_embeddings=True,  # Keep normalized for consistent retrieval
-        )
+        api_base = config.embedding_api_base.rstrip("/")
+        api_key = config.embedding_api_key
+        model = config.embedding_model
 
-        # Unified return as list format, consistent with get_embedding's return embedding.tolist()
-        return embeddings.tolist()
+        headers = {
+            "Content-Type": "application/json",
+        }
+        if api_key:
+            headers["Authorization"] = f"Bearer {api_key}"
+
+        payload = {
+            "model": model,
+            "input": [text.strip() for text in batch],
+        }
+
+        async with httpx.AsyncClient() as client:
+            response = await client.post(
+                f"{api_base}/embeddings",
+                headers=headers,
+                json=payload,
+                timeout=60.0,
+            )
+            response.raise_for_status()
+            result = response.json()
+
+        # Extract embeddings from OpenAI-compatible response
+        return [item["embedding"] for item in result["data"]]
 
 
 import hashlib
