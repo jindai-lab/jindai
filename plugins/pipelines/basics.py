@@ -266,7 +266,7 @@ class Reparagraph(PipelineStage):
     @zhs 重新分段"""
 
     def resolve(self, paragraph: Paragraph) -> Paragraph:
-        lang = paragraph.lang
+        lang = paragraph.lang or 'en'
         lines = paragraph.content.split('\n')
 
         def paragraph_finished(text):

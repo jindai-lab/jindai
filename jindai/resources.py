@@ -30,7 +30,7 @@ from fastapi import (
     Request,
 )
 from fastapi.responses import StreamingResponse
-from sqlalchemy.sql import func, select
+from sqlalchemy.sql import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 # Import existing components
@@ -816,6 +816,95 @@ class ContentManager(ResourceRegistry):
             await session.commit()
             return {"message": "Dataset deleted"}
 
+        @router.post(
+            "/datasets/merge",
+            tags=["Datasets"],
+            dependencies=[Depends(get_current_admin)],
+        )
+        async def merge_datasets(
+            data: dict = Body(...), session: AsyncSession = Depends(get_db)
+        ):
+            """Merge datasets matching a pattern into a target dataset.
+
+            Args:
+                data: Dictionary with:
+                    - pattern: String pattern to match dataset names (matches if name contains pattern)
+                    - regex: Optional regex pattern for more specific matching
+                    - target: Target dataset name to merge into (creates if not exists)
+
+            Returns:
+                Dictionary with merged count and target dataset ID.
+
+            Raises:
+                HTTPException: If no target specified or no datasets match.
+            """
+            import re as re_module
+
+            pattern = data.get("pattern", "")
+            regex_pattern = data.get("regex")
+            target = data.get("target")
+
+            if not target:
+                raise HTTPException(400, detail="Target dataset name is required")
+
+            if not pattern and not regex_pattern:
+                raise HTTPException(400, detail="At least one of 'pattern' or 'regex' must be provided")
+
+            # Get all datasets
+            result = await session.execute(select(Dataset))
+            all_datasets = result.scalars().all()
+
+            # Filter datasets matching the pattern
+            matching_datasets = []
+            for ds in all_datasets:
+                # Skip the target dataset itself
+                if ds.name == target:
+                    continue
+
+                # Check string pattern (case-insensitive contains match)
+                matches_pattern = not pattern or pattern.lower() in ds.name.lower()
+
+                # Check regex pattern if provided
+                matches_regex = True
+                if regex_pattern:
+                    try:
+                        matches_regex = re_module.search(regex_pattern, ds.name) is not None
+                    except re_module.error as e:
+                        raise HTTPException(400, detail=f"Invalid regex pattern: {str(e)}")
+
+                if matches_pattern and matches_regex:
+                    matching_datasets.append(ds)
+
+            if not matching_datasets:
+                raise HTTPException(404, detail="No datasets match the specified criteria")
+
+            # Get or create target dataset
+            target_ds = await Dataset.get(target, auto_create=True)
+            
+            # Move all paragraphs from matching datasets to target
+            merged_count = 0
+            for ds in matching_datasets:
+                stmt = (
+                    update(Paragraph)
+                    .where(Paragraph.dataset == ds.id)
+                    .values({"dataset": target_ds.id})
+                )
+                result = await session.execute(stmt)
+                merged_count += result.rowcount
+
+                # Delete the source dataset
+                await session.delete(ds)
+
+            await session.commit()
+
+            return {
+                "message": f"Successfully merged {merged_count} paragraphs from {len(matching_datasets)} datasets",
+                "merged_paragraphs": merged_count,
+                "merged_datasets": len(matching_datasets),
+                "target_dataset": target,
+                "target_dataset_id": str(target_ds.id),
+            }
+
         @router.post("/paragraphs", tags=["Paragraphs"])
         async def post_paragraphs(
             data: dict = Body(...), session: AsyncSession = Depends(get_db)
@@ -840,6 +929,7 @@ class ContentManager(ResourceRegistry):
             filters: QueryFilters,
             session: AsyncSession = Depends(get_db),
             username: str = Depends(get_current_username),
+            enable_rerank: bool = False
         ):
             """Search paragraphs with filters.
 
@@ -866,6 +956,28 @@ class ContentManager(ResourceRegistry):
             session.add(hist)
             await session.commit()
             query = await Paragraph.build_query(filters)
+            
+            if filters.embeddings and enable_rerank: # embedding search, need rerank
+                async with get_db_session() as session:
+                    # Get all matching paragraphs without pagination
+                    all_results = (
+                        await session.execute(query)
+                    ).scalars().all()
+                    
+                    # Rerank results based on embedding similarity
+                    ranked_results = await TextEmbeddings.rerank_by_embedding(
+                        filters.q, all_results
+                    )
+                    
+                    # Apply pagination to ranked results
+                    paginated_results = ranked_results[offset : offset + limit] if limit else ranked_results[offset:]
+                    
+                    return {
+                        "total": len(ranked_results),
+                        "results": [r.as_dict() for r in paginated_results],
+                        "query": str(query.compile()),
+                    }
+            
             resp = await self.paginate(session, query, '', offset or 0, limit or 0)
             resp['query'] = str(query.compile())
             return resp

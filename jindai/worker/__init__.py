@@ -107,7 +107,8 @@ async def get_task(
     metadata = manager._get_task_metadata(task_id)
     if metadata is None:
         raise HTTPException(status_code=404, detail=f"Task '{task_id}' not found")
-    return metadata.to_dict()
+    r = metadata.to_dict()
+    return r
 
 
 @router.delete("/tasks")

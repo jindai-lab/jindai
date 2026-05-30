@@ -13,8 +13,11 @@ redis:
   port: 6379
   db: 0
 
-embedding_model: 'BAAI/bge-m3'
-embdding_dims: 1024
+# Embedding configuration - OpenAI-compatible API
+embedding_api_base: 'http://localhost:1234/v1'
+embedding_api_key: ''
+embedding_model: 'bge-m3'
+embedding_dims: 1024
 
 ui_dist: ./dist/
 paddle_remote: http://paddle-ocr:8080/

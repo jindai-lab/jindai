@@ -1,7 +1,6 @@
 """Helper functions for Jindai application.
 
 This module provides utility classes and functions for:
-- Automatic model unloading to manage memory
 - Word stemming for text processing
 - Safe module importing with auto-install
 - Context discovery for plugins
@@ -10,7 +9,6 @@ This module provides utility classes and functions for:
 """
 
 import ast
-import gc
 import glob
 import importlib
 import inspect
@@ -18,141 +16,18 @@ import logging
 import os
 import subprocess
 import sys
-import threading
-import time
 from threading import Lock
 from typing import (Any, Callable, Dict, List, Literal, Type, Union, get_args,
                     get_origin)
 
 import jieba3
 import nltk.stem.snowball
-import numpy as np
 import regex as re
-import torch
 from asteval import Interpreter
 from nltk.stem.snowball import SnowballStemmer
 from pydantic import BaseModel
-from sentence_transformers import SentenceTransformer
 
 jieba = jieba3.jieba3()
-
-
-class AutoUnloadSentenceTransformer:
-    """SentenceTransformer model automatic loading/unloading helper.
-
-    Automatically unloads the model to release memory/GPU memory when idle
-    for a specified timeout period (default 5 minutes). This helps manage
-    memory usage in long-running applications.
-
-    Attributes:
-        model_name_or_path: Model name or path for SentenceTransformer.
-        idle_timeout: Seconds of inactivity before unloading (default: 300).
-    """
-
-    def __init__(self, model_name_or_path: str, idle_timeout: int = 300) -> None:
-        """Initialize the model manager.
-
-        Args:
-            model_name_or_path: Model name (e.g., all-MiniLM-L6-v2) or local model path,
-                consistent with SentenceTransformer.
-            idle_timeout: Idle timeout in seconds, default 300 seconds (5 minutes).
-        """
-        self.model_name_or_path = model_name_or_path
-        self.idle_timeout = idle_timeout  # Idle timeout threshold
-        self.model = None  # Core model object, initially empty (lazy loading)
-        self.last_used_time = time.time()  # Last used timestamp
-        self.lock = threading.Lock()  # Thread-safe lock
-        self._monitor_thread = None  # Monitoring thread
-        self._stop_monitor = False  # Monitoring thread stop flag
-
-        # Start idle monitoring thread (daemon thread that exits with main thread)
-        self._start_monitor()
-
-    def _start_monitor(self) -> None:
-        """Start the model idle monitoring background thread."""
-
-        def monitor_loop():
-            """Monitor model usage and unload when idle timeout is reached."""
-            while not self._stop_monitor:
-                time.sleep(10)  # Check every 10 seconds to reduce CPU usage
-                with self.lock:
-                    # Trigger unloading when both conditions are met:
-                    # 1. Model is loaded 2. Current time - last used time > timeout threshold
-                    if (
-                        self.model is not None
-                        and (time.time() - self.last_used_time) > self.idle_timeout
-                    ):
-                        self._unload_model()
-
-        self._monitor_thread = threading.Thread(target=monitor_loop, daemon=True)
-        self._monitor_thread.start()
-
-    def _load_model(self) -> None:
-        """Load the model if not already loaded."""
-        if self.model is None:
-            self.model = SentenceTransformer(self.model_name_or_path)
-        # Update last used time on each load/reuse
-        self.last_used_time = time.time()
-
-    def _unload_model(self) -> None:
-        """Unload the model to release memory/GPU memory completely."""
-        if self.model is not None:
-            logging.info(
-                f"[Auto-unload] Model idle for {self.idle_timeout} seconds, releasing resources..."
-            )
-            # Core: Delete the model object
-            del self.model
-            self.model = None
-
-            # Force Python garbage collection to release memory
-            gc.collect()
-
-            # Critical step: Clear PyTorch GPU memory cache (required for GPU, otherwise GPU memory won't be released)
-            if torch.cuda.is_available():
-                torch.cuda.empty_cache()
-                torch.cuda.ipc_collect()
-
-            logging.info(f"[Auto-unload] Model resources released")
-
-    def encode(self, sentences, **kwargs) -> np.ndarray:
-        """Wrap the native encode method for seamless usage.
-
-        Args:
-            sentences: Single sentence or list of sentences, consistent with native method.
-            kwargs: Other encode parameters such as convert_to_tensor, normalize_embeddings, etc.
-
-        Returns:
-            Sentence embeddings as numpy array.
-        """
-        with self.lock:
-            self._load_model()  # Load if not present, reuse and update time
-            # Call native model method
-            embeddings = self.model.encode(sentences, **kwargs)
-            # Update last used time
-            self.last_used_time = time.time()
-            return embeddings
-
-    def encode_batch(self, sentences, **kwargs):
-        """Wrap the native encode_batch method for efficient batch encoding.
-
-        Args:
-            sentences: 2D list of sentences.
-            kwargs: Other parameters.
-
-        Returns:
-            Batch sentence embeddings as numpy array.
-        """
-        with self.lock:
-            self._load_model()
-            embeddings = self.model.encode_batch(sentences, **kwargs)
-            self.last_used_time = time.time()
-            return embeddings
-
-    def __del__(self) -> None:
-        """Clean up when object is destroyed - unload model and stop monitoring thread."""
-        self._stop_monitor = True
-        with self.lock:
-            self._unload_model()
 
 
 class WordStemmer:
