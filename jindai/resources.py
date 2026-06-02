@@ -323,22 +323,6 @@ class EmbeddingManager:
         except asyncio.CancelledError:
             logging.info("Embedding Polling Loop is being cancelled.")
 
-    @asynccontextmanager
-    async def lifespan(self, app: FastAPI):
-        """Lifespan context for embedding polling task.
-
-        Args:
-            app: FastAPI application.
-
-        Yields:
-            None.
-        """
-        self.polling_task = asyncio.create_task(self.polling_loop())
-        yield
-        if self.polling_task:
-            self.polling_task.cancel()
-            await asyncio.gather(self.polling_task, return_exceptions=True)
-
     def register_routes(self, router: APIRouter):
         """Register embedding-related routes.
 
@@ -1098,6 +1082,7 @@ emb_manager = EmbeddingManager()
 @asynccontextmanager
 async def combined_lifespan(app: FastAPI):
     """Combined lifespan for embedding polling and worker management."""
+    
     # Start embedding polling task
     emb_manager.polling_task = asyncio.create_task(emb_manager.polling_loop())
     
