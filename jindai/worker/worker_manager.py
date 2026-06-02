@@ -382,25 +382,7 @@ class WorkerManager:
     def is_running(self) -> bool:
         """Check if worker is running."""
         return self._running
-    
-    @asynccontextmanager
-    async def lifespan(self, app: FastAPI) -> Any:
-        """Lifespan context for worker management.
         
-        Starts the worker when the app starts and stops it when the app shuts down.
-        
-        Args:
-            app: FastAPI application.
-        
-        Yields:
-            None.
-        """
-        # Start the worker
-        await self.start_worker()
-        yield
-        # Stop the worker on shutdown
-        self.stop_worker()
-    
     def get_registered_tasks(self) -> List[str]:
         """Get list of registered task names."""
         return {
