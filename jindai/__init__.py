@@ -10,7 +10,7 @@ This package provides the main application components including:
 """
 
 from . import helpers, models
-from .app import app, serve_static
+from .app import app, serve_static, run_service
 from .config import config
 from .models import Dataset, Paragraph, TaskDBO, UserInfo, get_db_session, is_uuid_literal
 from .pipeline import Pipeline, PipelineStage
@@ -37,4 +37,5 @@ __all__ = [
     "serve_static",
     "helpers",
     "models",
+    "run_service"
 ]

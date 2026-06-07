@@ -25,8 +25,7 @@ import urllib3
 import yaml
 import logging
 
-from . import Plugin, PluginManager, Task, config, storage
-from .app import app, run_service
+from . import Plugin, PluginManager, Task, config, storage, app, run_service
 from .helpers import get_context, safe_import
 from .models import (Dataset, Paragraph, QueryFilters, TaskDBO, UserInfo, get_db_session)
 

@@ -19,7 +19,7 @@ from typing import Callable, Iterator
 from fastapi import APIRouter, Depends
 
 from .helpers import get_context
-from .app import get_current_admin
+from .models import get_current_admin
 from .config import config
 from .pipeline import Pipeline, PipelineStage
 from .storage import storage
@@ -93,6 +93,10 @@ class Plugin:
                 and not cls.__name__.startswith("_")
             ):
                 Pipeline.ctx[cls.__name__] = cls
+                
+    def register_routes(self, target: APIRouter) -> None:
+        """Register routes to target router"""
+        pass
 
 
 class PluginManager:
@@ -147,12 +151,16 @@ class PluginManager:
                 logging.error(f"Error while registering plugin: {plugin_name} {ex}")
                 continue
 
-    def get_router(self) -> APIRouter:
-        """Get FastAPI router for plugin management endpoints.
-
-        Returns:
-            APIRouter with plugin endpoints.
+    def register_routes(self, target: APIRouter):
         """
+        Register FastAPI router for plugin management endpoints.
+        """
+        
+        # Register routes for every plugin first
+        for plugin_instance in self.plugins:
+            plugin_instance.register_routes(target)
+        
+        # Register routes for self
         router = APIRouter(prefix='/plugins', tags=['Plugins'], dependencies=[Depends(get_current_admin)])
 
         @router.get("/")
@@ -204,7 +212,7 @@ class PluginManager:
 
             return result
 
-        return router
+        target.include_router(router)
 
     def __iter__(self) -> Iterator:
         """Iterate through loaded plugins.

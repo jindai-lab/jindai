@@ -9,15 +9,15 @@ This module provides:
 """
 
 import asyncio
-import json
 import base64
-import struct
-import os
-import httpx
+import json
 import logging
-from typing import Optional, Type, List, Any, Dict
-from contextlib import asynccontextmanager, AsyncExitStack
+import os
+import struct
+from contextlib import AsyncExitStack, asynccontextmanager
+from typing import Any, Dict, List, Optional, Type
 
+import httpx
 from fastapi import (
     APIRouter,
     Body,
@@ -26,18 +26,19 @@ from fastapi import (
     File,
     HTTPException,
     Query,
-    UploadFile,
     Request,
+    Response,
+    UploadFile,
 )
 from fastapi.responses import StreamingResponse
-from sqlalchemy.sql import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.sql import func, select, update
+from sse_starlette import EventSourceResponse
 
 # Import existing components
-from .app import get_current_admin, get_current_username, router, app
+from .models import get_current_admin, get_current_username, get_current_user
 from .config import config
 from .maintenance import maintenance_manager
-from .worker import worker_manager
 from .models import (
     APIKey,
     Base,
@@ -49,13 +50,17 @@ from .models import (
     TaskDBO,
     TextEmbeddings,
     UserInfo,
-    get_db_session,
-    get_db,
     generate_api_key,
-    hash_api_key
+    get_db,
+    get_db_session,
+    hash_api_key,
 )
 from .plugin import plugins
 from .storage import storage
+from .worker import worker_manager
+
+router = APIRouter(prefix="/api/v2", dependencies=[Depends(get_current_user)])
+
 
 # --- Basic utilities and dependencies ---
 
@@ -65,6 +70,7 @@ logging.basicConfig(
 
 
 # --- Resource management base class ---
+
 
 class ResourceRegistry:
     """Base class for automatic APIRouter registration with permissions.
@@ -97,27 +103,22 @@ class ResourceRegistry:
         Returns:
             SQLAlchemy filter expression.
         """
-        
+
         # Admin has full access
         if await get_current_admin({}, username):
             return True
-        
+
         # Check if model has user relationship
-        if hasattr(self.model, 'user'):
+        if hasattr(self.model, "user"):
             return self.model.user.username == username
-        elif hasattr(self.model, 'user_id'):
+        elif hasattr(self.model, "user_id"):
             return self.model.user_id == UserInfo.id
         else:
             # For models without user relationship, allow access
             return True
 
     async def paginate(
-        self,
-        session: AsyncSession,
-        stmt,
-        sort: str,
-        offset: int,
-        limit: int
+        self, session: AsyncSession, stmt, sort: str, offset: int, limit: int
     ) -> dict:
         """Paginate query results.
 
@@ -136,9 +137,7 @@ class ResourceRegistry:
         stmt = stmt.offset(offset).limit(limit)
         if sorts := self.model.parse_sort_string(sort):
             stmt = stmt.order_by(*sorts)
-        results = (
-            (await session.execute(stmt)).scalars().all()
-        )
+        results = (await session.execute(stmt)).scalars().all()
         return {"total": total, "results": [r.as_dict() for r in results]}
 
     def register(self, parent_router: APIRouter, dependencies: List[Any] = None):
@@ -156,7 +155,7 @@ class ResourceRegistry:
         async def list_items(
             offset: int = 0,
             limit: int = 100,
-            sort: str = Query(''),
+            sort: str = Query(""),
             session: AsyncSession = Depends(get_db),
             username: str = Depends(get_current_username),
         ):
@@ -300,6 +299,7 @@ class TaskResource(ResourceRegistry):
 
 # --- Core business logic managers ---
 
+
 class EmbeddingManager:
     """Handles embedding statistics and background polling."""
 
@@ -329,6 +329,7 @@ class EmbeddingManager:
         Args:
             router: APIRouter to register routes with.
         """
+
         @router.get("/embeddings/", tags=["Embeddings"])
         async def stat_embeddings(session: AsyncSession = Depends(get_db)):
             """Get embedding statistics.
@@ -361,10 +362,10 @@ class EmbeddingManager:
             session: AsyncSession = Depends(get_db),
         ):
             """Create embeddings for input text(s) using configured model.
-            
+
             This endpoint follows OpenAI's embeddings API style:
             https://platform.openai.com/docs/api-reference/embeddings
-            
+
             Args:
                 data: Request body with:
                     - model: Model name to use for embeddings (optional, uses config model)
@@ -396,65 +397,55 @@ class EmbeddingManager:
             else:
                 raise HTTPException(
                     status_code=400,
-                    detail="Invalid input: must be a string or list of strings"
+                    detail="Invalid input: must be a string or list of strings",
                 )
-            
+
             if not input_texts:
-                raise HTTPException(
-                    status_code=400,
-                    detail="Invalid input: empty list"
-                )
-            
+                raise HTTPException(status_code=400, detail="Invalid input: empty list")
+
             # Get model name (use config if not provided)
             model_name = data.get("model", config.embedding_model)
-            
+
             # Compute embeddings using the configured model
             embeddings = []
             for text in input_texts:
                 if not isinstance(text, str):
                     raise HTTPException(
                         status_code=400,
-                        detail=f"Invalid input: expected string, got {type(text).__name__}"
+                        detail=f"Invalid input: expected string, got {type(text).__name__}",
                     )
                 # Use the existing get_embedding method from TextEmbeddings
                 embedding = await TextEmbeddings.get_embedding(text)
                 embeddings.append(embedding)
-            
+
             # Determine encoding format (default to float)
             encoding_format = data.get("encoding_format", "float")
-            
+
             # Build response in OpenAI format
             data_entries = []
             for i, embedding in enumerate(embeddings):
                 # Convert to base64 if requested
                 if encoding_format == "base64":
                     # Pack floats as binary and encode as base64
-                    packed = struct.pack(f'{len(embedding)}f', *embedding)
-                    embedding_b64 = base64.b64encode(packed).decode('utf-8')
-                    data_entries.append({
-                        "object": "embedding",
-                        "embedding": embedding_b64,
-                        "index": i
-                    })
+                    packed = struct.pack(f"{len(embedding)}f", *embedding)
+                    embedding_b64 = base64.b64encode(packed).decode("utf-8")
+                    data_entries.append(
+                        {"object": "embedding", "embedding": embedding_b64, "index": i}
+                    )
                 else:
                     # Default: return as float list
-                    data_entries.append({
-                        "object": "embedding",
-                        "embedding": embedding,
-                        "index": i
-                    })
-            
+                    data_entries.append(
+                        {"object": "embedding", "embedding": embedding, "index": i}
+                    )
+
             # Calculate token usage (approximate: 1 token ~ 4 characters)
             total_tokens = sum(len(text) // 4 for text in input_texts)
-            
+
             return {
                 "object": "list",
                 "data": data_entries,
                 "model": model_name,
-                "usage": {
-                    "prompt_tokens": total_tokens,
-                    "total_tokens": total_tokens
-                }
+                "usage": {"prompt_tokens": total_tokens, "total_tokens": total_tokens},
             }
 
         @router.post("/embeddings/{resource_id}", status_code=201, tags=["Embeddings"])
@@ -499,17 +490,18 @@ class APIKeyManager:
         Args:
             router: APIRouter to register routes with.
         """
+
         @router.get("/apikeys", tags=["API Keys"])
         async def list_api_keys(
             session: AsyncSession = Depends(get_db),
             username: str = Depends(get_current_username),
         ):
             """List all API keys for the current user.
-            
+
             Args:
                 session: Database session.
                 username: Current username.
-                
+
             Returns:
                 List of API keys with metadata.
             """
@@ -520,13 +512,13 @@ class APIKeyManager:
             user = result.scalar_one_or_none()
             if not user:
                 raise HTTPException(404, detail="User not found")
-            
+
             # Query API keys for this user
             result = await session.execute(
                 select(APIKey).filter(APIKey.user_id == user.id)
             )
             api_keys = result.scalars().all()
-            
+
             return {
                 "object": "list",
                 "data": [
@@ -535,8 +527,16 @@ class APIKeyManager:
                         "object": "api_key",
                         "name": api_key.name,
                         "is_active": api_key.is_active,
-                        "expires_at": api_key.expires_at.isoformat() if api_key.expires_at else None,
-                        "last_used_at": api_key.last_used_at.isoformat() if api_key.last_used_at else None,
+                        "expires_at": (
+                            api_key.expires_at.isoformat()
+                            if api_key.expires_at
+                            else None
+                        ),
+                        "last_used_at": (
+                            api_key.last_used_at.isoformat()
+                            if api_key.last_used_at
+                            else None
+                        ),
                         "created_at": api_key.created_at.isoformat(),
                     }
                     for api_key in api_keys
@@ -550,16 +550,16 @@ class APIKeyManager:
             username: str = Depends(get_current_username),
         ):
             """Create a new API key for the current user.
-            
+
             Args:
                 data: Request body with optional 'name' field.
                 session: Database session.
                 username: Current username.
-                
+
             Returns:
                 Dictionary with the plain API key (only shown once!) and metadata.
             """
-                        
+
             # Get user ID from username
             result = await session.execute(
                 select(UserInfo).filter(UserInfo.username == username)
@@ -567,11 +567,11 @@ class APIKeyManager:
             user = result.scalar_one_or_none()
             if not user:
                 raise HTTPException(404, detail="User not found")
-            
+
             # Generate new API key
             plain_key = generate_api_key()
             key_hash = hash_api_key(plain_key)
-            
+
             # Create API key record
             api_key = APIKey(
                 user_id=user.id,
@@ -581,7 +581,7 @@ class APIKeyManager:
             )
             session.add(api_key)
             await session.commit()
-            
+
             return {
                 "id": str(api_key.id),
                 "object": "api_key",
@@ -599,18 +599,18 @@ class APIKeyManager:
             username: str = Depends(get_current_username),
         ):
             """Delete an API key for the current user.
-            
+
             Args:
                 resource_id: API key ID.
                 session: Database session.
                 username: Current username.
-                
+
             Returns:
                 Deletion confirmation.
-                
+
             Raises:
                 HTTPException: If API key not found or doesn't belong to user.
-            """ 
+            """
             # Get user ID from username
             result = await session.execute(
                 select(UserInfo).filter(UserInfo.username == username)
@@ -618,20 +618,20 @@ class APIKeyManager:
             user = result.scalar_one_or_none()
             if not user:
                 raise HTTPException(404, detail="User not found")
-            
+
             # Get API key
             api_key = await session.get(APIKey, resource_id)
             if not api_key:
                 raise HTTPException(404, detail="API key not found")
-            
+
             # Verify ownership
             if api_key.user_id != user.id:
                 raise HTTPException(403, detail="API key does not belong to user")
-            
+
             # Soft delete by setting is_active to False
             await session.delete(api_key)
             await session.commit()
-            
+
             return {"message": "API key deleted"}
 
         @router.post("/apikeys/{resource_id}/revoke", tags=["API Keys"])
@@ -641,15 +641,15 @@ class APIKeyManager:
             username: str = Depends(get_current_username),
         ):
             """Revoke an API key (soft delete).
-            
+
             Args:
                 resource_id: API key ID.
                 session: Database session.
                 username: Current username.
-                
+
             Returns:
                 Revocation confirmation.
-                
+
             Raises:
                 HTTPException: If API key not found or doesn't belong to user.
             """
@@ -660,20 +660,20 @@ class APIKeyManager:
             user = result.scalar_one_or_none()
             if not user:
                 raise HTTPException(404, detail="User not found")
-            
+
             # Get API key
             api_key = await session.get(APIKey, resource_id)
             if not api_key:
                 raise HTTPException(404, detail="API key not found")
-            
+
             # Verify ownership
             if api_key.user_id != user.id:
                 raise HTTPException(403, detail="API key does not belong to user")
-            
+
             # Soft delete by setting is_active to False
             api_key.is_active = False
             await session.commit()
-            
+
             return {"message": "API key revoked"}
 
         @router.post("/apikeys/{resource_id}/activate", tags=["API Keys"])
@@ -683,15 +683,15 @@ class APIKeyManager:
             username: str = Depends(get_current_username),
         ):
             """Activate a revoked API key.
-            
+
             Args:
                 resource_id: API key ID.
                 session: Database session.
                 username: Current username.
-                
+
             Returns:
                 Activation confirmation.
-                
+
             Raises:
                 HTTPException: If API key not found or doesn't belong to user.
             """
@@ -702,20 +702,20 @@ class APIKeyManager:
             user = result.scalar_one_or_none()
             if not user:
                 raise HTTPException(404, detail="User not found")
-            
+
             # Get API key
             api_key = await session.get(APIKey, resource_id)
             if not api_key:
                 raise HTTPException(404, detail="API key not found")
-            
+
             # Verify ownership
             if api_key.user_id != user.id:
                 raise HTTPException(403, detail="API key does not belong to user")
-            
+
             # Activate the key
             api_key.is_active = True
             await session.commit()
-            
+
             return {"message": "API key activated"}
 
 
@@ -724,7 +724,7 @@ class ContentManager(ResourceRegistry):
 
     def __init__(self):
         """Initialize content manager."""
-        super().__init__(Paragraph, '', [])
+        super().__init__(Paragraph, "", [])
 
     def register_routes(self, router: APIRouter):
         """Register content-related routes.
@@ -732,6 +732,7 @@ class ContentManager(ResourceRegistry):
         Args:
             router: APIRouter to register routes with.
         """
+
         @router.get("/datasets", tags=["Datasets"])
         @router.get("/datasets/{resource_id}", tags=["Datasets"])
         async def get_datasets(resource_id: Optional[str] = None):
@@ -832,7 +833,9 @@ class ContentManager(ResourceRegistry):
                 raise HTTPException(400, detail="Target dataset name is required")
 
             if not pattern and not regex_pattern:
-                raise HTTPException(400, detail="At least one of 'pattern' or 'regex' must be provided")
+                raise HTTPException(
+                    400, detail="At least one of 'pattern' or 'regex' must be provided"
+                )
 
             # Get all datasets
             result = await session.execute(select(Dataset))
@@ -852,19 +855,25 @@ class ContentManager(ResourceRegistry):
                 matches_regex = True
                 if regex_pattern:
                     try:
-                        matches_regex = re_module.search(regex_pattern, ds.name) is not None
+                        matches_regex = (
+                            re_module.search(regex_pattern, ds.name) is not None
+                        )
                     except re_module.error as e:
-                        raise HTTPException(400, detail=f"Invalid regex pattern: {str(e)}")
+                        raise HTTPException(
+                            400, detail=f"Invalid regex pattern: {str(e)}"
+                        )
 
                 if matches_pattern and matches_regex:
                     matching_datasets.append(ds)
 
             if not matching_datasets:
-                raise HTTPException(404, detail="No datasets match the specified criteria")
+                raise HTTPException(
+                    404, detail="No datasets match the specified criteria"
+                )
 
             # Get or create target dataset
             target_ds = await Dataset.get(target, auto_create=True)
-            
+
             # Move all paragraphs from matching datasets to target
             merged_count = 0
             for ds in matching_datasets:
@@ -913,7 +922,7 @@ class ContentManager(ResourceRegistry):
             filters: QueryFilters,
             session: AsyncSession = Depends(get_db),
             username: str = Depends(get_current_username),
-            enable_rerank: bool = False
+            enable_rerank: bool = False,
         ):
             """Search paragraphs with filters.
 
@@ -940,30 +949,32 @@ class ContentManager(ResourceRegistry):
             session.add(hist)
             await session.commit()
             query = await Paragraph.build_query(filters)
-            
-            if filters.embeddings and enable_rerank: # embedding search, need rerank
+
+            if filters.embeddings and enable_rerank:  # embedding search, need rerank
                 async with get_db_session() as session:
                     # Get all matching paragraphs without pagination
-                    all_results = (
-                        await session.execute(query)
-                    ).scalars().all()
-                    
+                    all_results = (await session.execute(query)).scalars().all()
+
                     # Rerank results based on embedding similarity
                     ranked_results = await TextEmbeddings.rerank_by_embedding(
                         filters.q, all_results
                     )
-                    
+
                     # Apply pagination to ranked results
-                    paginated_results = ranked_results[offset : offset + limit] if limit else ranked_results[offset:]
-                    
+                    paginated_results = (
+                        ranked_results[offset : offset + limit]
+                        if limit
+                        else ranked_results[offset:]
+                    )
+
                     return {
                         "total": len(ranked_results),
                         "results": [r.as_dict() for r in paginated_results],
                         "query": str(query.compile()),
                     }
-            
-            resp = await self.paginate(session, query, '', offset or 0, limit or 0)
-            resp['query'] = str(query.compile())
+
+            resp = await self.paginate(session, query, "", offset or 0, limit or 0)
+            resp["query"] = str(query.compile())
             return resp
 
         @router.post("/paragraphs/filters/{column}")
@@ -1006,6 +1017,7 @@ class StorageManager:
         Args:
             router: APIRouter to register routes with.
         """
+
         @router.get("/files/{file_path:path}", tags=["Files"])
         def get_file(
             file_path: str = "",
@@ -1078,29 +1090,28 @@ class StorageManager:
 
 emb_manager = EmbeddingManager()
 
+
 # Combined lifespan that runs both embedding polling and worker
 @asynccontextmanager
 async def combined_lifespan(app: FastAPI):
     """Combined lifespan for embedding polling and worker management."""
-    
+
     # Start embedding polling task
     emb_manager.polling_task = asyncio.create_task(emb_manager.polling_loop())
-    
+
     # Start worker
     await worker_manager.start_worker()
-    
+
     yield
-    
+
     # Stop worker
     worker_manager.stop_worker()
-    
+
     # Stop embedding polling task
     if emb_manager.polling_task:
         emb_manager.polling_task.cancel()
         await asyncio.gather(emb_manager.polling_task, return_exceptions=True)
 
-app.router.lifespan_context = combined_lifespan
-api_key_manager = APIKeyManager()
 
 # Register common CRUD resources
 ResourceRegistry(UserInfo, "/users", ["Users"]).register(
@@ -1112,7 +1123,7 @@ TaskResource().register(router)
 # Register business logic modules
 ContentManager().register_routes(router)
 emb_manager.register_routes(router)
-api_key_manager.register_routes(router)
+APIKeyManager().register_routes(router)
 StorageManager().register_routes(router)
 
 
@@ -1149,7 +1160,7 @@ async def translator(params: dict = Body(...)):
         return response.json()["choices"][0]["message"]["content"]
 
 
-# 4. External manager integration
-router.include_router(plugins.get_router())
-router.include_router(maintenance_manager.get_router())
-app.include_router(router)
+# External manager integration
+plugins.register_routes(router)
+maintenance_manager.register_routes(router)
+worker_manager.register_routes(router)
