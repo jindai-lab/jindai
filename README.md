@@ -324,7 +324,6 @@ pgvector>=0.4.2
 redis>=7.1.0
 celery>=5.6.2
 taskiq-redis>=1.2.2
-sentence-transformers>=5.2.0
 torch>=2.9.1
 hanlp>=2.1.3
 pymupdf>=1.26.7

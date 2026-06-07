@@ -423,7 +423,7 @@ class BooksPagesLink(Books):
     format_size: Mapped[int] = mapped_column(Integer, nullable=False, server_default=text('0'))
     needs_scan: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text('0'))
     book: Mapped[Optional[int]] = mapped_column(ForeignKey('books.id', ondelete='CASCADE'), primary_key=True)
-    timestamp: Mapped[Optional[datetime.datetime]] = mapped_column(TIMESTAMP, server_default=text('CURRENT_TIMESTAMP'))
+
 
 class Format(str, Enum):
     """电子书格式枚举"""

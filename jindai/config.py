@@ -40,6 +40,8 @@ class ConfigObject(BaseModel):
         ui_dist: Path to UI distribution files (default: './dist/').
         paddle_remote: PaddleOCR remote service URL.
         constants: Application constants dictionary.
+        firecrawl_apikey: Firecrawl API key.
+        firecrawl_apiurl: Firecrawl API URL.
     """
 
     model_config = ConfigDict(extra="allow")
@@ -76,6 +78,12 @@ class ConfigObject(BaseModel):
 
     constants: dict = Field(default_factory=dict, description="Application constants")
     mineru: str = Field(description="MinerU API Endpoint")
+    firecrawl_apikey: str = Field(
+        default="", description="Firecrawl API key"
+    )
+    firecrawl_apiurl: str = Field(
+        default="", description="Firecrawl API URL"
+    )
 
     @field_validator("redis")
     @classmethod

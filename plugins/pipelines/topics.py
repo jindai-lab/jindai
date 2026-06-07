@@ -4,22 +4,64 @@
 
 from collections import defaultdict
 from io import BytesIO
-from threading import Lock
 from typing import Dict
 
 import numpy as np
-from sentence_transformers import SentenceTransformer, util
+from scipy.sparse.csgraph import connected_components
+from sklearn.metrics.pairwise import cosine_similarity
 
+from jindai.models import Paragraph, TextEmbeddings
 from jindai.pipeline import PipelineStage
-from jindai.helpers import safe_import
-from jindai.models import Paragraph
 
 from .basics import AccumulateParagraphs, Counter
 
 
+def community_detection(vecs, min_community_size=1, threshold=0.75):
+    """
+    基于余弦相似度阈值的社区检测。
+    
+    参数:
+        vecs: list of array-like 或 numpy 数组，形状 (n_samples, n_features)
+        min_community_size: int，最小社区大小，小于此值的社区将被丢弃（标签置为 -1）
+        threshold: float，相似度阈值，大于等于此值的两个向量属于同一社区
+    
+    返回:
+        labels: numpy 数组，形状 (n_samples,)，社区标签（-1 表示不属于任何有效社区）
+    """
+    # 转换为 numpy 数组并确保是 float 类型
+    vecs = np.asarray(vecs, dtype=np.float32)
+    n = len(vecs)
+    
+    if n == 0:
+        return np.array([], dtype=int)
+    
+    # 计算余弦相似度矩阵（仅保留上三角以节省内存，但 full 矩阵更方便）
+    sim_matrix = cosine_similarity(vecs)
+    
+    # 构建邻接矩阵：相似度 >= threshold 的节点之间有一条边
+    adjacency = (sim_matrix >= threshold).astype(int)
+    # 确保对角线为 0（节点不与自己连接，不影响连通分量）
+    np.fill_diagonal(adjacency, 0)
+    
+    # 计算连通分量（无向图）
+    n_components, labels = connected_components(csgraph=adjacency, directed=False, return_labels=True)
+    
+    # 统计每个社区的大小
+    unique, counts = np.unique(labels, return_counts=True)
+    size_map = dict(zip(unique, counts))
+    
+    # 将大小小于 min_community_size 的社区标记为 -1
+    filtered_labels = np.array([
+        lab if size_map[lab] >= min_community_size else -1
+        for lab in labels
+    ])
+    
+    return filtered_labels
+
+
 def import_plt():
     """safe import matplotlib.pyplot"""
-    plt = safe_import('matplotlib.pyplot', 'matplotlib')
+    import matplotlib.pyplot as plt
     plt.rcParams['font.sans-serif'] = ['Microsoft YaHei']
     return plt
 
@@ -27,8 +69,6 @@ def import_plt():
 def import_sklearn_kmeans_pca() -> tuple:
     """safe import sklearn kmeans and pca, in respective order
     """
-    safe_import('sklearn.cluster', 'scikit-learn')
-    safe_import('sklearn.decomposition')
     from sklearn.cluster import KMeans
     from sklearn.decomposition import PCA
     return KMeans, PCA
@@ -55,7 +95,8 @@ class LDA(PipelineStage):
         self.mat[str(paragraph.id)] = paragraph.tokens
 
     async def summarize(self, *_) -> dict[str, dict]:
-        model = safe_import('gensim.models_ldamodel').LdaModel
+        import gensim.models.ldamodel
+        model = gensim.models.ldamodel.LdaModel
 
         for sent_vec in self.mat.values():
             for word_vec in sent_vec:
@@ -81,28 +122,20 @@ class LDA(PipelineStage):
         }
 
 
-class Word2Vec(PipelineStage):
+class TextEmbedding(PipelineStage):
     """Vectorize text, multilingual support
-    @zhs 根据不同语言自动进行 Word2Vec 向量化
-    @zhs （调用 transformers 的 paraphrase-multilingual-MiniLM-L12-v2 模型）
+    @zhs 根据不同语言自动进行 TextEmbedding 向量化
     """
 
-    def __init__(self, model_name='paraphrase-multilingual-MiniLM-L12-v2') -> None:
-        '''
-        Args:
-            model_name (str): Model name
-                @zhs 模型名称，默认为多语言小模型
-        '''
-        text2vec = safe_import('text2vec')
-        self.bert = text2vec.SBert(model_name)
-        super().__init__()
-
+    def __init__(self) -> None:
+        pass
+        
     def resolve(self, paragraph: Paragraph) -> Paragraph:
-        paragraph.vec = self.bert.encode(paragraph.content)
+        paragraph.extdata['vec'] = TextEmbeddings.get_embedding_sync(paragraph.content)
         return paragraph
 
 
-class WordsBagVec(PipelineStage):
+class WordsBagVectorize(PipelineStage):
     """Vectorize with one-shot words bag
     @zhs 使用词袋模型进行 0/1 编码的向量化
     """
@@ -212,7 +245,7 @@ class CosSimClustering(AccumulateParagraphs):
 
     async def summarize(self, *_):
         vecs = np.array(self.vecs)
-        clusters = util.community_detection(
+        clusters = community_detection(
             vecs, min_community_size=self.min_community_size, threshold=self.threshold)
         for i, cluster in enumerate(clusters):
             for idx in cluster:
@@ -341,12 +374,11 @@ class GenerateCooccurance(PipelineStage):
 
     async def summarize(self, _) -> Dict:
         if self.method == 'vec_cos':
-            from sentence_transformers.util import cos_sim
             sim_result = {}
             for i, para in enumerate(self.paragraphs):
                 for another in self.paragraphs[i+1:]:
                     sim_result[f'{para.content[:10]}\n{another.content[:10]}'] = float(
-                        cos_sim(para.vec, another.vec)[0][0])
+                        cosine_similarity(para.vec, another.vec)[0][0])
         else:
             sim_result = self.counter.as_dict()
         for k, v in sim_result.items():
@@ -369,7 +401,7 @@ class GraphicClustering(PipelineStage):
         super().__init__()
 
     async def summarize(self, result) -> dict:
-        nx = safe_import('networkx')
+        import networkx as nx
         graph = nx.Graph()
         for (node_a, node_b), val in sorted(result, key=lambda x: x[1], reverse=True)[:self.topk]:
             for i in (node_a, node_b):
@@ -389,36 +421,4 @@ class GraphicClustering(PipelineStage):
         import_plt().savefig(buf, format='png')
 
         return PipelineStage.return_file('png', buf.getvalue(), meta=meta)
-
-
-class SentenceTransformer(PipelineStage):
-    """
-    Sentence Transformer
-    """
-    
-    def __init__(self, n=10, model="sentence-transformers/distiluse-base-multilingual-cased-v1") -> None:
-        super().__init__()
-        self.trans = SentenceTransformer(model)
-        self.buffer = []
-        self.n = n
-        self.lock = Lock()
-
-    def process_buffer(self) -> None:
-        """Process buffer"""
-        sentences = [p.content for p in self.buffer]
-        sentence_embeddings = self.trans.encode(sentences)
-        for p, emb in zip(self.buffer, sentence_embeddings):
-            p.embedding = emb.tobytes()
-            p.save()
-        self.buffer.clear()
-
-    def resolve(self, paragraph) -> None:
-        with self.lock:
-            self.buffer.append(paragraph)
-            if len(self.buffer) >= self.n:
-                self.process_buffer()
-
-    async def summarize(self, result) -> Dict:
-        self.process_buffer()
-        return result
     

@@ -9,17 +9,14 @@ from itertools import chain
 from itertools import count as iter_count
 from typing import Dict, Iterator
 
+import hanzidentifier
 import many_stop_words
 import pandas
 import regex as re
-import textrank4zh
-import hanzidentifier
-from lingua import Language, LanguageDetectorBuilder
+from lingua import LanguageDetectorBuilder
 
-from jindai.helpers import WordStemmer as WStemmer
-from jindai.helpers import aeval, jieba, safe_import
-from jindai.maintenance import maintenance_manager
-from jindai.models import Paragraph, QueryFilters, Terms, get_db_session
+from jindai.helpers import WordStemmer as WStemmer, aeval, jieba
+from jindai.models import Paragraph, Terms, get_db_session
 from jindai.pipeline import PipelineStage, ResolveReturn
 from jindai.storage import storage
 
@@ -163,7 +160,7 @@ class LatinTransliterate(PipelineStage):
         super().__init__()
         self.append = append
         self.field = field
-        transliterate = safe_import('transliterate')
+        import transliterate
         self.supported_languages = transliterate.get_available_language_codes()
         self.translit = transliterate.translit
         
@@ -188,9 +185,11 @@ class WordCut(PipelineStage):
     Multilingual word cutting
     @zhs 多语种分词
     """
-
-    t2s = safe_import('opencc', 'opencc-python-reimplemented').OpenCC('t2s')
-    kks = safe_import('pykakasi').kakasi()
+    
+    import opencc
+    import pykakasi
+    t2s = opencc.OpenCC('t2s')
+    kks = pykakasi.kakasi()
     
     def __init__(self, for_search=False, field='keywords', **_) -> None:
         """
@@ -210,7 +209,7 @@ class WordCut(PipelineStage):
 
     @staticmethod
     def remove_accents(input_str) -> str:
-        unicodedata = safe_import('unicodedata')
+        import unicodedata
         nfkd_form = unicodedata.normalize('NFKD', input_str)
         return u"".join([c for c in nfkd_form if not unicodedata.combining(c)])
     
@@ -265,7 +264,7 @@ class Reparagraph(PipelineStage):
     Reparagraphize
     @zhs 重新分段"""
 
-    def resolve(self, paragraph: Paragraph) -> Paragraph:
+    def resolve(self, paragraph: Paragraph) -> ResolveReturn:
         lang = paragraph.lang or 'en'
         lines = paragraph.content.split('\n')
 
@@ -441,32 +440,6 @@ class Export(PipelineStage):
             buf = BytesIO()
             getattr(pandas.DataFrame(result), f'to_{self.format}')(buf)
             return PipelineStage.return_file(self.extension, buf.getvalue())
-
-
-class AutoSummary(PipelineStage):
-    """
-    Auto summary for Chinese texts
-    @zhs 中文自动摘要
-    """
-
-    def __init__(self, count) -> None:
-        """
-        Args:
-            count (int):
-                Sentences count
-                @zhs 摘要中的句子数量
-        """
-        super().__init__()
-        self.count = count
-
-    def resolve(self, paragraph: Paragraph) -> Paragraph:
-        tr4s = textrank4zh.TextRank4Sentence()
-        tr4s.analyze(text=paragraph.content, lower=True, source='all_filters')
-        paragraph.summary = '\n'.join([
-            item.sentence
-            for item in tr4s.get_key_sentences(num=self.count)
-        ])
-        return paragraph
 
 
 class ArrayField(PipelineStage):
@@ -736,7 +709,7 @@ class RegexMatches(PipelineStage):
         self.field = field
         self.regex = regex
 
-    def resolve(self, paragraph: Paragraph) -> Paragraph:
+    def resolve(self, paragraph: Paragraph) -> ResolveReturn:
         for m in re.findall(self.regex, str(paragraph[self.field])):
             paragraph.extdata[self.field] = m
             yield paragraph
@@ -926,7 +899,6 @@ class OutlineFilter(PipelineStage):
                 self.nums = nnums
 
         paragraph.outline = '.'.join(self.nums)
-        try_commit()
         return paragraph
 
 
