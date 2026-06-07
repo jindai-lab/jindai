@@ -2,23 +2,22 @@
 AMap LBS API
 高德地图地理位置服务 API
 """
+
 import math
 import os
-from typing import Iterable
+import osmnx as ox
 
-import pandas as pd
+import geojson_utils
 import httpx
+import pandas as pd
 
 from jindai.helpers import safe_import
 from jindai.models import Paragraph
 from jindai.pipeline import DataSourceStage, PipelineStage
 from jindai.plugin import Plugin
 
-gcj2wgs = safe_import('geojson_utils').gcj02towgs84
+gcj2wgs = geojson_utils.gcj02towgs84
 pluginConfig = {}
-
-
-from typing import Iterable
 
 
 class AMapCityCodeQuery(DataSourceStage):
@@ -36,13 +35,16 @@ class AMapCityCodeQuery(DataSourceStage):
         self.query = [q for q in content.split() if q]
 
     async def fetch(self):
-        df = pd.read_excel(os.path.join(os.path.dirname(
-            __file__), 'AMap_adcode_citycode.xlsx'))
+        df = pd.read_excel(
+            os.path.join(os.path.dirname(__file__), "AMap_adcode_citycode.xlsx")
+        )
         for _, data in df.iterrows():
             for field in data:
                 for q in self.query:
                     if q in str(field):
-                        yield Paragraph(content=q[0], extdata=dict(adcode=q[1], citycode=q[2]))
+                        yield Paragraph(
+                            content=q[0], extdata=dict(adcode=q[1], citycode=q[2])
+                        )
 
 
 class AMapPOISearch(DataSourceStage):
@@ -51,7 +53,7 @@ class AMapPOISearch(DataSourceStage):
     @zhs 查询高德地图位置信息，可根据关键字、城市代码和类别信息限定
     """
 
-    def apply_params(self, content: str, adcode: str, category: str = '') -> None:
+    def apply_params(self, content: str, adcode: str, category: str = "") -> None:
         """
         Args:
             content (str): Query keywords
@@ -62,12 +64,11 @@ class AMapPOISearch(DataSourceStage):
         """
         self.content = content
         self.adcode = adcode
-        self.category = '|'.join(self.parse_lines(category))
-        self.geoutil = safe_import('geojson_utils')
+        self.category = "|".join(self.parse_lines(category))
 
     async def fetch(self):
 
-        gcjconv = GCJtoWGS(field='coordinate', out_format='lat_lng').resolve
+        gcjconv = GCJtoWGS(field="coordinate", out_format="lat_lng").resolve
 
         total_pages = 1
         page = 0
@@ -76,11 +77,11 @@ class AMapPOISearch(DataSourceStage):
         while page < total_pages:
             try:
                 self.log("{}/{}".format(page, total_pages))
-                
+
                 async with httpx.AsyncClient() as client:
                     response = await client.get(url_template % page)
                     data = response.json()
-                
+
                 for poi in data["pois"]:
                     lng, lat = GCJtoWGS.convert(poi["location"])
 
@@ -96,11 +97,15 @@ class AMapPOISearch(DataSourceStage):
                             "biz": poi["typecode"] + " " + poi["type"],
                         },
                     }
-                    p = Paragraph(content=poi['name'],
-                                  extdata=dict(adcode=self.adcode,
-                                  category=poi["typecode"] + " " + poi["type"],
-                                  coordinate=poi['location'],
-                                  geojson=feature))
+                    p = Paragraph(
+                        content=poi["name"],
+                        extdata=dict(
+                            adcode=self.adcode,
+                            category=poi["typecode"] + " " + poi["type"],
+                            coordinate=poi["location"],
+                            geojson=feature,
+                        ),
+                    )
                     gcjconv(p)
                     yield p
 
@@ -116,7 +121,7 @@ class _GeoCodingStage(PipelineStage):
     Geocoding parent class, do not use directly
     """
 
-    def __init__(self, field: str = 'coordinate', out_format: str = 'lat_lng') -> None:
+    def __init__(self, field: str = "coordinate", out_format: str = "lat_lng") -> None:
         """
         Args:
             field (str): Field name for coordinate
@@ -128,7 +133,7 @@ class _GeoCodingStage(PipelineStage):
         self.field = field
 
     def assign_coordinates(self, paragraph, lat, lng):
-        if self.out_format == 'lat_lng':
+        if self.out_format == "lat_lng":
             paragraph[self.field] = [lat, lng]
         else:
             paragraph[self.field] = [lng, lat]
@@ -146,7 +151,7 @@ class AMapGeoCode(_GeoCodingStage):
         async with httpx.AsyncClient() as client:
             resp = await client.get(url)
             resp = resp.json()
-        location = resp['geocodes'][0]['location']
+        location = resp["geocodes"][0]["location"]
         lng, lat = GCJtoWGS.convert(location)
         return self.assign_coordinates(paragraph, lat, lng)
 
@@ -157,7 +162,7 @@ class GCJtoWGS(_GeoCodingStage):
     @zhs GCJ 到 WGS-84 坐标系转换
     """
 
-    def __init__(self, *args, in_format='', **kwargs) -> None:
+    def __init__(self, *args, in_format="", **kwargs) -> None:
         """
         Args:
             field (str): Coordinate to read from
@@ -171,37 +176,20 @@ class GCJtoWGS(_GeoCodingStage):
         self.in_format = in_format
 
     @staticmethod
-    def convert(coords, in_format='') -> list | None:
+    def convert(coords, in_format="") -> list | None:
         if not coords:
             return [0, 0]
         if isinstance(coords, str):
-            coords = coords.split(',')
+            coords = coords.split(",")
         if isinstance(coords, (list, tuple)):
             lng, lat = [float(_) for _ in coords]
-        if in_format == 'lat_lng':
+        if in_format == "lat_lng":
             lat, lng = lng, lat
         lng, lat = gcj2wgs(lng, lat)
         return [lng, lat]
 
     def resolve(self, paragraph: Paragraph) -> Paragraph:
         lng, lat = self.convert(paragraph[self.field], self.in_format)
-        return self.assign_coordinates(paragraph, lat, lng)
-
-
-class GoogleMapGeoCode(_GeoCodingStage):
-    """
-    Geo-coding with Google Maps
-    @zhs 查询谷歌地图位置信息
-    """
-
-    def __init__(self, *args, **kwargs) -> None:
-        super().__init__(*args, **kwargs)
-        googlemaps = safe_import('googlemaps')
-        self.gmaps = googlemaps.Client(key=pluginConfig['google_key'])
-
-    def resolve(self, paragraph: Paragraph):
-        lat, lng = self.gmaps.geocode(paragraph.content)[
-            'geometry']['location']
         return self.assign_coordinates(paragraph, lat, lng)
 
 
@@ -216,9 +204,9 @@ class BingMapGeoCode(_GeoCodingStage):
         async with httpx.AsyncClient() as client:
             outp = await client.get(url)
             outp = outp.json()
-        lng, lat = outp['resourceSets'][0]['resources'][0]['point']['coordinates']
+        lng, lat = outp["resourceSets"][0]["resources"][0]["point"]["coordinates"]
         return self.assign_coordinates(paragraph, lat, lng)
-    
+
 
 from typing import Iterator
 
@@ -228,45 +216,49 @@ class OSMPOISearch(DataSourceStage):
     POI Search with OSM (OpenStreetMap)
     """
 
-    def apply_params(self, content: str = '', tags: str = '', ) -> None:
+    def apply_params(
+        self,
+        content: str = "",
+        tags: str = "",
+    ) -> None:
         """
         Args:
             tags (LINES): Tags
             place (str): City name to search in
         """
         self.tags = self.parse_lines(tags)
-        self.ox = safe_import('omnx')
         #   tags = [
-        # # 'feature descriptions', 'proposed features', 'features/translations', 
-        # 'accommodation', 'addresses', 'agriculture', 'amenities', 
-        # # 'barriers', 'boundaries', 
+        # # 'feature descriptions', 'proposed features', 'features/translations',
+        # 'accommodation', 'addresses', 'agriculture', 'amenities',
+        # # 'barriers', 'boundaries',
         # 'clothes', 'commerce', 'conservation', 'disabilities', 'education', 'emergencies', 'environment',
         # 'hazards', 'health', 'heritage', 'historic', 'infrastructure', 'leisure',
         # 'man made', 'meta features', 'micromapping', 'military',
         # # 'names',
         # 'offices',
-        # 'places', 
+        # 'places',
         # 'police', 'properties', 'religion', 'social facilities', 'sports', 'transport',
         # # 'water', 'templates for mapping features',
         # ]
-        self.city = self.ox.geocode_to_gdf(content)
+        self.city = ox.geocode_to_gdf(content)
 
     def guesses(self, tag) -> Iterator:
         yield tag
-        if tag.endswith('s'):
+        if tag.endswith("s"):
             tag = tag[:-1]
             yield tag
-            if tag.endswith('ie'):
-                tag = tag[:-2] + 'y'
-            elif tag.endswith('e'):
+            if tag.endswith("ie"):
+                tag = tag[:-2] + "y"
+            elif tag.endswith("e"):
                 tag = tag[:-1]
             yield tag
-    
+
     async def fetch(self):
         for tag in self.tags:
             for guess in set(self.guesses(tag)):
-                for p in self.ox.geometries_from_polygon(
-                    self.city['geometry'].all(), tags={guess: True}):
+                for p in ox.geometries_from_polygon(
+                    self.city["geometry"].all(), tags={guess: True}
+                ):
                     yield Paragraph.from_dict(**p)
 
 

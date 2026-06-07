@@ -13,6 +13,7 @@ import os
 import tempfile
 from hashlib import sha1
 from typing import Dict, Iterable, List, Optional, Union
+from urllib.parse import urljoin
 
 import regex as re
 import httpx
@@ -24,7 +25,7 @@ from jindai.helpers import safe_import, aeval
 from jindai.models import Paragraph
 from jindai.pipeline import DataSourceStage, PipelineStage
 
-trafilatura = safe_import('trafilatura')
+import trafilatura
 from trafilatura.settings import use_config
 
 trafcfg = use_config()
@@ -83,8 +84,8 @@ class CachedWebAccess:
             })
         return resp.content    
     
-    async def request_browserless(self, url: str, wait_for: str = '') -> bytes:
-        """Download a web page using browserless (for JavaScript rendering).
+    async def request_firecrawl(self, url: str, wait_for: str = '') -> bytes:
+        """Download a web page using firecrawl (for JavaScript rendering).
         
         Args:
             url: The URL to fetch.
@@ -93,20 +94,23 @@ class CachedWebAccess:
         Returns:
             Raw bytes of the rendered page HTML.
         """
-        pyppeteer = safe_import('pyppeteer')
+        import firecrawl
+        fc = firecrawl.Firecrawl(config.firecrawl_apikey, config.firecrawl_apiurl)
 
-        browser = await pyppeteer.launcher.connect(
-            browserWSEndpoint=config.browserless
-        )
-        page = await browser.newPage()
-        await page.goto(url)
+        # 构建请求参数（支持等待指定元素）
+        params = {}
         if wait_for:
-            await page.waitForSelector(wait_for)
+            params['waitFor'] = wait_for
         
-        values = await page.evaluate('''() => document.documentElement.outerHTML''')
+        # 调用 Firecrawl 获取渲染后的页面数据
+        # scrape_url 默认返回 JSON，包含 markdown / text / html 等字段
+        result = fc.scrape_url(url, params=params)
         
-        await browser.close()
-        return values.encode('utf-8')
+        # 提取纯文本内容（优先 markdown，其次 text，最后 fallback 到空字符串）
+        text_content = result.get('markdown') or result.get('text') or ''
+        
+        # 返回 UTF-8 编码的字节数据（与类型注解 -> bytes 保持一致）
+        return text_content.encode('utf-8')
         
     async def get(self, url: str, with_chrome: bool = False, wait_for: str = '') -> bytes:
         """Get page content, using cache if available.
@@ -126,7 +130,7 @@ class CachedWebAccess:
         else:
             if url.split('://')[0] in ('http', 'https'):
                 if with_chrome or wait_for:
-                    data = await self.request_browserless(url, wait_for)
+                    data = await self.request_firecrawl(url, wait_for)
                 else:
                     data = await self.request(url)
             else:

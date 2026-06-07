@@ -5,8 +5,9 @@ Sentiment Analysis
 
 from jindai.pipeline import PipelineStage
 from jindai.plugin import Plugin
-from jindai.helpers import safe_import
 from jindai.models import Paragraph
+
+import snownlp
 
 
 class AutoSentimentAnalysis(PipelineStage):
@@ -16,7 +17,7 @@ class AutoSentimentAnalysis(PipelineStage):
     """
 
     def resolve(self, paragraph: Paragraph) -> Paragraph:
-        snow = safe_import('snownlp').SnowNLP
+        snow = snownlp.SnowNLP
         paragraph.extdata['sentiment'] = (snow(paragraph.content).sentiments-0.5) * 2
         return paragraph
 

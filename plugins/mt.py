@@ -18,7 +18,6 @@ from opencc import OpenCC
 
 from jindai.pipeline import PipelineStage
 from jindai.plugin import Plugin
-from jindai.helpers import safe_import
 from jindai.models import Paragraph
 
 
@@ -353,17 +352,19 @@ class MachineTranslation(PipelineStage):
                 Model for translation
                 @zhs 机器翻译所使用的模型 (opus-mt 较快速度, mbart50_m2m 较高准确度)
         """
-        super().__init__()
+        import easynmt
+        import opencc
 
-        self.model = safe_import('easynmt').EasyNMT(model)
+        super().__init__()
+        
+        self.model = easynmt.EasyNMT(model)
 
         self.opencc = None
         if to_lang == 'zhs':
             to_lang = 'zh'
         elif to_lang == 'zht':
             to_lang = 'zh'
-            self.opencc = safe_import(
-                'opencc', 'opencc-python-reimplemented').OpenCC('s2t')
+            self.opencc = opencc.OpenCC('s2t')
 
         self.to_lang = to_lang
 

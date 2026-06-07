@@ -22,9 +22,9 @@ from .helpers import inspect_function_signature
 from .models import Paragraph, session_factory
 from .storage import storage
 
-ResolveResultType = Paragraph | None
+type ResolveResultType = Paragraph | None
 ResolveResultType |= Tuple[ResolveResultType, "PipelineStage"]
-ResolveReturn = (
+type ResolveReturn = (
     ResolveResultType
     | Iterable[ResolveResultType]
     | Awaitable[ResolveResultType]
