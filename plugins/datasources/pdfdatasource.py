@@ -15,7 +15,7 @@ import fitz
 import regex as re
 from sqlalchemy import func, select
 
-from jindai.app import storage
+from jindai.storage import storage
 from jindai.models import Dataset, Paragraph, get_db_session
 from jindai.pipeline import DataSourceStage, PipelineStage
 from plugins.pipelines.pdf_stages import TextCleaner, PDFLanguageDetect, CrossPageReparagraphizer

@@ -1,5 +1,6 @@
 """API Web Service"""
 
+from contextlib import AsyncExitStack, asynccontextmanager
 import hashlib
 import json
 import logging
@@ -15,16 +16,18 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
 from sqlalchemy import func, select
 
-from .config import config, oidc_validator
+from .config import config
 from .helpers import get_context
-from .models import APIKey, UserInfo, get_db_session, redis_client
+from .models import get_current_admin, get_current_user, get_current_username
 from .storage import storage
+from .mcp import MCPServer
+from .resources import combined_lifespan, router
 
 app = FastAPI(
     docs_url="/api/v2/docs",
     openapi_url="/api/v2/openapi.json",
     title="Jindai",
-    version="2.0.693",
+    version="2.0.694",
 )
 
 # CORS middleware configuration
@@ -36,230 +39,22 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-
-# API Key authentication constants
-API_KEY_CACHE_PREFIX = "api_key:"
-API_KEY_CACHE_TTL = 3600  # 1 hour in seconds
+mcp_lifespan = MCPServer().mount(app)
+app.include_router(router)
 
 
-async def get_current_user(request: Request = None, websocket: WebSocket = None) -> Dict[str, Any]:
-    """Get current user from either OAuth token or API key.
-    
-    Checks Authorization header for Bearer token (OAuth) or plain API key.
-    Returns user info dict with username, roles, and user_id.
-    
-    Args:
-        request: FastAPI request object.
-        
-    Returns:
-        Dict with user info.
-        
-    Raises:
-        HTTPException: If authentication fails.
-    """
-    if websocket is not None:
-        auth_header = 'Bearer ' + websocket.query_params.get("token")
-    else:
-        auth_header = request.headers.get("Authorization", "")   
-    # Check for Bearer token (OAuth)
-    if auth_header.startswith("Bearer "):
-        token = auth_header[7:]
-        try:
-            token_payload = await oidc_validator.validate_token(token)
-            username = token_payload.get("preferred_username", "")
-            if not username:
-                raise HTTPException(
-                    status_code=status.HTTP_401_UNAUTHORIZED,
-                    detail="Token missing username information",
-                )
-            
-            # Get user from database
-            async with get_db_session() as session:
-                result = await session.execute(
-                    select(UserInfo).filter(UserInfo.username == username)
-                )
-                user = result.scalar_one_or_none()
-                if not user:
-                    # Check if this is the first user (table is empty)
-                    count_result = await session.execute(select(func.count(UserInfo.id)))
-                    total_count = count_result.scalar_one()
-                    
-                    # Create new user with appropriate roles
-                    new_user = UserInfo(username=username)
-                    if total_count == 0:
-                        # First user gets admin role
-                        new_user.roles = ["admin"]
-                    else:
-                        # Regular user gets default roles
-                        new_user.roles = ["user"]
-                    session.add(new_user)
-                    await session.commit()
-                    await session.refresh(new_user)
-                    user = new_user
-                return {
-                    "username": username,
-                    "roles": user.roles,
-                    "user_id": str(user.id)
-                }
-        except HTTPException:
-            raise
-        except Exception as e:
-            raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail=str(e)
-            )
-    
-    # Check for API key
-    if auth_header.startswith("sk_"):
-        api_key = auth_header[7:]
-        key_hash = hashlib.sha256(api_key.encode("utf-8")).hexdigest()
-        cache_key = f"{API_KEY_CACHE_PREFIX}{key_hash}"
-        
-        # Try to get from cache first
-        cached = redis_client.get(cache_key)
-        if cached:
-            user_info = json.loads(cached)
-            return user_info
-        
-        # Not in cache, query database
-        async with get_db_session() as session:
-            result = await session.execute(
-                select(APIKey)
-                .filter(
-                    APIKey.key_hash == key_hash,
-                    APIKey.is_active == True
-                )
-            )
-            api_key_obj = result.scalar_one_or_none()
-            
-            if not api_key_obj:
-                raise HTTPException(
-                    status_code=status.HTTP_401_UNAUTHORIZED,
-                    detail="Invalid API key",
-                )
-            
-            # Check expiration
-            if api_key_obj.expires_at and api_key_obj.expires_at < datetime.utcnow():
-                raise HTTPException(
-                    status_code=status.HTTP_401_UNAUTHORIZED,
-                    detail="API key expired",
-                )
-            
-            # Update last_used_at
-            api_key_obj.last_used_at = datetime.utcnow()
-            await session.commit()
-            
-            # Get user info
-            user_result = await session.execute(
-                select(UserInfo).filter(UserInfo.id == api_key_obj.user_id)
-            )
-            user = user_result.scalar_one_or_none()
-            
-            if not user:
-                raise HTTPException(
-                    status_code=status.HTTP_401_UNAUTHORIZED,
-                    detail="User not found",
-                )
-            
-            user_info = {
-                "username": user.username,
-                "roles": user.roles,
-                "user_id": str(user.id)
-            }
-            
-            # Cache the result
-            redis_client.setex(cache_key, API_KEY_CACHE_TTL, json.dumps(user_info))
-            
-            return user_info
-    
-    raise HTTPException(
-        status_code=status.HTTP_401_UNAUTHORIZED,
-        detail="Missing or invalid authorization header",
-    )
+# mount lifespan
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    async with AsyncExitStack() as stack:
+        await stack.enter_async_context(combined_lifespan(app))
+        await stack.enter_async_context(mcp_lifespan(app))
+        print('stacked')
+        yield
 
 
-async def get_current_username(request: Request) -> str:
-    """Get current username from either OAuth token or API key.
-    
-    Args:
-        request: FastAPI request object.
-        
-    Returns:
-        Username string.
-    """
-    user = await get_current_user(request)
-    return user.get("username", "")
+app.router.lifespan_context = lifespan     
 
-
-async def get_current_admin(request: Request = None, username: str = "") -> Dict[str, Any]:
-    """
-    Verify if the current user has the admin role.
-    Supports both OAuth token and API key authentication.
-    
-    Args:
-        request: FastAPI request object (optional for backward compatibility).
-        username: Optional username to check (if not provided, uses current user).
-        
-    Returns:
-        Dict with user info if user is admin.
-        
-    Raises:
-        HTTPException: If authentication fails or user is not admin.
-    """
-    # Handle backward compatibility: if request is None or dict, use username directly
-    if request is None or isinstance(request, dict):
-        if not username:
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Username required when request is not provided",
-            )
-        # Query database directly
-        async with get_db_session() as session:
-            user = (
-                await session.execute(
-                    select(UserInfo)
-                    .filter(
-                        UserInfo.username == username, UserInfo.roles.contains(["admin"])
-                    )
-                    .limit(1)
-                )
-            ).scalar()
-            if not user:
-                raise HTTPException(
-                    status_code=status.HTTP_403_FORBIDDEN,
-                    detail=f"Must be admin. You are logged in as: {username}",
-                )
-            return user.as_dict()
-    
-    # New signature: request is a Request object
-    if not username:
-        username = await get_current_username(request)
-    
-    if not username:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Token/API key missing username information",
-        )
-
-    async with get_db_session() as session:
-        # Query database to verify role
-        user = (
-            await session.execute(
-                select(UserInfo)
-                .filter(
-                    UserInfo.username == username, UserInfo.roles.contains(["admin"])
-                )
-                .limit(1)
-            )
-        ).scalar_one_or_none()
-
-        if not user:
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail=f"Must be admin. You are logged in as: {username}",
-            )
-
-        return {"username": username, "roles": user.roles, "user_id": str(user.id)}
 
 
 async def serve_static(path: str = ""):

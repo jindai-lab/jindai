@@ -22,7 +22,6 @@ from jindai.helpers import get_context, jieba
 from jindai.models import get_db_session, get_db
 from jindai.storage import storage
 from jindai.worker import worker_manager
-from jindai.app import router as api_router
 
 
 # Import all components for registration
@@ -61,9 +60,6 @@ class BibliographyPlugin(Plugin):
 
         # Load saved configuration from storage
         self._load_config(config)
-
-        # Register plugin routes
-        self._register_routes()
 
         # Register task
         self._register_tasks()
@@ -161,7 +157,7 @@ class BibliographyPlugin(Plugin):
         worker_manager.register_task(self._sync_from_calibre, "sync_calibre")
         worker_manager.register_task(self._sync_from_zotero, "sync_zotero")
 
-    def _register_routes(self) -> None:
+    def register_routes(self, target: APIRouter) -> None:
         """Register plugin-specific API routes."""
 
         router = APIRouter(prefix="/bibliography", tags=["Bibliography"])
@@ -520,7 +516,7 @@ class BibliographyPlugin(Plugin):
                 }
 
         # Register routes with the app
-        api_router.include_router(router)
+        target.include_router(router)
 
     @property
     def calibre_library_paths(self) -> list:

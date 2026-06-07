@@ -11,34 +11,27 @@ This module provides:
 
 import asyncio
 import datetime
+import hashlib
 import logging
 import os
 import tempfile
-from typing import Optional
-import hashlib
 from pathlib import Path
-from fastapi import APIRouter, BackgroundTasks, Body, Depends
-from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import TIMESTAMP, cast, exists, func, select, text, update, delete
-from sqlalchemy.dialects.postgresql import insert
-from watchdog.observers import Observer
-from watchdog.events import FileSystemEventHandler
+from typing import Optional
 
-from .app import get_current_admin
+from fastapi import APIRouter, BackgroundTasks, Body, Depends
+from sqlalchemy import (TIMESTAMP, cast, delete, exists, func, select, text,
+                        update)
+from sqlalchemy.dialects.postgresql import insert
+from sqlalchemy.ext.asyncio import AsyncSession
+from watchdog.events import FileSystemEventHandler
+from watchdog.observers import Observer
+
 from .config import config
-from .storage import storage
+from .models import (Dataset, EmbeddingPendingQueue, FileMetadata, Paragraph,
+                     QueryFilters, TaskDBO, Terms, TextEmbeddings,
+                     get_current_admin, get_db_session)
 from .pdfutils import get_pdf_page_count
-from .models import (
-    Dataset,
-    EmbeddingPendingQueue,
-    Paragraph,
-    TaskDBO,
-    Terms,
-    TextEmbeddings,
-    FileMetadata,
-    get_db_session,
-    QueryFilters,
-)
+from .storage import storage
 
 
 class MaintenanceManager:
@@ -631,7 +624,8 @@ class MaintenanceManager:
         Returns:
             Path to the output OCR'd PDF file.
         """
-        from .pdfutils import convert_pdf_to_tiff_group4, merge_images_from_folder
+        from .pdfutils import (convert_pdf_to_tiff_group4,
+                               merge_images_from_folder)
 
         temps = []
         input_path = storage.safe_join(input_path)
@@ -693,7 +687,7 @@ class MaintenanceManager:
         await asyncio.sleep(10)
         logging.info("Test Task Ended")
 
-    def get_router(self) -> APIRouter:
+    def register_routes(self, target: APIRouter):
         """Get FastAPI router for maintenance endpoints.
 
         Returns:
@@ -742,7 +736,7 @@ class MaintenanceManager:
                     "params": params,
                 }
 
-        return router
+        target.include_router(router)
 
 
 maintenance_manager = MaintenanceManager()
