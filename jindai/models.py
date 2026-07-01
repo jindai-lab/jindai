@@ -33,8 +33,8 @@ from pgvector.sqlalchemy import Vector
 from pydantic import BaseModel, Field
 from sqlalchemy import (BigInteger, Boolean, Column, DateTime, ForeignKey,
                         Index, Integer, PrimaryKeyConstraint, String, Text,
-                        UniqueConstraint, asc, desc, exists, or_, select, text,
-                        update)
+                        UniqueConstraint, and_, asc, desc, exists, or_, select,
+                        text, update)
 from sqlalchemy.dialects.postgresql import ARRAY, JSONB, UUID, insert
 from sqlalchemy.ext.asyncio import (AsyncSession, async_sessionmaker,
                                     create_async_engine)
@@ -549,6 +549,150 @@ class Paragraph(Base):
         return data
 
     @staticmethod
+    async def _keyword_filter(word: str) -> Any:
+        """Build keyword filter for a single word.
+
+        Args:
+            word: Search term, optionally prefixed with '^'.
+
+        Returns:
+            SQLAlchemy filter expression matching the keyword(s).
+        """
+        candidates = [word.strip("^%")]
+        if word.startswith("^"):
+            candidates.extend(await Terms.starting_with(word.strip("^")))
+        return or_(*(Paragraph.keywords.contains([c]) for c in candidates))
+
+    @staticmethod
+    def _tokenize_expression(search: str) -> list:
+        """Tokenize a search expression into tokens.
+
+        Args:
+            search: Raw search string.
+
+        Returns:
+            List of tokens (words and operators).
+        """
+        tokens = []
+        i = 0
+        while i < len(search):
+            ch = search[i]
+            if ch in '|&()':
+                tokens.append(ch)
+                i += 1
+            elif ch.isspace():
+                i += 1
+            else:
+                j = i
+                while j < len(search) and search[j] not in '|&()' and not search[j].isspace():
+                    j += 1
+                tokens.append(search[i:j].lower())
+                i = j
+        return tokens
+
+    @staticmethod
+    async def _parse_or_expr(tokens: list, pos: int) -> tuple:
+        """Parse OR expression.
+
+        or_expr := and_expr ('|' and_expr)*
+
+        Args:
+            tokens: Token list.
+            pos: Current parsing position.
+
+        Returns:
+            Tuple of (SQLAlchemy filter or str token, new position).
+        """
+        left, pos = await Paragraph._parse_and_expr(tokens, pos)
+        while pos < len(tokens) and tokens[pos] == '|':
+            pos += 1
+            right, pos = await Paragraph._parse_and_expr(tokens, pos)
+            if isinstance(left, str) and isinstance(right, str):
+                left = or_(await Paragraph._keyword_filter(left), await Paragraph._keyword_filter(right))
+            elif isinstance(left, str):
+                left = or_(await Paragraph._keyword_filter(left), right)
+            elif isinstance(right, str):
+                left = or_(left, await Paragraph._keyword_filter(right))
+            else:
+                left = or_(left, right)
+        return left, pos
+
+    @staticmethod
+    async def _parse_and_expr(tokens: list, pos: int) -> tuple:
+        """Parse AND expression.
+
+        and_expr := atom ('&'? atom)*
+
+        Args:
+            tokens: Token list.
+            pos: Current parsing position.
+
+        Returns:
+            Tuple of (SQLAlchemy filter or str token, new position).
+        """
+        left, pos = await Paragraph._parse_atom(tokens, pos)
+        while pos < len(tokens) and tokens[pos] not in ('|', ')'):
+            if tokens[pos] == '&':
+                pos += 1
+            right, pos = await Paragraph._parse_atom(tokens, pos)
+            if isinstance(left, str) and isinstance(right, str):
+                left = and_(await Paragraph._keyword_filter(left), await Paragraph._keyword_filter(right))
+            elif isinstance(left, str):
+                left = and_(await Paragraph._keyword_filter(left), right)
+            elif isinstance(right, str):
+                left = and_(left, await Paragraph._keyword_filter(right))
+            else:
+                left = and_(left, right)
+        return left, pos
+
+    @staticmethod
+    async def _parse_atom(tokens: list, pos: int) -> tuple:
+        """Parse an atom: word or parenthesized expression.
+
+        atom := word | '(' or_expr ')'
+
+        Args:
+            tokens: Token list.
+            pos: Current parsing position.
+
+        Returns:
+            Tuple of (SQLAlchemy filter or str token, new position).
+        """
+        if pos >= len(tokens):
+            raise ValueError("Unexpected end of query expression")
+        token = tokens[pos]
+        if token == '(':
+            expr, pos = await Paragraph._parse_or_expr(tokens, pos + 1)
+            if pos >= len(tokens) or tokens[pos] != ')':
+                raise ValueError("Missing closing parenthesis")
+            return expr, pos + 1
+        elif token in ('|', '&', ')'):
+            raise ValueError(f"Unexpected token '{token}'")
+        else:
+            return token, pos + 1
+
+    @staticmethod
+    async def _parse_search_expression(search: str) -> Any:
+        """Parse a search expression with |, &, () operators.
+
+        Args:
+            search: Search expression string.
+
+        Returns:
+            SQLAlchemy filter expression.
+        """
+        tokens = Paragraph._tokenize_expression(search)
+        if not tokens:
+            from sqlalchemy import true
+            return true()
+        expr, pos = await Paragraph._parse_or_expr(tokens, 0)
+        if pos < len(tokens):
+            raise ValueError(f"Unexpected token after position {pos}: {tokens[pos]}")
+        if isinstance(expr, str):
+            return await Paragraph._keyword_filter(expr)
+        return expr
+
+    @staticmethod
     async def build_query(query_filters: QueryFilters):
         """Build SQLAlchemy query from QueryFilters.
 
@@ -614,6 +758,10 @@ class Paragraph(Base):
                 filters.append(Paragraph.content.ilike(f"%{search_term}%"))
         elif search.startswith(":") or query_filters.embeddings:
             query_embedding = await TextEmbeddings.get_embedding(search.strip(":"))
+        elif any(c in search for c in '|&()'):
+            # Parse expression with |, &, () operators
+            search_filter = await Paragraph._parse_search_expression(search)
+            filters.append(search_filter)
         else:
             words = [_.strip().lower() for _ in jieba.cut_query(search) if _.strip()]
             for word in words:
@@ -667,6 +815,7 @@ class Paragraph(Base):
 
         # Sorting
         if sort_by := query_filters.sort:
+            if sort_by == 'source': sort_by += ',pagenum'
             sorts = Paragraph.parse_sort_string(sort_by)
             query = query.order_by(*sorts)
 
