@@ -950,11 +950,11 @@ class ContentManager(ResourceRegistry):
             await session.commit()
             query = await Paragraph.build_query(filters)
 
-            if filters.embeddings and enable_rerank:  # embedding search, need rerank
+            if filters.embeddings:  # embedding search, need rerank
                 async with get_db_session() as session:
                     # Get all matching paragraphs without pagination
                     all_results = (await session.execute(query)).scalars().all()
-
+                    
                     # Rerank results based on embedding similarity
                     ranked_results = await TextEmbeddings.rerank_by_embedding(
                         filters.q, all_results

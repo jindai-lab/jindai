@@ -20,14 +20,13 @@ from .config import config
 from .helpers import get_context
 from .models import get_current_admin, get_current_user, get_current_username
 from .storage import storage
-from .mcp import MCPServer
 from .resources import combined_lifespan, router
 
 app = FastAPI(
     docs_url="/api/v2/docs",
     openapi_url="/api/v2/openapi.json",
     title="Jindai",
-    version="2.0.697",
+    version="2.0.698",
 )
 
 # CORS middleware configuration
@@ -39,7 +38,6 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-mcp_lifespan = MCPServer().mount(app)
 app.include_router(router)
 
 
@@ -48,7 +46,6 @@ app.include_router(router)
 async def lifespan(app: FastAPI):
     async with AsyncExitStack() as stack:
         await stack.enter_async_context(combined_lifespan(app))
-        await stack.enter_async_context(mcp_lifespan(app))
         print('stacked')
         yield
 

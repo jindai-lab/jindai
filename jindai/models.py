@@ -792,6 +792,7 @@ class Paragraph(Base):
                     TextEmbeddings.embedding.cosine_distance(query_embedding),
                 )
                 .add_columns(TextEmbeddings.embedding)
+                .limit(1000)
                 .subquery()
             )
             query = (
@@ -815,7 +816,7 @@ class Paragraph(Base):
 
         # Sorting
         if sort_by := query_filters.sort:
-            if sort_by == 'source': sort_by += ',pagenum'
+            if sort_by == 'source': sort_by += '_url,source_page'
             sorts = Paragraph.parse_sort_string(sort_by)
             query = query.order_by(*sorts)
 
@@ -1178,7 +1179,7 @@ class TextEmbeddings(Base):
     )
 
     @staticmethod
-    async def rerank_by_embedding(query: str, items: List[Dict[str, Any]]):
+    async def rerank_by_embedding(query: str, items: List["Paragraph"]):
         """Rerank items by embedding similarity to query.
 
         Args:
@@ -1200,7 +1201,7 @@ class TextEmbeddings(Base):
         payload = {
             "model": config.rerank_model,
             "query": query.strip(),
-            "documents": [item.get("content", "") for item in items],
+            "documents": [item.content for item in items],
             "return_documents": False,
             "top_n": len(items)
         }
