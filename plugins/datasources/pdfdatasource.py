@@ -1,23 +1,27 @@
 """PDF Data Source
 
 This module provides a data source implementation for importing paragraphs
-from PDF documents using the PyMuPDF (fitz) library.
+from PDF documents. Text is extracted page by page via the unified
+``jindai.pdfutils`` helpers; pages without extractable text fall back to
+an external PaddleOCR remote service.
 
 Enhanced features:
 - Text cleaning (OCR error correction, whitespace normalization)
 - Language detection optimized for zh, en, de, fr, ja, ru
 - Cross-page re-paragraphization with sliding window
+- External OCR fallback for scanned pages (no embedded text)
 """
 
 from typing import Iterator, List, Optional
 
-import fitz
 import regex as re
 from sqlalchemy import func, select
 
 from jindai.storage import storage
 from jindai.models import Dataset, Paragraph, get_db_session
 from jindai.pipeline import DataSourceStage, PipelineStage
+from jindai.pdfutils import open_pdf, render_pdf_page
+from jindai.ocrutils import PaddleOCRClient
 from plugins.pipelines.pdf_stages import TextCleaner, PDFLanguageDetect, CrossPageReparagraphizer
 
 
@@ -100,6 +104,8 @@ class PDFDataSource(DataSourceStage):
         max_paragraph_length: int = 2000,
         short_line_threshold: int = 30,
         short_line_batch: int = 5,
+        # OCR fallback parameters
+        ocr_fallback: bool = True,
     ) -> None:
         """Configure the PDF data source.
         
@@ -120,6 +126,8 @@ class PDFDataSource(DataSourceStage):
             max_paragraph_length: Maximum paragraph length (default: 2000).
             short_line_threshold: Short line threshold (default: 30).
             short_line_batch: Short lines to trigger merge (default: 5).
+            ocr_fallback: If True, call external OCR service for pages with
+                no extractable text (default: True).
         """
         self.dataset_name = dataset_name
         self.lang = lang
@@ -133,6 +141,7 @@ class PDFDataSource(DataSourceStage):
         self.clean_text = clean_text
         self.detect_language = lang == 'auto'
         self.reparagraphize = reparagraphize
+        self.ocr_fallback = ocr_fallback
         
         # TextCleaner options
         self.remove_garbled = remove_garbled
@@ -200,96 +209,109 @@ class PDFDataSource(DataSourceStage):
             short_line_batch=self.short_line_batch,
         ) if self.reparagraphize else None
 
+        # OCR client for fallback on text-less pages (scanned documents)
+        ocr_client = PaddleOCRClient() if self.ocr_fallback else None
+
         total = len(files)
         for i, filepath in enumerate(files):
             imported_pages = 0
             self.log(f"{i+1}/{total} importing {filepath}")
 
-            # Open PDF file
+            # Open PDF file using the unified helper
             stream = storage.open(filepath, "rb")
-            if hasattr(stream, "name"):
-                doc = fitz.open(stream.name)
-            else:
-                doc = fitz.open("pdf", stream)
+            doc = open_pdf(stream)
+            try:
+                # Determine page range to process
+                page_range = self.page_range
+                if not page_range:
+                    # Process pages after the last imported one
+                    min_page = existent.get(filepath)
+                    min_page = 0 if min_page is None else (min_page + 1)
+                    self.log("... from page", min_page)
+                    page_range = range(min_page, doc.page_count)
 
-            # Determine page range to process
-            page_range = self.page_range
-            if not page_range:
-                # Process pages after the last imported one
-                min_page = existent.get(filepath)
-                min_page = 0 if min_page is None else (min_page + 1)
-                self.log("... from page", min_page)
-                page_range = range(min_page, doc.page_count)
+                # Accumulate pages for re-paragraphization
+                page_buffer = []
+                
+                for page in page_range:
+                    if page >= doc.page_count:
+                        break
 
-            # Accumulate pages for re-paragraphization
-            page_buffer = []
-            
-            for page in page_range:
-                if page >= doc.page_count:
-                    break
+                    try:
+                        # Get page label (e.g., "i", "1", "A-1")
+                        label = doc[page].get_label()
+                    except (RuntimeError, TypeError):
+                        label = ""
 
-                try:
-                    # Get page label (e.g., "i", "1", "A-1")
-                    label = doc[page].get_label()
-                except (RuntimeError, TypeError):
-                    label = ""
+                    try:
+                        # Extract text content
+                        content = (
+                            doc[page]
+                            .get_text()
+                            .encode("utf-8", errors="ignore")
+                            .decode("utf-8")
+                        )
+                    except Exception as ex:
+                        self.log(filepath, page + 1, ex)
+                        content = ""
 
-                try:
-                    # Extract text content
-                    content = (
-                        doc[page]
-                        .get_text()
-                        .encode("utf-8", errors="ignore")
-                        .decode("utf-8")
-                    )
-                except Exception as ex:
-                    self.log(filepath, page + 1, ex)
-                    content = ""
+                    # If page has little/no text, try OCR fallback via external service
+                    if (not content or len(content.strip()) < 10) and ocr_client:
+                        try:
+                            self.log(f"{filepath} page {page + 1} has no text, running OCR...")
+                            image_bytes = render_pdf_page(stream, page_num=page, zoom=2.0)
+                            content = ocr_client.ocr_image(image_bytes, lang=lang)
+                        except Exception as ex:
+                            self.log(f"OCR failed for {filepath} page {page + 1}: {ex}")
+                            content = ""
 
-                # Skip empty pages
-                if not content or len(content.strip()) < 10:
-                    continue
-
-                # Create base paragraph
-                para = Paragraph(
-                    lang=lang,
-                    content=content,
-                    source_url=filepath,
-                    source_page=page,
-                    pagenum=label or str(page + 1),
-                    dataset=dataset.id,
-                )
-
-                # Apply text cleaning
-                if text_cleaner:
-                    para = text_cleaner.resolve(para)
-                    if para is None:  # Filtered as garbled
+                    # Skip pages with no content after OCR fallback
+                    if not content or len(content.strip()) < 10:
                         continue
 
-                # Apply language detection
-                if lang_detector:
-                    para = lang_detector.resolve(para)
+                    # Create base paragraph
+                    para = Paragraph(
+                        lang=lang,
+                        content=content,
+                        source_url=filepath,
+                        source_page=page,
+                        pagenum=label or str(page + 1),
+                        dataset=dataset.id,
+                    )
 
-                # Buffer for re-paragraphization
-                if reparagraphizer:
-                    page_buffer.append((page, label, para.content))
-                else:
-                    imported_pages += 1
-                    yield para
+                    # Apply text cleaning
+                    if text_cleaner:
+                        para = text_cleaner.resolve(para)
+                        if para is None:  # Filtered as garbled
+                            continue
 
-            # Process buffered pages for re-paragraphization
-            if reparagraphizer and page_buffer:
-                for page, label, content in page_buffer:
-                    for result in reparagraphizer.process_page(
-                        page, label or str(page + 1), content, filepath, dataset.id
-                    ):
+                    # Apply language detection
+                    if lang_detector:
+                        para = lang_detector.resolve(para)
+
+                    # Buffer for re-paragraphization
+                    if reparagraphizer:
+                        page_buffer.append((page, label, para.content))
+                    else:
+                        imported_pages += 1
+                        yield para
+
+                # Process buffered pages for re-paragraphization
+                if reparagraphizer and page_buffer:
+                    for page, label, content in page_buffer:
+                        for result in reparagraphizer.process_page(
+                            page, label or str(page + 1), content, filepath, dataset.id
+                        ):
+                            imported_pages += 1
+                            yield result
+                    
+                    # Finalize re-paragraphization
+                    for result in reparagraphizer.finalize(filepath, dataset.id):
                         imported_pages += 1
                         yield result
-                
-                # Finalize re-paragraphization
-                for result in reparagraphizer.finalize(filepath, dataset.id):
-                    imported_pages += 1
-                    yield result
+
+            finally:
+                doc.close()
 
             # Log if no sufficient content was found
             if not existent.get(filepath) and imported_pages == 0:

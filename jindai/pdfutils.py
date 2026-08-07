@@ -5,17 +5,37 @@ This module provides functions for:
 - PDF rendering to images
 - PDF conversion to TIFF
 - Image merging into PDF
-- PDF text extraction
 - PDF merging operations
 """
 
 import os
 from io import BytesIO
-from typing import Iterator
 
 import fitz
 from PIL import Image
 from PyPDF2 import PdfReader, PdfWriter
+
+
+def open_pdf(pdf_path: str | bytes):
+    """Open a PDF document from a path, bytes, or file-like object.
+
+    Provides a single unified way to open PDFs across the codebase,
+    accepting either a filesystem path, raw bytes, or an open file object.
+
+    Args:
+        pdf_path: Path to PDF file, raw PDF bytes, or file-like object.
+
+    Returns:
+        An open fitz.Document. Caller must close it.
+    """
+    if isinstance(pdf_path, str):
+        return fitz.open(pdf_path)
+    if hasattr(pdf_path, 'read'):
+        # File-like object - fitz can read from a stream
+        if hasattr(pdf_path, 'name'):
+            return fitz.open(pdf_path.name)
+        return fitz.open("pdf", pdf_path.read())
+    return fitz.open(stream=pdf_path)
 
 
 def get_pdf_page_count(pdf_path: str) -> int | None:
@@ -36,8 +56,34 @@ def get_pdf_page_count(pdf_path: str) -> int | None:
         return None
 
 
+def render_pdf_page(pdf_path: str | bytes, page_num: int = 0, zoom: float = 2.0, format: str = "png") -> bytes:
+    """Render a single PDF page to an image as raw bytes.
+
+    This is the unified page-rendering helper used for OCR fallback
+    and page previews. It accepts a path, raw bytes, or file-like object.
+
+    Args:
+        pdf_path: Path to PDF file, raw PDF bytes, or file-like object.
+        page_num: Page number to render (0-indexed).
+        zoom: Zoom factor for resolution (default: 2.0).
+        format: Output image format (default: "png").
+
+    Returns:
+        Raw image bytes.
+    """
+    doc = open_pdf(pdf_path)
+    try:
+        page = doc.load_page(page_num)
+        pix = page.get_pixmap(matrix=fitz.Matrix(zoom, zoom))
+        return pix.tobytes(format)
+    finally:
+        doc.close()
+
+
 def render_pdf_with_fitz(pdf_path: str | bytes, page_num: int = 0, format: str = "png") -> BytesIO:
     """Render a PDF page to an image using PyMuPDF (fitz).
+
+    Wraps :func:`render_pdf_page` and returns the image as a BytesIO stream.
 
     Args:
         pdf_path: Path to PDF file or bytes.
@@ -47,20 +93,7 @@ def render_pdf_with_fitz(pdf_path: str | bytes, page_num: int = 0, format: str =
     Returns:
         Image data as BytesIO.
     """
-    # Open PDF
-    if isinstance(pdf_path, str):
-        doc = fitz.open(pdf_path)
-    else:
-        doc = fitz.open(stream=pdf_path)
-    # Get specified page (note: fitz is 0-indexed)
-    page = doc.load_page(page_num)
-
-    # Render page to pixel map (PixMap)
-    pix = page.get_pixmap(matrix=fitz.Matrix(2, 2))  # 2x zoom for higher resolution
-
-    # Convert to byte stream
-    img_data = pix.tobytes(format)
-    return BytesIO(img_data)
+    return BytesIO(render_pdf_page(pdf_path, page_num=page_num, format=format))
 
 
 def convert_pdf_to_tiff_group4(pdf, outp) -> None:
@@ -210,29 +243,3 @@ def sequential_merge_pdf(outp, pdf1, pdf2, reversed1: bool, reversed2: bool) -> 
 
     except Exception as e:
         raise e
-
-
-def extract_pdf_texts(filename: str, since: int = 0) -> Iterator:
-    """Extract text from PDF pages.
-
-    Args:
-        filename: Path to PDF file.
-        since: Start page number (0-indexed).
-
-    Yields:
-        Tuples of (page_number, label, content).
-    """
-    doc = fitz.open(filename)
-
-    for page in range(since, doc.page_count):
-        try:
-            label = doc[page].get_label()
-        except (RuntimeError, TypeError):
-            label = ""
-
-        try:
-            content = doc[page].get_text()
-        except Exception as ex:
-            content = ""
-
-        yield page, label, content

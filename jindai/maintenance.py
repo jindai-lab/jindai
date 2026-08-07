@@ -13,6 +13,7 @@ import asyncio
 import datetime
 import hashlib
 import logging
+import httpx
 import os
 import tempfile
 from pathlib import Path
@@ -554,7 +555,7 @@ class MaintenanceManager:
                             "content": chunk,
                         }
                     )
-                if i % 320 == 0 or i == results_len:
+                if i % 100 == 0 or i == results_len:
                     added += await self.update_text_embeddings_do(bulk=new_bulk)
                     new_bulk.clear()
 
@@ -568,22 +569,26 @@ class MaintenanceManager:
             Number of embeddings added.
         """
         embs = []
-        for p, emb in zip(
-            bulk,
-            await TextEmbeddings.batch_encode([p["content"] for p in bulk]),
-        ):
-            embs.append(
-                TextEmbeddings(
-                    id=p["id"],
-                    dataset=p["dataset"],
-                    chunk_id=p["chunk_id"],
-                    embedding=emb,
+        try:
+            for p, emb in zip(
+                bulk,
+                await TextEmbeddings.batch_encode([p["content"] for p in bulk]),
+            ):
+                embs.append(
+                    TextEmbeddings(
+                        id=p["id"],
+                        dataset=p["dataset"],
+                        chunk_id=p["chunk_id"],
+                        embedding=emb,
+                    )
                 )
-            )
-        async with get_db_session() as session:
-            session.add_all(embs)
-            await session.commit()
-        logging.info(f"{len(embs)} added")
+                
+            async with get_db_session() as session:
+                session.add_all(embs)
+                await session.commit()
+            logging.info(f"{len(embs)} added")
+        except httpx.ReadTimeout:
+            logging.error('Read timeout')
         return len(embs)
 
     async def custom_task(self, task_id: str = "", **params) -> dict:

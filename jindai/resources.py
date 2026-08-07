@@ -174,6 +174,38 @@ class ResourceRegistry:
             stmt = select(self.model).filter(await self.get_auth_filters(username))
             return await self.paginate(session, stmt, sort, offset, limit)
 
+        @res_router.post("/", status_code=201)
+        async def create_item(
+            data: dict = Body(...),
+            session: AsyncSession = Depends(get_db),
+            username: str = Depends(get_current_username),
+        ):
+            """Create a new item.
+
+            Args:
+                data: Item data.
+                session: Database session.
+                username: Current username.
+
+            Returns:
+                Created item as dictionary.
+            """
+            if hasattr(self.model, "user_id"):
+                user = (
+                    await session.execute(
+                        select(UserInfo).filter(UserInfo.username == username)
+                    )
+                ).scalar_one_or_none()
+                if not user:
+                    raise HTTPException(404, detail="User not found")
+                data["user_id"] = user.id
+
+            new_item = self.model(**data)
+            session.add(new_item)
+            await session.commit()
+            await session.refresh(new_item)
+            return new_item.as_dict()
+
         @res_router.get("/{resource_id}")
         async def get_item(
             resource_id: str,
@@ -340,13 +372,7 @@ class EmbeddingManager:
             Returns:
                 Dictionary with finished and queued counts.
             """
-            finished = (
-                await session.execute(
-                    select(TextEmbeddings)
-                    .filter(TextEmbeddings.chunk_id == 1)
-                    .with_only_columns(func.count(1))
-                )
-            ).scalar()
+            finished = None
             queued = (
                 await session.execute(
                     select(EmbeddingPendingQueue).with_only_columns(

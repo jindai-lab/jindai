@@ -156,6 +156,9 @@ class CalibreDataSource(DataSourceStage):
                     author_sort, series_index, authors, publisher,
                     tag_names, series_name, language
                 ) = row
+                
+                if file_name.lower().endswith(f".{ext.lower()}"):
+                    file_name = file_name[:-len(ext)-1]
 
                 # Parse publication year
                 year: Optional[int] = pubdate.year
