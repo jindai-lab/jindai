@@ -11,7 +11,15 @@ from typing import Any, Dict, Optional, Union
 
 import uvicorn
 from asteval import Interpreter
-from fastapi import APIRouter, Depends, FastAPI, HTTPException, Request, WebSocket, status
+from fastapi import (
+    APIRouter,
+    Depends,
+    FastAPI,
+    HTTPException,
+    Request,
+    WebSocket,
+    status,
+)
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
 from sqlalchemy import func, select
@@ -26,7 +34,7 @@ app = FastAPI(
     docs_url="/api/v2/docs",
     openapi_url="/api/v2/openapi.json",
     title="Jindai",
-    version="2.0.698",
+    version="2.0.699",
 )
 
 # CORS middleware configuration
@@ -46,12 +54,11 @@ app.include_router(router)
 async def lifespan(app: FastAPI):
     async with AsyncExitStack() as stack:
         await stack.enter_async_context(combined_lifespan(app))
-        print('stacked')
+        print("stacked")
         yield
 
 
-app.router.lifespan_context = lifespan     
-
+app.router.lifespan_context = lifespan
 
 
 async def serve_static(path: str = ""):
@@ -60,8 +67,8 @@ async def serve_static(path: str = ""):
         os.path.join(config.ui_dist, path),
         os.path.join(config.ui_dist, "index.html"),
     ]
-    
-    logging.info('Searching for: ' + ', '.join(search_paths))
+
+    logging.info("Searching for: " + ", ".join(search_paths))
 
     for p in search_paths:
         if os.path.exists(p) and os.path.isfile(p):
@@ -90,16 +97,13 @@ def run_service(host: str = "0.0.0.0", port: int = 8370) -> None:
 async def custom_404_handler(request: Request, exc: HTTPException):
     # 404 when FastAPI route matching fails, detail is fixed to "Not Found"
     DEFAULT_404_DETAIL = "Not Found"
-    
+
     # 1. Only handle 404 from route matching failure (detail is default value)
     if exc.detail == DEFAULT_404_DETAIL:
-        return await serve_static(request.url.path.lstrip('/'))
+        return await serve_static(request.url.path.lstrip("/"))
     # 2. Manually raised 404 (custom detail), preserve original 404 behavior
     else:
-        return JSONResponse(
-            status_code=exc.status_code,
-            content={"detail": exc.detail}
-        )
-        
+        return JSONResponse(status_code=exc.status_code, content={"detail": exc.detail})
+
 
 router = APIRouter(prefix="/api/v2", dependencies=[Depends(get_current_user)])
