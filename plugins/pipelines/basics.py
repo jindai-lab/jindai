@@ -779,6 +779,8 @@ class SaveParagraph(PipelineStage):
             await self.dbsession.rollback()
             raise
         
+        self.log('Saved.')
+        
         return paragraph
     
 

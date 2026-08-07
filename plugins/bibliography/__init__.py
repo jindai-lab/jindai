@@ -104,7 +104,7 @@ class BibliographyPlugin(Plugin):
                     "CalibreDataSource",
                     {
                         "content": "\n".join(paths),
-                        "scan_for_moved": False,
+                        "scan_for_moved": True,
                     },
                 ),
                 ("BibItemSave", {}),

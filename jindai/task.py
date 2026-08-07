@@ -3,7 +3,8 @@
 This module provides:
 - Task: Main class for executing pipeline tasks
 - Async execution with concurrent workers
-- Priority queue for processing order
+- Depth-first scheduling: a paragraph follows the whole stage chain
+  before siblings are picked up
 - Progress tracking with tqdm
 - Error handling and resume capabilities
 """
@@ -22,9 +23,18 @@ from .pipeline import Pipeline
 class Task:
     """Task executor for pipeline processing.
 
-    Manages the execution of pipeline stages on paragraphs
-    with support for concurrent processing, progress tracking,
-    and error recovery.
+    Manages the execution of pipeline stages on paragraphs using a
+    depth-first strategy. When a stage fans out multiple paragraphs,
+    the worker that pulled the job drives the **first** result all the
+    way down the remaining stages (recursing into the chain) before it
+    enqueues any sibling results. The siblings are then placed on the
+    bounded work queue and picked up by whichever worker has a free
+    concurrency slot - hence "one path runs to completion first, then the
+    next one starts if concurrency is not yet full".
+
+    This keeps the bounded-queue backpressure of the previous design
+    (a fan-out stage such as a data source cannot flood memory) while
+    guaranteeing depth-first ordering of a single chain.
     """
 
     def __init__(
@@ -68,14 +78,18 @@ class Task:
 
         # Bounded async priority queue.
         #
-        # The bound is intentionally small relative to the number of workers:
-        # a pipeline stage (particularly DataSourceStage.fetch) can yield far
-        # more paragraphs than the workers can concurrently process. With an
-        # unbounded queue every produced paragraph - and any heavy payload it
-        # carries (text, images, ...) - would sit in memory waiting. A bounded
-        # queue applies backpressure; when it is full, the producing worker
-        # drains a pending item inline (see ``_enqueue``), which keeps memory
-        # bounded without deadlocking the worker pool.
+        # Jobs placed on the queue represent the *start* of a chain
+        # (a paragraph together with the stage at which to begin
+        # processing). A worker that pulls a job drives that paragraph
+        # all the way through the remaining stages inline / recursively
+        # (depth-first); only sibling results produced by a fan-out are
+        # enqueued back.
+        #
+        # The bound keeps memory usage in check when a stage (particularly
+        # DataSourceStage.fetch) yields far more paragraphs than can be
+        # processed concurrently. When the queue is full the producer
+        # drains a pending job inline (see ``_enqueue``), which applies
+        # backpressure without deadlocking the worker pool.
         self._queue_maxsize = max(self.concurrent * (2 + queue_buffer), 4)
         self._queue: asyncio.PriorityQueue = asyncio.PriorityQueue(
             maxsize=self._queue_maxsize
@@ -84,7 +98,7 @@ class Task:
         self._worker_tasks = []
 
     async def _worker(self):
-        """Consumer coroutine: pulls jobs from the bounded queue.
+        """Consumer coroutine: pulls chain-root jobs from the queue.
 
         The worker keeps draining the queue until **both** ``alive`` is False
         and the queue is empty. This distinction matters: ``alive=False`` only
@@ -119,16 +133,16 @@ class Task:
                 self._queue.task_done()
 
     async def _enqueue(self, item: tuple) -> None:
-        """Enqueue a job with backpressure.
+        """Enqueue a chain-root job with backpressure.
 
         Uses ``put_nowait`` on the bounded queue. When the queue is full the
         current worker does **not** block (which could deadlock once every
         worker is blocked on a full queue while also being the only consumers).
-        Instead it drains the highest-priority pending job inline and then
-        retries. This effectively serializes oversized fan-outs (e.g. a data
-        source yielding thousands of paragraphs) while keeping real
-        concurrency bounded by ``self.concurrent`` and memory usage bounded by
-        the queue capacity.
+        Instead it drains the highest-priority pending job inline - running
+        that paragraph through its remaining chain - and then retries. This
+        effectively serializes oversized fan-outs (e.g. a data source yielding
+        thousands of paragraphs) while keeping real concurrency bounded by
+        ``self.concurrent`` and memory usage bounded by the queue capacity.
 
         Args:
             item: A ``(priority, tie_breaker, (paragraph, stage))`` tuple.
@@ -155,48 +169,100 @@ class Task:
                 finally:
                     self._queue.task_done()
 
-    async def _async_execute(self, priority: int, fc: tuple) -> None:
-        """Async execution logic for a single job.
+    async def _run_chain(
+        self, input_paragraph, stage, priority: int
+    ) -> None:
+        """Drive a paragraph through a stage chain depth-first.
+
+        At every stage the first result that has a continuation is followed
+        *immediately* by recursing into it, so one path through the pipeline
+        runs to completion before any sibling result is enqueued. After the
+        deep path returns, the remaining results of the current stage's
+        generator are drained into the bounded queue (applying backpressure)
+        for other workers to pick up.
+
+        All sibling enqueues happen **inside** the current job's execution,
+        i.e. before the owning worker calls ``queue.task_done()``. This is
+        important: it keeps ``queue.join()``'s unfinished-task counter
+        consistent and avoids the race that a background "producer" task
+        would introduce against ``task_done()``/``join()``.
 
         Args:
-            priority: Task priority.
-            fc: Tuple of (paragraph, stage).
+            input_paragraph: Paragraph to process.
+            stage: First stage to apply.
+            priority: Current priority level.
         """
-        input_paragraph, stage = fc
+        if stage is None or not self.alive:
+            return
 
         if self.verbose:
-            self.log_func(type(stage).__name__, getattr(input_paragraph, 'id', '%x' % id(input_paragraph)))
+            self.log_func(
+                type(stage).__name__,
+                getattr(input_paragraph, "id", "%x" % id(input_paragraph)),
+            )
 
-        if stage is None:
+        # Pull only the first result that has a continuation. The async
+        # generator stays paused at this first yield while we dive deeper;
+        # any further items are drained (and enqueued as siblings) after the
+        # deep path completes.
+        agen = stage.flow(input_paragraph)
+        first_fc = None
+        try:
+            async for next_fc in agen:
+                if next_fc[1] is not None:
+                    first_fc = next_fc
+                    break
+        except Exception as ex:
+            self.log_exception("Error while executing", ex)
+            if not self.resume_next:
+                self.alive = False
             self._pbar.update(1)
             return
 
         try:
-            # Priority handling
-            new_priority = priority - 1
+            if first_fc is not None and self.alive:
+                # 1. Depth-first: follow the first result all the way down.
+                next_paragraph, next_stage = first_fc
+                await self._run_chain(next_paragraph, next_stage, priority - 1)
 
-            # Use async for to drive async generator. Enqueuing goes through
-            # the bounded ``_enqueue`` so a large fan-out is throttled instead
-            # of flooding the queue.
-            async for next_fc in stage.flow(input_paragraph):
-                if next_fc[1] is None:
-                    continue
-
-                # Async enqueue: (priority, unique ID, data).
-                # Use id() as sorting placeholder to prevent tuple comparison
-                # errors when paragraphs compare equal.
-                await self._enqueue(
-                    (new_priority, id(next_fc[0]), next_fc)
-                )
-
-                if not self.alive:
-                    break
-
-            self._pbar.update(1)
+                # 2. Then enqueue remaining siblings. Draining the paused
+                #    generator through ``_enqueue`` applies backpressure, so a
+                #    stage that yields a huge number of paragraphs cannot flood
+                #    memory. Other workers pick these up when they are free.
+                async for next_fc in agen:
+                    if next_fc[1] is None:
+                        continue
+                    if not self.alive:
+                        break
+                    await self._enqueue(
+                        (priority - 1, id(next_fc[0]), next_fc)
+                    )
         except Exception as ex:
-            self.log_exception('Error while executing', ex)
+            self.log_exception("Error while executing", ex)
             if not self.resume_next:
                 self.alive = False
+        finally:
+            # Ensure the async generator is closed even if we stopped early
+            # (e.g. alive flipped False). Without this, an abandoned async
+            # generator would only be finalized by GC.
+            await agen.aclose()
+            self._pbar.update(1)
+
+    async def _async_execute(self, priority: int, fc: tuple) -> None:
+        """Async execution logic for a single chain-root job.
+
+        Args:
+            priority: Task priority.
+            fc: Tuple of (paragraph, first stage to apply).
+        """
+        input_paragraph, stage = fc
+
+        if stage is None:
+            # Defensive: terminal no-op job.
+            self._pbar.update(1)
+            return
+
+        await self._run_chain(input_paragraph, stage, priority)
 
     def execute(self):
         """Synchronous execution entry point.
@@ -227,6 +293,11 @@ class Task:
                     asyncio.create_task(self._worker()) for _ in range(self.concurrent)
                 ]
 
+                # Every item that will ever be processed is enqueued within
+                # some job's ``_run_chain`` (i.e. before that job's
+                # ``task_done()``), so once the queue is fully drained there
+                # is no outstanding producer and ``queue.join()`` returning is
+                # a sufficient termination condition.
                 await self._queue.join()
 
                 self.alive = False
@@ -244,6 +315,9 @@ class Task:
                 "__tracestack__": "".join(traceback.format_exception(type(ex), ex, ex.__traceback__)),
             }
         finally:
+            self.alive = False
+            for t in self._worker_tasks:
+                t.cancel()
             self._pbar.close()
         return None
 
