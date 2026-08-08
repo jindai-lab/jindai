@@ -777,6 +777,42 @@ class ContentManager(ResourceRegistry):
                 raise HTTPException(404)
             return res.as_dict()
 
+        @router.post(
+            "/datasets",
+            tags=["Datasets"],
+            dependencies=[Depends(get_current_admin)],
+        )
+        async def create_dataset(
+            data: dict = Body(...), session: AsyncSession = Depends(get_db)
+        ):
+            """Create a new dataset.
+
+            Args:
+                data: Request body with dataset fields (e.g. name).
+                session: Database session.
+
+            Returns:
+                The created dataset as dictionary.
+
+            Raises:
+                HTTPException: If the dataset name is missing or already exists.
+            """
+            name = (data.get("name") or "").strip()
+            if not name:
+                raise HTTPException(400, detail="Dataset name is required")
+
+            existing = (
+                await session.execute(select(Dataset).filter(Dataset.name == name))
+            ).scalar_one_or_none()
+            if existing:
+                raise HTTPException(409, detail="Dataset already exists")
+
+            ds = Dataset(name=name, order_weight=data.get("order_weight", 0))
+            session.add(ds)
+            await session.commit()
+            await session.refresh(ds)
+            return ds.as_dict()
+
         @router.put(
             "/datasets/{resource_id}",
             tags=["Datasets"],

@@ -34,7 +34,7 @@ class FilterOut(PipelineStage):
     @zhs 截止当前处理的段落
     """
 
-    def __init__(self, cond='true') -> None:
+    def __init__(self, cond="true") -> None:
         """
         Arg:
             cond (QUERY): Condition
@@ -55,13 +55,15 @@ class TradToSimpChinese(PipelineStage):
     @zhs 繁体中文转为简体中文
     @zht 繁體中文轉爲簡體中文
     """
+
     import opencc
-    t2s = opencc.OpenCC('t2s')
+
+    t2s = opencc.OpenCC("t2s")
 
     def resolve(self, paragraph: Paragraph) -> Paragraph:
         paragraph.content = TradToSimpChinese.t2s.convert(paragraph.content)
-        if paragraph.lang == 'zht':
-            paragraph.lang = 'zhs'
+        if paragraph.lang == "zht":
+            paragraph.lang = "zhs"
         return paragraph
 
 
@@ -69,43 +71,44 @@ class LanguageDetect(PipelineStage):
     """Simple language detection
     @zhs 简易语言检测
     """
+
     detector = LanguageDetectorBuilder.from_all_languages().build()
 
     def resolve(self, paragraph: Paragraph) -> Paragraph:
-        if paragraph.lang and paragraph.lang != 'auto':
+        if paragraph.lang and paragraph.lang != "auto":
             return paragraph
 
         if paragraph.content:
             paragraph.lang = self.detect(paragraph.content)
-            if paragraph.lang in ('zh-cn', 'zh-sg'):
-                paragraph.lang = 'zhs'
-            elif paragraph.lang.startswith('zh-'):
-                paragraph.lang = 'zht'
-            elif '-' in paragraph.lang:
-                paragraph.lang = paragraph.lang.split('-')[0]
+            if paragraph.lang in ("zh-cn", "zh-sg"):
+                paragraph.lang = "zhs"
+            elif paragraph.lang.startswith("zh-"):
+                paragraph.lang = "zht"
+            elif "-" in paragraph.lang:
+                paragraph.lang = paragraph.lang.split("-")[0]
 
         return paragraph
 
     def detect(self, sentence) -> str:
         """Detect language"""
 
-        sentence = re.sub('[0-9]', '', sentence).strip()
+        sentence = re.sub("[0-9]", "", sentence).strip()
 
         if re.search(r"[\uac00-\ud7ff]+", sentence):
-            return 'ko'
-        
+            return "ko"
+
         if hanzidentifier.has_chinese(sentence):
             if hanzidentifier.is_simplified(sentence):
-                return 'zhs'
+                return "zhs"
             else:
-                return 'zht'
+                return "zht"
 
         try:
             lang = LanguageDetect.detector.detect_language_of(sentence)
             assert lang
             return lang.iso_code_639_1.name.lower()
         except Exception:
-            return 'en'
+            return "en"
 
 
 class WordStemmer(PipelineStage):
@@ -114,7 +117,7 @@ class WordStemmer(PipelineStage):
     @zhs 附加词干到 tokens 中（需要先进行切词）
     """
 
-    def __init__(self, append=True, field='tokens') -> None:
+    def __init__(self, append=True, field="tokens") -> None:
         """
         Args:
             append (bool):
@@ -128,7 +131,7 @@ class WordStemmer(PipelineStage):
         self.append = append
         self.field = field
         self.stemmer = WStemmer()
-        
+
     def stem_words(self, lang, words):
         return self.stemmer.stem_tokens(lang, words)
 
@@ -147,7 +150,7 @@ class LatinTransliterate(PipelineStage):
     @zhs 转写为拉丁字母的单词（需要先进行切词）
     """
 
-    def __init__(self, append=True, field='tokens') -> None:
+    def __init__(self, append=True, field="tokens") -> None:
         """
         Args:
             append (bool):
@@ -161,13 +164,13 @@ class LatinTransliterate(PipelineStage):
         self.append = append
         self.field = field
         import transliterate
+
         self.supported_languages = transliterate.get_available_language_codes()
         self.translit = transliterate.translit
-        
+
     def transliterate(self, lang, words) -> list:
         if lang in self.supported_languages:
-            return [self.translit(
-                word, lang, reversed=True).lower() for word in words]
+            return [self.translit(word, lang, reversed=True).lower() for word in words]
         else:
             return []
 
@@ -185,16 +188,17 @@ class WordCut(PipelineStage):
     Multilingual word cutting
     @zhs 多语种分词
     """
-    
+
     import opencc
     import pykakasi
-    t2s = opencc.OpenCC('t2s')
+
+    t2s = opencc.OpenCC("t2s")
     kks = pykakasi.kakasi()
-    
-    def __init__(self, for_search=False, field='keywords', **_) -> None:
+
+    def __init__(self, for_search=False, field="keywords", **_) -> None:
         """
         Args:
-            for_search (bool): 
+            for_search (bool):
                 Append redundant word-cutting results or stemming/transliteration
                 @zhs 是否用于搜索（添加冗余分词结果或词干/转写）
             field (str):
@@ -210,34 +214,39 @@ class WordCut(PipelineStage):
     @staticmethod
     def remove_accents(input_str) -> str:
         import unicodedata
-        nfkd_form = unicodedata.normalize('NFKD', input_str)
-        return u"".join([c for c in nfkd_form if not unicodedata.combining(c)])
-    
+
+        nfkd_form = unicodedata.normalize("NFKD", input_str)
+        return "".join([c for c in nfkd_form if not unicodedata.combining(c)])
+
     def resolve(self, paragraph: Paragraph) -> Paragraph:
         words = []
-        if paragraph.lang == 'zht':
+        if paragraph.lang == "zht":
             content = WordCut.t2s.convert(paragraph.content)
         else:
             content = paragraph.content
 
-        if paragraph.lang in ('zhs', 'zht'):
-            words = list(jieba.cut_query(content) if self.for_search else jieba.cut_text(content))
-        elif paragraph.lang == 'ja':
+        if paragraph.lang in ("zhs", "zht"):
+            words = list(
+                jieba.cut_query(content) if self.for_search else jieba.cut_text(content)
+            )
+        elif paragraph.lang == "ja":
             words = list(set(content))
             for i in WordCut.kks.convert(content):
-                words.append(i['orig'])
+                words.append(i["orig"])
                 if self.for_search:
-                    words.append(i['hepburn'])
+                    words.append(i["hepburn"])
         else:
-            words = [_.lower().strip().strip(string.punctuation)
-                     for _ in re.split(r'[^\w]', content)]
+            words = [
+                _.lower().strip().strip(string.punctuation)
+                for _ in re.split(r"[^\w]", content)
+            ]
             if self.for_search:
                 words += self.stmr.stem_words(paragraph.lang, words)
             words += [WordCut.remove_accents(word) for word in words]
 
         if self.for_search:
             words += self.trlit.transliterate(paragraph.lang, words)
-        
+
         if not paragraph[self.field]:
             paragraph[self.field] = []
         paragraph[self.field] += words
@@ -251,13 +260,15 @@ class FilterPunctuations(PipelineStage):
     """
 
     re_punctuations = re.compile(
-        r'[，。「」·；□■•●『』［］【】（）\s\(\)、“”‘’《》——\-！？\.\?\!\,\'\"：\/\\\n\u3000…]')
+        r"[，。「」·；□■•●『』［］【】（）\s\(\)、“”‘’《》——\-！？\.\?\!\,\'\"：\/\\\n\u3000…]"
+    )
 
     def resolve(self, paragraph: Paragraph) -> Paragraph:
         paragraph.content = FilterPunctuations.re_punctuations.sub(
-            '', paragraph.content.strip(string.punctuation))
+            "", paragraph.content.strip(string.punctuation)
+        )
         return paragraph
-    
+
 
 class Reparagraph(PipelineStage):
     """
@@ -265,45 +276,45 @@ class Reparagraph(PipelineStage):
     @zhs 重新分段"""
 
     def resolve(self, paragraph: Paragraph) -> ResolveReturn:
-        lang = paragraph.lang or 'en'
-        lines = paragraph.content.split('\n')
+        lang = paragraph.lang or "en"
+        lines = paragraph.content.split("\n")
 
         def paragraph_finished(text):
-            return text.endswith(tuple('.!?…\"。！？…—：”）'))
+            return text.endswith(tuple('.!?…"。！？…—：”）'))
 
         def merge_lines():
             lens = [len(_) for _ in lines]
             if len(lens) < 3:
-                yield ('' if lang[:2] in ('zh', 'ja') else ' ').join(lines)
+                yield ("" if lang[:2] in ("zh", "ja") else " ").join(lines)
                 return
 
             std = abs(statistics.stdev(lens))
             maxl = max(lens)
-            text = ''
-            last_line = '1'
+            text = ""
+            last_line = "1"
             for line in lines:
                 line = line.strip()
                 if not line:
                     continue
-                if re.search(r'^[①-⑩]', line):
+                if re.search(r"^[①-⑩]", line):
                     break
 
-                if lang[:2] != 'zh':
-                    text += ' '
+                if lang[:2] != "zh":
+                    text += " "
                 text += line
                 if len(line) < maxl - std:
                     if paragraph_finished(text) or not last_line:
                         yield text
-                        text = ''
+                        text = ""
                 last_line = line.strip()
 
             if text:
                 yield text
 
         data = paragraph.as_dict()
-        del data['content']
+        del data["content"]
         for text in merge_lines():
-            data['content'] = text
+            data["content"] = text
             yield Paragraph.from_dict(data)
 
 
@@ -313,7 +324,7 @@ class SplitParagraph(PipelineStage):
     @zhs 拆分语段
     """
 
-    def __init__(self, delimeter='\n') -> None:
+    def __init__(self, delimeter="\n") -> None:
         """
         Args:
             delimeter (str):
@@ -337,7 +348,7 @@ class AccumulateParagraphs(PipelineStage):
     @zhs 聚集段落遍历结果
     """
 
-    def __init__(self, sort='') -> None:
+    def __init__(self, sort="") -> None:
         """
         Args:
             sort (str): Sort by field name
@@ -345,27 +356,27 @@ class AccumulateParagraphs(PipelineStage):
         """
         super().__init__()
         self.paragraphs = deque()
-        self.sort = [_.strip() for _ in sort.split(',') if _]
+        self.sort = [_.strip() for _ in sort.split(",") if _]
 
     def resolve(self, paragraph: Paragraph) -> None:
         self.paragraphs.append(paragraph.as_dict())
-        
+
     def sorter(self, obj) -> list:
         class _Rev:
             def __init__(self, val):
                 self.val = val
-            
+
             def __lt__(self, other):
                 return self.val > other.val
-                        
+
         def _rev(val, reversed):
             if reversed:
                 if isinstance(val, (int, float)):
                     return -val
                 return _Rev(val)
             return val
-                    
-        return [_rev(obj.get(k.strip('-'), ''), k.startswith('-')) for k in self.sort]
+
+        return [_rev(obj.get(k.strip("-"), ""), k.startswith("-")) for k in self.sort]
 
     async def summarize(self, result) -> list:
         results = list(self.paragraphs)
@@ -380,7 +391,7 @@ class Export(PipelineStage):
     @zhs 结果导出为文件
     """
 
-    def __init__(self, output_format='xlsx', limit=0) -> None:
+    def __init__(self, output_format="xlsx", limit=0) -> None:
         """导出结果
 
         Args:
@@ -393,7 +404,7 @@ class Export(PipelineStage):
         """
         super().__init__()
         self.extension = output_format
-        self.format = {'xlsx': 'excel'}.get(output_format, output_format)
+        self.format = {"xlsx": "excel"}.get(output_format, output_format)
         self.limit = limit
 
     async def summarize(self, result) -> dict:
@@ -405,17 +416,17 @@ class Export(PipelineStage):
             if isinstance(val, str):
                 return val
             elif isinstance(val, list):
-                val = ', '.join(map(str_repr, val))
+                val = ", ".join(map(str_repr, val))
                 if not strip_brackets:
-                    val = f'[{val}]'
+                    val = f"[{val}]"
                 return val
             elif isinstance(val, dict):
-                val = ', '.join([f'{k}={str_repr(v)}' for k, v in val.items()])
+                val = ", ".join([f"{k}={str_repr(v)}" for k, v in val.items()])
                 if not strip_brackets:
-                    val = f'({val})'
+                    val = f"({val})"
                 return val
             elif isinstance(val, bytes):
-                return f'<... {len(val)} bytes>'
+                return f"<... {len(val)} bytes>"
             else:
                 return str(val)
 
@@ -425,20 +436,27 @@ class Export(PipelineStage):
                 if isinstance(v, dict):
                     v = flattern_dict(v)
                     for kp, vp in v.items():
-                        result[f'{k}.{kp}'] = vp
+                        result[f"{k}.{kp}"] = vp
                 else:
                     result[k] = v
             return result
 
-        result = [{k: str_repr(v, True) for k, v in (
-            flattern_dict(r if isinstance(r, dict) else r.as_dict())).items()} for r in result]
+        result = [
+            {
+                k: str_repr(v, True)
+                for k, v in (
+                    flattern_dict(r if isinstance(r, dict) else r.as_dict())
+                ).items()
+            }
+            for r in result
+        ]
 
-        if self.format == 'json':
-            return PipelineStage.return_file('json', json_dump(result).encode('utf-8'))
+        if self.format == "json":
+            return PipelineStage.return_file("json", json_dump(result).encode("utf-8"))
 
-        elif self.format in ('csv', 'excel'):
+        elif self.format in ("csv", "excel"):
             buf = BytesIO()
-            getattr(pandas.DataFrame(result), f'to_{self.format}')(buf)
+            getattr(pandas.DataFrame(result), f"to_{self.format}")(buf)
             return PipelineStage.return_file(self.extension, buf.getvalue())
 
 
@@ -448,7 +466,7 @@ class ArrayField(PipelineStage):
     @zhs 操作数组字段
     """
 
-    def __init__(self, field, push=True, elements='') -> None:
+    def __init__(self, field, push=True, elements="") -> None:
         """
         Args:
             field (str): Field name
@@ -482,7 +500,7 @@ class ArrayAggregation(PipelineStage):
     Concat arrays in an array field
     @zhs 减少一层数组嵌套层级"""
 
-    def __init__(self, field, new_field='') -> None:
+    def __init__(self, field, new_field="") -> None:
         """
         Args:
             field (str): Field name
@@ -528,17 +546,14 @@ class Counter:
 
     def as_dict(self) -> dict:
         """Get the dictionary representation of the counter"""
-        return {
-            k: v.value() for k, v in self._d.items()
-        }
+        return {k: v.value() for k, v in self._d.items()}
 
 
 class NgramCounter(PipelineStage):
-    """N-Gram
-    """
+    """N-Gram"""
 
     def __init__(self, n: int, lr=False) -> None:
-        """ N-Gram
+        """N-Gram
 
         Args:
             n (int): Max string lenght
@@ -556,24 +571,21 @@ class NgramCounter(PipelineStage):
         self.ngrams_rights = defaultdict(Counter)
 
     def resolve(self, paragraph: Paragraph) -> Paragraph:
-        ngrams = [' ' * i for i in range(self.n)]
+        ngrams = [" " * i for i in range(self.n)]
         for content in paragraph.content:
             for i in range(self.n):
-                ngrams[i] = (ngrams[i] + content)[-i-1:]
+                ngrams[i] = (ngrams[i] + content)[-i - 1 :]
                 self.ngrams[ngrams[i]].inc()
             if self.lr:
                 for i in range(2, self.n):
-                    left, word, right = ngrams[i][0], ngrams[i][1:-
-                                                                1], ngrams[i][-1]
+                    left, word, right = ngrams[i][0], ngrams[i][1:-1], ngrams[i][-1]
                     self.ngrams_lefts[word][left].inc()
                     self.ngrams_rights[word][right].inc()
 
     async def summarize(self, result) -> Dict:
         self.ngrams = self.ngrams.as_dict()
-        self.ngrams_lefts = {k: v.as_dict()
-                             for k, v in self.ngrams_lefts.items()}
-        self.ngrams_rights = {k: v.as_dict()
-                              for k, v in self.ngrams_rights.items()}
+        self.ngrams_lefts = {k: v.as_dict() for k, v in self.ngrams_lefts.items()}
+        self.ngrams_rights = {k: v.as_dict() for k, v in self.ngrams_rights.items()}
 
 
 class Limit(PipelineStage):
@@ -605,7 +617,7 @@ class RegexReplace(PipelineStage):
     @zhs 正则表达式匹配并替换
     """
 
-    def __init__(self, pattern, replacement='', plain=False) -> None:
+    def __init__(self, pattern, replacement="", plain=False) -> None:
         """
         Args:
             pattern (str):
@@ -622,14 +634,13 @@ class RegexReplace(PipelineStage):
         self.replacement = replacement
 
     def resolve(self, paragraph: Paragraph) -> Paragraph:
-        paragraph.content = self.regexp.sub(
-            self.replacement, paragraph.content)
+        paragraph.content = self.regexp.sub(self.replacement, paragraph.content)
         return paragraph
-    
+
 
 class DatasetFromField(PipelineStage):
-    
-    def __init__(self, pattern: str="{author}") -> None:
+
+    def __init__(self, pattern: str = "{author}") -> None:
         """
         Args:
             pattern (str): Formatting string
@@ -637,12 +648,13 @@ class DatasetFromField(PipelineStage):
         """
         super().__init__()
         self.pattern = pattern
-        
+
     async def resolve(self, paragraph: Paragraph) -> ResolveReturn:
         replaced = self.pattern.format(**paragraph.as_dict(), **paragraph.extdata or {})
-        if '{' not in replaced:
+        if "{" not in replaced:
             await paragraph.set_dataset_name(replaced)
         return paragraph
+
 
 class RegexFilter(PipelineStage):
     """
@@ -650,8 +662,15 @@ class RegexFilter(PipelineStage):
     @zhs 正则表达式匹配并提取到字段中
     """
 
-    def __init__(self, pattern, target, source='content', match='{0}',
-                 continuous=False, filter_out=False) -> None:
+    def __init__(
+        self,
+        pattern,
+        target,
+        source="content",
+        match="{0}",
+        continuous=False,
+        filter_out=False,
+    ) -> None:
         """
         Args:
             pattern (str): Regular expression
@@ -672,16 +691,17 @@ class RegexFilter(PipelineStage):
         self.regexp = re.compile(pattern)
         self.source = source
         self.target = target
-        self.value = ''
+        self.value = ""
         self.match = match
         self.continuous = continuous
         self.filter_out = filter_out
 
-    def resolve(self, paragraph: Paragraph) -> Paragraph | None:
+    async def resolve(self, paragraph: Paragraph) -> Paragraph | None:
         match = self.regexp.search(str(paragraph[self.source]))
         if match:
-            val = self.match.format(match.group(
-                0), *[_ if _ is not None else '' for _ in match.groups()])
+            val = self.match.format(
+                match.group(0), *[_ if _ is not None else "" for _ in match.groups()]
+            )
             paragraph[self.target] = val
             self.value = val
         elif self.continuous:
@@ -697,7 +717,7 @@ class RegexMatches(PipelineStage):
     @zhs 正则表达式匹配
     """
 
-    def __init__(self, regex, field='content') -> None:
+    def __init__(self, regex, field="content") -> None:
         """
         Args:
             field (str): Field name to match from
@@ -721,7 +741,7 @@ class FieldAssignment(PipelineStage):
     @zhs 将某一个字段的值或输入值保存到另一个字段
     """
 
-    def __init__(self, field, value='', delete_field=False) -> None:
+    def __init__(self, field, value="", delete_field=False) -> None:
         """
         Args:
             field (str): Field name
@@ -738,7 +758,7 @@ class FieldAssignment(PipelineStage):
         self.value = value
         self.delete_field = delete_field
 
-    def resolve(self, paragraph: Paragraph) -> Paragraph:
+    async def resolve(self, paragraph: Paragraph) -> Paragraph:
         if self.delete_field:
             del paragraph.extdata[self.field]
         else:
@@ -754,7 +774,7 @@ class DeleteParagraph(PipelineStage):
     async def resolve(self, paragraph: Paragraph) -> None:
         if paragraph.id:
             await self.dbsession.delete(paragraph)
-        
+
 
 class SaveParagraph(PipelineStage):
     """Save
@@ -762,13 +782,16 @@ class SaveParagraph(PipelineStage):
     """
 
     def __init__(self) -> None:
-        '''
-        '''
+        """ """
         super().__init__()
-        
+
     async def resolve(self, paragraph: Paragraph):
-        paragraph.content = re.sub(r'\p{Other}', ' ', paragraph.content)
-        
+        paragraph.content = re.sub(r"\p{Other}", " ", paragraph.content)
+        if paragraph.extdata and "dataset_name" in paragraph.extdata:
+            await paragraph.set_dataset_name(paragraph["dataset_name"])
+            del paragraph.extdata["dataset_name"]
+            if not paragraph.extdata:
+                paragraph.extdata = None
         try:
             if not paragraph.id:
                 self.dbsession.add(paragraph)
@@ -778,11 +801,11 @@ class SaveParagraph(PipelineStage):
         except:
             await self.dbsession.rollback()
             raise
-        
-        self.log('Saved.')
-        
+
+        self.log("Saved.")
+
         return paragraph
-    
+
 
 class FieldIncresement(PipelineStage):
     """
@@ -791,13 +814,13 @@ class FieldIncresement(PipelineStage):
     """
 
     def __init__(self, field, inc_value) -> None:
-        '''
+        """
         Args:
             field (str): Field name
                 @zhs 字段名称
             inc_value (str): Increment by, or $<field>
                 @zhs 自增的值，或以 $ 开头的另一字段名
-        '''
+        """
         super().__init__()
         self.field = field
         self.inc_value = inc_value
@@ -815,23 +838,26 @@ class OutlineFilter(PipelineStage):
     @zhs 中英文大纲序号识别
     """
 
-    chnum = '[一二三四五六七八九十首甲乙丙丁戊己庚辛壬癸]'
-    romannum = (
-        ',I,II,III,IV,V,VI,VII,VIII,IX,X,XI,XII,XIII,XIV,XV,XVI,XVII,').split(',')
+    chnum = "[一二三四五六七八九十首甲乙丙丁戊己庚辛壬癸]"
+    romannum = (",I,II,III,IV,V,VI,VII,VIII,IX,X,XI,XII,XIII,XIV,XV,XVI,XVII,").split(
+        ","
+    )
 
     def __init__(self) -> None:
         super().__init__()
-        self.nums = ['00', '00', '00']
+        self.nums = ["00", "00", "00"]
 
     def roman(self, text) -> int:
         """Decode Roman numbers"""
-        if '.' in text:
-            text = text[:text.find('.')]
-        return OutlineFilter.romannum.index(text) if text in OutlineFilter.romannum else 99
+        if "." in text:
+            text = text[: text.find(".")]
+        return (
+            OutlineFilter.romannum.index(text) if text in OutlineFilter.romannum else 99
+        )
 
     def dechnum(self, text) -> int:
         """Decode Chinese numbers"""
-        vals = [(OutlineFilter.chnum+_).find(_) for _ in text]
+        vals = [(OutlineFilter.chnum + _).find(_) for _ in text]
         if len(vals) == 1:
             if vals[0] > 10:
                 return vals[0] - 11
@@ -843,42 +869,44 @@ class OutlineFilter(PipelineStage):
             else:
                 return -1
         else:
-            return vals[0]*vals[1]+vals[2]
+            return vals[0] * vals[1] + vals[2]
 
     def check_outline(self, paragraph: Paragraph) -> str:
         """Check outline"""
-        lang, content = paragraph.lang, paragraph. content
-        outline = ''
+        lang, content = paragraph.lang, paragraph.content
+        outline = ""
 
-        if lang == 'eng':
+        if lang == "eng":
             lev, num, _ = (content + "  ").split(" ", 2)
-            if lev == '§':
-                outline = 'sect {:02}'.format(int(num[:-1]))
-            elif lev.upper() == 'CHAPTER':
-                outline = 'chap {:02}'.format(self.roman(num))
-            elif lev.upper() == 'BOOK':
-                outline = 'book {:02}'.format(self.roman(num))
-            elif lev.upper().startswith('INTRODUCTION'):
-                outline = 'book 00'
+            if lev == "§":
+                outline = "sect {:02}".format(int(num[:-1]))
+            elif lev.upper() == "CHAPTER":
+                outline = "chap {:02}".format(self.roman(num))
+            elif lev.upper() == "BOOK":
+                outline = "book {:02}".format(self.roman(num))
+            elif lev.upper().startswith("INTRODUCTION"):
+                outline = "book 00"
         else:
-            if re.match('^' + OutlineFilter.chnum + '+、', content):
-                outline = 'sect {:02}'.format(
-                    self.dechnum(content[:content.find('、')]))
-            elif re.match('^第' + OutlineFilter.chnum + '+章', content):
-                outline = 'chap {:02}'.format(
-                    self.dechnum(content[1:content.find('章')]))
-            elif re.match('^第' + OutlineFilter.chnum + '+節', content):
-                outline = 'sect {:02}'.format(
-                    self.dechnum(content[1:content.find('節')]))
-            elif re.match('^第' + OutlineFilter.chnum + '卷', content):
-                outline = 'book {:02}'.format(
-                    self.dechnum(content[1:content.find('卷')]))
-            elif re.match('^篇' + OutlineFilter.chnum, content):
-                outline = 'chap {:02}'.format(
-                    self.dechnum(content[1]))
-            elif re.match('^部' + OutlineFilter.chnum, content):
-                outline = 'book {:02}'.format(
-                    self.dechnum(content[1]))
+            if re.match("^" + OutlineFilter.chnum + "+、", content):
+                outline = "sect {:02}".format(
+                    self.dechnum(content[: content.find("、")])
+                )
+            elif re.match("^第" + OutlineFilter.chnum + "+章", content):
+                outline = "chap {:02}".format(
+                    self.dechnum(content[1 : content.find("章")])
+                )
+            elif re.match("^第" + OutlineFilter.chnum + "+節", content):
+                outline = "sect {:02}".format(
+                    self.dechnum(content[1 : content.find("節")])
+                )
+            elif re.match("^第" + OutlineFilter.chnum + "卷", content):
+                outline = "book {:02}".format(
+                    self.dechnum(content[1 : content.find("卷")])
+                )
+            elif re.match("^篇" + OutlineFilter.chnum, content):
+                outline = "chap {:02}".format(self.dechnum(content[1]))
+            elif re.match("^部" + OutlineFilter.chnum, content):
+                outline = "book {:02}".format(self.dechnum(content[1]))
 
         return outline
 
@@ -889,18 +917,18 @@ class OutlineFilter(PipelineStage):
 
         outline = self.check_outline(paragraph)
 
-        if outline and outline[5] != '-':
+        if outline and outline[5] != "-":
             # self.log(content[:20], outline)
-            if outline.startswith('book '):
-                nnums = [outline[5:], '00', '00']
-            elif outline.startswith('chap '):
-                nnums = [self.nums[0], outline[5:], '00']
+            if outline.startswith("book "):
+                nnums = [outline[5:], "00", "00"]
+            elif outline.startswith("chap "):
+                nnums = [self.nums[0], outline[5:], "00"]
             else:
                 nnums = [self.nums[0], self.nums[1], outline[5:]]
-            if '.'.join(nnums) > '.'.join(self.nums):
+            if ".".join(nnums) > ".".join(self.nums):
                 self.nums = nnums
 
-        paragraph.outline = '.'.join(self.nums)
+        paragraph.outline = ".".join(self.nums)
         return paragraph
 
 
@@ -922,10 +950,11 @@ class ConditionalAssignment(PipelineStage):
         self.conds = cond
         self.field = field
 
-    def resolve(self, paragraph: Paragraph):
+    async def resolve(self, paragraph: Paragraph):
         for cond, val in aeval(self.conds, paragraph):
             if aeval(cond, paragraph):
-                paragraph[self.field] = aeval(val, paragraph)
+                aval = aeval(val, paragraph)
+                paragraph[self.field] = aval
                 break
         return paragraph
 
@@ -934,7 +963,7 @@ class KeywordsReplacement(PipelineStage):
     """Replace keywords/tags
     @zhs 替换关键词（标签）"""
 
-    def __init__(self, from_tag, to_tag, arr='keywords') -> None:
+    def __init__(self, from_tag, to_tag, arr="keywords") -> None:
         """
         Args:
             from_tag (str): Original keyword
@@ -972,9 +1001,10 @@ class PDFUnlock(PipelineStage):
         """
         super().__init__()
         import pike
+
         buf = BytesIO()
-        pike.open(storage.open(file, 'rb')).save(buf)
-        self.data = PipelineStage.return_file('pdf', buf.getvalue())
+        pike.open(storage.open(file, "rb")).save(buf)
+        self.data = PipelineStage.return_file("pdf", buf.getvalue())
 
     async def summarize(self, result) -> dict:
         return self.data
@@ -1014,7 +1044,7 @@ class LoadNamedResult(Passthrough):
         self.name = name
 
     async def summarize(self, _) -> dict:
-        if self.name == '':
+        if self.name == "":
             return self.gctx
         return self.gctx.get(self.name)
 
@@ -1023,36 +1053,39 @@ class FilterStopWords(PipelineStage):
     """Filter stop words
     @zhs 过滤停用词
     """
-    
+
     _lang_stopwords: dict[str, set[str]] = {
         l: many_stop_words.get_stop_words(l)
-        for l in ['en', 'fr', 'de', 'ru', 'ja', 'zh']
+        for l in ["en", "fr", "de", "ru", "ja", "zh"]
     }
-    
-    _punctuations = re.compile(r'^[\u3000-\u303F\uFF00-\uFFEF\"\'{}()\[\]\\*&.?!,…:;@#!]$')
-    
+
+    _punctuations = re.compile(
+        r"^[\u3000-\u303F\uFF00-\uFFEF\"\'{}()\[\]\\*&.?!,…:;@#!]$"
+    )
+
     @staticmethod
     def get(lang) -> set:
-        if lang == 'chs':
-            return FilterStopWords._lang_stopwords['zh']
+        if lang == "chs":
+            return FilterStopWords._lang_stopwords["zh"]
         elif lang in FilterStopWords._lang_stopwords:
             return FilterStopWords._lang_stopwords[lang]
         else:
             return set()
 
-    def __init__(self, stopwords='') -> None:
+    def __init__(self, stopwords="") -> None:
         """
         Args:
             stopwords (str): 额外的停用词表，用空格分割
         """
         self.stopwords = set(stopwords.split())
         super().__init__()
-    
+
     def resolve(self, paragraph):
         paragraph.keywords = [
-            kw for kw in paragraph.keywords
-            if kw not in self.stopwords and \
-                kw not in FilterStopWords.get(paragraph.lang) and \
-                not FilterStopWords._punctuations.match(kw)
+            kw
+            for kw in paragraph.keywords
+            if kw not in self.stopwords
+            and kw not in FilterStopWords.get(paragraph.lang)
+            and not FilterStopWords._punctuations.match(kw)
         ]
         return paragraph

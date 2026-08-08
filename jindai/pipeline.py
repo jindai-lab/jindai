@@ -423,7 +423,7 @@ class PipelineStage:
             or iterable multiple objects for next stage.
         """
         return paragraph
-
+    
     async def summarize(self, result: dict) -> Dict:
         """Reduce/aggregate results from the last stage.
 
