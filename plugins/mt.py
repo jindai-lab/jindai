@@ -338,48 +338,6 @@ class GoogleTranslation(PipelineStage):
         return paragraph
 
 
-class MachineTranslation(PipelineStage):
-    """Machine Translation on Local Machine
-    @zhs 本地机器翻译"""
-
-    def __init__(self, to_lang='zhs', model='opus-mt') -> None:
-        """
-        Args:
-            to_lang (LANG):
-                Target language
-                @zhs 目标语言标识
-            model (opus-mt|mbart50_m2m):
-                Model for translation
-                @zhs 机器翻译所使用的模型 (opus-mt 较快速度, mbart50_m2m 较高准确度)
-        """
-        import easynmt
-        import opencc
-
-        super().__init__()
-        
-        self.model = easynmt.EasyNMT(model)
-
-        self.opencc = None
-        if to_lang == 'zhs':
-            to_lang = 'zh'
-        elif to_lang == 'zht':
-            to_lang = 'zh'
-            self.opencc = opencc.OpenCC('s2t')
-
-        self.to_lang = to_lang
-
-    def resolve(self, paragraph: Paragraph) -> Paragraph:
-        translated = self.model.translate(
-            paragraph.content,
-            source_lang=paragraph.lang if paragraph.lang not in (
-                'zhs', 'zht') else 'zh',
-            target_lang=self.to_lang)
-        if self.opencc:
-            translated = self.opencc.convert(translated)
-        paragraph.content = translated
-        return paragraph
-
-
 class TranslateRequest(BaseModel):
     text: str          # 待翻译文本
     from_lang: str     # 源语言，如 en / zh
