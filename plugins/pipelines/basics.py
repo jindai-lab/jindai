@@ -787,22 +787,17 @@ class SaveParagraph(PipelineStage):
 
     async def resolve(self, paragraph: Paragraph):
         paragraph.content = re.sub(r"\p{Other}", " ", paragraph.content)
-        if paragraph.extdata and "dataset_name" in paragraph.extdata:
-            await paragraph.set_dataset_name(paragraph["dataset_name"])
-            del paragraph.extdata["dataset_name"]
-            if not paragraph.extdata:
-                paragraph.extdata = None
         try:
             if not paragraph.id:
                 self.dbsession.add(paragraph)
                 await Terms.store(paragraph.keywords)
             else:
                 await self.dbsession.merge(paragraph)
-        except:
+            await self.dbsession.commit()
+        except Exception as e:
             await self.dbsession.rollback()
+            self.log_exception(e)
             raise
-
-        self.log("Saved.")
 
         return paragraph
 
