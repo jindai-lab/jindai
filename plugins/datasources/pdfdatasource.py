@@ -105,7 +105,7 @@ class PDFDataSource(DataSourceStage):
         short_line_threshold: int = 30,
         short_line_batch: int = 5,
         # OCR fallback parameters
-        ocr_fallback: bool = True,
+        ocr_fallback: bool = False,
     ) -> None:
         """Configure the PDF data source.
         
@@ -134,7 +134,7 @@ class PDFDataSource(DataSourceStage):
         self.skip_existed = skip_existed
         self.page_range = sorted(resolve_range(page_range))
         
-        print(f'File Paths: {content}')
+        self.log(f'File Paths: {content}')
         self.files = PipelineStage.parse_paths(content)
         
         # Text processing options
