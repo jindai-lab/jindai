@@ -75,11 +75,14 @@ class WordDataSource(DataSourceStage):
                 para = Paragraph(
                     lang=self.lang, 
                     content=doc,
-                    source_url=storage.relative_path(file),
+                    source=await Paragraph.resolve_source(storage.relative_path(file)),
                     pagenum=1,
+                    # TODO(legacy): dataset column is kept only for HASH partitioning.
+                    # Remove once data migration is complete.
                     dataset=dataset.id,
                     outline=''
                 )
+                await para.associate_dataset(dataset.id)
                 yield para
 
 

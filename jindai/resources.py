@@ -44,6 +44,8 @@ from .models import (
     Base,
     Dataset,
     EmbeddingPendingQueue,
+    FileDataset,
+    FileMetadata,
     History,
     Paragraph,
     QueryFilters,
@@ -936,15 +938,22 @@ class ContentManager(ResourceRegistry):
             # Get or create target dataset
             target_ds = await Dataset.get(target, auto_create=True)
 
-            # Move all paragraphs from matching datasets to target
+            # Move all file-dataset associations from matching datasets to target
             merged_count = 0
             for ds in matching_datasets:
                 stmt = (
+                    update(FileDataset)
+                    .where(FileDataset.dataset_id == ds.id)
+                    .values({"dataset_id": target_ds.id})
+                )
+                result = await session.execute(stmt)
+                # TODO(legacy): dataset column is kept only for HASH partitioning.
+                # Update the legacy dataset column on affected paragraphs to match.
+                await session.execute(
                     update(Paragraph)
                     .where(Paragraph.dataset == ds.id)
                     .values({"dataset": target_ds.id})
                 )
-                result = await session.execute(stmt)
                 merged_count += result.rowcount
 
                 # Delete the source dataset
@@ -1061,9 +1070,14 @@ class ContentManager(ResourceRegistry):
             )
             setattr(filters, column, "")
             query = await Paragraph.build_query(filters)
-            col_attr = getattr(
-                Paragraph, "source_url" if column == "sources" else column
-            )
+            if column == "sources":
+                # Source filtering now goes through FileMetadata
+                col_attr = FileMetadata.path
+                query = query.join(
+                    FileMetadata, Paragraph.source == FileMetadata.id
+                )
+            else:
+                col_attr = getattr(Paragraph, column)
             query = query.with_only_columns(
                 col_attr.label("value"), func.count(1).label("count")
             ).group_by(col_attr)

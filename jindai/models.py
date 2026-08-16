@@ -105,6 +105,49 @@ class Base(MBase):
         UUID(as_uuid=True), primary_key=True, default=uuid.uuid4, comment="Primary Key ID"
     )
 
+    def __getitem__(self, key: str) -> Any:
+        """Get attribute or extdata value.
+
+        Args:
+            key: Field name.
+
+        Returns:
+            Field value or extdata value.
+        """
+        if hasattr(self, key):
+            return getattr(self, key)
+        elif hasattr(self, 'extdata'):
+            if self.extdata is None:
+                self.extdata = {}
+            return self.extdata.get(key)
+        else:
+            raise KeyError()
+
+    def __setitem__(self, key: str, val: Any) -> None:
+        """Set attribute or extdata value.
+
+        Args:
+            key: Field name.
+            val: Value to set.
+        """
+        if hasattr(self, key):
+            setattr(self, key, val)
+        elif hasattr(self, 'extdata'):
+            if self.extdata is None:
+                self.extdata = {}
+            self.extdata[key] = val
+        else:
+            raise KeyError()
+
+    def __delitem__(self, key: str) -> None:
+        """Delete extdata key.
+
+        Args:
+            key: Key to delete from extdata.
+        """
+        if hasattr(self, 'extdata') and key in self.extdata:
+            del self.extdata[key]
+
     def as_dict(self) -> dict:
         """Convert model instance to dictionary.
 
@@ -190,11 +233,6 @@ class Dataset(Base):
     name: Mapped[str] = mapped_column(String(128), nullable=False, comment="Dataset name")
     tags: Mapped[List[str] | None] = mapped_column(ARRAY(Text), comment="Tag list")
 
-    # Relationship: One dataset has many paragraphs
-    paragraphs: Mapped[List["Paragraph"]] = relationship(
-        "Paragraph", back_populates="dataset_obj", cascade="all, delete-orphan"
-    )
-
     @staticmethod
     async def get(name: str, auto_create: bool = True) -> "Dataset":
         """Get or create a dataset by name.
@@ -220,7 +258,7 @@ class Dataset(Base):
         return ds
 
     async def rename_dataset(self, new_name: str) -> Optional[uuid.UUID]:
-        """Rename dataset and update all related paragraphs.
+        """Rename dataset and update all related file-dataset associations.
 
         Args:
             new_name: New dataset name.
@@ -231,17 +269,18 @@ class Dataset(Base):
         if self.name == new_name:
             return None
         ds = await Dataset.get(new_name)
-        if ds:
-            stmt = (
-                update(Paragraph)
-                .where(Paragraph.dataset == self.id)
-                .values({"dataset": ds.id})
-            )
-            async with get_db_session() as session:
+        async with get_db_session() as session:
+            if ds:
+                # Re-associate all files from this dataset to the target dataset
+                stmt = (
+                    update(FileDataset)
+                    .where(FileDataset.dataset_id == self.id)
+                    .values({"dataset_id": ds.id})
+                )
                 await session.execute(stmt)
                 await session.delete(self)
-        else:
-            self.name = new_name
+            else:
+                self.name = new_name
         return ds.id if ds else self.id
 
     @staticmethod
@@ -402,6 +441,13 @@ class Paragraph(Base):
         },
     )
 
+    source: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("public.file_metadata.id"),
+        nullable=True,
+        # primary_key=True,
+        comment="Related File ID",
+    )
     source_url: Mapped[str | None] = mapped_column(String(1024), comment="Source URL")
     source_page: Mapped[int | None] = mapped_column(
         Integer, comment="Source file page number (e.g., PDF page)"
@@ -430,8 +476,13 @@ class Paragraph(Base):
     )
 
     dataset_obj: Mapped["Dataset"] = relationship(
-        "Dataset", back_populates="paragraphs", lazy="joined"
+        "Dataset", lazy="joined"
     )
+
+    source_obj: Mapped["FileMetadata"] = relationship(
+        "FileMetadata", lazy="joined"
+    )
+    
     text_embeddings: Mapped[List["TextEmbeddings"]] = relationship(
         "TextEmbeddings", back_populates="paragraph", cascade="all, delete-orphan"
     )
@@ -465,12 +516,87 @@ class Paragraph(Base):
         return val
 
     async def set_dataset_name(self, new_name: str) -> None:
-        """Set dataset by name.
+        """Associate the paragraph's source file with a dataset by name.
+
+        Creates/updates the File <-> Dataset association for this paragraph's
+        source file.
 
         Args:
             new_name: New dataset name.
         """
-        self.dataset = (await Dataset.get(new_name)).id
+        ds = await Dataset.get(new_name)
+        if not self.source:
+            return
+        async with get_db_session() as session:
+            existing = (
+                await session.execute(
+                    select(FileDataset).filter(
+                        FileDataset.file_id == self.source,
+                        FileDataset.dataset_id == ds.id,
+                    )
+                )
+            ).scalar_one_or_none()
+            if existing is None:
+                session.add(FileDataset(file_id=self.source, dataset_id=ds.id))
+        # TODO(legacy): dataset column is kept only for HASH partitioning.
+        # Remove once data migration is complete.
+        self.dataset = ds.id
+
+    @staticmethod
+    async def resolve_source(source_url: str) -> Optional[uuid.UUID]:
+        """Resolve a source URL/path to a FileMetadata UUID.
+
+        Args:
+            source_url: Source file path or URL.
+
+        Returns:
+            FileMetadata ID if found, else None.
+        """
+        if not source_url:
+            return None
+        async with get_db_session() as session:
+            fm = (
+                await session.execute(
+                    select(FileMetadata).filter(FileMetadata.path == source_url)
+                )
+            ).scalar_one_or_none()
+            return fm.id if fm else None
+
+    async def associate_dataset(self, dataset_id: uuid.UUID) -> None:
+        """Associate this paragraph's source file with a dataset.
+
+        Args:
+            dataset_id: Dataset ID.
+        """
+        if not self.source:
+            return
+        async with get_db_session() as session:
+            existing = (
+                await session.execute(
+                    select(FileDataset).filter(
+                        FileDataset.file_id == self.source,
+                        FileDataset.dataset_id == dataset_id,
+                    )
+                )
+            ).scalar_one_or_none()
+            if existing is None:
+                session.add(FileDataset(file_id=self.source, dataset_id=dataset_id))
+
+    async def dataset_names(self) -> List[str]:
+        """Get dataset names associated with this paragraph's source file.
+
+        Returns:
+            List of dataset names.
+        """
+        if not self.source:
+            return []
+        async with get_db_session() as session:
+            result = await session.execute(
+                select(Dataset.name)
+                .join(FileDataset, FileDataset.dataset_id == Dataset.id)
+                .filter(FileDataset.file_id == self.source)
+            )
+            return list(result.scalars())
 
     @staticmethod
     def from_dict(data: dict, ignored_fields: list = None, **kwargs) -> "Paragraph":
@@ -499,53 +625,18 @@ class Paragraph(Base):
                 p.extdata[k] = v
         return p
 
-    def __getitem__(self, key: str) -> Any:
-        """Get attribute or extdata value.
-
-        Args:
-            key: Field name.
-
-        Returns:
-            Field value or extdata value.
-        """
-        if hasattr(self, key):
-            return getattr(self, key)
-        else:
-            if self.extdata is None:
-                self.extdata = {}
-            return self.extdata.get(key)
-
-    def __setitem__(self, key: str, val: Any) -> None:
-        """Set attribute or extdata value.
-
-        Args:
-            key: Field name.
-            val: Value to set.
-        """
-        if hasattr(self, key):
-            setattr(self, key, val)
-        else:
-            if self.extdata is None:
-                self.extdata = {}
-            self.extdata[key] = val
-
-    def __delitem__(self, key: str) -> None:
-        """Delete extdata key.
-
-        Args:
-            key: Key to delete from extdata.
-        """
-        if key in self.extdata:
-            del self.extdata[key]
-
     def as_dict(self) -> dict:
-        """Convert to dictionary with dataset name.
+        """Convert to dictionary with dataset name and source path.
 
         Returns:
-            Dictionary with all fields including dataset_name.
+            Dictionary with all fields including dataset_name and source_path.
         """
         data = super().as_dict()
+        # TODO(legacy): dataset_name is derived from the legacy dataset column
+        # for display only. It does not participate in business logic.
         data["dataset_name"] = self.dataset_obj.name if self.dataset_obj else None
+        # source_path is derived from the FileMetadata association (canonical source).
+        data["source_path"] = self.source_obj.path if self.source_obj else None
         return data
 
     @staticmethod
@@ -712,22 +803,30 @@ class Paragraph(Base):
             filters.append(Paragraph.id.in_(ids))
 
         # Dataset Filters (Optimized logic)
+        # Filter paragraphs through the source file association chain:
+        # paragraph.source -> file_metadata -> file_dataset -> dataset
         if datasets := query_filters.datasets:
-            dataset_filters = [Dataset.name.in_(datasets)]
+            dataset_name_filters = [Dataset.name.in_(datasets)]
             for dataset_prefix in datasets:
-                dataset_filters.append(Dataset.name.ilike(f"{dataset_prefix}--%"))
+                dataset_name_filters.append(Dataset.name.ilike(f"{dataset_prefix}--%"))
 
-            datasets = select(Dataset.id).where(or_(*dataset_filters))
-            async with get_db_session() as session:
-                dataset_ids = await session.execute(datasets)
-            filters.append(Paragraph.dataset.in_(dataset_ids.scalars()))
+            # Find file IDs associated with the matching datasets
+            file_ids = (
+                select(FileDataset.file_id)
+                .join(Dataset, Dataset.id == FileDataset.dataset_id)
+                .where(or_(*dataset_name_filters))
+            )
+            # Filter paragraphs whose source file belongs to one of the datasets
+            filters.append(Paragraph.source.in_(file_ids))
 
-        # Source URL Filters
+        # Source File Filters (via FileMetadata)
+        # Filter paragraphs whose source file matches the given paths
         if sources := query_filters.sources:
-            source_filters = [Paragraph.source_url.in_(sources)]
+            source_filters = [FileMetadata.path.in_(sources)]
             for source in sources:
-                source_filters.append(Paragraph.source_url.ilike(f"{source}%"))
-            filters.append(or_(*source_filters))
+                source_filters.append(FileMetadata.path.ilike(f"{source}%"))
+            file_ids = select(FileMetadata.id).where(or_(*source_filters))
+            filters.append(Paragraph.source.in_(file_ids))
 
         if source_page := query_filters.sourcePage:
             filters.append(Paragraph.source_page == source_page)
@@ -776,6 +875,9 @@ class Paragraph(Base):
 
         # Vector Search Join
         if query_embedding is not None:
+            # TODO(legacy): TextEmbeddings.dataset is part of its composite primary
+            # key and is used for chunking association. It must stay in sync with
+            # Paragraph.dataset until the schema is migrated.
             query = (
                 query.join(
                     TextEmbeddings,
@@ -816,9 +918,17 @@ class Paragraph(Base):
 
         # Sorting
         if sort_by := query_filters.sort:
-            if sort_by == 'source': sort_by += '_url,source_page'
-            sorts = Paragraph.parse_sort_string(sort_by)
-            query = query.order_by(*sorts)
+            if sort_by == 'source':
+                # Sort by source file path via FileMetadata, then source_page
+                query = query.outerjoin(
+                    FileMetadata, Paragraph.source == FileMetadata.id
+                )
+                # Use FileMetadata.path for sorting
+                sorts = [FileMetadata.path, Paragraph.source_page]
+                query = query.order_by(*sorts)
+            else:
+                sorts = Paragraph.parse_sort_string(sort_by)
+                query = query.order_by(*sorts)
 
         # Pagination
         if offset := query_filters.offset:
@@ -904,11 +1014,19 @@ class EmbeddingPendingQueue(Base):
     __tablename__ = 'embedding_pending_queue'
 
     # Define composite primary key
-    id: Mapped[uuid.UUID] = mapped_column(UUID, primary_key=True)
     dataset: Mapped[uuid.UUID] = mapped_column(UUID, primary_key=True)
 
     # Record creation time for debugging delays or ordered processing
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class FileDataset(MBase):
+    """File Metadata <-> Dataset Relationship"""
+    __tablename__ = 'file_dataset'
+    
+    dataset_id: Mapped[uuid.UUID] = mapped_column(UUID, ForeignKey("dataset.id", ondelete="CASCADE"),
+            primary_key=True)
+    file_id: Mapped[uuid.UUID] = mapped_column(UUID, ForeignKey("file_metadata.id", ondelete="CASCADE"), primary_key=True)
 
 
 class FileMetadata(Base):
@@ -918,20 +1036,14 @@ class FileMetadata(Base):
     """
 
     __tablename__ = "file_metadata"
-
+    
+    
     # Original filename (with extension)
-    filename: Mapped[str] = mapped_column(
-        String(512),
+    path: Mapped[str] = mapped_column(
+        String(1024),
         nullable=False,
-        primary_key=True,
+        unique=True,
         doc="Original filename as uploaded / stored"
-    )
-
-    # Primary key – using SHA-1 hash as natural/business key (common in content-addressable systems)
-    sha1: Mapped[str] = mapped_column(
-        String(40),          # SHA-1 is exactly 40 hex characters
-        index=True,
-        doc="SHA-1 hash of the file content (hex digest)"
     )
 
     # File extension (normalized, lowercase, without dot)
@@ -949,31 +1061,13 @@ class FileMetadata(Base):
         doc="Size of the file in bytes"
     )
 
-    # For PDFs mostly – number of pages
-    page_count: Mapped[Optional[int]] = mapped_column(
-        Integer,
-        nullable=True,
-        doc="Number of pages (mainly for PDFs & images with multiple frames)"
-    )
-
     # Flexible metadata stored in JSONB (very powerful with PostgreSQL)
     extdata: Mapped[dict] = mapped_column(
         JSONB,
         nullable=False,
         default=dict,
         server_default="{}",
-        doc="""Flexible JSON metadata – examples:
-        {
-          "title": "...",
-          "author": "...",
-          "keywords": ["finance", "2024"],
-          "ocr_text": "...",
-          "has_form_fields": true,
-          "color_space": "CMYK",
-          "embedded_fonts": 12,
-          "is_scanned": true,
-          "scan_dpi": 300
-        }"""
+        doc="""Flexible JSON metadata"""
     )
 
     # Audit timestamps
@@ -991,18 +1085,9 @@ class FileMetadata(Base):
         onupdate=func.now(),
         index=True
     )
-
-    # Optional: if you want automatic "version" on update (incrementing counter)
-    version: Mapped[int] = mapped_column(
-        Integer,
-        nullable=False,
-        server_default="1",
-        doc="Incremented on each update (optimistic locking possible)",
-        onupdate=text("version + 1")
-    )
-
+    
     def __repr__(self):
-        return f"<File {self.filename}  sha1:{self.sha1[:12]}…  {self.page_count or '?'} pages>"
+        return f"<FileMeta {self.filename}>"
 
     @property
     def is_pdf(self) -> bool:

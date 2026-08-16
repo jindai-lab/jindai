@@ -28,8 +28,8 @@ from watchdog.events import FileSystemEventHandler
 from watchdog.observers import Observer
 
 from .config import config
-from .models import (Dataset, EmbeddingPendingQueue, FileMetadata, Paragraph,
-                     QueryFilters, TaskDBO, Terms, TextEmbeddings,
+from .models import (Dataset, EmbeddingPendingQueue, FileDataset, FileMetadata,
+                     Paragraph, QueryFilters, TaskDBO, Terms, TextEmbeddings,
                      get_current_admin, get_db_session)
 from .pdfutils import get_pdf_page_count
 from .storage import storage
@@ -52,7 +52,7 @@ class MaintenanceManager:
         """Synchronize data sources by checking file existence.
 
         Marks paragraphs as offline if their source files no longer exist,
-        and removes datasets with no associated paragraphs.
+        and removes datasets with no associated files.
 
         Args:
             dataset: Optional dataset name to filter.
@@ -61,52 +61,50 @@ class MaintenanceManager:
         assert dataset or folder, "Must specify at least one condition"
 
         async with get_db_session() as session:
-            query = select(Paragraph)
+            query = (
+                select(FileMetadata)
+                .join(Paragraph, Paragraph.source == FileMetadata.id)
+            )
             if folder:
-                query = query.filter(Paragraph.source_url.startswith(folder))
+                query = query.filter(FileMetadata.path.startswith(folder))
             if dataset:
-                query = query.filter(
-                    Paragraph.dataset.in_(
-                        select(Dataset)
-                        .filter(
-                            (Dataset.name == dataset)
-                            | Dataset.name.startswith(dataset + "--")
-                        )
-                        .with_only_columns(Dataset.id)
-                    )
+                query = query.join(
+                    FileDataset, FileDataset.file_id == FileMetadata.id
+                ).join(
+                    Dataset, Dataset.id == FileDataset.dataset_id
+                ).filter(
+                    (Dataset.name == dataset)
+                    | Dataset.name.startswith(dataset + "--")
                 )
 
-            query = query.distinct(Paragraph.source_url).with_only_columns(
-                Paragraph.source_url
+            query = query.distinct(FileMetadata.path).with_only_columns(
+                FileMetadata.path, FileMetadata.id
             )
-            sources: list[str] = [_ for _, in await session.execute(query)]
-            datasets = []
+            rows = (await session.execute(query)).all()
+            dataset_ids = set()
 
-            for source in sources:
-                if '://' in source:
+            for path, file_id in rows:
+                if '://' in path:
                     continue
-                if '#' in source:
-                    source = source[:source.find('#')]
-                joined = storage.safe_join(source)
+                if '#' in path:
+                    path = path[:path.find('#')]
+                joined = storage.safe_join(path)
                 if not os.path.exists(joined):
                     logging.info(
-                        f"{source} does not exist any more. Mark related paragraphs."
+                        f"{path} does not exist any more. Mark related paragraphs."
                     )
-                    datasets.extend(
-                        (
-                            await session.execute(
-                                select(Paragraph)
-                                .filter(Paragraph.source_url == source)
-                                .distinct(Paragraph.dataset)
-                                .with_only_columns(Paragraph.dataset)
+                    # Collect datasets associated with this file
+                    fd_ids = (
+                        await session.execute(
+                            select(FileDataset.dataset_id).filter(
+                                FileDataset.file_id == file_id
                             )
                         )
-                        .scalars()
-                        .all()
-                    )
+                    ).scalars().all()
+                    dataset_ids.update(fd_ids)
                     await session.execute(
                         update(Paragraph)
-                        .filter(Paragraph.source_url == source)
+                        .filter(Paragraph.source == file_id)
                         .values(
                             extdata=Paragraph.extdata.op("||")(
                                 func.jsonb_build_object("offline", True)
@@ -115,21 +113,21 @@ class MaintenanceManager:
                     )
 
             stmt = delete(Dataset).filter(
-                ~exists().where(Paragraph.dataset == Dataset.id),
-                Dataset.id.in_(list(set(datasets))),
+                ~exists().where(FileDataset.dataset_id == Dataset.id),
+                Dataset.id.in_(list(dataset_ids)),
             )
             await session.execute(stmt)
 
     async def cleanup_unused_datasets(self) -> None:
         """Clean up unused datasets.
 
-        Deletes all datasets that have no associated paragraphs,
+        Deletes all datasets that have no associated files,
         except for the default dataset with name='' (empty string).
         """
         async with get_db_session() as session:
-            # Find datasets with no paragraphs, excluding the default dataset with name=''
+            # Find datasets with no associated files, excluding the default dataset with name=''
             stmt = delete(Dataset).filter(
-                ~exists().where(Paragraph.dataset == Dataset.id),
+                ~exists().where(FileDataset.dataset_id == Dataset.id),
                 Dataset.name != ''  # Exclude default dataset
             )
             result = await session.execute(stmt)
@@ -265,15 +263,16 @@ class MaintenanceManager:
         """Update author field from URL using regex pattern.
 
         Args:
-            pattern: Regex pattern to extract author from source_url.
+            pattern: Regex pattern to extract author from the source file path.
         """
         async with get_db_session() as session:
             sql = text(
                 """
                 WITH extracted_data AS (
-                    SELECT id, substring(source_url FROM :p) AS extracted_author
-                    FROM paragraph
-                    WHERE source_url ~* :p
+                    SELECT p.id, substring(fm.path FROM :p) AS extracted_author
+                    FROM paragraph p
+                    JOIN file_metadata fm ON p.source = fm.id
+                    WHERE fm.path ~* :p
                 )
                 UPDATE paragraph
                 SET author = extracted_data.extracted_author
@@ -293,21 +292,20 @@ class MaintenanceManager:
             dataset: Dataset name to filter.
         """
         async with get_db_session() as session:
-            dataset_id_subquery = (
-                select(Dataset.id).where(Dataset.name == dataset).scalar_subquery()
-            )
-
             reg = r"(18|19|20)\d{2}"
 
             q = (
                 select(
                     Paragraph.id,
                     (
-                        func.regexp_matches(Paragraph.source_url, reg)[1] + "-01-01"
+                        func.regexp_matches(FileMetadata.path, reg)[1] + "-01-01"
                     ).label("pdate_str"),
                 )
-                .where(Paragraph.dataset == dataset_id_subquery)
-                .where(Paragraph.source_url.op("~*")(reg))
+                .join(FileMetadata, Paragraph.source == FileMetadata.id)
+                .join(FileDataset, FileDataset.file_id == FileMetadata.id)
+                .join(Dataset, Dataset.id == FileDataset.dataset_id)
+                .where(Dataset.name == dataset)
+                .where(FileMetadata.path.op("~*")(reg))
                 .cte("q")
             )
 
@@ -319,21 +317,39 @@ class MaintenanceManager:
             )
 
             await session.execute(stmt)
+            
+    def _build_metadata(self, path: str):
+        if '://' in path:
+            return FileMetadata(
+                path=path,
+                extension='',
+                size_bytes=0,
+            )
+        
+        # Decide what to store as the primary key "filename"
+        dbpath = storage.relative_path(path)
+        if not os.path.exists(path):
+            return FileMetadata(
+                path=dbpath,
+                extension='',
+                size_bytes=0,
+                )
 
-    def _compute_sha1(self, file_path: str) -> str:
-        """Compute SHA-1 hash of a file in chunks for memory efficiency.
+        stat = os.stat(path)
+        size_bytes = stat.st_size
 
-        Args:
-            file_path: Path to the file.
+        # Extension (lowercase, no dot)
+        ext = Path(path).suffix.lower().lstrip(".")
+        
+        # Build model instance (all other fields are auto-managed by SQLAlchemy)
+        metadata_obj = FileMetadata(
+            path=dbpath,
+            extension=ext,
+            size_bytes=size_bytes,
+            extdata={},
+        )
 
-        Returns:
-            Hexadecimal SHA-1 hash string.
-        """
-        sha1 = hashlib.sha1()
-        with open(file_path, "rb") as f:
-            while chunk := f.read(16 << 10):
-                sha1.update(chunk)
-        return sha1.hexdigest()
+        return metadata_obj
 
     def _scan_storage(self, storage_root: str):
         """Scan storage directory and yield file metadata objects.
@@ -351,35 +367,9 @@ class MaintenanceManager:
             # dirs[:] = [d for d in dirs if not d.startswith(".")]
 
             for filename in files:
-                full_path = os.path.join(root, filename)
-
-                # Decide what to store as the primary key "filename"
-                db_filename = storage.relative_path(full_path)
-
                 try:
-                    stat = os.stat(full_path)
-                    size_bytes = stat.st_size
-
-                    sha1 = self._compute_sha1(full_path)
-
-                    # Extension (lowercase, no dot)
-                    ext = Path(filename).suffix.lower().lstrip(".")
-
-                    # PDF page count (only when relevant)
-                    page_count = get_pdf_page_count(full_path) if ext == "pdf" else None
-
-                    # Build model instance (all other fields are auto-managed by SQLAlchemy)
-                    metadata_obj = FileMetadata(
-                        filename=db_filename,
-                        sha1=sha1,
-                        extension=ext,
-                        size_bytes=size_bytes,
-                        page_count=page_count,
-                        extdata={},
-                    )
-
-                    yield metadata_obj
-
+                    full_path = os.path.join(root, filename)
+                    yield self._build_metadata(full_path)
                 except PermissionError:
                     print(f"   ⏭️  Permission denied: {full_path}")
                 except Exception as e:
@@ -418,22 +408,14 @@ class MaintenanceManager:
                         stat = path.stat()
                         size_bytes = stat.st_size
 
-                        # Compute SHA-1 (same as your initial scanner)
-                        sha1 = self._compute_sha1(path)
-
                         ext = path.suffix.lower().lstrip('.') or ''
 
                         # Optional: page_count for PDFs (reuse your logic)
                         page_count = None
-                        if ext == 'pdf':
-                            page_count = self._get_pdf_page_count(path)  # implement if needed
-
                         metadata = FileMetadata(
-                            filename=relative_path,     # PK = relative path
-                            sha1=sha1,
+                            path=relative_path,     # PK = relative path
                             extension=ext,
                             size_bytes=size_bytes,
-                            page_count=page_count,
                             extdata={},                 # can enrich later
                         )
 
@@ -455,6 +437,17 @@ class MaintenanceManager:
                     session.close()
 
         return StorageHandler()
+    
+    async def sync_source_urls(self):
+        """[LEGACY] One-time migration to backfill FileMetadata.
+
+        This method is kept only for backward compatibility during data migration.
+        It should be removed once the migration is complete, as the source field
+        is now the canonical source of file association.
+        """
+        # Legacy migration - no longer needed as source field is canonical.
+        # The original implementation backfilled FileMetadata from source_url.
+        pass
 
     async def populate_file_metadata(self) -> None:
         """Populate file metadata table by scanning storage directory.

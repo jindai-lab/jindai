@@ -7,7 +7,7 @@ plain text files, file patterns, and structured text formats like EndNote.
 import codecs
 from typing import Iterator, List, Optional
 
-from jindai.models import Paragraph
+from jindai.models import Dataset, Paragraph
 from jindai.pipeline import DataSourceStage, PipelineStage
 from jindai.storage import storage
 
@@ -72,17 +72,22 @@ class TextDataSource(DataSourceStage):
             Paragraph objects, one for each line in the files.
             Each paragraph contains:
                 - content: The line text
-                - source_url: Path to the source file
+                - source: Source file ID
                 - dataset: Target dataset ID
                 - lang: Language code
                 - outline: Line number (zero-padded)
         """
+        dataset = await Dataset.get(self.name)
         for path in await self.files:
+            source_path = path if '://' in path else storage.relative_path(path)
+            source = await Paragraph.resolve_source(source_path)
             for i, line in enumerate(storage.open(path)):
                 yield Paragraph(
                     content=codecs.decode(line),
-                    source_url=path if '://' in path else storage.relative_path(path),
-                    dataset=self.name, 
+                    source=source,
+                    # TODO(legacy): dataset column is kept only for HASH partitioning.
+                    # Remove once data migration is complete.
+                    dataset=dataset.id, 
                     lang=self.lang, 
                     outline=f'{i+1:06d}'
                 )

@@ -246,8 +246,9 @@ class WebPageListingDataSource(DataSourceStage):
             self.log_exception(f'Error while reading from {url}', ose)
             data = b''
         return Paragraph(
-            source_url=url, 
             extdata={'html': data.decode('utf-8', errors='ignore')}, 
+            # TODO(legacy): dataset column is kept only for HASH partitioning.
+            # Remove once data migration is complete.
             dataset=self.dataset, 
             lang=self.lang
         )
@@ -277,7 +278,8 @@ class WebPageListingDataSource(DataSourceStage):
             Paragraph with extracted content, title, date, and tags.
         """
         para.pdate = datetime.datetime.now()
-        para.source_url = url
+        # TODO(legacy): dataset column is kept only for HASH partitioning.
+        # Remove once data migration is complete.
         para.dataset = self.dataset
         para.lang = self.lang
         para.content = self.get_text(b)
@@ -523,13 +525,15 @@ class ExtractHTMLParagraphs(PipelineStage):
             para = Paragraph(
                 lang=paragraph.lang,
                 content='',
-                source_url=paragraph.source_url,
+                source=paragraph.source,
                 pagenum=1,
+                # TODO(legacy): dataset column is kept only for HASH partitioning.
+                # Remove once data migration is complete.
                 dataset=paragraph.dataset,
                 outline=paragraph.outline,
                 keywords=[],
                 extdata={'html': str(html_para)},
             )
             self._resolve_assignments(html_para, para)
-            self.log('Extract para at', para.source_url)
+            self.log('Extract para from', para.source)
             yield para

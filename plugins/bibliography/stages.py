@@ -70,8 +70,8 @@ class BibItemSave(PipelineStage):
                         existing = await BibItem.get_by_catalog(self.dbsession, library_catalog, call_number)
                 
                 # Try URL if no DOI match
-                if existing is None and paragraph.source_url:
-                    existing = await BibItem.get_by_url(self.dbsession, paragraph.source_url)
+                if existing is None and paragraph.extdata and paragraph.extdata.get("url"):
+                    existing = await BibItem.get_by_url(self.dbsession, paragraph.extdata["url"])
             
             if existing:
                 # Update existing BibItem
