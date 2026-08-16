@@ -18,7 +18,7 @@ import regex as re
 from sqlalchemy import func, select
 
 from jindai.storage import storage
-from jindai.models import Dataset, Paragraph, get_db_session
+from jindai.models import Dataset, FileMetadata, Paragraph, get_db_session
 from jindai.pipeline import DataSourceStage, PipelineStage
 from jindai.pdfutils import open_pdf, render_pdf_page
 from jindai.ocrutils import PaddleOCRClient
@@ -179,12 +179,15 @@ class PDFDataSource(DataSourceStage):
             async with get_db_session() as session:
                 result = await session.execute(
                     select(
-                        Paragraph.source_url,
+                        FileMetadata.path,
                         func.max(Paragraph.source_page).label("max_page"),
-                    ).where(Paragraph.source_url.in_(files)).group_by(Paragraph.source_url)
+                    )
+                    .join(FileMetadata, Paragraph.source == FileMetadata.id)
+                    .where(FileMetadata.path.in_(files))
+                    .group_by(FileMetadata.path)
                 )
                 existent = {
-                    d["source_url"]: d["max_page"]
+                    d["path"]: d["max_page"]
                     for d in result.mappings()
                 }
         else:
@@ -273,11 +276,14 @@ class PDFDataSource(DataSourceStage):
                     para = Paragraph(
                         lang=lang,
                         content=content,
-                        source_url=filepath,
+                        source=await Paragraph.resolve_source(filepath),
                         source_page=page,
                         pagenum=label or str(page + 1),
+                        # TODO(legacy): dataset column is kept only for HASH partitioning.
+                        # Remove once data migration is complete.
                         dataset=dataset.id,
                     )
+                    await para.associate_dataset(dataset.id)
 
                     # Apply text cleaning
                     if text_cleaner:

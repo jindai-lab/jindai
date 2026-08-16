@@ -501,11 +501,11 @@ class CrossPageReparagraphizer(PipelineStage):
         
         return False
     
-    def _flush_paragraph(self, source_url: str, base_dataset) -> Optional[Paragraph]:
+    def _flush_paragraph(self, source, base_dataset) -> Optional[Paragraph]:
         """Flush accumulated lines as a paragraph.
         
         Args:
-            source_url: Source file path.
+            source: Source file ID.
             base_dataset: Base dataset for the paragraph.
             
         Returns:
@@ -529,9 +529,11 @@ class CrossPageReparagraphizer(PipelineStage):
         # Create paragraph
         para = Paragraph(
             content=content,
-            source_url=source_url,
+            source=source,
             source_page=first_page_num,
             pagenum=first_label or str(first_page_num + 1),
+            # TODO(legacy): dataset column is kept only for HASH partitioning.
+            # Remove once data migration is complete.
             dataset=base_dataset,
         )
         
@@ -587,7 +589,7 @@ class CrossPageReparagraphizer(PipelineStage):
         page_num: int, 
         page_label: str, 
         content: str,
-        source_url: str,
+        source,
         base_dataset
     ) -> Iterator[Paragraph]:
         """Process a single page and yield paragraphs.
@@ -602,7 +604,7 @@ class CrossPageReparagraphizer(PipelineStage):
             page_num: Page number (0-indexed).
             page_label: Page label (e.g., "i", "1", "A-1").
             content: Page text content.
-            source_url: Source file path.
+            source: Source file ID.
             base_dataset: Base dataset for paragraphs.
             
         Yields:
@@ -634,7 +636,7 @@ class CrossPageReparagraphizer(PipelineStage):
             
             if is_boundary and self._current_paragraph_lines:
                 # Flush current paragraph
-                para = self._flush_paragraph(source_url, base_dataset)
+                para = self._flush_paragraph(source, base_dataset)
                 if para:
                     yield para
             
@@ -650,7 +652,7 @@ class CrossPageReparagraphizer(PipelineStage):
             # Check if we have enough short lines to merge
             if self._short_line_count >= self.short_line_batch:
                 # Flush as paragraph
-                para = self._flush_paragraph(source_url, base_dataset)
+                para = self._flush_paragraph(source, base_dataset)
                 if para:
                     yield para
             
@@ -665,25 +667,27 @@ class CrossPageReparagraphizer(PipelineStage):
                     if len(chunk) >= self.min_paragraph_length:
                         yield Paragraph(
                             content=chunk,
-                            source_url=source_url,
+                            source=source,
                             source_page=page_num,
                             pagenum=page_label or str(page_num + 1),
+                            # TODO(legacy): dataset column is kept only for HASH partitioning.
+                            # Remove once data migration is complete.
                             dataset=base_dataset,
                         )
         
         self._last_page_num = page_num
     
-    def finalize(self, source_url: str, base_dataset) -> Iterator[Paragraph]:
+    def finalize(self, source, base_dataset) -> Iterator[Paragraph]:
         """Flush any remaining buffered content.
         
         Args:
-            source_url: Source file path.
+            source: Source file ID.
             base_dataset: Base dataset for paragraphs.
             
         Yields:
             Remaining Paragraph objects.
         """
-        para = self._flush_paragraph(source_url, base_dataset)
+        para = self._flush_paragraph(source, base_dataset)
         if para:
             yield para
     
@@ -712,7 +716,9 @@ class CrossPageReparagraphizer(PipelineStage):
             Tuples of (result, next_stage).
         """
         # Get source info from paragraph
-        source_url = paragraph.source_url or ''
+        source = paragraph.source
+        # TODO(legacy): dataset column is kept only for HASH partitioning.
+        # Remove once data migration is complete.
         base_dataset = paragraph.dataset
         
         # Process page content
@@ -720,11 +726,11 @@ class CrossPageReparagraphizer(PipelineStage):
         page_label = paragraph.pagenum or str(page_num + 1)
         
         for result in self.process_page(
-            page_num, page_label, paragraph.content, source_url, base_dataset
+            page_num, page_label, paragraph.content, source, base_dataset
         ):
             yield result, self.next
         
         # Check if we're at the end (no more paragraphs from same source)
         # This is a simplification - in practice, you'd need to track sources
-        for result in self.finalize(source_url, base_dataset):
+        for result in self.finalize(source, base_dataset):
             yield result, self.next

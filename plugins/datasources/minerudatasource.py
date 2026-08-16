@@ -411,8 +411,12 @@ class MinerUDataSource(DataSourceStage):
                 
                 # Parse markdown content into paragraphs
                 source_url = storage.relative_path(path) if hasattr(storage, 'relative_path') else str(path)
+                source = await Paragraph.resolve_source(source_url)
                 for para in self._parse_markdown_to_sections(md_content):
-                    # Ensure dataset is set correctly
+                    # Ensure source and dataset are set correctly
+                    para.source = source
+                    # TODO(legacy): dataset column is kept only for HASH partitioning.
+                    # Remove once data migration is complete.
                     para.dataset = dataset.id
-                    para.source_url = source_url
+                    await para.associate_dataset(dataset.id)
                     yield para

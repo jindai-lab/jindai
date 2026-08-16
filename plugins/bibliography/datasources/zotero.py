@@ -336,7 +336,6 @@ class ZoteroDataSource(DataSourceStage):
             pdate=date,
             outline=title,
             content=abstract or "",
-            source_url=url,
             extdata=extdata,
         )
         
@@ -418,6 +417,8 @@ class ZoteroDataSource(DataSourceStage):
             
             # Set dataset and yield
             for paragraph in paragraphs:
+                # TODO(legacy): dataset column is kept only for HASH partitioning.
+                # Remove once data migration is complete.
                 paragraph.dataset = ds.id
                 yield paragraph
             

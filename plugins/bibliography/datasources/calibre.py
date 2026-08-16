@@ -15,7 +15,7 @@ from sqlalchemy import distinct, select, update, func, create_engine
 from sqlalchemy.orm import Session
 
 from jindai.storage import storage
-from jindai.models import Dataset, Paragraph, get_db_session
+from jindai.models import Dataset, FileMetadata, Paragraph, get_db_session
 from jindai.pipeline import DataSourceStage, PipelineStage
 
 from .calibre_models import (
@@ -218,12 +218,13 @@ class CalibreDataSource(DataSourceStage):
         async with get_db_session() as session:
         
             if self.scan_for_moved:
-                # Build mapping of book_id -> current source_url for existing books
+                # Build mapping of book_id -> current source path for existing books
                 existent = dict(
                     (await session.execute(
                         select(Paragraph.extdata.op('->>')('book_id'),
-                               Paragraph.source_url)
-                               .distinct(Paragraph.source_url)
+                               FileMetadata.path)
+                               .join(FileMetadata, Paragraph.source == FileMetadata.id)
+                               .distinct(FileMetadata.path)
                     )).all()
                 )
                 
@@ -248,6 +249,7 @@ class CalibreDataSource(DataSourceStage):
                             pdate=datetime.datetime(book["year"], 1, 1) if book["year"] else None,
                             outline=book["title"],
                             content=book["file_path"],
+                            source=await Paragraph.resolve_source(book["file_path"]),
                             extdata={
                                 "call_number": book["book_id"],
                                 "file_attachments": book["file_attachments"],
@@ -260,19 +262,22 @@ class CalibreDataSource(DataSourceStage):
                                 "library_catalog": path,
                                 "cover": cover_path or ''
                             },
-                            source_url=book["file_path"]
                         )
+                        # TODO(legacy): dataset column is kept only for HASH partitioning.
+                        # Remove once data migration is complete.
                         paragraph.dataset = dsid
+                        await paragraph.associate_dataset(dsid)
                         book_id = str(book["book_id"])
                         
-                        # Update source URL for moved books
+                        # Update source file reference for moved books
                         if self.scan_for_moved and existent.get(book_id):
-                            await session.execute(
-                                update(Paragraph)
-                                .filter(
-                                    Paragraph.source_url == existent[book_id],
+                            old_source = await Paragraph.resolve_source(existent[book_id])
+                            new_source = await Paragraph.resolve_source(book['file_path'])
+                            if old_source and new_source:
+                                await session.execute(
+                                    update(Paragraph)
+                                    .filter(Paragraph.source == old_source)
+                                    .values(source=new_source)
                                 )
-                                .values(source_url=storage.relative_path(file_path))
-                            )
                             
                         yield paragraph
