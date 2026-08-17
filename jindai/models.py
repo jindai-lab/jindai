@@ -425,17 +425,17 @@ class Paragraph(Base):
     source information, author, date, and keywords.
     """
 
-    __tablename__ = "paragraph"
+    __tablename__ = "paragraph_new"
     __table_args__ = (
         # Index definitions (same as original table)
-        PrimaryKeyConstraint("id", "dataset", name="paragraph_part_pk"),
-        Index("fki_dataset", "dataset"),
+        PrimaryKeyConstraint("id", "source", name="paragraph_new_pk"),
+        Index("fki_source", "source"),
         Index("idx_paragraph_author", "author"),
         Index("idx_paragraph_keywords", "keywords", postgresql_using="gin"),
         Index("idx_paragraph_outline", "outline"),
         Index("idx_paragraph_pagenum", "pagenum"),
         Index("idx_paragraph_pdate", "pdate"),
-        Index("idx_paragraph_source", "source_url", "source_page", "pagenum"),
+        Index("idx_paragraph_source", "source", "source_page", "pagenum"),
         {
             "comment": "Paragraph table",
         },
@@ -445,10 +445,10 @@ class Paragraph(Base):
         UUID(as_uuid=True),
         ForeignKey("public.file_metadata.id"),
         nullable=True,
-        # primary_key=True,
+        primary_key=True,
         comment="Related File ID",
     )
-    source_url: Mapped[str | None] = mapped_column(String(1024), comment="Source URL")
+    
     source_page: Mapped[int | None] = mapped_column(
         Integer, comment="Source file page number (e.g., PDF page)"
     )
@@ -464,29 +464,13 @@ class Paragraph(Base):
         nullable=False,
         comment="Extended metadata (custom JSON field)",
     )
-    dataset: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True),
-        ForeignKey("dataset.id"),
-        nullable=False,
-        primary_key=True,
-        comment="Related dataset ID",
-    )
     keywords: Mapped[List[str]] = mapped_column(
         ARRAY(Text), comment="Keyword list"
     )
-
-    dataset_obj: Mapped["Dataset"] = relationship(
-        "Dataset", lazy="joined"
-    )
-
     source_obj: Mapped["FileMetadata"] = relationship(
         "FileMetadata", lazy="joined"
     )
     
-    text_embeddings: Mapped[List["TextEmbeddings"]] = relationship(
-        "TextEmbeddings", back_populates="paragraph", cascade="all, delete-orphan"
-    )
-
     @validates("content")
     def normalize_content(self, key: str, val: str) -> str:
         """Normalize content by removing null bytes.
@@ -634,9 +618,9 @@ class Paragraph(Base):
         data = super().as_dict()
         # TODO(legacy): dataset_name is derived from the legacy dataset column
         # for display only. It does not participate in business logic.
-        data["dataset_name"] = self.dataset_obj.name if self.dataset_obj else None
+        data["dataset_name"] = self.source_obj.dataset_objs[0].name
         # source_path is derived from the FileMetadata association (canonical source).
-        data["source_path"] = self.source_obj.path if self.source_obj else None
+        data["source_url"] = self.source_obj.path if self.source_obj else None
         return data
 
     @staticmethod
@@ -1026,7 +1010,7 @@ class FileDataset(MBase):
     
     dataset_id: Mapped[uuid.UUID] = mapped_column(UUID, ForeignKey("dataset.id", ondelete="CASCADE"),
             primary_key=True)
-    file_id: Mapped[uuid.UUID] = mapped_column(UUID, ForeignKey("file_metadata.id", ondelete="CASCADE"), primary_key=True)
+    file_id: Mapped[uuid.UUID] = mapped_column(UUID, ForeignKey("public.file_metadata.id", ondelete="CASCADE"), primary_key=True)
 
 
 class FileMetadata(Base):
@@ -1097,6 +1081,14 @@ class FileMetadata(Base):
             True if file extension is 'pdf'.
         """
         return self.extension == "pdf"
+
+    # Relationship to datasets via file_dataset association table
+    dataset_objs: Mapped[List["Dataset"]] = relationship(
+        "Dataset",
+        secondary="file_dataset",
+        lazy="selectin",
+        doc="Datasets associated with this file (via file_dataset table)",
+    )
 
 
 class TaskDBO(Base):
@@ -1257,10 +1249,6 @@ class TextEmbeddings(Base):
 
     embedding: Mapped[Vector] = mapped_column(
         Vector(config.embedding_dims), nullable=False, comment="Text embedding vector"
-    )
-
-    paragraph: Mapped["Paragraph"] = relationship(
-        "Paragraph", back_populates="text_embeddings"
     )
 
     @staticmethod
