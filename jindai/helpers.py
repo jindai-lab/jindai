@@ -156,7 +156,7 @@ def get_context(directory: str, parent_class: Type, *sub_dirs: str) -> Dict:
         return dirpath.replace(os.sep, ".") + "." + name
 
     if len(sub_dirs) == 0:
-        sub_dirs = [""]
+        sub_dirs = ("",)
     modules = []
     for sub_dir in sub_dirs:
         modules += [
@@ -317,7 +317,7 @@ class UndefinedNameTransformer(ast.NodeTransformer):
         return node
 
 
-def aeval(expr: str, context: Union[Dict[str, Any], Any]) -> Any:
+def aeval(expr: str, context: Any) -> Any:
     """Evaluate an expression in a safe context.
 
     Args:

@@ -4,7 +4,7 @@ LLM API Integration for Text Completion
 """
 import json
 import logging
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, cast
 
 import httpx
 
@@ -41,7 +41,7 @@ class LLMStageBase(PipelineStage):
         if not self._initialized:
             self.client = httpx.AsyncClient(timeout=60.0)
             self._initialized = True
-        return self.client
+        return cast(httpx.AsyncClient, self.client)
 
     async def _close_client(self) -> None:
         """Close HTTP client."""
@@ -285,7 +285,7 @@ class OllamaCompletion(LLMStageBase):
         temperature: float = 0.7,
         max_tokens: int = 1000,
         result_field: str = "llm_completion",
-        options: Dict[str, Any] = None,
+        options: Optional[Dict[str, Any]] = None,
     ) -> None:
         """Initialize Ollama LLM stage.
         

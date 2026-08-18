@@ -1,14 +1,17 @@
 import asyncio
-import httpx
+import logging
 import re
 import time
 from pathlib import Path
-from typing import AsyncIterator, Iterator, Optional, Dict, Any, List
+from typing import (Any, AsyncIterator, Dict, Iterator, List, Optional, Union,
+                    cast)
 
+import httpx
+
+from jindai.config import config
 from jindai.models import Dataset, Paragraph
 from jindai.pipeline import DataSourceStage, PipelineStage
 from jindai.storage import storage
-from jindai.config import config
 
 
 class MinerULocalClient:
@@ -40,9 +43,9 @@ class MinerULocalClient:
     
     async def convert_to_markdown(
         self, 
-        file_path: str, 
+        file_path: Union[str, Path], 
         output_path: Optional[str] = None,
-        lang_list: list = None,
+        lang_list: Optional[list] = None,
         formula_enable: bool = True,
         table_enable: bool = True,
         parse_method: str = "auto",
@@ -73,7 +76,7 @@ class MinerULocalClient:
         if file_size > 200 * 1024 * 1024:
             raise ValueError(f"文件大小超过 200MB 限制: {file_size / 1024 / 1024:.1f}MB")
         
-        print(f"📄 正在处理文件: {file_path.name} ({file_size / 1024:.1f}KB)")
+        logging.info(f"📄 正在处理文件: {file_path.name} ({file_size / 1024:.1f}KB)")
         
         # 准备请求参数
         url = f"{self.base_url}/file_parse"
@@ -91,7 +94,7 @@ class MinerULocalClient:
             'return_md': str(return_md).lower(),
         }
         
-        print("⏳ 正在解析文档，请稍候...")
+        logging.info("⏳ 正在解析文档，请稍候...")
         start_time = time.time()
         
         try:
@@ -109,7 +112,7 @@ class MinerULocalClient:
             files['files'][1].close()
         
         elapsed = time.time() - start_time
-        print(f"✅ 解析完成，耗时 {elapsed:.1f} 秒")
+        logging.info(f"✅ 解析完成，耗时 {elapsed:.1f} 秒")
         
         # 提取 Markdown 内容
         md_content = self._extract_markdown_from_response(result, file_path.name)
@@ -119,7 +122,7 @@ class MinerULocalClient:
             output_file = Path(output_path)
             output_file.parent.mkdir(parents=True, exist_ok=True)
             output_file.write_text(md_content, encoding='utf-8')
-            print(f"💾 Markdown 已保存至: {output_file}")
+            logging.info(f"💾 Markdown 已保存至: {output_file}")
         
         return md_content
     
@@ -172,7 +175,7 @@ class MinerULocalClient:
     async def convert_batch(
         self, 
         file_paths: List[str], 
-        output_dir: str = "./output", 
+        output_dir: Union[str, Path] = "./output", 
         max_concurrent: int = 3,
         **kwargs
     ) -> Dict[str, Any]:
@@ -206,7 +209,7 @@ class MinerULocalClient:
                     file_name = Path(file_path).stem
                     output_path = output_dir / f"{file_name}.md"
                     
-                    print(f"\n[{index}/{len(file_paths)}] ", end="")
+                    logging.info(f"\n[{index}/{len(file_paths)}] ", end="")
                     md_content = await self.convert_to_markdown(
                         file_path, str(output_path), **kwargs
                     )
@@ -216,7 +219,7 @@ class MinerULocalClient:
                     })
                     
                 except Exception as e:
-                    print(f"❌ 转换失败: {file_path}, 错误: {e}")
+                    logging.info(f"❌ 转换失败: {file_path}, 错误: {e}")
                     results['failed'].append({
                         'file': file_path, 
                         'error': str(e)
@@ -231,10 +234,10 @@ class MinerULocalClient:
         # 等待所有任务完成
         await asyncio.gather(*tasks)
         
-        print(f"\n📊 批量转换完成: 成功 {len(results['success'])} 个, 失败 {len(results['failed'])} 个")
+        logging.info(f"\n📊 批量转换完成: 成功 {len(results['success'])} 个, 失败 {len(results['failed'])} 个")
         return results
     
-    async def convert_streaming(self, file_path: str) -> AsyncIterator[bytes]:
+    async def convert_streaming(self, file_path: Union[str, Path]) -> AsyncIterator[bytes]:
         """
         流式获取转换结果（适用于大文件）
         
@@ -309,12 +312,13 @@ class MinerUDataSource(DataSourceStage):
         self.base_url = config.mineru
         super().__init__(**params)
     
-    def apply_params(
+    def apply_params(  # type: ignore[override]
         self,
         content: str,
         max_connections: int = 10,
         dataset_name: str = "",
-        lang: str = "auto"
+        lang: str = "auto",
+        **params
     ) -> None:
         """Configure the MinerU data source.
         
@@ -388,7 +392,7 @@ class MinerUDataSource(DataSourceStage):
                 extdata={"heading_level": heading_level},
             )
 
-    async def fetch(self) -> Iterator[Paragraph]:
+    async def fetch(self):
         """Process configured documents and yield paragraphs.
         
         Yields:
@@ -411,12 +415,9 @@ class MinerUDataSource(DataSourceStage):
                 
                 # Parse markdown content into paragraphs
                 source_url = storage.relative_path(path) if hasattr(storage, 'relative_path') else str(path)
-                source = await Paragraph.resolve_source(source_url)
+                source = await Paragraph.resolve_source(cast(str, source_url))
                 for para in self._parse_markdown_to_sections(md_content):
                     # Ensure source and dataset are set correctly
-                    para.source = source
-                    # TODO(legacy): dataset column is kept only for HASH partitioning.
-                    # Remove once data migration is complete.
-                    para.dataset = dataset.id
+                    cast(Any, para).source = source
                     await para.associate_dataset(dataset.id)
                     yield para

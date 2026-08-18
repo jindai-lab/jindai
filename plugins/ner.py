@@ -5,6 +5,7 @@ Named Entity Recognition
 import hanlp
 import regex as re
 import spacy
+from typing import Any, cast
 
 from jindai.pipeline import PipelineStage
 from jindai.plugin import Plugin
@@ -31,7 +32,7 @@ class HanLPModel(PipelineStage):
             'JA': 'NPCMJ_UD_KYOTO_TOK_POS_CON_BERT_BASE_CHAR_JA',
             'OT': 'UD_ONTONOTES_TOK_POS_LEM_FEA_NER_SRL_DEP_SDP_CON_XLMR_BASE'
         }.get(pretrained, 'ZH')
-        self.model = hanlp.load(getattr(hanlp.pretrained.mtl, pretrained))
+        self.model = hanlp.load(getattr(cast(Any, hanlp).pretrained.mtl, pretrained))
         super().__init__()
 
     def resolve(self, paragraph: Paragraph) -> Paragraph:
@@ -51,7 +52,7 @@ class HanlpNerZh(PipelineStage):
         """
         super().__init__()
         self.model = hanlp.load(
-            hanlp.pretrained.mtl.CLOSE_TOK_POS_NER_SRL_DEP_SDP_CON_ELECTRA_BASE_ZH)
+            cast(Any, hanlp).pretrained.mtl.CLOSE_TOK_POS_NER_SRL_DEP_SDP_CON_ELECTRA_BASE_ZH)
 
     def resolve(self, paragraph: Paragraph) -> Paragraph:
         paragraph.ner = self.model(
@@ -68,7 +69,7 @@ class HanlpNerJa(PipelineStage):
     def __init__(self) -> None:
         super().__init__()
         self.model = hanlp.load(
-            hanlp.pretrained.mtl.hanlp.pretrained.mtl.NPCMJ_UD_KYOTO_TOK_POS_CON_BERT_BASE_CHAR_JA)
+            cast(Any, hanlp).pretrained.mtl.hanlp.pretrained.mtl.NPCMJ_UD_KYOTO_TOK_POS_CON_BERT_BASE_CHAR_JA)
 
     def resolve(self, paragraph: Paragraph) -> Paragraph:
         paragraph.ner = self.model(re.sub(r'\s', '', paragraph.content),

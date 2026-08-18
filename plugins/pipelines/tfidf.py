@@ -2,7 +2,7 @@
 
 import math
 from collections import defaultdict
-from typing import Dict
+from typing import Any, Dict, cast
 
 from jindai.pipeline import PipelineStage
 from jindai.models import Paragraph
@@ -19,11 +19,11 @@ class TermFreq(PipelineStage):
         self.tf = defaultdict(list)
         self.result = {}
 
-    def resolve(self, p: Paragraph) -> None:
-        for w in p.tokens:
-            self.tf[w].append(p)
+    def resolve(self, paragraph: Paragraph) -> None:
+        for w in paragraph.tokens:
+            self.tf[w].append(paragraph)
 
-    async def summarize(self, returned) -> Dict:
+    async def summarize(self, result) -> list:  # type: ignore[override]
         final_words = sorted([{'word': k, 'count': len(v), 'paragraphs': v}
                              for k, v in self.tf.items()], key=lambda x: x['count'], reverse=True)
         return final_words
@@ -48,15 +48,15 @@ class TFIDFWordFetch(PipelineStage):
         self.tf = Counter()
         self.result = {}
 
-    def resolve(self, p: Paragraph) -> None:
+    def resolve(self, paragraph: Paragraph) -> None:
         self.docs[''].inc()
-        for w in p.tokens:
+        for w in paragraph.tokens:
             self.tf[w].inc()
-        for w in set(p.tokens):
-            self.df[w].append(p)
+        for w in set(paragraph.tokens):
+            self.df[w].append(paragraph)
 
-    async def summarize(self, returned) -> Dict:
-        self.tf = self.tf.as_dict()
+    async def summarize(self, result) -> list:  # type: ignore[override]
+        self.tf = cast(Any, self.tf).as_dict()
         num_docs = self.docs.as_dict()['']
         min_df = self.min_df * num_docs
         tfidf = defaultdict(float)

@@ -35,7 +35,8 @@ class DBQueryDataSource(DataSourceStage):
         limit: int = 0, 
         skip: int = 0, 
         sort: str = "",
-        groups: str = ""
+        groups: str = "",
+        **params
     ) -> None:
         """Configure the database query parameters.
         
@@ -61,13 +62,13 @@ class DBQueryDataSource(DataSourceStage):
             sort=sort
         ))
 
-    async def fetch(self) -> Iterable[Paragraph]:
+    async def fetch(self):
         """Execute the configured database query.
         
         Yields:
             Paragraph objects matching the query criteria.
         """
         async with get_db_session() as session:
-            result = await session.execute(self.query)
+            result = await session.execute(await self.query)
             for item in result:
                 yield item

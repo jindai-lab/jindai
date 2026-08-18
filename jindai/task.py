@@ -12,7 +12,7 @@ This module provides:
 import asyncio
 import logging
 import traceback
-from typing import Any, Callable
+from typing import Any, Callable, Optional
 
 from tqdm import tqdm
 
@@ -42,7 +42,7 @@ class Task:
         params: dict,
         stages: list,
         concurrent: int = 3,
-        log: Callable = None,
+        log: Optional[Callable] = None,
         resume_next: bool = False,
         verbose: bool = False,
         use_tqdm: bool = True,
@@ -71,7 +71,7 @@ class Task:
         self.params = params
 
         # Logging
-        self.log_func = log or print
+        self.log_func = log or logging.info
 
         # Core components (note: Pipeline methods also need to be async)
         self.pipeline = Pipeline(stages, self.log_func, verbose)

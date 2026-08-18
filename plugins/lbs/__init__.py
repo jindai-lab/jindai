@@ -26,7 +26,7 @@ class AMapCityCodeQuery(DataSourceStage):
     @zhs 查询高德地图城市代码表
     """
 
-    def apply_params(self, content: str) -> None:
+    def apply_params(self, content: str, **params) -> None:  # type: ignore[override]
         """
         Args:
             content (str): Query keywords
@@ -34,7 +34,7 @@ class AMapCityCodeQuery(DataSourceStage):
         """
         self.query = [q for q in content.split() if q]
 
-    async def fetch(self):
+    async def fetch(self):  # type: ignore[override]
         df = pd.read_excel(
             os.path.join(os.path.dirname(__file__), "AMap_adcode_citycode.xlsx")
         )
@@ -53,7 +53,7 @@ class AMapPOISearch(DataSourceStage):
     @zhs 查询高德地图位置信息，可根据关键字、城市代码和类别信息限定
     """
 
-    def apply_params(self, content: str, adcode: str, category: str = "") -> None:
+    def apply_params(self, content: str, adcode: str, category: str = "", **params) -> None:  # type: ignore[override]
         """
         Args:
             content (str): Query keywords
@@ -66,7 +66,7 @@ class AMapPOISearch(DataSourceStage):
         self.adcode = adcode
         self.category = "|".join(self.parse_lines(category))
 
-    async def fetch(self):
+    async def fetch(self):  # type: ignore[override]
 
         gcjconv = GCJtoWGS(field="coordinate", out_format="lat_lng").resolve
 
@@ -147,7 +147,7 @@ class AMapGeoCode(_GeoCodingStage):
     """
 
     async def resolve(self, paragraph: Paragraph) -> Paragraph:
-        url = f"https://restapi.amap.com/v3/geocode/geo?key={pluginConfig['amap_key']}&address={self.content}"
+        url = f"https://restapi.amap.com/v3/geocode/geo?key={pluginConfig['amap_key']}&address={self.content}"  # type: ignore[attr-defined]
         async with httpx.AsyncClient() as client:
             resp = await client.get(url)
             resp = resp.json()
@@ -176,7 +176,7 @@ class GCJtoWGS(_GeoCodingStage):
         self.in_format = in_format
 
     @staticmethod
-    def convert(coords, in_format="") -> list | None:
+    def convert(coords, in_format="") -> list:
         if not coords:
             return [0, 0]
         if isinstance(coords, str):
@@ -184,8 +184,8 @@ class GCJtoWGS(_GeoCodingStage):
         if isinstance(coords, (list, tuple)):
             lng, lat = [float(_) for _ in coords]
         if in_format == "lat_lng":
-            lat, lng = lng, lat
-        lng, lat = gcj2wgs(lng, lat)
+            lat, lng = lng, lat  # type: ignore[possibly-unbound]
+        lng, lat = gcj2wgs(lng, lat)  # type: ignore[possibly-unbound]
         return [lng, lat]
 
     def resolve(self, paragraph: Paragraph) -> Paragraph:
@@ -208,7 +208,7 @@ class BingMapGeoCode(_GeoCodingStage):
         return self.assign_coordinates(paragraph, lat, lng)
 
 
-from typing import Iterator
+from typing import Any, Iterator, cast
 
 
 class OSMPOISearch(DataSourceStage):
@@ -220,6 +220,7 @@ class OSMPOISearch(DataSourceStage):
         self,
         content: str = "",
         tags: str = "",
+        **params,
     ) -> None:
         """
         Args:
@@ -253,10 +254,10 @@ class OSMPOISearch(DataSourceStage):
                 tag = tag[:-1]
             yield tag
 
-    async def fetch(self):
+    async def fetch(self):  # type: ignore[override]
         for tag in self.tags:
             for guess in set(self.guesses(tag)):
-                for p in ox.geometries_from_polygon(
+                for p in cast(Any, ox).geometries_from_polygon(
                     self.city["geometry"].all(), tags={guess: True}
                 ):
                     yield Paragraph.from_dict(**p)

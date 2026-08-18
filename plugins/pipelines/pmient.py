@@ -2,6 +2,7 @@
 @zhs 基于信息熵的词汇抽取词汇抽取"""
 import numpy as np
 import regex as re
+from typing import Any, cast
 
 from jindai.models import Paragraph
 
@@ -30,7 +31,7 @@ class PMILREntropyWordFetcher(NgramCounter):
         self.min_lr_ent = min_lr_ent
         self.min_freq = min_freq
         self.word_length = word_length
-        self.text_length = {}
+        self.text_length: Any = {}
         self.result = {}
         super().__init__(word_length, self.min_lr_ent > 0)
 
@@ -38,12 +39,12 @@ class PMILREntropyWordFetcher(NgramCounter):
         self.text_length[paragraph.id] = len(paragraph.content)
         super().resolve(paragraph)
 
-    async def summarize(self, _):
+    async def summarize(self, result):  # type: ignore[override]
         self.text_length = sum(self.text_length.values())
-        result = self.pmient()
+        words = self.pmient()
         if self.min_lr_ent > 0:
-            result = self.ent_lr()
-        return sorted([(w, self.ngrams[w]) for w in result], key=lambda x: x[1], reverse=True)
+            words = self.ent_lr()
+        return sorted([(w, self.ngrams[w]) for w in words], key=lambda x: cast(float, x[1]), reverse=True)
 
     def pmient(self) -> list:
         """Calculating PMI Entropy"""

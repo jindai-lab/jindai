@@ -1,7 +1,7 @@
 # Generated with sqlacodegen
-from typing import Any, Optional, List, Optional, Dict
+from typing import Any, Optional, List, Optional, Dict, cast
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime as dt
 from enum import Enum
 import datetime
 
@@ -128,11 +128,11 @@ class Books(Base):
     title: Mapped[str] = mapped_column(Text, nullable=False, server_default=text("'Unknown'"))
     series_index: Mapped[float] = mapped_column(REAL, nullable=False, server_default=text('1.0'))
     path: Mapped[str] = mapped_column(Text, nullable=False, server_default=text('""'))
-    last_modified: Mapped[datetime.datetime] = mapped_column(TIMESTAMP, nullable=False, server_default=text('"2000-01-01 00:00:00+00:00"'))
+    last_modified: Mapped[dt] = mapped_column(TIMESTAMP, nullable=False, server_default=text('"2000-01-01 00:00:00+00:00"'))
     id: Mapped[Optional[int]] = mapped_column(Integer, primary_key=True)
     sort: Mapped[Optional[str]] = mapped_column(Text)
-    timestamp: Mapped[Optional[datetime.datetime]] = mapped_column(TIMESTAMP, server_default=text('CURRENT_TIMESTAMP'))
-    pubdate: Mapped[Optional[datetime.datetime]] = mapped_column(TIMESTAMP, server_default=text('CURRENT_TIMESTAMP'))
+    timestamp: Mapped[Optional[dt]] = mapped_column(TIMESTAMP, server_default=text('CURRENT_TIMESTAMP'))
+    pubdate: Mapped[Optional[dt]] = mapped_column(TIMESTAMP, server_default=text('CURRENT_TIMESTAMP'))
     author_sort: Mapped[Optional[str]] = mapped_column(Text)
     uuid: Mapped[Optional[str]] = mapped_column(Text)
     has_cover: Mapped[Optional[bool]] = mapped_column(Boolean, server_default=text('0'))
@@ -519,7 +519,7 @@ class PageInfo:
     format: str = ""
     format_size: int = 0
     needs_scan: bool = False
-    timestamp: Optional[datetime] = None
+    timestamp: Optional[dt] = None
 
 @dataclass
 class ReadingProgress:
@@ -558,9 +558,9 @@ class CompleteBookInfo:
     has_cover: bool = False  # 是否有封面
     
     # 时间信息
-    timestamp: Optional[datetime] = None  # 添加时间
-    pubdate: Optional[datetime] = None  # 出版日期
-    last_modified: Optional[datetime] = None  # 最后修改时间
+    timestamp: Optional[dt] = None  # 添加时间
+    pubdate: Optional[dt] = None  # 出版日期
+    last_modified: Optional[dt] = None  # 最后修改时间
     
     # 作者信息
     authors: List[AuthorInfo] = field(default_factory=list)
@@ -863,7 +863,7 @@ def create_book_info_from_orm_models(book: Books, session) -> CompleteBookInfo:
     
     # 创建完整信息对象
     return CompleteBookInfo(
-        id=book.id,
+        id=cast(int, book.id),
         title=book.title,
         uuid=book.uuid,
         sort=book.sort,
@@ -937,7 +937,7 @@ def get_all_books_complete_info(
         logger.info(f"处理第 {offset//batch_size + 1} 批，共 {len(books_batch)} 本书")
         
         # 获取当前批次所有书籍的ID
-        book_ids = [book.id for book in books_batch]
+        book_ids = [cast(int, book.id) for book in books_batch]
         
         # 批量预加载所有关联数据
         preloaded_data = preload_all_related_data(
@@ -1312,7 +1312,7 @@ def create_book_info_from_preloaded(
     
     # 创建完整信息对象
     return CompleteBookInfo(
-        id=book.id,
+        id=cast(int, book.id),
         title=book.title,
         uuid=book.uuid,
         sort=book.sort,
@@ -1355,7 +1355,7 @@ def get_all_books_generator(
             .limit(batch_size)\
             .all()
         
-        book_ids = [book.id for book in books_batch]
+        book_ids = [cast(int, book.id) for book in books_batch]
         preloaded = preload_all_related_data(session, book_ids)
         
         for book in books_batch:
@@ -1428,7 +1428,7 @@ def get_books_by_filter(
         query = query.limit(limit)
     
     books = query.all()
-    book_ids = [book.id for book in books]
+    book_ids = [cast(int, book.id) for book in books]
     
     if not book_ids:
         return []

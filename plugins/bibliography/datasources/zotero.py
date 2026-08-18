@@ -6,7 +6,7 @@ data from Zotero using the official Zotero API.
 
 import datetime
 import logging
-from typing import List, Optional, Dict, Any
+from typing import List, Optional, Dict, Any, cast
 from uuid import UUID
 
 import httpx
@@ -118,6 +118,7 @@ class ZoteroDataSource(DataSourceStage):
         include_annotations: bool = False,
         limit: int = 100,
         start: int = 0,
+        **params: Any
     ) -> None:
         """Configure the data source parameters.
         
@@ -397,7 +398,7 @@ class ZoteroDataSource(DataSourceStage):
             self.log_exception("Unexpected error fetching Zotero items", e)
             return []
 
-    async def fetch(self):
+    async def fetch(self):  # type: ignore[override]
         """Fetch bibliographic data from Zotero library.
         
         Yields:
@@ -417,9 +418,7 @@ class ZoteroDataSource(DataSourceStage):
             
             # Set dataset and yield
             for paragraph in paragraphs:
-                # TODO(legacy): dataset column is kept only for HASH partitioning.
-                # Remove once data migration is complete.
-                paragraph.dataset = ds.id
+                await paragraph.associate_dataset(ds.id)
                 yield paragraph
             
             # Check if we got fewer items than limit (last page)

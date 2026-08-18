@@ -10,6 +10,7 @@ This module provides functions for:
 
 import os
 from io import BytesIO
+from typing import Any, cast
 
 import fitz
 from PIL import Image
@@ -33,8 +34,8 @@ def open_pdf(pdf_path: str | bytes):
     if hasattr(pdf_path, 'read'):
         # File-like object - fitz can read from a stream
         if hasattr(pdf_path, 'name'):
-            return fitz.open(pdf_path.name)
-        return fitz.open("pdf", pdf_path.read())
+            return fitz.open(cast(Any, pdf_path).name)
+        return fitz.open("pdf", cast(Any, pdf_path).read())
     return fitz.open(stream=pdf_path)
 
 

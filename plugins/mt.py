@@ -6,9 +6,11 @@ import json
 import random
 import time
 import urllib
+import urllib.parse
 import uuid
 from hashlib import md5
-from typing import Iterator
+from typing import Iterator, Optional
+import asyncio
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 import httpx
@@ -39,7 +41,7 @@ class RemoteTranslation(PipelineStage):
     @zhs 调用远程 API 进行机器翻译
     """
 
-    def __init__(self, server='http://localhost/translate', to_lang='zhs') -> str:
+    def __init__(self, server='http://localhost/translate', to_lang='zhs') -> None:
         """
         :param to_lang:
             Target language
@@ -57,7 +59,7 @@ class RemoteTranslation(PipelineStage):
         self.to_lang = to_lang if to_lang not in ('zhs', 'zht') else 'zh'
         self.convert = OpenCC('s2t' if to_lang == 'zht' else 't2s').convert
 
-    async def resolve(self, paragraph) -> None:
+    async def resolve(self, paragraph) -> Optional[Paragraph]:
         """Translate the paragraph
         """
         result = ''
@@ -204,8 +206,8 @@ class BaiduTranslation(PipelineStage):
 
             await asyncio.sleep(1)
             async with httpx.AsyncClient() as client:
-                resp = client.post(api_endpoint, params=payload,
-                                 headers=headers).json()
+                resp = (await client.post(api_endpoint, params=payload,
+                                 headers=headers)).json()
             if 'error_msg' in resp:
                 raise ValueError(resp['error_msg'])
             result += ' '.join([_['dst'] for _ in resp['trans_result']])
@@ -333,7 +335,7 @@ class GoogleTranslation(PipelineStage):
                 tgt += result[0]
         return tgt
     
-    async def resolve(self, paragraph: Paragraph) -> str:
+    async def resolve(self, paragraph: Paragraph) -> Paragraph:
         paragraph.content = await self.translate(paragraph.content, paragraph.lang[:2], self.to_lang)
         return paragraph
 

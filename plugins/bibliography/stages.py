@@ -6,6 +6,8 @@ records and other bibliography-related operations.
 
 import logging
 
+from typing import Any, Dict
+
 from jindai.models import Paragraph
 from jindai.pipeline import PipelineStage
 from .models import BibItem
@@ -228,7 +230,7 @@ class BibItemDeduplicate(PipelineStage):
         self._log = lambda *x: logging.info(' '.join(map(str, x)))
     
     @classmethod
-    def get_spec(cls) -> dict[str, str]:
+    def get_spec(cls) -> Dict[str, Any]:
         """Get specification info for the pipeline stage.
         
         Returns:

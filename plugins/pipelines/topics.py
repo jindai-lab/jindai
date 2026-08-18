@@ -2,9 +2,9 @@
 @zhs 话题与分类
 """
 
-from collections import defaultdict
+from collections import defaultdict, deque
 from io import BytesIO
-from typing import Dict
+from typing import Any, AsyncGenerator, Dict, cast
 
 import numpy as np
 from scipy.sparse.csgraph import connected_components
@@ -91,10 +91,10 @@ class LDA(PipelineStage):
         self.mat = defaultdict(list)
         super().__init__()
 
-    def resolve(self, paragraph: Paragraph) -> Paragraph:
+    def resolve(self, paragraph: Paragraph) -> None:
         self.mat[str(paragraph.id)] = paragraph.tokens
 
-    async def summarize(self, *_) -> dict[str, dict]:
+    async def summarize(self, result) -> dict[str, Any]:
         import gensim.models.ldamodel
         model = gensim.models.ldamodel.LdaModel
 
@@ -115,7 +115,7 @@ class LDA(PipelineStage):
         self.result = {}
         for _id, vec in zip(self.mat, self.array):
             self.result[_id] = int(
-                np.argmax(lda[list(zip(range(len(self.dict)), vec))]))
+                np.argmax(cast(Any, lda[list(zip(range(len(self.dict)), vec))])))
         return {
             'labels': self.result,
             'topics': lda.show_topics()
@@ -181,7 +181,7 @@ class CosSimFSClassifier(AccumulateParagraphs):
         self.vecs = {}
         self.vecs_cnt = defaultdict(int)
 
-    def resolve(self, paragraph: Paragraph) -> Paragraph:
+    def resolve(self, paragraph: Paragraph) -> Paragraph:  # type: ignore[override]
         super().resolve(paragraph)
         label = getattr(paragraph, self.label_field, '')
         if label:
@@ -209,7 +209,7 @@ class CosSimFSClassifier(AccumulateParagraphs):
             self.vecs_cnt[label] += 1
         return label
 
-    async def summarize(self, *_):
+    async def summarize(self, result) -> deque:  # type: ignore[override]
         for dim in self.vecs:
             self.vecs[dim] = self.vecs[dim] / np.linalg.norm(self.vecs[dim])
         for para in self.paragraphs:
@@ -238,12 +238,12 @@ class CosSimClustering(AccumulateParagraphs):
         self.vecs = []
         self.label_field = label_field
 
-    def resolve(self, paragraph):
+    def resolve(self, paragraph: Paragraph) -> Paragraph:  # type: ignore[override]
         super().resolve(paragraph)
         self.vecs.append(paragraph.vec)
         return paragraph
 
-    async def summarize(self, *_):
+    async def summarize(self, result) -> deque:  # type: ignore[override]
         vecs = np.array(self.vecs)
         clusters = community_detection(
             vecs, min_community_size=self.min_community_size, threshold=self.threshold)
@@ -280,7 +280,7 @@ class KmeansClustering(PipelineStage):
         vec = getattr(self.paragraphs[i], self.vector_field)
         return vec
 
-    async def summarize(self, _) -> list:
+    async def summarize(self, result) -> list:  # type: ignore[override]
         if len(self.paragraphs) == 0:
             return []
         mat = np.zeros((len(self.paragraphs), len(self._get_vec(0))), 'float')
@@ -351,6 +351,8 @@ class GenerateCooccurance(PipelineStage):
     @zhs 生成共现矩阵
     """
 
+    paragraphs: list
+
     def __init__(self, weighted_by='vec_cos') -> None:
         """
         Args:
@@ -372,7 +374,7 @@ class GenerateCooccurance(PipelineStage):
             self.token(paragraph)
         return paragraph
 
-    async def summarize(self, _) -> Dict:
+    async def summarize(self, result) -> AsyncGenerator[Any, None]:  # type: ignore[override]
         if self.method == 'vec_cos':
             sim_result = {}
             for i, para in enumerate(self.paragraphs):

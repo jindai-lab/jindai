@@ -3,7 +3,7 @@
 import json
 import logging
 from datetime import datetime
-from typing import Optional
+from typing import Any, List, Optional, cast
 
 import redis
 
@@ -99,7 +99,7 @@ class RedisLogger:
         
         log_key = f"task:log:{tid}"
         try:
-            logs = self.redis.lrange(log_key, 0, -1)
+            logs = cast(List[Any], self.redis.lrange(log_key, 0, -1))
             return [json.loads(log) for log in logs]
         except Exception:
             return []

@@ -1,4 +1,5 @@
 from datetime import datetime, timedelta
+from typing import Any, cast
 
 import chardet
 import regex as re
@@ -71,7 +72,7 @@ class TimeExtractor(PipelineStage):
                 self.base_date = datetime.strptime(
                     self.base_date, '%Y-%m-%d %H:%M:%S')
             except ValueError:
-                raise 'type of base_date must be str of %Y-%m-%d %H:%M:%S or datetime'
+                raise ValueError('type of base_date must be str of %Y-%m-%d %H:%M:%S or datetime')
 
         for item in splits:
             for num, value in item.items():
@@ -98,10 +99,11 @@ class TimeExtractor(PipelineStage):
 
         return None
 
-    def find_time(self, text) -> list | list[datetime] | None:
+    def find_time(self, text) -> list[datetime] | None:
         # 格式化text为str类型
         if isinstance(text, bytes):
             encoding = chardet.detect(text)['encoding']
+            assert encoding is not None
             text = text.decode(encoding)
 
         res = []
@@ -133,5 +135,7 @@ class TimeExtractor(PipelineStage):
         return res
 
     def resolve(self, paragraph: Paragraph) -> Paragraph:
-        paragraph.pdate = self.find_time(paragraph.content)[0]
+        found = self.find_time(paragraph.content)
+        if found:
+            cast(Any, paragraph).pdate = cast(datetime, found[0])
         return paragraph
