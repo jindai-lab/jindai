@@ -18,6 +18,7 @@ import asyncio
 import hashlib
 import json
 import logging
+import os
 import secrets
 import uuid
 from contextlib import asynccontextmanager
@@ -527,21 +528,20 @@ class Paragraph(Base):
     async def resolve_source(source_url: str) -> Optional[uuid.UUID]:
         """Resolve a source URL/path to a FileMetadata UUID.
 
+        Creates the FileMetadata if it does not already exist, and
+        automatically matches or creates the associated dataset based on
+        the name of the directory that contains the source file.
+
         Args:
             source_url: Source file path or URL.
 
         Returns:
-            FileMetadata ID if found, else None.
+            FileMetadata ID if found/created, else None.
         """
         if not source_url:
             return None
-        async with get_db_session() as session:
-            fm = (
-                await session.execute(
-                    select(FileMetadata).filter(FileMetadata.path == source_url)
-                )
-            ).scalar_one_or_none()
-            return fm.id if fm else None
+        fm = await FileMetadata.get_or_create(source_url)
+        return fm.id if fm else None
 
     async def associate_dataset(self, dataset_id: uuid.UUID) -> None:
         """Associate this paragraph's source file with a dataset.
@@ -1066,6 +1066,154 @@ class FileMetadata(Base):
             True if file extension is 'pdf'.
         """
         return self.extension == "pdf"
+
+    async def ensure_dataset(self, dataset_id: Optional[uuid.UUID] = None) -> "Dataset":
+        """Ensure the file has at least one associated dataset.
+
+        If ``dataset_id`` is provided, associate the file with that dataset if
+        not already associated.
+
+        If the file currently has no associated dataset at all, a dataset is
+        matched or created based on the name of the directory that contains the
+        file (reusing the ``get_or_create`` matching logic).
+
+        Args:
+            dataset_id: Dataset to associate, if any.
+
+        Returns:
+            The Dataset instance associated with the file.
+        """
+        async with get_db_session() as session:
+            if dataset_id is not None:
+                ds = await session.get(Dataset, dataset_id)
+                if ds is not None:
+                    return ds
+
+            # Find the folder-based dataset (match or create)
+            dirname = ""
+            if "://" not in self.path:
+                parent = os.path.dirname(self.path.rstrip("/"))
+                dirname = os.path.basename(parent) if parent else ""
+
+            if dirname:
+                ds = (
+                    await session.execute(
+                        select(Dataset)
+                        .where(
+                            or_(
+                                Dataset.name == dirname,
+                                Dataset.name.endswith("--" + dirname),
+                            )
+                        )
+                        .order_by(Dataset.name)
+                        .limit(1)
+                    )
+                ).scalar_one_or_none()
+                if ds is None:
+                    ds = Dataset(name=dirname)
+                    session.add(ds)
+                    await session.flush()
+            else:
+                ds = (
+                    await session.execute(
+                        select(Dataset).filter(Dataset.name == "")
+                    )
+                ).scalar_one_or_none()
+                if ds is None:
+                    ds = Dataset(name="")
+                    session.add(ds)
+                    await session.flush()
+
+            existing = (
+                await session.execute(
+                    select(FileDataset).filter(
+                        FileDataset.file_id == self.id,
+                        FileDataset.dataset_id == ds.id,
+                    )
+                )
+            ).scalar_one_or_none()
+            if existing is None:
+                session.add(FileDataset(file_id=self.id, dataset_id=ds.id))
+            return ds
+
+    @staticmethod
+    async def get_or_create(
+        source_url: str,
+        extension: str = "",
+        size_bytes: int = 0,
+        extdata: Optional[dict] = None,
+    ) -> Optional["FileMetadata"]:
+        """Get or create a FileMetadata by source path/URL.
+
+        When the FileMetadata does not exist, it is created and automatically
+        matched or created against a Dataset based on the name of the directory
+        that contains the source file:
+
+        - Let ``dirname`` be the name of the directory containing the file.
+        - If an existing Dataset named ``dirname`` or ending with ``--dirname``
+          (i.e. ``name == '<dirname>'`` or ``name like '%--<dirname>'``) is
+          found, the first match is used.
+        - Otherwise a new Dataset named ``dirname`` is created.
+        - The created FileMetadata is then associated with that Dataset.
+
+        Args:
+            source_url: Source file path or URL.
+            extension: File extension (lowercase, without dot). Defaults to
+                being inferred from ``source_url``.
+            size_bytes: File size in bytes. Defaults to 0.
+            extdata: Extra metadata dict. Defaults to ``{}``.
+
+        Returns:
+            FileMetadata instance, or None if not applicable.
+        """
+        async with get_db_session() as session:
+            existing = (
+                await session.execute(
+                    select(FileMetadata).filter(FileMetadata.path == source_url)
+                )
+            ).scalar_one_or_none()
+            if existing:
+                return existing
+
+            # Determine file extension and parent directory name
+            if not extension and "://" not in source_url:
+                extension = os.path.splitext(source_url)[1].lstrip(".").lower()
+            dirname = ""
+            if "://" not in source_url:
+                parent = os.path.dirname(source_url.rstrip("/"))
+                dirname = os.path.basename(parent) if parent else ""
+
+            fm = FileMetadata(
+                path=source_url,
+                extension=extension,
+                size_bytes=size_bytes,
+                extdata=extdata or {},
+            )
+            session.add(fm)
+            await session.flush()
+
+            # Auto match/create a dataset based on the containing folder name
+            if dirname:
+                ds = (
+                    await session.execute(
+                        select(Dataset)
+                        .where(
+                            or_(
+                                Dataset.name == dirname,
+                                Dataset.name.endswith("--" + dirname),
+                            )
+                        )
+                        .order_by(Dataset.name)
+                        .limit(1)
+                    )
+                ).scalar_one_or_none()
+                if ds is None:
+                    ds = Dataset(name=dirname)
+                    session.add(ds)
+                    await session.flush()
+                session.add(FileDataset(file_id=fm.id, dataset_id=ds.id))
+
+            return fm
 
     # Relationship to datasets via file_dataset association table
     dataset_objs: Mapped[List["Dataset"]] = relationship(
