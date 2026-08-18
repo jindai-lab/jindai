@@ -409,17 +409,16 @@ class MaintenanceManager:
 
                         ext = path.suffix.lower().lstrip('.') or ''
 
-                        # Optional: page_count for PDFs (reuse your logic)
-                        page_count = None
-                        metadata = FileMetadata(
-                            path=relative_path,     # PK = relative path
-                            extension=ext,
-                            size_bytes=size_bytes,
-                            extdata={},                 # can enrich later
+                        # Get or create the FileMetadata, auto-matching/creating a
+                        # dataset based on the containing folder if newly created.
+                        asyncio.run(
+                            FileMetadata.get_or_create(
+                                relative_path,
+                                extension=ext,
+                                size_bytes=size_bytes,
+                            )
                         )
-
-                        session.merge(metadata)         # UPSERT
-                        session.commit()
+                        session.close()
                         logging.info(f"↑ Updated DB: {relative_path}  ({event.event_type})")
 
                     elif event.event_type == 'deleted':
@@ -473,7 +472,12 @@ class MaintenanceManager:
 
             for metadata_obj in self._scan_storage(storage_root):
 
-                await session.merge(metadata_obj)   # UPSERT
+                await FileMetadata.get_or_create(
+                    metadata_obj.path,
+                    extension=metadata_obj.extension,
+                    size_bytes=metadata_obj.size_bytes,
+                    extdata=metadata_obj.extdata,
+                )
 
                 processed += 1
 

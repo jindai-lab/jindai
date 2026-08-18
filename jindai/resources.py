@@ -33,6 +33,7 @@ from fastapi import (
 )
 from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import delete
 from sqlalchemy.sql import func, select, update
 from sse_starlette import EventSourceResponse
 
@@ -780,6 +781,164 @@ class ContentManager(ResourceRegistry):
                 raise HTTPException(404)
             return res.as_dict()
 
+        @router.get("/datasets/{resource_id}/files", tags=["Datasets"])
+        async def list_dataset_files(
+            resource_id: str, session: AsyncSession = Depends(get_db)
+        ):
+            """List file paths associated with a dataset.
+
+            Args:
+                resource_id: Dataset ID.
+                session: Database session.
+
+            Returns:
+                List of file paths associated with the dataset.
+
+            Raises:
+                HTTPException: If dataset not found.
+            """
+            ds = await Dataset.get(resource_id, False)
+            if not ds:
+                raise HTTPException(404, detail="Dataset not found")
+            result = await session.execute(
+                select(FileMetadata.path)
+                .join(FileDataset, FileDataset.file_id == FileMetadata.id)
+                .filter(FileDataset.dataset_id == ds.id)
+                .order_by(FileMetadata.path)
+            )
+            return {"paths": list(result.scalars())}
+
+        @router.post(
+            "/datasets/{resource_id}/files",
+            tags=["Datasets"],
+            dependencies=[Depends(get_current_admin)],
+        )
+        async def add_dataset_files(
+            resource_id: str,
+            data: dict = Body(...),
+            session: AsyncSession = Depends(get_db),
+        ):
+            """Add file paths to a dataset.
+
+            Files that do not yet exist in FileMetadata are created (and
+            auto-associated with their folder-based dataset). Then they are
+            associated with this dataset.
+
+            Args:
+                resource_id: Dataset ID.
+                data: Request body with ``paths`` list.
+                session: Database session.
+
+            Returns:
+                Updated file path list.
+
+            Raises:
+                HTTPException: If dataset not found or no paths provided.
+            """
+            ds = await Dataset.get(resource_id, False)
+            if not ds:
+                raise HTTPException(404, detail="Dataset not found")
+            paths = (data.get("paths") or [])
+            if not paths:
+                raise HTTPException(400, detail="No paths provided")
+
+            for path in paths:
+                fm = await FileMetadata.get_or_create(path)
+                if fm is None:
+                    continue
+                existing = (
+                    await session.execute(
+                        select(FileDataset).filter(
+                            FileDataset.file_id == fm.id,
+                            FileDataset.dataset_id == ds.id,
+                        )
+                    )
+                ).scalar_one_or_none()
+                if existing is None:
+                    session.add(FileDataset(file_id=fm.id, dataset_id=ds.id))
+
+            await session.commit()
+            result = await session.execute(
+                select(FileMetadata.path)
+                .join(FileDataset, FileDataset.file_id == FileMetadata.id)
+                .filter(FileDataset.dataset_id == ds.id)
+                .order_by(FileMetadata.path)
+            )
+            return {"paths": list(result.scalars())}
+
+        @router.delete(
+            "/datasets/{resource_id}/files",
+            tags=["Datasets"],
+            dependencies=[Depends(get_current_admin)],
+        )
+        async def remove_dataset_files(
+            resource_id: str,
+            data: dict = Body(...),
+            session: AsyncSession = Depends(get_db),
+        ):
+            """Remove file paths from a dataset.
+
+            Guarantees that no FileMetadata is left without any dataset
+            association: removing the last association of a file re-associates
+            it with a folder-based dataset (matched or created).
+
+            Args:
+                resource_id: Dataset ID.
+                data: Request body with ``paths`` list.
+                session: Database session.
+
+            Returns:
+                Updated file path list.
+
+            Raises:
+                HTTPException: If dataset not found or no paths provided.
+            """
+            ds = await Dataset.get(resource_id, False)
+            if not ds:
+                raise HTTPException(404, detail="Dataset not found")
+            paths = (data.get("paths") or [])
+            if not paths:
+                raise HTTPException(400, detail="No paths provided")
+
+            for path in paths:
+                fm = (
+                    await session.execute(
+                        select(FileMetadata).filter(FileMetadata.path == path)
+                    )
+                ).scalar_one_or_none()
+                if fm is None:
+                    continue
+                # Check whether the file has other dataset associations besides
+                # this one. If not, ensure it gets a folder-based dataset first.
+                other_count = (
+                    await session.execute(
+                        select(func.count())
+                        .select_from(FileDataset)
+                        .where(
+                            FileDataset.file_id == fm.id,
+                            FileDataset.dataset_id != ds.id,
+                        )
+                    )
+                ).scalar_one()
+                if other_count == 0:
+                    await fm.ensure_dataset()
+                # Remove the association with this dataset
+                await session.execute(
+                    delete(FileDataset).where(
+                        FileDataset.file_id == fm.id,
+                        FileDataset.dataset_id == ds.id,
+                    )
+                )
+
+            await session.commit()
+            result = await session.execute(
+                select(FileMetadata.path)
+                .join(FileDataset, FileDataset.file_id == FileMetadata.id)
+                .filter(FileDataset.dataset_id == ds.id)
+                .order_by(FileMetadata.path)
+            )
+            return {"paths": list(result.scalars())}
+
         @router.post(
             "/datasets",
             tags=["Datasets"],
@@ -849,6 +1008,11 @@ class ContentManager(ResourceRegistry):
         ):
             """Delete a dataset.
 
+            Before deletion, every FileMetadata that would otherwise be left
+            without any remaining dataset association is re-associated with a
+            folder-based dataset (matched or created), so no FileMetadata ever
+            loses all of its datasets.
+
             Args:
                 resource_id: Dataset ID.
                 session: Database session.
@@ -862,6 +1026,33 @@ class ContentManager(ResourceRegistry):
             ds = await Dataset.get(resource_id, False)
             if not ds:
                 raise HTTPException(404)
+
+            # Ensure no FileMetadata loses all its datasets when this dataset
+            # is removed.
+            file_ids = (
+                await session.execute(
+                    select(FileDataset.file_id).filter(
+                        FileDataset.dataset_id == ds.id
+                    )
+                )
+            ).scalars().all()
+            for file_id in file_ids:
+                # Count associations of this file excluding the one being deleted
+                other_count = (
+                    await session.execute(
+                        select(func.count())
+                        .select_from(FileDataset)
+                        .where(
+                            FileDataset.file_id == file_id,
+                            FileDataset.dataset_id != ds.id,
+                        )
+                    )
+                ).scalar_one()
+                if other_count == 0:
+                    fm = await session.get(FileMetadata, file_id)
+                    if fm is not None:
+                        await fm.ensure_dataset()
+
             await session.delete(ds)
             await session.commit()
             return {"message": "Dataset deleted"}
