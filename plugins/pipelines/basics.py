@@ -7,7 +7,7 @@ from collections import defaultdict, deque
 from io import BytesIO
 from itertools import chain
 from itertools import count as iter_count
-from typing import Dict, Iterator
+from typing import Any, Dict, Iterator, cast
 
 import hanzidentifier
 import many_stop_words
@@ -378,7 +378,7 @@ class AccumulateParagraphs(PipelineStage):
 
         return [_rev(obj.get(k.strip("-"), ""), k.startswith("-")) for k in self.sort]
 
-    async def summarize(self, result) -> list:
+    async def summarize(self, result) -> list:  # type: ignore[override]
         results = list(self.paragraphs)
         if self.sort:
             results = sorted(results, key=self.sorter)
@@ -407,7 +407,7 @@ class Export(PipelineStage):
         self.format = {"xlsx": "excel"}.get(output_format, output_format)
         self.limit = limit
 
-    async def summarize(self, result) -> dict:
+    async def summarize(self, result) -> Any:
 
         def json_dump(val):
             return json.dumps(val)
@@ -458,6 +458,9 @@ class Export(PipelineStage):
             buf = BytesIO()
             getattr(pandas.DataFrame(result), f"to_{self.format}")(buf)
             return PipelineStage.return_file(self.extension, buf.getvalue())
+
+        else:
+            return result
 
 
 class ArrayField(PipelineStage):
@@ -566,11 +569,11 @@ class NgramCounter(PipelineStage):
             n += 2
         self.n = n
         self.lr = lr
-        self.ngrams = Counter()
-        self.ngrams_lefts = defaultdict(Counter)
-        self.ngrams_rights = defaultdict(Counter)
+        self.ngrams: Any = Counter()
+        self.ngrams_lefts: Any = defaultdict(Counter)
+        self.ngrams_rights: Any = defaultdict(Counter)
 
-    def resolve(self, paragraph: Paragraph) -> Paragraph:
+    def resolve(self, paragraph: Paragraph) -> None:
         ngrams = [" " * i for i in range(self.n)]
         for content in paragraph.content:
             for i in range(self.n):
@@ -586,6 +589,7 @@ class NgramCounter(PipelineStage):
         self.ngrams = self.ngrams.as_dict()
         self.ngrams_lefts = {k: v.as_dict() for k, v in self.ngrams_lefts.items()}
         self.ngrams_rights = {k: v.as_dict() for k, v in self.ngrams_rights.items()}
+        return result
 
 
 class Limit(PipelineStage):
@@ -617,7 +621,7 @@ class RegexReplace(PipelineStage):
     @zhs 正则表达式匹配并替换
     """
 
-    def __init__(self, pattern, replacement="", plain=False) -> None:
+    def __init__(self, pattern: str, replacement="", plain=False) -> None:
         """
         Args:
             pattern (str):
@@ -664,7 +668,7 @@ class RegexFilter(PipelineStage):
 
     def __init__(
         self,
-        pattern,
+        pattern: str,
         target,
         source="content",
         match="{0}",
@@ -796,7 +800,7 @@ class SaveParagraph(PipelineStage):
             await self.dbsession.commit()
         except Exception as e:
             await self.dbsession.rollback()
-            self.log_exception(e)
+            self.log_exception(str(e), e)
             raise
 
         return paragraph
@@ -998,7 +1002,8 @@ class PDFUnlock(PipelineStage):
         import pike
 
         buf = BytesIO()
-        pike.open(storage.open(file, "rb")).save(buf)
+        pike_obj = cast(Any, pike)
+        pike_obj.open(storage.open(cast(str, file), "rb")).save(buf)
         self.data = PipelineStage.return_file("pdf", buf.getvalue())
 
     async def summarize(self, result) -> dict:
@@ -1038,10 +1043,10 @@ class LoadNamedResult(Passthrough):
         super().__init__()
         self.name = name
 
-    async def summarize(self, _) -> dict:
+    async def summarize(self, result) -> dict:
         if self.name == "":
             return self.gctx
-        return self.gctx.get(self.name)
+        return cast(dict, self.gctx.get(self.name))
 
 
 class FilterStopWords(PipelineStage):

@@ -13,7 +13,8 @@ import sys
 import traceback
 from collections import defaultdict
 from collections.abc import Iterable as IterableClass
-from typing import Any, Awaitable, Callable, Dict, Iterable, List, Tuple, Type, Union
+from typing import (Any, AsyncGenerator, Awaitable, Callable, Dict, Iterable,
+                    List, Optional, Tuple, Type, Union)
 
 import regex as re
 
@@ -23,9 +24,11 @@ from .models import Paragraph, session_factory
 from .storage import storage
 
 type ResolveResultType = Paragraph | None
-ResolveResultType |= Tuple[ResolveResultType, "PipelineStage"]
-type ResolveReturn = (
+# Tuple form: (result, next stage); intentionally merged into the union so that
+# the tuple variant is part of ResolveResultType (used across the codebase).
+ResolveReturn = (
     ResolveResultType
+    | Tuple[ResolveResultType, "PipelineStage"]
     | Iterable[ResolveResultType]
     | Awaitable[ResolveResultType]
     | Awaitable[Iterable[ResolveResultType]]
@@ -66,7 +69,7 @@ class PipelineStage:
         return self._dbsession
 
     @classmethod
-    def get_spec(cls) -> dict[str, str]:
+    def get_spec(cls) -> Dict[str, Any]:
         """Get specification info of the current stage.
 
         Returns:
@@ -448,7 +451,7 @@ class PipelineStage:
 
     async def flow(
         self, paragraph: Paragraph
-    ) -> Iterable[Tuple[ResolveReturn, "PipelineStage | None"]]:
+    ) -> AsyncGenerator[Tuple[Any, "PipelineStage | None"], None]:
         """Flow control for pipeline processing.
 
         Args:
@@ -508,7 +511,7 @@ class DataSourceStage(PipelineStage):
         self.params = params
 
     @classmethod
-    def get_spec(cls) -> dict[str, str]:
+    def get_spec(cls) -> Dict[str, Any]:
         """Overwrite the method for getting specifications.
 
         Returns:
@@ -536,7 +539,7 @@ class DataSourceStage(PipelineStage):
         """
         pass
 
-    async def fetch(self):
+    async def fetch(self) -> AsyncGenerator[Any, None]:
         """Fetch data from data source.
 
         Yields:
@@ -544,7 +547,7 @@ class DataSourceStage(PipelineStage):
         """
         yield
 
-    async def resolve(self, paragraph: Paragraph):
+    async def resolve(self, paragraph: Paragraph):  # type: ignore[override]
         """Update the parameters of the data source with the input paragraph.
 
         Args:
@@ -720,7 +723,7 @@ class Pipeline:
         for stage in self.stages:
             stage.gctx = val
 
-    async def summarize(self, result: dict = None) -> dict | None:
+    async def summarize(self, result: Optional[dict] = None) -> dict | None:
         """Summarize pipeline results by calling summarize on each stage.
 
         Args:

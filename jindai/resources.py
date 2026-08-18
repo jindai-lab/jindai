@@ -15,7 +15,8 @@ import logging
 import os
 import struct
 from contextlib import AsyncExitStack, asynccontextmanager
-from typing import Any, Dict, List, Optional, Type
+from typing import Any, Dict, List, Optional, Type, cast
+from datetime import datetime
 
 import httpx
 from fastapi import (
@@ -107,7 +108,7 @@ class ResourceRegistry:
         """
 
         # Admin has full access
-        if await get_current_admin({}, username):
+        if await get_current_admin(None, username):
             return True
 
         # Check if model has user relationship
@@ -142,7 +143,7 @@ class ResourceRegistry:
         results = (await session.execute(stmt)).scalars().all()
         return {"total": total, "results": [r.as_dict() for r in results]}
 
-    def register(self, parent_router: APIRouter, dependencies: List[Any] = None):
+    def register(self, parent_router: APIRouter, dependencies: Optional[List[Any]] = None):
         """Register CRUD endpoints with parent router.
 
         Args:
@@ -150,7 +151,7 @@ class ResourceRegistry:
             dependencies: Additional dependencies for endpoints.
         """
         res_router = APIRouter(
-            prefix=self.prefix, tags=self.tags, dependencies=dependencies
+            prefix=self.prefix, tags=cast(Any, self.tags), dependencies=dependencies
         )
 
         @res_router.get("/")
@@ -502,7 +503,7 @@ class EmbeddingManager:
                 )
             ).scalar_one_or_none()
             if te:
-                te.embedding = emb_val
+                te.embedding = cast(Any, emb_val)
             else:
                 session.add(TextEmbeddings(id=resource_id, embedding=emb_val))
             await session.commit()
@@ -565,7 +566,7 @@ class APIKeyManager:
                             if api_key.last_used_at
                             else None
                         ),
-                        "created_at": api_key.created_at.isoformat(),
+                        "created_at": cast(datetime, api_key.created_at).isoformat(),
                     }
                     for api_key in api_keys
                 ],
@@ -615,7 +616,7 @@ class APIKeyManager:
                 "object": "api_key",
                 "name": api_key.name,
                 "is_active": api_key.is_active,
-                "created_at": api_key.created_at.isoformat(),
+                "created_at": cast(datetime, api_key.created_at).isoformat(),
                 # Only show the plain key once!
                 "plain_key": plain_key,
             }
@@ -947,14 +948,7 @@ class ContentManager(ResourceRegistry):
                     .values({"dataset_id": target_ds.id})
                 )
                 result = await session.execute(stmt)
-                # TODO(legacy): dataset column is kept only for HASH partitioning.
-                # Update the legacy dataset column on affected paragraphs to match.
-                await session.execute(
-                    update(Paragraph)
-                    .where(Paragraph.dataset == ds.id)
-                    .values({"dataset": target_ds.id})
-                )
-                merged_count += result.rowcount
+                merged_count += cast(Any, result).rowcount
 
                 # Delete the source dataset
                 await session.delete(ds)
@@ -1028,7 +1022,7 @@ class ContentManager(ResourceRegistry):
                     
                     # Rerank results based on embedding similarity
                     ranked_results = await TextEmbeddings.rerank_by_embedding(
-                        filters.q, all_results
+                        filters.q, list(all_results)
                     )
 
                     # Apply pagination to ranked results
@@ -1040,7 +1034,7 @@ class ContentManager(ResourceRegistry):
 
                     return {
                         "total": len(ranked_results),
-                        "results": [r.as_dict() for r in paginated_results],
+                        "results": [cast(Any, r).as_dict() for r in paginated_results],
                         "query": str(query.compile()),
                     }
 

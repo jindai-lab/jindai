@@ -5,7 +5,7 @@ import json
 import uuid
 from contextlib import asynccontextmanager
 from datetime import datetime
-from typing import Any, Callable, Dict, List, Optional
+from typing import Any, Callable, Dict, List, Optional, cast
 
 import redis
 from fastapi import (APIRouter, Body, Depends, FastAPI, HTTPException,
@@ -177,7 +177,7 @@ class WorkerManager:
         result_key = f"task:result:{task_id}"
         result = self.redis.get(result_key)
         if result:
-            return json.loads(result)
+            return json.loads(cast(str, result))
         return None
     
     def get_task_logs(self, task_id: str) -> List[Dict[str, Any]]:
@@ -199,7 +199,7 @@ class WorkerManager:
         data = self.redis.hgetall(meta_key)
         if not data:
             return None
-        return TaskMetadata.from_dict(data)
+        return TaskMetadata.from_dict(cast(Dict[str, Any], data))
     
     def _set_task_metadata(self, task_id: str, metadata: TaskMetadata) -> None:
         """Set task metadata in Redis."""
@@ -324,10 +324,10 @@ class WorkerManager:
         """
         while self._running:
             # Blocking pop from single global queue
-            result = self.redis.blpop(self._queue_key, timeout=1)
+            result = self.redis.blpop(cast(List[Any], [self._queue_key]), timeout=1)
             
             if result:
-                _, task_id = result
+                _, task_id = cast(tuple, result)
                 # Get task name from metadata
                 metadata = self._get_task_metadata(task_id)
                 if metadata:
@@ -384,7 +384,7 @@ class WorkerManager:
         """Check if worker is running."""
         return self._running
         
-    def get_registered_tasks(self) -> List[str]:
+    def get_registered_tasks(self) -> Dict[str, Any]:
         """Get list of registered task names."""
         return {
             k: inspect_function_signature(v)
@@ -401,9 +401,9 @@ class WorkerManager:
         Returns:
             Number of tasks in the queue
         """
-        return self.redis.llen(self._queue_key)
+        return cast(int, self.redis.llen(self._queue_key))
     
-    def clear_tasks(self) -> bool:
+    def clear_tasks(self, task_name: Optional[str] = None) -> bool:
         """
         Clear the task queue.
         
@@ -476,9 +476,9 @@ class WorkerManager:
         # Scan all task metadata keys
         cursor = 0
         while True:
-            cursor, keys = self.redis.scan(cursor, match="task:meta:*", count=100)
+            cursor, keys = cast(tuple, self.redis.scan(cursor, match="task:meta:*", count=100))
             for key in keys:
-                data = self.redis.hgetall(key)
+                data = cast(Dict[str, Any], self.redis.hgetall(key))
                 if data and "status" in data:
                     status = data["status"]
                     if status in summary:
@@ -502,10 +502,10 @@ class WorkerManager:
         # Scan all task metadata keys
         cursor = 0
         while True:
-            cursor, keys = self.redis.scan(cursor, match="task:meta:*", count=100)
+            cursor, keys = cast(tuple, self.redis.scan(cursor, match="task:meta:*", count=100))
             for key in keys:
                 # Extract task_id from key pattern "task:meta:{task_id}"
-                task_id = key.replace("task:meta:", "")
+                task_id = cast(str, key).replace("task:meta:", "")
                 task_ids.append(task_id)
             
             if cursor == 0:
@@ -564,11 +564,11 @@ class WorkerManager:
             tasks = []
             
             while True:
-                cursor, keys = self.redis.scan(cursor, match="task:meta:*", count=limit)
+                cursor, keys = cast(tuple, self.redis.scan(cursor, match="task:meta:*", count=limit))
                 for key in keys:
-                    data = self.redis.hgetall(key)
+                    data = cast(Dict[str, Any], self.redis.hgetall(key))
                     if data and "task_id" in data:
-                        tasks.append(TaskMetadata.from_dict(data).to_dict())
+                        tasks.append(TaskMetadata.from_dict(cast(Dict[str, Any], data)).to_dict())
                 
                 if cursor == 0:
                     break
@@ -617,6 +617,7 @@ class WorkerManager:
             Returns:
                 Dictionary with success flag
             """
+            success = False
             if task_id:
                 success = self.delete_task(task_id)
             if not success:

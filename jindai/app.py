@@ -34,7 +34,7 @@ app = FastAPI(
     docs_url="/api/v2/docs",
     openapi_url="/api/v2/openapi.json",
     title="Jindai",
-    version="2.0.704",
+    version="2.0.705",
 )
 
 # CORS middleware configuration
@@ -54,7 +54,6 @@ app.include_router(router)
 async def lifespan(app: FastAPI):
     async with AsyncExitStack() as stack:
         await stack.enter_async_context(combined_lifespan(app))
-        print("stacked")
         yield
 
 

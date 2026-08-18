@@ -9,7 +9,8 @@ This module provides:
 """
 
 import os
-from typing import Dict, Any
+import logging
+from typing import Dict, Any, cast
 
 from fastapi import APIRouter, Depends
 from sqlalchemy import select, func, or_, and_
@@ -74,9 +75,9 @@ class BibliographyPlugin(Plugin):
         """Save configuration to storage."""
         try:
             config_path = storage.safe_join("plugins", "bibliography", "config.json")
-            storage.write_json(config_path, self._config)
+            cast(Any, storage).write_json(config_path, self._config)
         except Exception as e:
-            print(f"Error saving bibliography config: {e}")
+            logging.error(f"Error saving bibliography config: {e}")
 
     async def _sync_from_calibre(self) -> Dict[str, Any]:
         """Internal method to synchronize bibliographic data from Calibre libraries.
@@ -109,10 +110,14 @@ class BibliographyPlugin(Plugin):
                 ),
                 ("BibItemSave", {}),
             ],
-            log=print,
+            log=logging.info,
         )
         await task.execute_async()
-        return True
+        return {
+            "success": True,
+            "count": 0,
+            "message": "Synchronization completed",
+        }
 
     async def _sync_from_zotero(self) -> Dict[str, Any]:
         """Internal method to synchronize bibliographic data from Zotero.
@@ -151,7 +156,11 @@ class BibliographyPlugin(Plugin):
             ],
         )
         await task.execute_async()
-        return True
+        return {
+            "success": True,
+            "count": 0,
+            "message": "Synchronization completed",
+        }
 
     def _register_tasks(self) -> None:
         worker_manager.register_task(self._sync_from_calibre, "sync_calibre")

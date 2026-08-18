@@ -8,7 +8,7 @@ including file attachments.
 import datetime
 import os
 import urllib.parse
-from typing import List, Optional, Dict, Any
+from typing import List, Optional, Dict, Any, Iterable, cast
 from uuid import UUID
 
 from sqlalchemy import distinct, select, update, func, create_engine
@@ -56,7 +56,8 @@ class CalibreDataSource(DataSourceStage):
         lang: str = "auto",
         content: str = "",
         formats: str = "epub,pdf",
-        scan_for_moved: bool = True
+        scan_for_moved: bool = True,
+        **params: Any
     ) -> None:
         """Configure the data source parameters.
         
@@ -197,7 +198,7 @@ class CalibreDataSource(DataSourceStage):
             session.close()
             return books_info
 
-    async def fetch(self):
+    async def fetch(self):  # type: ignore[override]
         """Fetch book metadata from configured Calibre libraries.
         
         Yields:
@@ -220,12 +221,12 @@ class CalibreDataSource(DataSourceStage):
             if self.scan_for_moved:
                 # Build mapping of book_id -> current source path for existing books
                 existent = dict(
-                    (await session.execute(
+                    cast(Iterable, (await session.execute(
                         select(Paragraph.extdata.op('->>')('book_id'),
                                FileMetadata.path)
                                .join(FileMetadata, Paragraph.source == FileMetadata.id)
                                .distinct(FileMetadata.path)
-                    )).all()
+                    )).all())
                 )
                 
             for path in paths:
@@ -263,9 +264,6 @@ class CalibreDataSource(DataSourceStage):
                                 "cover": cover_path or ''
                             },
                         )
-                        # TODO(legacy): dataset column is kept only for HASH partitioning.
-                        # Remove once data migration is complete.
-                        paragraph.dataset = dsid
                         await paragraph.associate_dataset(dsid)
                         book_id = str(book["book_id"])
                         

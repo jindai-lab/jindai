@@ -12,7 +12,7 @@ import json
 import os
 import tempfile
 from hashlib import sha1
-from typing import Dict, Iterable, List, Optional, Union
+from typing import Any, Dict, Iterable, List, Optional, Union, cast
 from urllib.parse import urljoin
 
 import regex as re
@@ -104,7 +104,7 @@ class CachedWebAccess:
         
         # 调用 Firecrawl 获取渲染后的页面数据
         # scrape_url 默认返回 JSON，包含 markdown / text / html 等字段
-        result = fc.scrape_url(url, params=params)
+        result: Any = fc.scrape_url(url, params=params)
         
         # 提取纯文本内容（优先 markdown，其次 text，最后 fallback 到空字符串）
         text_content = result.get('markdown') or result.get('text') or ''
@@ -191,7 +191,8 @@ class WebPageListingDataSource(DataSourceStage):
         level: int = 1, 
         wait_for: str = '',
         with_chrome: bool = False,
-        base_cls: Optional[type] = None
+        base_cls: Optional[type] = None,
+        **kwargs
     ) -> None:
         """Configure the web page listing data source.
         
@@ -245,13 +246,13 @@ class WebPageListingDataSource(DataSourceStage):
         except OSError as ose:
             self.log_exception(f'Error while reading from {url}', ose)
             data = b''
-        return Paragraph(
+        p = Paragraph(
             extdata={'html': data.decode('utf-8', errors='ignore')}, 
-            # TODO(legacy): dataset column is kept only for HASH partitioning.
-            # Remove once data migration is complete.
-            dataset=self.dataset, 
             lang=self.lang
         )
+        if self.dataset:
+            await p.set_dataset_name(self.dataset)
+        return p
 
     def get_text(self, element) -> str:
         """Extract clean text from a BeautifulSoup element.
@@ -278,9 +279,6 @@ class WebPageListingDataSource(DataSourceStage):
             Paragraph with extracted content, title, date, and tags.
         """
         para.pdate = datetime.datetime.now()
-        # TODO(legacy): dataset column is kept only for HASH partitioning.
-        # Remove once data migration is complete.
-        para.dataset = self.dataset
         para.lang = self.lang
         para.content = self.get_text(b)
         para.keywords = self.tags
@@ -305,7 +303,7 @@ class WebPageListingDataSource(DataSourceStage):
 
         links: set = set()
         for a in b.select('a[href]'):
-            link_url = a['href'] = urljoin(url, a['href'])
+            link_url = a['href'] = urljoin(url, cast(str, a['href']))
             link_url = link_url.split('#')[0]
             
             # Skip already visited URLs
@@ -349,7 +347,7 @@ class WebPageListingDataSource(DataSourceStage):
                 for upath in await self.parse_list(url, b):
                     if upath not in self.queued:
                         self.queued.add(upath)
-                        yield Paragraph.from_dict(content=upath, level=level+1), self
+                        yield Paragraph.from_dict({'content': upath, 'level': level+1}), self
 
             # Process detail pages
             if self.detail_link.search(url):
@@ -368,6 +366,7 @@ class WebPageListingDataSource(DataSourceStage):
         self.log('clear visited & queued urls')
         self.visited.clear()
         self.queued.clear()
+        return result
 
 
 class JSONDataSource(DataSourceStage):
@@ -397,7 +396,7 @@ class JSONDataSource(DataSourceStage):
         if not isinstance(self.content, list):
             self.content = [self.content]
 
-    async def fetch(self) -> Iterable[Paragraph]:
+    async def fetch(self):
         """Parse JSON content and yield Paragraph objects.
         
         Yields:
@@ -448,8 +447,8 @@ class ExtractHTMLParagraphs(PipelineStage):
         self.field = field
         self.paragraph_selector = paragraph_selector
         if isinstance(assignments, str):
-            assignments = aeval(assignments)
-        self.assignments = assignments or {'content': '//text'}
+            assignments = aeval(assignments, {})
+        self.assignments = cast(Dict[str, str], assignments or {'content': '//text'})
         self.autoextract = autoextract
 
     def _get_text(self, bs_ele) -> str:
@@ -492,7 +491,7 @@ class ExtractHTMLParagraphs(PipelineStage):
                 value = ' '.join(value)
             setattr(para, field_name, value)
         if self.autoextract:
-            para.content = self.extract(str(bs_ele))
+            cast(Any, para).content = self.extract(str(bs_ele))
     
     def extract(self, html: str) -> Optional[str]:
         """Extract main content from HTML using trafilatura.
@@ -527,9 +526,6 @@ class ExtractHTMLParagraphs(PipelineStage):
                 content='',
                 source=paragraph.source,
                 pagenum=1,
-                # TODO(legacy): dataset column is kept only for HASH partitioning.
-                # Remove once data migration is complete.
-                dataset=paragraph.dataset,
                 outline=paragraph.outline,
                 keywords=[],
                 extdata={'html': str(html_para)},

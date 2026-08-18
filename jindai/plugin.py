@@ -14,7 +14,7 @@ import sys
 import tempfile
 import zipfile
 from collections import defaultdict
-from typing import Callable, Iterator
+from typing import Callable, Iterator, cast
 
 from fastapi import APIRouter, Depends
 
@@ -132,8 +132,9 @@ class PluginManager:
             if isinstance(plugin_name, tuple) and len(plugin_name) == 2:
                 plugin_name, params = plugin_name
             else:
-                params = getattr(config, plugin_name, {})
+                params = getattr(config, cast(str, plugin_name), {})
 
+            plugin_cls = None
             if isinstance(plugin_name, str):
                 plugin_cls = plugin_ctx.get(plugin_name)
             elif isinstance(plugin_name, type):

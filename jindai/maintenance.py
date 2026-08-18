@@ -11,17 +11,16 @@ This module provides:
 
 import asyncio
 import datetime
-import hashlib
 import logging
 import httpx
 import os
 import tempfile
 from pathlib import Path
-from typing import Optional
+from typing import Any, Optional, cast
 
 from fastapi import APIRouter, BackgroundTasks, Body, Depends
-from sqlalchemy import (TIMESTAMP, cast, delete, exists, func, select, text,
-                        update)
+from sqlalchemy import (TIMESTAMP, cast as sqlcast, delete, exists, func,
+                        select, text, update)
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 from watchdog.events import FileSystemEventHandler
@@ -131,7 +130,7 @@ class MaintenanceManager:
                 Dataset.name != ''  # Exclude default dataset
             )
             result = await session.execute(stmt)
-            deleted_count = result.rowcount
+            deleted_count = cast(Any, result).rowcount
             if deleted_count > 0:
                 logging.info(f"Cleaned up {deleted_count} unused datasets.")
             else:
@@ -283,7 +282,7 @@ class MaintenanceManager:
             )
 
             result = await session.execute(sql, {"p": pattern})
-            logging.info(f"Successfully updated {result.rowcount} records.")
+            logging.info(f"Successfully updated {cast(Any, result).rowcount} records.")
 
     async def update_pdate_from_url(self, dataset: str) -> None:
         """Update publication date from URL using regex pattern.
@@ -313,7 +312,7 @@ class MaintenanceManager:
             stmt = (
                 update(Paragraph)
                 .where(Paragraph.id == q.c.id)
-                .values(pdate=cast(q.c.pdate_str, TIMESTAMP))
+                .values(pdate=sqlcast(q.c.pdate_str, TIMESTAMP))
             )
 
             await session.execute(stmt)
@@ -360,20 +359,20 @@ class MaintenanceManager:
         Yields:
             FileMetadata objects for each file found.
         """
-        print(f"🚀 Starting thorough scan of: {storage_root}")
+        logging.info(f"🚀 Starting thorough scan of: {storage_root}")
 
         for root, dirs, files in os.walk(storage_root):
             # You can uncomment to skip hidden directories if you want
             # dirs[:] = [d for d in dirs if not d.startswith(".")]
 
             for filename in files:
+                full_path = os.path.join(root, filename) or ""
                 try:
-                    full_path = os.path.join(root, filename)
                     yield self._build_metadata(full_path)
                 except PermissionError:
-                    print(f"   ⏭️  Permission denied: {full_path}")
+                    logging.info(f"   ⏭️  Permission denied: {full_path}")
                 except Exception as e:
-                    print(f"   ❌ Error processing {full_path}: {e}")
+                    logging.info(f"   ❌ Error processing {full_path}: {e}")
                     continue
 
     def get_storage_handler(self):
@@ -391,10 +390,10 @@ class MaintenanceManager:
                 if event.is_directory:
                     return
 
-                path = Path(event.src_path)
+                path = Path(str(event.src_path))
                 relative_path = str(path.relative_to(self.root))
 
-                session = self.get_session()
+                session = cast(Any, self).get_session()
 
                 try:
                     if event.event_type in ('created', 'modified', 'moved'):
@@ -421,7 +420,7 @@ class MaintenanceManager:
 
                         session.merge(metadata)         # UPSERT
                         session.commit()
-                        print(f"↑ Updated DB: {relative_path}  ({event.event_type})")
+                        logging.info(f"↑ Updated DB: {relative_path}  ({event.event_type})")
 
                     elif event.event_type == 'deleted':
                         # File or directory was deleted → remove from DB if it's a file we track
@@ -429,10 +428,10 @@ class MaintenanceManager:
                         count = q.delete()
                         if count > 0:
                             session.commit()
-                            print(f"🗑 Deleted from DB: {relative_path}")
+                            logging.info(f"🗑 Deleted from DB: {relative_path}")
 
                 except Exception as e:
-                    print(f"Error processing {relative_path}: {e}")
+                    logging.info(f"Error processing {relative_path}: {e}")
                 finally:
                     session.close()
 
@@ -469,7 +468,7 @@ class MaintenanceManager:
             if not os.path.isdir(storage_root):
                 raise ValueError(f"❌ Not a directory: {storage_root}")
 
-            print(f"🚀 Starting thorough scan of: {storage_root}")
+            logging.info(f"🚀 Starting thorough scan of: {storage_root}")
             processed = 0
 
             for metadata_obj in self._scan_storage(storage_root):
@@ -480,14 +479,14 @@ class MaintenanceManager:
 
                 if processed % commit_every == 0:
                     await session.commit()
-                    print(f"   ✅ Processed {processed:,} files...")
+                    logging.info(f"   ✅ Processed {processed:,} files...")
 
             # Final commit
             await session.commit()
 
-            print("\n🎉 Scan finished!")
-            print(f"   Total files processed : {processed:,}")
-            print(f"   Database updated via UPSERT on filename (PK)")
+            logging.info("\n🎉 Scan finished!")
+            logging.info(f"   Total files processed : {processed:,}")
+            logging.info(f"   Database updated via UPSERT on filename (PK)")
 
         async with get_db_session() as session:
             await scan_storage_and_populate_db(
@@ -584,7 +583,7 @@ class MaintenanceManager:
             logging.error('Read timeout')
         return len(embs)
 
-    async def custom_task(self, task_id: str = "", **params) -> dict:
+    async def custom_task(self, task_id: str = "", **params) -> Optional[dict]:
         """Execute a custom task.
 
         Args:
@@ -610,7 +609,7 @@ class MaintenanceManager:
 
     async def ocr(
         self, input_path: str, output_path: str, lang: str, monochrome: bool = False
-    ) -> str:
+    ) -> Optional[str]:
         """Perform OCR on a PDF file.
 
         Args:

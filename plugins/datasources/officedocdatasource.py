@@ -7,7 +7,7 @@ Microsoft Word (.docx) and Excel (.xlsx) documents.
 import os
 import subprocess
 import tempfile
-from typing import Iterable, List, Optional
+from typing import Iterable, List, Optional, cast
 
 import pandas as pd
 
@@ -32,7 +32,7 @@ class WordDataSource(DataSourceStage):
         files: List of Word document paths to process.
     """
 
-    def apply_params(self, dataset_name: str = '', lang: str = 'auto', content: str = '') -> None:
+    def apply_params(self, dataset_name: str = '', lang: str = 'auto', content: str = '', **params) -> None:
         """Configure the Word document data source.
         
         Args:
@@ -62,7 +62,7 @@ class WordDataSource(DataSourceStage):
             return res
         return None
 
-    async def fetch(self) -> Iterable[Paragraph]:
+    async def fetch(self):
         """Process configured Word documents and yield paragraphs.
         
         Yields:
@@ -75,11 +75,8 @@ class WordDataSource(DataSourceStage):
                 para = Paragraph(
                     lang=self.lang, 
                     content=doc,
-                    source=await Paragraph.resolve_source(storage.relative_path(file)),
+                    source=await Paragraph.resolve_source(cast(str, storage.relative_path(file))),
                     pagenum=1,
-                    # TODO(legacy): dataset column is kept only for HASH partitioning.
-                    # Remove once data migration is complete.
-                    dataset=dataset.id,
                     outline=''
                 )
                 await para.associate_dataset(dataset.id)
@@ -99,7 +96,7 @@ class ExcelDataSource(DataSourceStage):
         files: List of Excel/CSV file paths to process.
     """
 
-    def apply_params(self, content: str = '', dataset_name: str = '', lang: str = 'auto') -> None:
+    def apply_params(self, content: str = '', dataset_name: str = '', lang: str = 'auto', **params) -> None:
         """Configure the Excel data source.
         
         Args:
@@ -111,7 +108,7 @@ class ExcelDataSource(DataSourceStage):
         self.lang = lang
         self.files = PipelineStage.parse_paths(content)
 
-    async def fetch(self) -> Iterable[Paragraph]:
+    async def fetch(self):
         """Process configured Excel files and yield paragraphs.
         
         Yields:

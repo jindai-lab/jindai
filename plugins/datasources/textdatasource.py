@@ -5,7 +5,7 @@ plain text files, file patterns, and structured text formats like EndNote.
 """
 
 import codecs
-from typing import Iterator, List, Optional
+from typing import Iterator, List, Optional, cast
 
 from jindai.models import Dataset, Paragraph
 from jindai.pipeline import DataSourceStage, PipelineStage
@@ -23,7 +23,7 @@ class FilePatternDataSource(DataSourceStage):
         paths: List of matched file paths.
     """
 
-    def apply_params(self, content: str = "") -> None:
+    def apply_params(self, content: str = "", **params) -> None:
         """Configure the file pattern data source.
         
         Args:
@@ -31,7 +31,7 @@ class FilePatternDataSource(DataSourceStage):
         """
         self.paths = PipelineStage.parse_paths(content)
 
-    async def fetch(self) -> Iterator[Paragraph]:
+    async def fetch(self):
         """Yield paragraphs with file paths as content.
         
         Yields:
@@ -53,7 +53,7 @@ class TextDataSource(DataSourceStage):
         files: List of text file paths to process.
     """
 
-    def apply_params(self, dataset_name: str = '', lang: str = 'auto', content: str = '') -> None:
+    def apply_params(self, dataset_name: str = '', lang: str = 'auto', content: str = '', **params) -> None:
         """Configure the text file data source.
         
         Args:
@@ -65,7 +65,7 @@ class TextDataSource(DataSourceStage):
         self.lang = lang
         self.files = PipelineStage.parse_paths(content)
 
-    async def fetch(self) -> Iterator[Paragraph]:
+    async def fetch(self):
         """Process configured text files and yield paragraphs.
         
         Yields:
@@ -80,14 +80,11 @@ class TextDataSource(DataSourceStage):
         dataset = await Dataset.get(self.name)
         for path in await self.files:
             source_path = path if '://' in path else storage.relative_path(path)
-            source = await Paragraph.resolve_source(source_path)
+            source = await Paragraph.resolve_source(cast(str, source_path))
             for i, line in enumerate(storage.open(path)):
                 yield Paragraph(
                     content=codecs.decode(line),
                     source=source,
-                    # TODO(legacy): dataset column is kept only for HASH partitioning.
-                    # Remove once data migration is complete.
-                    dataset=dataset.id, 
                     lang=self.lang, 
                     outline=f'{i+1:06d}'
                 )
@@ -113,7 +110,8 @@ class LinesDataSource(DataSourceStage):
         lang: str = "auto", 
         content: str = "", 
         params: Optional[dict] = None, 
-        delimiter: str = '\n'
+        delimiter: str = '\n',
+        **kwargs
     ) -> None:
         """Configure the lines data source.
         
@@ -129,7 +127,7 @@ class LinesDataSource(DataSourceStage):
         self.lines = content.split(delimiter)
         self.params = params or {}
 
-    async def fetch(self) -> Iterator[Paragraph]:
+    async def fetch(self):
         """Yield paragraphs from configured text lines.
         
         Yields:
@@ -178,7 +176,8 @@ class BiblioDataSource(DataSourceStage):
         content: str = '', 
         dataset_name: str = '', 
         lang: str = 'zhs', 
-        input_format: str = 'endnote'
+        input_format: str = 'endnote',
+        **kwargs
     ) -> None:
         """Configure the bibliography data source.
         
@@ -277,7 +276,7 @@ class BiblioDataSource(DataSourceStage):
         if doc:
             yield Paragraph.from_dict(dict(dataset=self.dataset, **doc))
 
-    async def fetch(self) -> Iterator[Paragraph]:
+    async def fetch(self):
         """Process configured bibliography files and yield paragraphs.
         
         Yields:

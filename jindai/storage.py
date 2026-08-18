@@ -14,7 +14,7 @@ import os
 import shutil
 from datetime import datetime
 from io import BytesIO
-from typing import Any, Dict, List, Self
+from typing import Any, Dict, IO, List, Optional, cast
 
 from PIL import Image
 from werkzeug.utils import secure_filename
@@ -39,7 +39,7 @@ class Storage:
     __instance: "Storage | None" = None
     __initialized: bool = False
 
-    def __new__(cls, *args, **kwargs) -> Self:
+    def __new__(cls, *args, **kwargs) -> "Storage":
         """Implement singleton pattern for Storage.
 
         Args:
@@ -92,10 +92,10 @@ class Storage:
         Raises:
             ValueError: If path would escape storage root directory.
         """
-        segs = "/".join(segs).lstrip("/").replace("../", "/")
-        if segs.startswith(self.FILE_STORAGE_ROOT.lstrip("/")):
-            segs = segs[len(self.FILE_STORAGE_ROOT) :]
-        joined_path = os.path.abspath(os.path.join(self.FILE_STORAGE_ROOT, segs))
+        joined = "/".join(segs).lstrip("/").replace("../", "/")
+        if joined.startswith(self.FILE_STORAGE_ROOT.lstrip("/")):
+            joined = joined[len(self.FILE_STORAGE_ROOT) :]
+        joined_path = os.path.abspath(os.path.join(self.FILE_STORAGE_ROOT, joined))
         if not joined_path.startswith(self.FILE_STORAGE_ROOT):
             raise ValueError(
                 f"Access path is not within allowed range, possible path traversal attack {segs} -> {joined_path}"
@@ -203,7 +203,7 @@ class Storage:
             List of relative paths matching pattern.
         """
         results = glob.glob(self.safe_join(pattern), recursive=recursive)
-        return [self.relative_path(p) for p in results]
+        return [cast(str, self.relative_path(p)) for p in results]
 
     def search(self, base_dir: str, search: str, detailed: bool = True) -> Dict[str, Any]:
         """Search for files/directories matching pattern in directory tree.
@@ -285,7 +285,7 @@ class Storage:
         return self.fileinfo(dir_path)
 
     def mv(
-        self, old_rel_path, new_name=None, new_rel_path=None
+        self, old_rel_path, new_name=None, new_rel_path: Optional[str] = None
     ) -> dict[str, bytes | str | dict]:
         """Move or rename file/directory.
 
@@ -306,6 +306,7 @@ class Storage:
             new_name = secure_filename(new_name)
             new_path = os.path.join(os.path.dirname(old_path), new_name)
         else:
+            assert new_rel_path is not None, "new_rel_path is required when new_name is empty"
             new_path = self.safe_join(new_rel_path)
 
         if os.path.exists(new_path):
@@ -387,13 +388,13 @@ class Storage:
         # Check format parameter
         if format:
             file_name = file_name.rsplit(".", 1)[0] + "." + format
-            if mime_type.startswith("image/"):
+            if cast(str, mime_type).startswith("image/"):
                 im = Image.open(buf)
                 buf = BytesIO()
                 im.save(buf, format)
                 mime_type = f"image/{format}"
             elif mime_type == "application/pdf":
-                buf = render_pdf_with_fitz(buf, format=format)
+                buf = render_pdf_with_fitz(cast(Any, buf), format=format)
                 mime_type = f"image/{format}"
 
         buf.seek(0)
@@ -410,7 +411,7 @@ class Storage:
         """
         return os.path.relpath(p, self.FILE_STORAGE_ROOT)
 
-    def open(self, relpath: str, mode: str = "rb") -> open:
+    def open(self, relpath: str, mode: str = "rb") -> IO:
         """Open file with safe path joining.
 
         Args:

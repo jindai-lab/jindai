@@ -3,11 +3,11 @@
 """
 
 import asyncio
-from typing import Dict, Iterable, Tuple, Iterator
+from typing import AsyncGenerator, Callable, Dict, Iterable, Tuple, Iterator, cast
 
 
 from jindai.helpers import aeval
-from jindai.models import TaskDBO
+from jindai.models import Paragraph, TaskDBO
 from jindai.pipeline import Pipeline, PipelineStage
 from jindai.task import Task
 
@@ -27,7 +27,7 @@ class FlowControlStage(PipelineStage):
         super().__init__()
 
     @property
-    def log(self) -> None:
+    def log(self) -> Callable:
         """log"""
         return lambda *x: self._log(
             self.instance_name or self.__class__.__name__, "|", *x
@@ -113,7 +113,7 @@ class RepeatWhile(FlowControlStage):
             yield paragraph, self.next
 
     async def summarize(self, result) -> Dict:
-        return await self.pipeline.summarize(result)
+        return cast(Dict, await self.pipeline.summarize(result))
 
 
 class ForEach(FlowControlStage):
@@ -249,14 +249,16 @@ class CallTask(FlowControlStage):
         self.pipeline = task.pipeline
         self.pipeline.stages = self.pipeline.stages[self._pipeline_skip:]
         
-    async def resolve(self, paragraph):
+    async def resolve(  # pyright: ignore[reportIncompatibleMethodOverride]
+        self, paragraph
+    ) -> AsyncGenerator[Tuple[Paragraph, PipelineStage | None], None]:
         if self.pipeline.stages:
             yield paragraph, self.pipeline.stages[0]
         else:
             yield paragraph, self.next
 
-    async def summarize(self, _):
-        return await self.pipeline.summarize()
+    async def summarize(self, result) -> Dict:
+        return cast(Dict, await self.pipeline.summarize())
 
 
 class RunTask(CallTask):
@@ -273,11 +275,13 @@ class RunTask(CallTask):
         """
         super().__init__(task, 0, params)
 
-    async def flow(self, paragraph, gctx) -> Iterable[Tuple]:
+    async def flow(  # pyright: ignore[reportIncompatibleMethodOverride]
+        self, paragraph, gctx
+    ) -> AsyncGenerator[Tuple[Paragraph, PipelineStage | None], None]:
         self.gctx = gctx
         yield paragraph, self.next
 
-    async def summarize(self, _) -> Dict:
+    async def summarize(self, _) -> Dict:  # pyright: ignore[reportIncompatibleMethodOverride]
         return self.task.execute()
 
 

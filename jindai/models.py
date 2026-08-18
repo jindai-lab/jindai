@@ -23,7 +23,7 @@ import uuid
 from contextlib import asynccontextmanager
 from datetime import datetime
 from functools import wraps
-from typing import Any, AsyncIterator, Dict, List, Optional, Union
+from typing import Any, AsyncIterator, Dict, List, Optional, Union, cast
 
 import httpx
 import redis
@@ -425,7 +425,7 @@ class Paragraph(Base):
     source information, author, date, and keywords.
     """
 
-    __tablename__ = "paragraph_new"
+    __tablename__ = "paragraph"
     __table_args__ = (
         # Index definitions (same as original table)
         PrimaryKeyConstraint("id", "source", name="paragraph_new_pk"),
@@ -522,9 +522,6 @@ class Paragraph(Base):
             ).scalar_one_or_none()
             if existing is None:
                 session.add(FileDataset(file_id=self.source, dataset_id=ds.id))
-        # TODO(legacy): dataset column is kept only for HASH partitioning.
-        # Remove once data migration is complete.
-        self.dataset = ds.id
 
     @staticmethod
     async def resolve_source(source_url: str) -> Optional[uuid.UUID]:
@@ -583,7 +580,7 @@ class Paragraph(Base):
             return list(result.scalars())
 
     @staticmethod
-    def from_dict(data: dict, ignored_fields: list = None, **kwargs) -> "Paragraph":
+    def from_dict(data: dict, ignored_fields: Optional[list] = None, **kwargs) -> "Paragraph":
         """Create Paragraph instance from dictionary.
 
         Args:
@@ -616,7 +613,7 @@ class Paragraph(Base):
             Dictionary with all fields including dataset_name and source_path.
         """
         data = super().as_dict()
-        # TODO(legacy): dataset_name is derived from the legacy dataset column
+        # ataset_name is derived from the legacy dataset column
         # for display only. It does not participate in business logic.
         data["dataset_name"] = self.source_obj.dataset_objs[0].name
         # source_path is derived from the FileMetadata association (canonical source).
@@ -777,7 +774,7 @@ class Paragraph(Base):
         Returns:
             SQLAlchemy select query with filters applied.
         """
-        query = select(Paragraph)
+        query = select(Paragraph).join(FileMetadata, FileMetadata.id == Paragraph.source).join(FileDataset, Paragraph.source == FileDataset.file_id)
         filters = []
         query_embedding = None
         search = query_filters.q
@@ -841,40 +838,28 @@ class Paragraph(Base):
                 filters.append(Paragraph.content.ilike(f"%{search_term}%"))
         elif search.startswith(":") or query_filters.embeddings:
             query_embedding = await TextEmbeddings.get_embedding(search.strip(":"))
-        elif any(c in search for c in '|&()'):
+        else:
             # Parse expression with |, &, () operators
             search_filter = await Paragraph._parse_search_expression(search)
             filters.append(search_filter)
-        else:
-            words = [_.strip().lower() for _ in jieba.cut_query(search) if _.strip()]
-            for word in words:
-                candidates = [word.strip("^%")]
-                if word.startswith("^"):
-                    candidates.extend(await Terms.starting_with(word.strip("^")))
-                filters.append(
-                    or_(*(Paragraph.keywords.contains([c]) for c in candidates))
-                )
-
+        
         query = query.filter(*filters)
 
         # Vector Search Join
         if query_embedding is not None:
-            # TODO(legacy): TextEmbeddings.dataset is part of its composite primary
-            # key and is used for chunking association. It must stay in sync with
-            # Paragraph.dataset until the schema is migrated.
             query = (
                 query.join(
                     TextEmbeddings,
                     (Paragraph.id == TextEmbeddings.id)
-                    & (Paragraph.dataset == TextEmbeddings.dataset),  # Chunking requires
+                    & (Paragraph.source == TextEmbeddings.source),  # Chunking requires
                 )
                 .distinct(
                     Paragraph.id,
-                    Paragraph.dataset,
+                    Paragraph.source,
                 )
                 .order_by(
                     Paragraph.id,
-                    Paragraph.dataset,
+                    Paragraph.source,
                     TextEmbeddings.embedding.cosine_distance(query_embedding),
                 )
                 .add_columns(TextEmbeddings.embedding)
@@ -1175,6 +1160,7 @@ def redis_auto_renew_cache(cache_key=None):
 
         @wraps(func)  # Preserve original function attributes (name, docstring, etc.)
         def wrapper(*args, **kwargs):
+            cache_key_full = ""  # Ensure the variable is always bound
             if func.cache_key_method is not None:
                 cache_key_str = f"{func.cache_key_method(*args, **kwargs) or ''}"
             else:
@@ -1184,7 +1170,7 @@ def redis_auto_renew_cache(cache_key=None):
 
             if cache_key_str:
                 cache_key_full = f"{CACHE_KEY_PREFIX}{func.__name__}_{cache_key_str}"
-                cached_data = redis_client.get(cache_key_full)
+                cached_data: Optional[bytes] = cast(Optional[bytes], redis_client.get(cache_key_full))
                 if cached_data is not None:
                     redis_client.expire(cache_key_full, CACHE_EXPIRE_SECONDS)
                     return json.loads(cached_data)
@@ -1234,11 +1220,11 @@ class TextEmbeddings(Base):
         comment="Paragraph ID",
     )
 
-    dataset: Mapped[uuid.UUID] = mapped_column(
+    source: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
-        ForeignKey("dataset.id", ondelete="CASCADE"),
+        ForeignKey("public.file_metadata.id", ondelete="CASCADE"),
         primary_key=True,
-        comment="Dataset ID",
+        comment="File Source ID",
     )
 
     chunk_id: Mapped[int] = mapped_column(
@@ -1247,8 +1233,8 @@ class TextEmbeddings(Base):
         comment="Chunk ID",
     )
 
-    embedding: Mapped[Vector] = mapped_column(
-        Vector(config.embedding_dims), nullable=False, comment="Text embedding vector"
+    embedding: Mapped[list[float]] = mapped_column(
+        Vector(config.embedding_dims), nullable=False, comment="Text embedding vector" # type: ignore
     )
 
     @staticmethod
@@ -1535,8 +1521,10 @@ async def get_current_user(request: Request = None, websocket: WebSocket = None)
         HTTPException: If authentication fails.
     """
     if websocket is not None:
-        auth_header = 'Bearer ' + websocket.query_params.get("token")
+        token = websocket.query_params.get("token")
+        auth_header = 'Bearer ' + (token or "")
     else:
+        assert request is not None, "request cannot be None when websocket is None"
         auth_header = request.headers.get("Authorization", "")   
      
     # Check for API key
@@ -1546,7 +1534,7 @@ async def get_current_user(request: Request = None, websocket: WebSocket = None)
         cache_key = f"{API_KEY_CACHE_PREFIX}{key_hash}"
         
         # Try to get from cache first
-        cached = redis_client.get(cache_key)
+        cached: Optional[bytes] = cast(Optional[bytes], redis_client.get(cache_key))
         if cached:
             user_info = json.loads(cached)
             return user_info

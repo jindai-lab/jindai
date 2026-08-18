@@ -12,7 +12,7 @@ Enhanced features:
 - External OCR fallback for scanned pages (no embedded text)
 """
 
-from typing import Iterator, List, Optional
+from typing import Any, Iterator, List, Optional, cast
 
 import regex as re
 from sqlalchemy import func, select
@@ -106,6 +106,7 @@ class PDFDataSource(DataSourceStage):
         short_line_batch: int = 5,
         # OCR fallback parameters
         ocr_fallback: bool = False,
+        **params,
     ) -> None:
         """Configure the PDF data source.
         
@@ -222,7 +223,7 @@ class PDFDataSource(DataSourceStage):
 
             # Open PDF file using the unified helper
             stream = storage.open(filepath, "rb")
-            doc = open_pdf(stream)
+            doc = open_pdf(cast(Any, stream))
             try:
                 # Determine page range to process
                 page_range = self.page_range
@@ -249,8 +250,7 @@ class PDFDataSource(DataSourceStage):
                     try:
                         # Extract text content
                         content = (
-                            doc[page]
-                            .get_text()
+                            str(doc[page].get_text())
                             .encode("utf-8", errors="ignore")
                             .decode("utf-8")
                         )
@@ -262,7 +262,7 @@ class PDFDataSource(DataSourceStage):
                     if (not content or len(content.strip()) < 10) and ocr_client:
                         try:
                             self.log(f"{filepath} page {page + 1} has no text, running OCR...")
-                            image_bytes = render_pdf_page(stream, page_num=page, zoom=2.0)
+                            image_bytes = render_pdf_page(cast(Any, stream), page_num=page, zoom=2.0)
                             content = ocr_client.ocr_image(image_bytes, lang=lang)
                         except Exception as ex:
                             self.log(f"OCR failed for {filepath} page {page + 1}: {ex}")
@@ -279,21 +279,18 @@ class PDFDataSource(DataSourceStage):
                         source=await Paragraph.resolve_source(filepath),
                         source_page=page,
                         pagenum=label or str(page + 1),
-                        # TODO(legacy): dataset column is kept only for HASH partitioning.
-                        # Remove once data migration is complete.
-                        dataset=dataset.id,
                     )
                     await para.associate_dataset(dataset.id)
 
                     # Apply text cleaning
                     if text_cleaner:
-                        para = text_cleaner.resolve(para)
+                        para = cast(Paragraph, text_cleaner.resolve(para))
                         if para is None:  # Filtered as garbled
                             continue
 
                     # Apply language detection
                     if lang_detector:
-                        para = lang_detector.resolve(para)
+                        para = cast(Paragraph, lang_detector.resolve(para))
 
                     # Buffer for re-paragraphization
                     if reparagraphizer:

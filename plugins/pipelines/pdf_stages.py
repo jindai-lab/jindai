@@ -9,7 +9,7 @@ This module provides specialized pipeline stages for PDF text processing:
 import re
 import statistics
 from collections import deque
-from typing import Iterator, List, Optional, Tuple
+from typing import AsyncGenerator, Iterator, List, Optional, Tuple, cast
 
 import hanzidentifier
 import regex as re
@@ -127,7 +127,7 @@ class TextCleaner(PipelineStage):
     
     def _replace_confusable(self, match: re.Match) -> str:
         """Replace matched confusable character."""
-        return self.OCR_CONFUSABLES.get(match.group(0), match.group(0))
+        return cast(str, self.OCR_CONFUSABLES.get(match.group(0), match.group(0)))
     
     def clean_text(self, text: str) -> str:
         """Clean text content.
@@ -532,9 +532,6 @@ class CrossPageReparagraphizer(PipelineStage):
             source=source,
             source_page=first_page_num,
             pagenum=first_label or str(first_page_num + 1),
-            # TODO(legacy): dataset column is kept only for HASH partitioning.
-            # Remove once data migration is complete.
-            dataset=base_dataset,
         )
         
         self._current_paragraph_lines.clear()
@@ -670,9 +667,6 @@ class CrossPageReparagraphizer(PipelineStage):
                             source=source,
                             source_page=page_num,
                             pagenum=page_label or str(page_num + 1),
-                            # TODO(legacy): dataset column is kept only for HASH partitioning.
-                            # Remove once data migration is complete.
-                            dataset=base_dataset,
                         )
         
         self._last_page_num = page_num
@@ -706,7 +700,9 @@ class CrossPageReparagraphizer(PipelineStage):
         # This is handled in flow() for proper iterator support
         return paragraph
     
-    async def flow(self, paragraph: Paragraph):
+    async def flow(
+        self, paragraph: Paragraph
+    ) -> AsyncGenerator[Tuple[Paragraph, "PipelineStage | None"], None]:  # type: ignore[override]
         """Flow control for re-paragraphization.
         
         Args:
@@ -717,9 +713,8 @@ class CrossPageReparagraphizer(PipelineStage):
         """
         # Get source info from paragraph
         source = paragraph.source
-        # TODO(legacy): dataset column is kept only for HASH partitioning.
-        # Remove once data migration is complete.
-        base_dataset = paragraph.dataset
+        
+        base_dataset = paragraph.source_obj.dataset_objs[0]
         
         # Process page content
         page_num = paragraph.source_page or 0

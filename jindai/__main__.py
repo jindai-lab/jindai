@@ -9,6 +9,7 @@ This module provides CLI commands for:
 - Launching an IPython shell with application context
 """
 
+import logging
 import glob
 import json
 import os
@@ -19,17 +20,23 @@ import zipfile
 
 import click
 import asyncio
+from typing import Optional, TextIO
 import regex as re
 from sqlalchemy import select
 import urllib3
 import yaml
-import logging
 
 from . import Plugin, PluginManager, Task, config, storage, app, run_service
 from .helpers import get_context, safe_import
 from .models import (Dataset, Paragraph, QueryFilters, TaskDBO, UserInfo, get_db_session)
 
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s [%(levelname)s] %(message)s',
+    datefmt='%Y-%m-%d %H:%M:%S'   # 指定时间格式
+)
+
 
 
 def _init_plugins(*paths) -> "PluginManager":
@@ -104,8 +111,9 @@ def export(query: str, output_file: str) -> None:
 
     xlsx = task_obj.execute()
 
-    with open(output_file, "wb") as output_file:
-        output_file.write(xlsx)
+    from typing import cast as _cast
+    with open(output_file, "wb") as fout:
+        fout.write(_cast(bytes, xlsx))
 
 
 @cli.command("task")
@@ -122,7 +130,7 @@ async def run_task(
     verbose: bool,
     edit: bool,
     log: str,
-    output: click.File
+    output: Optional[TextIO],
 ) -> None:
     """Run a task by ID or name.
     

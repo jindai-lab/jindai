@@ -6,7 +6,7 @@ entries based on title and author matching.
 
 import logging
 from datetime import datetime
-from typing import List, Optional, Dict, Any, Tuple
+from typing import Any, List, Optional, Dict, Tuple, cast
 from uuid import UUID
 
 from sqlalchemy import select, and_, or_
@@ -66,7 +66,7 @@ class BibItemDeduplicator:
         return (title, author)
 
     async def find_duplicates(
-        self, session, items: List[BibItem] = None
+        self, session, items: Optional[List[BibItem]] = None
     ) -> List[List[BibItem]]:
         """Find groups of duplicate items.
         
@@ -85,7 +85,7 @@ class BibItemDeduplicator:
         
         # Group items by merge key
         groups: Dict[Tuple[str, str], List[BibItem]] = {}
-        for item in items:
+        for item in cast(List[BibItem], items):
             key = self._get_merge_key(item)
             if key not in groups:
                 groups[key] = []
@@ -205,7 +205,7 @@ class BibItemDeduplicator:
         return merged
 
     async def deduplicate(
-        self, session, items: List[BibItem] = None, keep: str = "latest"
+        self, session, items: Optional[List[BibItem]] = None, keep: str = "latest"
     ) -> List[BibItem]:
         """Deduplicate a list of items.
         
@@ -256,7 +256,7 @@ class BibItemDeduplicator:
         return unique_items
 
     async def deduplicate_all(
-        self, session, dataset_id: UUID = None, keep: str = "latest"
+        self, session, dataset_id: Optional[UUID] = None, keep: str = "latest"
     ) -> Dict[str, Any]:
         """Deduplicate all items in the database (optionally filtered by dataset).
         
@@ -325,7 +325,7 @@ class BibItemDeduplicator:
         return (title, author)
 
     async def find_duplicates_by_key(
-        self, session, title: str, author: str, dataset_id: UUID = None
+        self, session, title: str, author: str, dataset_id: Optional[UUID] = None
     ) -> List[BibItem]:
         """Find items that match a specific title and author.
         

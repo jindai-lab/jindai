@@ -7,7 +7,7 @@ import logging
 import time
 import uuid
 from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, cast
 
 import httpx
 import regex as re
@@ -33,7 +33,7 @@ class CloudSearchBase(PipelineStage):
         api_endpoint: str = "",
         api_key: str = "",
         index_name: str = "",
-        search_fields: List[str] = None,
+        search_fields: Optional[List[str]] = None,
         result_field: str = "cloud_search_results",
         timeout: float = 30.0,
         verbose: bool = False,
@@ -76,7 +76,7 @@ class CloudSearchBase(PipelineStage):
         if not self._initialized:
             self.client = httpx.AsyncClient(timeout=self.timeout)
             self._initialized = True
-        return self.client
+        return cast(httpx.AsyncClient, self.client)
     
     async def _close_client(self) -> None:
         """Close HTTP client."""
@@ -89,7 +89,7 @@ class CloudSearchBase(PipelineStage):
         if self.verbose:
             logging.info(f"[{self.provider_name}] {' '.join(map(str, args))}")
     
-    async def _build_search_query(self, content: str) -> Dict[str, Any]:
+    async def _build_search_query(self, content: str) -> Any:
         """Build search query from content.
         
         Args:
@@ -102,7 +102,7 @@ class CloudSearchBase(PipelineStage):
         clean_content = re.sub(r'\s+', ' ', content).strip()
         return clean_content[:1000]  # Limit query length
     
-    async def _call_search_api(self, query: str) -> Dict[str, Any]:
+    async def _call_search_api(self, query: Any) -> Dict[str, Any]:
         """Call cloud search API.
         
         Args:
@@ -183,7 +183,7 @@ class TencentCloudSearch(CloudSearchBase):
         api_endpoint: str = "https://search.tencentcloudapi.com",
         api_key: str = "",
         index_name: str = "",
-        search_fields: List[str] = None,
+        search_fields: Optional[List[str]] = None,
         result_field: str = "tencent_search_results",
         timeout: float = 30.0,
         verbose: bool = False,
@@ -227,7 +227,7 @@ class TencentCloudSearch(CloudSearchBase):
         """
         clean_content = re.sub(r'\s+', ' ', content).strip()
         
-        query = {
+        query: Dict[str, Any] = {
             "query": {
                 "simple_query": clean_content
             }
@@ -290,7 +290,7 @@ class AzureCognitiveSearch(CloudSearchBase):
         api_endpoint: str = "",
         api_key: str = "",
         index_name: str = "",
-        search_fields: List[str] = None,
+        search_fields: Optional[List[str]] = None,
         result_field: str = "azure_search_results",
         timeout: float = 30.0,
         verbose: bool = False,
@@ -393,7 +393,7 @@ class AWSCloudSearch(CloudSearchBase):
         api_endpoint: str = "",
         api_key: str = "",
         index_name: str = "",
-        search_fields: List[str] = None,
+        search_fields: Optional[List[str]] = None,
         result_field: str = "aws_search_results",
         timeout: float = 30.0,
         verbose: bool = False,
@@ -497,7 +497,7 @@ class AWSCloudSearch(CloudSearchBase):
         
         return f"{algorithm} Credential={self.aws_access_key}/{credential_scope}, SignedHeaders={signed_headers}, Signature={signature}"
     
-    async def _build_search_query(self, content: str) -> Dict[str, Any]:
+    async def _build_search_query(self, content: str) -> str:
         """Build search query from content.
         
         Args:
