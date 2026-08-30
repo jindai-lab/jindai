@@ -225,7 +225,8 @@ class Dataset(Base):
         UniqueConstraint("name", name="dataset_name_key"),  # Unique constraint
         {
             "comment": "Dataset information table",
-        },  # Table comment + schema specification
+            **Base.__table_args__
+        }
     )
 
     order_weight: Mapped[int] = mapped_column(
@@ -335,7 +336,8 @@ class UserInfo(Base):
         UniqueConstraint("username", name="user_info_username_key"),  # Username unique
         {
             "comment": "User table",
-        },
+            **Base.__table_args__
+        }
     )
 
     username: Mapped[str] = mapped_column(String(64), nullable=False, comment="Username")
@@ -364,11 +366,12 @@ class History(Base):
     __tablename__ = "history"
     __table_args__ = {
         "comment": "User operation history table",
+        **Base.__table_args__
     }
 
     user_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
-        ForeignKey("user_info.id", ondelete="CASCADE"),
+        ForeignKey("public.user_info.id", ondelete="CASCADE"),
         nullable=False,
         comment="Related user ID",
     )
@@ -439,6 +442,7 @@ class Paragraph(Base):
         Index("idx_paragraph_source", "source_id", "source_page", "pagenum"),
         {
             "comment": "Paragraph table",
+            **Base.__table_args__
         },
     )
 
@@ -522,26 +526,78 @@ class Paragraph(Base):
 
         Args:
             data: Dictionary with field values.
-            ignored_fields: Fields to ignore (default: ["id", "dataset_name"]).
+            ignored_fields: Fields to ignore (default: ["id", "source_url", "dataset_name"]).
             **kwargs: Additional field values.
 
         Returns:
             Paragraph instance.
         """
         if ignored_fields is None:
-            ignored_fields = ["id", "dataset_name"]
+            ignored_fields = ["id", "source_url", "dataset_name"]
         p = Paragraph()
         data.update(kwargs)
         for k, v in data.items():
             if k in ignored_fields:
                 continue
-            if hasattr(p, k):
+            column = Paragraph.__table__.columns.get(k)
+            if column is not None:
+                # Coerce the value to the type declared by the model column,
+                # e.g. str -> uuid.UUID for UUID columns (as produced by
+                # as_dict() round-trips or external JSON payloads).
+                setattr(p, k, Paragraph._coerce_value(column, v))
+            elif hasattr(p, k):
                 setattr(p, k, v)
             else:
                 if p.extdata is None:
                     p.extdata = {}
                 p.extdata[k] = v
         return p
+
+    @staticmethod
+    def _coerce_value(column: Column, value: Any) -> Any:
+        """Coerce a raw value to the Python type expected by a model column.
+
+        Handles values coming from serialized forms (e.g. ``as_dict()``
+        round-trips or external JSON payloads) where UUIDs and datetimes are
+        represented as strings.
+
+        Args:
+            column: Target SQLAlchemy column.
+            value: Raw value to coerce.
+
+        Returns:
+            The value converted to the column's Python type, or the original
+            value when no conversion is applicable/possible.
+        """
+        if value is None:
+            return None
+
+        column_type = column.type
+
+        if isinstance(column_type, UUID):
+            if isinstance(value, uuid.UUID):
+                return value
+            if isinstance(value, str):
+                return uuid.UUID(value)
+            return value
+
+        if isinstance(column_type, DateTime):
+            if isinstance(value, datetime):
+                return value
+            if isinstance(value, str):
+                return datetime.fromisoformat(value)
+            return value
+
+        if isinstance(column_type, (Integer, BigInteger)):
+            if isinstance(value, bool):
+                return int(value)
+            if isinstance(value, int):
+                return value
+            if isinstance(value, str) and value.strip():
+                return int(value)
+            return value
+
+        return value
 
     def as_dict(self) -> dict:
         """Convert to dictionary with dataset name and source path.
@@ -854,6 +910,7 @@ class Terms(MBase):  # terms has no `id`, and cannot as_dict()
     __tablename__ = "terms"
     __table_args__ = {
         "comment": "Vocabulary table",
+        **Base.__table_args__
     }
 
     term: Mapped[str] = mapped_column(
@@ -920,7 +977,7 @@ class EmbeddingPendingQueue(Base):
     __tablename__ = 'embedding_pending_queue'
 
     # Define composite primary key
-    dataset: Mapped[uuid.UUID] = mapped_column(UUID, primary_key=True)
+    source_id: Mapped[uuid.UUID] = mapped_column(UUID, primary_key=True)
 
     # Record creation time for debugging delays or ordered processing
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
@@ -929,8 +986,9 @@ class EmbeddingPendingQueue(Base):
 class FileDataset(MBase):
     """File Metadata <-> Dataset Relationship"""
     __tablename__ = 'file_dataset'
+    __table_args__ = Base.__table_args__
     
-    dataset_id: Mapped[uuid.UUID] = mapped_column(UUID, ForeignKey("dataset.id", ondelete="CASCADE"),
+    dataset_id: Mapped[uuid.UUID] = mapped_column(UUID, ForeignKey("public.dataset.id", ondelete="CASCADE"),
             primary_key=True)
     file_id: Mapped[uuid.UUID] = mapped_column(UUID, ForeignKey("public.file_metadata.id", ondelete="CASCADE"), primary_key=True)
 
@@ -938,7 +996,7 @@ class FileDataset(MBase):
     async def link(file_metadata_id: uuid.UUID, dataset_name: uuid.UUID | str):
         assert isinstance(file_metadata_id, uuid.UUID), f'Invalid file metadata id, expected UUID, got {repr(file_metadata_id)}'
         if isinstance(dataset_name, str):
-            dataset_id = await Dataset.get(dataset_name)
+            dataset_id = (await Dataset.get(dataset_name)).id
         else:
             dataset_id = dataset_name
         async with get_db_session() as sess:
@@ -1167,7 +1225,7 @@ class FileMetadata(Base):
     # Relationship to datasets via file_dataset association table
     dataset_objs: Mapped[List["Dataset"]] = relationship(
         "Dataset",
-        secondary="file_dataset",
+        secondary="public.file_dataset",
         lazy="selectin",
         doc="Datasets associated with this file (via file_dataset table)",
     )
@@ -1182,6 +1240,7 @@ class TaskDBO(Base):
     __tablename__ = "task_dbo"
     __table_args__ = {
         "comment": "Task table",
+        **Base.__table_args__
     }
 
     name: Mapped[str] = mapped_column(String(128), nullable=False, comment="Task name")
@@ -1199,7 +1258,7 @@ class TaskDBO(Base):
 
     user_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
-        ForeignKey("user_info.id", ondelete="CASCADE"),
+        ForeignKey("public.user_info.id", ondelete="CASCADE"),
         nullable=False,
         comment="Related user ID",
     )
@@ -1310,12 +1369,13 @@ class TextEmbeddings(Base):
         ),
         {
             "comment": "Text embeddings table",
-        },
+            **Base.__table_args__
+        }
     )
 
     id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
-        ForeignKey("paragraph.id", ondelete="CASCADE"),
+        ForeignKey("public.paragraph.id", ondelete="CASCADE"),
         primary_key=True,
         comment="Paragraph ID",
     )
@@ -1564,6 +1624,7 @@ class APIKey(Base):
     __tablename__ = "api_keys"
     __table_args__ = {
         "comment": "API keys table for user authentication",
+        **Base.__table_args__
     }
 
     # The actual API key (stored as hashed in database)
@@ -1574,7 +1635,7 @@ class APIKey(Base):
     # User who owns this API key
     user_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
-        ForeignKey("user_info.id", ondelete="CASCADE"),
+        ForeignKey("public.user_info.id", ondelete="CASCADE"),
         nullable=False,
         comment="Owner user ID",
     )

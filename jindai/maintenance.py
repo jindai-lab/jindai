@@ -457,9 +457,9 @@ class MaintenanceManager:
             stmt.join(
                 EmbeddingPendingQueue,
                 (EmbeddingPendingQueue.id == Paragraph.id)
-                & (EmbeddingPendingQueue.dataset == Paragraph.dataset),
+                & (EmbeddingPendingQueue.source_id == Paragraph.source_id),
             )
-            .with_only_columns(Paragraph.id, Paragraph.dataset, Paragraph.content)
+            .with_only_columns(Paragraph.id, Paragraph.source_id, Paragraph.content)
             .limit(10000)
         )
 

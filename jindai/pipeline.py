@@ -460,6 +460,8 @@ class PipelineStage:
         Yields:
             Tuples of (<result/iterable results>, next pipeline stage).
         """
+        import uuid
+        assert paragraph.source_id is None or isinstance(paragraph.source_id, uuid.UUID), f'Invalid source: {repr(paragraph.source_id)}'
         
         if self.verbose:
             self.log("Processing")
