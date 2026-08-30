@@ -400,7 +400,7 @@ class Storage:
         buf.seek(0)
         return buf, mime_type, file_name
 
-    def relative_path(self, p) -> bytes | str:
+    def relative_path(self, p) -> str:
         """Get path relative to storage root.
 
         Args:

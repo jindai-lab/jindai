@@ -16,7 +16,7 @@ import regex as re
 from lingua import LanguageDetectorBuilder
 
 from jindai.helpers import WordStemmer as WStemmer, aeval, jieba
-from jindai.models import Paragraph, Terms, get_db_session
+from jindai.models import Paragraph, Terms, FileDataset, get_db_session
 from jindai.pipeline import PipelineStage, ResolveReturn
 from jindai.storage import storage
 
@@ -652,11 +652,16 @@ class DatasetFromField(PipelineStage):
         """
         super().__init__()
         self.pattern = pattern
+        self._datasets_set = []
 
     async def resolve(self, paragraph: Paragraph) -> ResolveReturn:
-        replaced = self.pattern.format(**paragraph.as_dict(), **paragraph.extdata or {})
+        data = paragraph.as_dict()
+        data.update(**paragraph.extdata or {})
+        replaced = self.pattern.format(**data)
         if "{" not in replaced:
-            await paragraph.set_dataset_name(replaced)
+            if (paragraph.source_id, replaced) not in self._datasets_set:
+                await FileDataset.link(paragraph.source_id, replaced)
+                self._datasets_set.append((paragraph.source_id, replaced))
         return paragraph
 
 

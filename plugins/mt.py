@@ -326,7 +326,7 @@ class GoogleTranslation(PipelineStage):
         
         param = f"sl={lang_from}&tl={lang_to}"
         async with httpx.AsyncClient() as client:
-            resp = await client.get(f"https://translate.google.com/translate_a/single?client=gtx&{param}&hl=zh-CN&dt=at&dt=bd&dt=ex&dt=ld&dt=md&dt=qca&dt=rw&dt=rm&dt=ss&dt=t&source=bh&ssel=0&tsel=0&kc=1&tk={TL(text)}&q={urllib.parse.quote(text)}", params=param, headers={ "responseType": "json" })
+            resp = await client.get(f"https://translate.google.com/translate_a/single?client=gtx&{param}&hl=zh-CN&dt=at&dt=bd&dt=ex&dt=ld&dt=md&dt=qca&dt=rw&dt=rm&dt=ss&dt=t&source_id=bh&ssel=0&tsel=0&kc=1&tk={TL(text)}&q={urllib.parse.quote(text)}", params=param, headers={ "responseType": "json" })
         resp.raise_for_status()
         tgt = ""
         results = resp.json()

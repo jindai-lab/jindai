@@ -62,7 +62,7 @@ class MaintenanceManager:
         async with get_db_session() as session:
             query = (
                 select(FileMetadata)
-                .join(Paragraph, Paragraph.source == FileMetadata.id)
+                .join(Paragraph, Paragraph.source_id == FileMetadata.id)
             )
             if folder:
                 query = query.filter(FileMetadata.path.startswith(folder))
@@ -103,7 +103,7 @@ class MaintenanceManager:
                     dataset_ids.update(fd_ids)
                     await session.execute(
                         update(Paragraph)
-                        .filter(Paragraph.source == file_id)
+                        .filter(Paragraph.source_id == file_id)
                         .values(
                             extdata=Paragraph.extdata.op("||")(
                                 func.jsonb_build_object("offline", True)
@@ -270,7 +270,7 @@ class MaintenanceManager:
                 WITH extracted_data AS (
                     SELECT p.id, substring(fm.path FROM :p) AS extracted_author
                     FROM paragraph p
-                    JOIN file_metadata fm ON p.source = fm.id
+                    JOIN file_metadata fm ON p.source_id = fm.id
                     WHERE fm.path ~* :p
                 )
                 UPDATE paragraph
@@ -300,7 +300,7 @@ class MaintenanceManager:
                         func.regexp_matches(FileMetadata.path, reg)[1] + "-01-01"
                     ).label("pdate_str"),
                 )
-                .join(FileMetadata, Paragraph.source == FileMetadata.id)
+                .join(FileMetadata, Paragraph.source_id == FileMetadata.id)
                 .join(FileDataset, FileDataset.file_id == FileMetadata.id)
                 .join(Dataset, Dataset.id == FileDataset.dataset_id)
                 .where(Dataset.name == dataset)
@@ -412,7 +412,7 @@ class MaintenanceManager:
                         # Get or create the FileMetadata, auto-matching/creating a
                         # dataset based on the containing folder if newly created.
                         asyncio.run(
-                            FileMetadata.get_or_create(
+                            FileMetadata.get(
                                 relative_path,
                                 extension=ext,
                                 size_bytes=size_bytes,
@@ -436,68 +436,6 @@ class MaintenanceManager:
 
         return StorageHandler()
     
-    async def sync_source_urls(self):
-        """[LEGACY] One-time migration to backfill FileMetadata.
-
-        This method is kept only for backward compatibility during data migration.
-        It should be removed once the migration is complete, as the source field
-        is now the canonical source of file association.
-        """
-        # Legacy migration - no longer needed as source field is canonical.
-        # The original implementation backfilled FileMetadata from source_url.
-        pass
-
-    async def populate_file_metadata(self) -> None:
-        """Populate file metadata table by scanning storage directory.
-
-        Performs a thorough recursive scan of the storage directory and
-        upserts file metadata into the database.
-        """
-        async def scan_storage_and_populate_db(
-            session: AsyncSession,
-            commit_every: int = 500,
-        ) -> None:
-            """Thorough recursive scan of storage directory.
-
-            Args:
-                session: Async database session.
-                commit_every: Number of files to process before committing.
-            """
-            storage_root = storage.safe_join('./')
-            if not os.path.isdir(storage_root):
-                raise ValueError(f"❌ Not a directory: {storage_root}")
-
-            logging.info(f"🚀 Starting thorough scan of: {storage_root}")
-            processed = 0
-
-            for metadata_obj in self._scan_storage(storage_root):
-
-                await FileMetadata.get_or_create(
-                    metadata_obj.path,
-                    extension=metadata_obj.extension,
-                    size_bytes=metadata_obj.size_bytes,
-                    extdata=metadata_obj.extdata,
-                )
-
-                processed += 1
-
-                if processed % commit_every == 0:
-                    await session.commit()
-                    logging.info(f"   ✅ Processed {processed:,} files...")
-
-            # Final commit
-            await session.commit()
-
-            logging.info("\n🎉 Scan finished!")
-            logging.info(f"   Total files processed : {processed:,}")
-            logging.info(f"   Database updated via UPSERT on filename (PK)")
-
-        async with get_db_session() as session:
-            await scan_storage_and_populate_db(
-                session=session,
-                commit_every=500,
-            )
-
     async def update_text_embeddings(self, filters: Optional[QueryFilters] = None) -> int:
         """Update text embeddings for paragraphs.
 

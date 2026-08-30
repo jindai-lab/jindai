@@ -843,7 +843,7 @@ class ContentManager(ResourceRegistry):
                 raise HTTPException(400, detail="No paths provided")
 
             for path in paths:
-                fm = await FileMetadata.get_or_create(path)
+                fm = await FileMetadata.get(storage.relative_path(path))
                 if fm is None:
                     continue
                 existing = (
@@ -1259,7 +1259,7 @@ class ContentManager(ResourceRegistry):
                 # Source filtering now goes through FileMetadata
                 col_attr = FileMetadata.path
                 query = query.join(
-                    FileMetadata, Paragraph.source == FileMetadata.id
+                    FileMetadata, Paragraph.source_id == FileMetadata.id
                 )
             else:
                 col_attr = getattr(Paragraph, column)

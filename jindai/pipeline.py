@@ -460,6 +460,7 @@ class PipelineStage:
         Yields:
             Tuples of (<result/iterable results>, next pipeline stage).
         """
+        
         if self.verbose:
             self.log("Processing")
 

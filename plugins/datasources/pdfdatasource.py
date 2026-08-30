@@ -18,7 +18,7 @@ import regex as re
 from sqlalchemy import func, select
 
 from jindai.storage import storage
-from jindai.models import Dataset, FileMetadata, Paragraph, get_db_session
+from jindai.models import Dataset, FileDataset, FileMetadata, Paragraph, get_db_session
 from jindai.pipeline import DataSourceStage, PipelineStage
 from jindai.pdfutils import open_pdf, render_pdf_page
 from jindai.ocrutils import PaddleOCRClient
@@ -183,7 +183,7 @@ class PDFDataSource(DataSourceStage):
                         FileMetadata.path,
                         func.max(Paragraph.source_page).label("max_page"),
                     )
-                    .join(FileMetadata, Paragraph.source == FileMetadata.id)
+                    .join(FileMetadata, Paragraph.source_id == FileMetadata.id)
                     .where(FileMetadata.path.in_(files))
                     .group_by(FileMetadata.path)
                 )
@@ -220,6 +220,7 @@ class PDFDataSource(DataSourceStage):
         for i, filepath in enumerate(files):
             imported_pages = 0
             self.log(f"{i+1}/{total} importing {filepath}")
+            source = await FileMetadata.get(storage.relative_path(filepath))
 
             # Open PDF file using the unified helper
             stream = storage.open(filepath, "rb")
@@ -271,16 +272,15 @@ class PDFDataSource(DataSourceStage):
                     # Skip pages with no content after OCR fallback
                     if not content or len(content.strip()) < 10:
                         continue
-
+                    
                     # Create base paragraph
                     para = Paragraph(
                         lang=lang,
                         content=content,
-                        source=await Paragraph.resolve_source(filepath),
+                        source_id=source,
                         source_page=page,
                         pagenum=label or str(page + 1),
                     )
-                    await para.associate_dataset(dataset.id)
 
                     # Apply text cleaning
                     if text_cleaner:
