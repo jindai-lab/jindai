@@ -268,7 +268,7 @@ class CalibreDataSource(DataSourceStage):
             - author: Book authors joined with ' & '
             - pdate: Publication date (year only) or None if unknown
             - outline: Book title
-            - source_url = content: Absolute file path
+            - source = content: Absolute file path
             - extdata: Dictionary with comprehensive book metadata including:
                 - book_id: Database ID
                 - file_attachments: Array of relative file paths

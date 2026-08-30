@@ -77,7 +77,6 @@ class ConfigObject(BaseModel):
     )
 
     constants: dict = Field(default_factory=dict, description="Application constants")
-    mineru: str = Field(description="MinerU API Endpoint")
     firecrawl_apikey: str = Field(
         default="", description="Firecrawl API key"
     )

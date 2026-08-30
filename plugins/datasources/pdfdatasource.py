@@ -133,6 +133,7 @@ class PDFDataSource(DataSourceStage):
         self.dataset_name = dataset_name
         self.lang = lang
         self.skip_existed = skip_existed
+        self.ext_params = params
         self.page_range = sorted(resolve_range(page_range))
         
         self.log(f'File Paths: {content}')
@@ -163,7 +164,7 @@ class PDFDataSource(DataSourceStage):
             Paragraph objects, one for each page in the specified range.
             Each paragraph contains:
                 - content: Extracted text from the page (optionally cleaned)
-                - source_url: Path to the PDF file
+                - source: FileMetadata of the PDF file
                 - source_page: 0-based page index
                 - pagenum: Page label or 1-based page number
                 - dataset: Target dataset ID
@@ -221,6 +222,7 @@ class PDFDataSource(DataSourceStage):
             imported_pages = 0
             self.log(f"{i+1}/{total} importing {filepath}")
             source = await FileMetadata.get(storage.relative_path(filepath))
+            assert source, 'Source should not be None'
 
             # Open PDF file using the unified helper
             stream = storage.open(filepath, "rb")
@@ -277,11 +279,12 @@ class PDFDataSource(DataSourceStage):
                     para = Paragraph(
                         lang=lang,
                         content=content,
-                        source_id=source,
+                        source_id=source.id,
                         source_page=page,
                         pagenum=label or str(page + 1),
+                        **self.ext_params
                     )
-
+                    
                     # Apply text cleaning
                     if text_cleaner:
                         para = cast(Paragraph, text_cleaner.resolve(para))
