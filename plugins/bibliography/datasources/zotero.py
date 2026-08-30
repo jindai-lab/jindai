@@ -11,7 +11,7 @@ from uuid import UUID
 
 import httpx
 
-from jindai.models import Dataset, Paragraph, get_db_session
+from jindai.models import Dataset, FileDataset, Paragraph, get_db_session
 from jindai.pipeline import DataSourceStage, PipelineStage
 
 
@@ -418,7 +418,7 @@ class ZoteroDataSource(DataSourceStage):
             
             # Set dataset and yield
             for paragraph in paragraphs:
-                await paragraph.associate_dataset(ds.id)
+                await FileDataset.link(paragraph.source_id, ds.id)
                 yield paragraph
             
             # Check if we got fewer items than limit (last page)

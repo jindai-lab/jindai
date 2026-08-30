@@ -7,15 +7,21 @@ including file attachments.
 
 import datetime
 import os
+import shutil
+import tempfile
 import urllib.parse
-from typing import List, Optional, Dict, Any, Iterable, cast
+from contextlib import contextmanager
+from typing import List, Optional, Dict, Any, Tuple
 from uuid import UUID
 
-from sqlalchemy import distinct, select, update, func, create_engine
+from sqlalchemy import create_engine, delete, func, select
 from sqlalchemy.orm import Session
 
 from jindai.storage import storage
-from jindai.models import Dataset, FileMetadata, Paragraph, get_db_session
+from jindai.models import (
+    Dataset, FileDataset, FileMetadata, Paragraph, TextEmbeddings,
+    get_db_session,
+)
 from jindai.pipeline import DataSourceStage, PipelineStage
 
 from .calibre_models import (
@@ -40,15 +46,22 @@ class CalibreDataSource(DataSourceStage):
     - Identifiers: book_id for tracking
     - Publication details: publisher, place, series, etc.
     
-    The data source supports scanning for moved files to update source URLs when
-    books are relocated within the library.
-    
+    The data source tracks every imported file in ``FileMetadata`` directly
+    (keyed by library path, book id and format in ``FileMetadata.extdata``).
+    When a book is relocated inside the library, the ``path`` of the tracked
+    FileMetadata row is rewritten in place; if the new path is already
+    occupied by another FileMetadata row (``path`` is unique), the stale row
+    is deleted together with its bound dataset links, paragraphs and text
+    embeddings, and the occupying row's ID is reused.
+
     Attributes:
         dataset_name: The name of the target dataset.
         lang: Language code for imported paragraphs.
         paths: List of Calibre library paths to scan.
         formats: Tuple of allowed file extensions (default: ('epub', 'pdf')).
-        scan_for_moved: Whether to update source URLs for moved books.
+        scan_for_moved: Whether to reconcile the path of moved books. When
+            False, moved books are imported as new FileMetadata rows and the
+            stale rows are left untouched.
     """
     def apply_params(
         self,
@@ -77,7 +90,9 @@ class CalibreDataSource(DataSourceStage):
     def get_calibre_books_safe(self, library_path: str) -> List[Dict[str, Any]]:
         """Safely read book metadata from a Calibre library database.
         
-        Opens the metadata.db file in read-only mode to extract book information.
+        A snapshot copy of metadata.db is made and queried instead of the
+        live file, so that a running Calibre instance cannot interfere with
+        the import; the copy is removed once the query has completed.
         Handles database errors gracefully and returns an empty list on failure.
         
         Args:
@@ -105,12 +120,10 @@ class CalibreDataSource(DataSourceStage):
         if not os.path.exists(db_path):
             return []
 
-        db_uri = f"sqlite:///{urllib.parse.quote(db_path)}?mode=ro&nolock=1&immutable=1"
-        
-        # Create engine with read-only URI
-        engine = create_engine(db_uri, echo=False)
-        
-        with engine.connect() as connection:
+        # Make a snapshot copy of the database, connect to the copy instead
+        # of the live file, and have the copy removed once the query has
+        # completed (see ``_connect_metadata_snapshot``).
+        with self._connect_metadata_snapshot(db_path) as connection:
             # Create a session
             session = Session(bind=connection)
             
@@ -198,9 +211,58 @@ class CalibreDataSource(DataSourceStage):
             session.close()
             return books_info
 
+    @contextmanager
+    def _connect_metadata_snapshot(self, db_path: str):
+        """Copy a Calibre ``metadata.db`` to a temporary file and connect to it.
+
+        Connecting straight to the live ``metadata.db`` can fail while the
+        Calibre application is running, because it holds locks on the file
+        (the previous ``nolock``/``immutable`` URI flags were only a
+        workaround that could still observe a half-written state). Instead,
+        the database file -- together with its WAL sidecar when one is
+        present -- is copied to a temporary location, the engine is pointed
+        at that private copy, and the copy is removed again as soon as the
+        yielded connection has been closed.
+
+        Args:
+            db_path: Absolute path to the ``metadata.db`` file to snapshot.
+
+        Yields:
+            A SQLAlchemy connection bound to the snapshot copy.
+        """
+        fd, snapshot_path = tempfile.mkstemp(prefix="calibre_metadata_", suffix=".db")
+        os.close(fd)
+        engine = None
+        try:
+            shutil.copy2(db_path, snapshot_path)
+            # A running Calibre keeps its most recent transactions in the
+            # WAL sidecar of metadata.db; copy it over as well so that the
+            # snapshot reflects the latest state of the library. The engine
+            # connects without the ``immutable``/``nolock`` flags so that
+            # SQLite can recover the WAL into the snapshot on open.
+            if os.path.exists(db_path + "-wal"):
+                shutil.copy2(db_path + "-wal", snapshot_path + "-wal")
+            engine = create_engine(
+                f"sqlite:///{urllib.parse.quote(snapshot_path)}", echo=False
+            )
+            with engine.connect() as connection:
+                yield connection
+        finally:
+            if engine is not None:
+                engine.dispose()
+            for suffix in ("", "-wal", "-shm"):
+                try:
+                    os.remove(snapshot_path + suffix)
+                except OSError:
+                    pass
+
     async def fetch(self):  # type: ignore[override]
         """Fetch book metadata from configured Calibre libraries.
-        
+
+        The FileMetadata row of every book is checked and reconciled directly
+        (see ``_reconcile_file_metadata``); the resulting ID is used as the
+        paragraph source without any on-the-fly path lookups.
+
         Yields:
             Paragraph objects containing comprehensive book metadata with:
             - author: Book authors joined with ' & '
@@ -214,68 +276,212 @@ class CalibreDataSource(DataSourceStage):
         """
         paths = await PipelineStage.parse_paths(self.paths)
         dsid = (await Dataset.get(self.dataset_name)).id
-        existent: dict = {}
-        
+
+        # Read all libraries up front so that the FileMetadata state can be
+        # preloaded in bulk instead of being queried per book.
+        libraries: List[Tuple[str, List[Dict[str, Any]]]] = []
+        for path in paths:
+            books = [
+                book for book in self.get_calibre_books_safe(storage.safe_join(path))
+                if not self.formats or book["file_path"].lower().endswith(self.formats)
+            ]
+            if books:
+                libraries.append((path, books))
+
+        # Preload the FileMetadata state:
+        # - tracked: (library, book_id, format) -> (file id, path) for rows
+        #   written by this datasource (stamped in FileMetadata.extdata);
+        # - by_path: path -> file id, to detect path conflicts (the
+        #   FileMetadata.path column is unique).
+        tracked: Dict[Tuple[str, str, str], Tuple[UUID, str]] = {}
+        by_path: Dict[str, UUID] = {}
         async with get_db_session() as session:
-        
-            if self.scan_for_moved:
-                # Build mapping of book_id -> current source path for existing books
-                existent = dict(
-                    cast(Iterable, (await session.execute(
-                        select(Paragraph.extdata.op('->>')('book_id'),
-                               FileMetadata.path)
-                               .join(FileMetadata, Paragraph.source == FileMetadata.id)
-                               .distinct(FileMetadata.path)
-                    )).all())
+            if paths:
+                rows = (await session.execute(
+                    select(FileMetadata.id, FileMetadata.path, FileMetadata.extdata)
+                    .where(FileMetadata.extdata.op('->>')('library_catalog').in_(paths))
+                )).all()
+                for fid, fpath, extdata in rows:
+                    book_id = (extdata or {}).get('book_id')
+                    fmt = (extdata or {}).get('format')
+                    if book_id and fmt:
+                        library = (extdata or {}).get('library_catalog')
+                        tracked[(str(library), str(book_id), str(fmt))] = (fid, fpath)
+            target_paths = {
+                book["file_path"] for _, books in libraries for book in books
+            }
+            if target_paths:
+                for fid, fpath in (await session.execute(
+                    select(FileMetadata.id, FileMetadata.path)
+                    .where(FileMetadata.path.in_(target_paths))
+                )).all():
+                    by_path[fpath] = fid
+
+        for path, books in libraries:
+            for book in books:
+                file_path = book["file_path"]
+
+                # Check if cover.jpg exists
+                cover_path = storage.safe_join(file_path).rsplit('/', 1)[0] + "/cover.jpg"
+                if os.path.exists(cover_path):
+                    cover_path = storage.relative_path(cover_path)
+                else:
+                    cover_path = ''
+
+                # Check FileMetadata directly and reconcile the stored path;
+                # use the resulting ID as the paragraph source.
+                source = await self._reconcile_file_metadata(
+                    path, book, tracked, by_path
                 )
-                
-            for path in paths:
-                books = self.get_calibre_books_safe(storage.safe_join(path))
-                for book in books:
-                    # Filter by allowed formats
-                    if not self.formats or book["file_path"].lower().endswith(self.formats):
-                        # Convert to absolute path
-                        file_path = book["file_path"]
-                        
-                        # Check if cover.jpg exists
-                        cover_path = storage.safe_join(file_path).rsplit('/', 1)[0] + "/cover.jpg"
-                        if os.path.exists(cover_path):
-                            cover_path = storage.relative_path(cover_path)
-                        else:
-                            cover_path = ''
-                        
-                        # Create Paragraph with rich metadata
-                        paragraph = Paragraph(
-                            author=book["authors"],
-                            pdate=datetime.datetime(book["year"], 1, 1) if book["year"] else None,
-                            outline=book["title"],
-                            content=book["file_path"],
-                            source=await Paragraph.resolve_source(book["file_path"]),
-                            extdata={
-                                "call_number": book["book_id"],
-                                "file_attachments": book["file_attachments"],
-                                "publisher": book["publisher"],
-                                "series": book["series_name"],
-                                "series_index": book["series_index"],
-                                "tags": book["tags"],
-                                "item_type": "book",
-                                "archive": "Calibre",
-                                "library_catalog": path,
-                                "cover": cover_path or ''
-                            },
-                        )
-                        await paragraph.associate_dataset(dsid)
-                        book_id = str(book["book_id"])
-                        
-                        # Update source file reference for moved books
-                        if self.scan_for_moved and existent.get(book_id):
-                            old_source = await Paragraph.resolve_source(existent[book_id])
-                            new_source = await Paragraph.resolve_source(book['file_path'])
-                            if old_source and new_source:
-                                await session.execute(
-                                    update(Paragraph)
-                                    .filter(Paragraph.source == old_source)
-                                    .values(source=new_source)
-                                )
-                            
-                        yield paragraph
+
+                # Create Paragraph with rich metadata
+                paragraph = Paragraph(
+                    author=book["authors"],
+                    pdate=datetime.datetime(book["year"], 1, 1) if book["year"] else None,
+                    outline=book["title"],
+                    content=file_path,
+                    source_id=source,
+                    extdata={
+                        "call_number": book["book_id"],
+                        "file_attachments": book["file_attachments"],
+                        "publisher": book["publisher"],
+                        "series": book["series_name"],
+                        "series_index": book["series_index"],
+                        "tags": book["tags"],
+                        "item_type": "book",
+                        "archive": "Calibre",
+                        "library_catalog": path,
+                        "cover": cover_path or ''
+                    },
+                )
+                await FileDataset.link(source, dsid)
+                yield paragraph
+
+
+    async def _reconcile_file_metadata(
+        self,
+        library: str,
+        book: Dict[str, Any],
+        tracked: Dict[Tuple[str, str, str], Tuple[UUID, str]],
+        by_path: Dict[str, UUID],
+    ) -> UUID:
+        """Check FileMetadata directly and reconcile the stored path of a book.
+
+        The row is located by the tracking key stamped in
+        ``FileMetadata.extdata`` (``library_catalog`` + ``book_id`` +
+        ``format``); rows written before tracking existed are adopted via
+        their path and stamped with the tracking key.
+
+        Resolution rules:
+        - No FileMetadata found: a new one is created (or an existing row
+          occupying the same path is adopted) and its ID returned;
+        - Found with an unchanged path: its ID is returned as-is;
+        - Moved and the new path is free: ``path`` is rewritten in place,
+          keeping the ID so that existing paragraphs stay valid;
+        - Moved but the new path is already occupied (``path`` is unique):
+          the stale row is deleted together with its bound dataset links
+          (``file_dataset``), ``paragraph`` and ``text_embeddings`` rows,
+          and the occupying row's ID is returned.
+
+        Args:
+            library: Calibre library path the book belongs to.
+            book: Book info dict as produced by ``get_calibre_books_safe``.
+            tracked: Preloaded tracking-key -> (file id, path) mapping;
+                updated in place.
+            by_path: Preloaded path -> file id mapping; updated in place.
+
+        Returns:
+            The FileMetadata ID to be used as ``Paragraph.source_id``.
+        """
+        file_path = book["file_path"]
+        book_id = str(book["book_id"])
+        fmt = book["file_format"].lower()
+        stamp = {"library_catalog": library, "book_id": book_id, "format": fmt}
+
+        fm_id, fm_path = tracked.get((library, book_id, fmt), (None, None))
+        if fm_id is None:
+            # Adopt a legacy row created before tracking was introduced
+            fm_id = by_path.get(file_path)
+            fm_path = file_path if fm_id is not None else None
+
+        if fm_id is not None and fm_path != file_path and not self.scan_for_moved:
+            # Moved books are left untouched; fall back to creation semantics
+            fm_id, fm_path = None, None
+
+        if fm_id is None:
+            # Create a new FileMetadata row (or adopt whatever already
+            # occupies the path, since ``path`` is unique).
+            occupy_id = by_path.get(file_path)
+            async with get_db_session() as session:
+                fm = (await session.get(FileMetadata, occupy_id)) if occupy_id else None
+                if fm is not None:
+                    fm.extdata = {**(fm.extdata or {}), **stamp}
+                    fid = fm.id
+                else:
+                    fm = FileMetadata(
+                        path=file_path,
+                        extension=fmt,
+                        size_bytes=int(book.get("file_size") or 0),
+                        extdata=stamp,
+                    )
+                    session.add(fm)
+                    await session.flush()
+                    fid = fm.id
+            tracked[(library, book_id, fmt)] = (fid, file_path)
+            by_path[file_path] = fid
+            return fid
+
+        if fm_path == file_path:
+            if (library, book_id, fmt) not in tracked:
+                # Adopted legacy row: stamp the tracking key
+                async with get_db_session() as session:
+                    fm = await session.get(FileMetadata, fm_id)
+                    if fm is not None:
+                        fm.extdata = {**(fm.extdata or {}), **stamp}
+                tracked[(library, book_id, fmt)] = (fm_id, file_path)
+            return fm_id
+
+        # The book has been moved: the stored path differs from file_path.
+        conflict_id = by_path.get(file_path)
+        if conflict_id is not None and conflict_id != fm_id:
+            # Changing the path would violate the unique constraint on
+            # FileMetadata.path: delete the stale row with everything bound
+            # to it and reuse the occupying row.
+            async with get_db_session() as session:
+                stale = await session.get(FileMetadata, fm_id)
+                if stale is not None:
+                    await session.execute(
+                        delete(TextEmbeddings).where(TextEmbeddings.source_id == fm_id)
+                    )
+                    await session.execute(
+                        delete(Paragraph).where(Paragraph.source_id == fm_id)
+                    )
+                    await session.execute(
+                        delete(FileDataset).where(FileDataset.file_id == fm_id)
+                    )
+                    await session.delete(stale)
+                occupant = await session.get(FileMetadata, conflict_id)
+                if occupant is not None:
+                    occupant.extdata = {**(occupant.extdata or {}), **stamp}
+            for key, val in list(tracked.items()):
+                if val[0] == conflict_id:
+                    del tracked[key]
+            tracked[(library, book_id, fmt)] = (conflict_id, file_path)
+            by_path.pop(fm_path, None)
+            by_path[file_path] = conflict_id
+            return conflict_id
+
+        # The target path is free: rewrite the path in place, keeping the ID
+        # so that paragraphs already imported remain valid.
+        async with get_db_session() as session:
+            fm = await session.get(FileMetadata, fm_id)
+            if fm is not None:
+                fm.path = file_path
+                fm.extension = fmt
+                fm.size_bytes = int(book.get("file_size") or 0)
+                fm.extdata = {**(fm.extdata or {}), **stamp}
+        tracked[(library, book_id, fmt)] = (fm_id, file_path)
+        by_path.pop(fm_path, None)
+        by_path[file_path] = fm_id
+        return fm_id
+

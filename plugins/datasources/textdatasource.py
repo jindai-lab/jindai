@@ -7,7 +7,7 @@ plain text files, file patterns, and structured text formats like EndNote.
 import codecs
 from typing import Iterator, List, Optional, cast
 
-from jindai.models import Dataset, Paragraph
+from jindai.models import Dataset, FileMetadata, Paragraph
 from jindai.pipeline import DataSourceStage, PipelineStage
 from jindai.storage import storage
 
@@ -80,11 +80,11 @@ class TextDataSource(DataSourceStage):
         dataset = await Dataset.get(self.name)
         for path in await self.files:
             source_path = path if '://' in path else storage.relative_path(path)
-            source = await Paragraph.resolve_source(cast(str, source_path))
+            source = await FileMetadata.get(storage.relative_path(source_path))
             for i, line in enumerate(storage.open(path)):
                 yield Paragraph(
                     content=codecs.decode(line),
-                    source=source,
+                    source_id=source,
                     lang=self.lang, 
                     outline=f'{i+1:06d}'
                 )

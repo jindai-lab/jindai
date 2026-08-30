@@ -429,20 +429,20 @@ class Paragraph(Base):
     __tablename__ = "paragraph"
     __table_args__ = (
         # Index definitions (same as original table)
-        PrimaryKeyConstraint("id", "source", name="paragraph_new_pk"),
-        Index("fki_source", "source"),
+        PrimaryKeyConstraint("id", "source_id", name="paragraph_new_pk"),
+        Index("fki_source", "source_id"),
         Index("idx_paragraph_author", "author"),
         Index("idx_paragraph_keywords", "keywords", postgresql_using="gin"),
         Index("idx_paragraph_outline", "outline"),
         Index("idx_paragraph_pagenum", "pagenum"),
         Index("idx_paragraph_pdate", "pdate"),
-        Index("idx_paragraph_source", "source", "source_page", "pagenum"),
+        Index("idx_paragraph_source", "source_id", "source_page", "pagenum"),
         {
             "comment": "Paragraph table",
         },
     )
 
-    source: Mapped[uuid.UUID] = mapped_column(
+    source_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
         ForeignKey("public.file_metadata.id"),
         nullable=True,
@@ -500,82 +500,19 @@ class Paragraph(Base):
             val = list({v.strip().lower() for v in val if v.strip()})
         return val
 
-    async def set_dataset_name(self, new_name: str) -> None:
-        """Associate the paragraph's source file with a dataset by name.
-
-        Creates/updates the File <-> Dataset association for this paragraph's
-        source file.
-
-        Args:
-            new_name: New dataset name.
-        """
-        ds = await Dataset.get(new_name)
-        if not self.source:
-            return
-        async with get_db_session() as session:
-            existing = (
-                await session.execute(
-                    select(FileDataset).filter(
-                        FileDataset.file_id == self.source,
-                        FileDataset.dataset_id == ds.id,
-                    )
-                )
-            ).scalar_one_or_none()
-            if existing is None:
-                session.add(FileDataset(file_id=self.source, dataset_id=ds.id))
-
-    @staticmethod
-    async def resolve_source(source_url: str) -> Optional[uuid.UUID]:
-        """Resolve a source URL/path to a FileMetadata UUID.
-
-        Creates the FileMetadata if it does not already exist, and
-        automatically matches or creates the associated dataset based on
-        the name of the directory that contains the source file.
-
-        Args:
-            source_url: Source file path or URL.
-
-        Returns:
-            FileMetadata ID if found/created, else None.
-        """
-        if not source_url:
-            return None
-        fm = await FileMetadata.get_or_create(source_url)
-        return fm.id if fm else None
-
-    async def associate_dataset(self, dataset_id: uuid.UUID) -> None:
-        """Associate this paragraph's source file with a dataset.
-
-        Args:
-            dataset_id: Dataset ID.
-        """
-        if not self.source:
-            return
-        async with get_db_session() as session:
-            existing = (
-                await session.execute(
-                    select(FileDataset).filter(
-                        FileDataset.file_id == self.source,
-                        FileDataset.dataset_id == dataset_id,
-                    )
-                )
-            ).scalar_one_or_none()
-            if existing is None:
-                session.add(FileDataset(file_id=self.source, dataset_id=dataset_id))
-
     async def dataset_names(self) -> List[str]:
         """Get dataset names associated with this paragraph's source file.
 
         Returns:
             List of dataset names.
         """
-        if not self.source:
+        if not self.source_id:
             return []
         async with get_db_session() as session:
             result = await session.execute(
                 select(Dataset.name)
                 .join(FileDataset, FileDataset.dataset_id == Dataset.id)
-                .filter(FileDataset.file_id == self.source)
+                .filter(FileDataset.file_id == self.source_id)
             )
             return list(result.scalars())
 
@@ -615,7 +552,7 @@ class Paragraph(Base):
         data = super().as_dict()
         # ataset_name is derived from the legacy dataset column
         # for display only. It does not participate in business logic.
-        data["dataset_name"] = self.source_obj.dataset_objs[0].name
+        data["dataset_name"] = self.source_obj.dataset_objs[0].name if self.source_obj else ''
         # source_path is derived from the FileMetadata association (canonical source).
         data["source_url"] = self.source_obj.path if self.source_obj else None
         return data
@@ -774,7 +711,7 @@ class Paragraph(Base):
         Returns:
             SQLAlchemy select query with filters applied.
         """
-        query = select(Paragraph).join(FileMetadata, FileMetadata.id == Paragraph.source).join(FileDataset, Paragraph.source == FileDataset.file_id)
+        query = select(Paragraph).join(FileMetadata, FileMetadata.id == Paragraph.source_id).join(FileDataset, Paragraph.source_id == FileDataset.file_id)
         filters = []
         query_embedding = None
         search = query_filters.q
@@ -785,7 +722,7 @@ class Paragraph(Base):
 
         # Dataset Filters (Optimized logic)
         # Filter paragraphs through the source file association chain:
-        # paragraph.source -> file_metadata -> file_dataset -> dataset
+        # paragraph.source_id -> file_metadata -> file_dataset -> dataset
         if datasets := query_filters.datasets:
             dataset_name_filters = [Dataset.name.in_(datasets)]
             for dataset_prefix in datasets:
@@ -798,7 +735,7 @@ class Paragraph(Base):
                 .where(or_(*dataset_name_filters))
             )
             # Filter paragraphs whose source file belongs to one of the datasets
-            filters.append(Paragraph.source.in_(file_ids))
+            filters.append(Paragraph.source_id.in_(file_ids))
 
         # Source File Filters (via FileMetadata)
         # Filter paragraphs whose source file matches the given paths
@@ -807,7 +744,7 @@ class Paragraph(Base):
             for source in sources:
                 source_filters.append(FileMetadata.path.ilike(f"{source}%"))
             file_ids = select(FileMetadata.id).where(or_(*source_filters))
-            filters.append(Paragraph.source.in_(file_ids))
+            filters.append(Paragraph.source_id.in_(file_ids))
 
         if source_page := query_filters.sourcePage:
             filters.append(Paragraph.source_page == source_page)
@@ -851,15 +788,15 @@ class Paragraph(Base):
                 query.join(
                     TextEmbeddings,
                     (Paragraph.id == TextEmbeddings.id)
-                    & (Paragraph.source == TextEmbeddings.source),  # Chunking requires
+                    & (Paragraph.source_id == TextEmbeddings.source_id),  # Chunking requires
                 )
                 .distinct(
                     Paragraph.id,
-                    Paragraph.source,
+                    Paragraph.source_id,
                 )
                 .order_by(
                     Paragraph.id,
-                    Paragraph.source,
+                    Paragraph.source_id,
                     TextEmbeddings.embedding.cosine_distance(query_embedding),
                 )
                 .add_columns(TextEmbeddings.embedding)
@@ -890,7 +827,7 @@ class Paragraph(Base):
             if sort_by == 'source':
                 # Sort by source file path via FileMetadata, then source_page
                 query = query.outerjoin(
-                    FileMetadata, Paragraph.source == FileMetadata.id
+                    FileMetadata, Paragraph.source_id == FileMetadata.id
                 )
                 # Use FileMetadata.path for sorting
                 sorts = [FileMetadata.path, Paragraph.source_page]
@@ -996,6 +933,17 @@ class FileDataset(MBase):
     dataset_id: Mapped[uuid.UUID] = mapped_column(UUID, ForeignKey("dataset.id", ondelete="CASCADE"),
             primary_key=True)
     file_id: Mapped[uuid.UUID] = mapped_column(UUID, ForeignKey("public.file_metadata.id", ondelete="CASCADE"), primary_key=True)
+
+    @staticmethod
+    async def link(file_metadata_id: uuid.UUID, dataset_name: uuid.UUID | str):
+        assert isinstance(file_metadata_id, uuid.UUID), f'Invalid file metadata id, expected UUID, got {repr(file_metadata_id)}'
+        if isinstance(dataset_name, str):
+            dataset_id = await Dataset.get(dataset_name)
+        else:
+            dataset_id = dataset_name
+        async with get_db_session() as sess:
+            await sess.execute(insert(FileDataset).values(dataset_id=dataset_id, file_id=file_metadata_id).on_conflict_do_nothing())
+        return dataset_id
 
 
 class FileMetadata(Base):
@@ -1137,7 +1085,7 @@ class FileMetadata(Base):
             return ds
 
     @staticmethod
-    async def get_or_create(
+    async def get(
         source_url: str,
         extension: str = "",
         size_bytes: int = 0,
@@ -1166,6 +1114,7 @@ class FileMetadata(Base):
         Returns:
             FileMetadata instance, or None if not applicable.
         """
+        
         async with get_db_session() as session:
             existing = (
                 await session.execute(
@@ -1354,7 +1303,10 @@ class TextEmbeddings(Base):
             "embedding",
             postgresql_using="vchordrq",
             # postgresql_with={"m": 16},
-            postgresql_ops={"embedding": "vector_cosine_ops"},
+            # embedding 列类型为 halfvec(1024)，须用 halfvec_cosine_ops；
+            # vchordrq 在 HASH 分区父表上 CREATE INDEX 只生成空壳，不向子分区传播，
+            # 故实际向量索引需逐个分区单独建（见 build_per_partition.py）。
+            postgresql_ops={"embedding": "halfvec_cosine_ops"},
         ),
         {
             "comment": "Text embeddings table",
@@ -1368,7 +1320,7 @@ class TextEmbeddings(Base):
         comment="Paragraph ID",
     )
 
-    source: Mapped[uuid.UUID] = mapped_column(
+    source_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
         ForeignKey("public.file_metadata.id", ondelete="CASCADE"),
         primary_key=True,

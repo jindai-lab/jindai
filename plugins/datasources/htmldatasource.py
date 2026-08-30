@@ -250,8 +250,6 @@ class WebPageListingDataSource(DataSourceStage):
             extdata={'html': data.decode('utf-8', errors='ignore')}, 
             lang=self.lang
         )
-        if self.dataset:
-            await p.set_dataset_name(self.dataset)
         return p
 
     def get_text(self, element) -> str:
@@ -524,12 +522,12 @@ class ExtractHTMLParagraphs(PipelineStage):
             para = Paragraph(
                 lang=paragraph.lang,
                 content='',
-                source=paragraph.source,
+                source_id=paragraph.source_id,
                 pagenum=1,
                 outline=paragraph.outline,
                 keywords=[],
                 extdata={'html': str(html_para)},
             )
             self._resolve_assignments(html_para, para)
-            self.log('Extract para from', para.source)
+            self.log('Extract para from', para.source_id)
             yield para

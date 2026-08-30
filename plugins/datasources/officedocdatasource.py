@@ -11,7 +11,7 @@ from typing import Iterable, List, Optional, cast
 
 import pandas as pd
 
-from jindai.models import Dataset, Paragraph
+from jindai.models import Dataset, FileDataset, FileMetadata, Paragraph
 from jindai.pipeline import DataSourceStage, PipelineStage
 from jindai.storage import storage
 
@@ -75,11 +75,11 @@ class WordDataSource(DataSourceStage):
                 para = Paragraph(
                     lang=self.lang, 
                     content=doc,
-                    source=await Paragraph.resolve_source(cast(str, storage.relative_path(file))),
+                    source_id=await FileMetadata.get(storage.relative_path(file)),
                     pagenum=1,
                     outline=''
                 )
-                await para.associate_dataset(dataset.id)
+                await FileDataset.link(para.source_id, dataset.id)
                 yield para
 
 

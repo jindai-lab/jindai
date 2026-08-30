@@ -529,7 +529,7 @@ class CrossPageReparagraphizer(PipelineStage):
         # Create paragraph
         para = Paragraph(
             content=content,
-            source=source,
+            source_id=source,
             source_page=first_page_num,
             pagenum=first_label or str(first_page_num + 1),
         )
@@ -664,7 +664,7 @@ class CrossPageReparagraphizer(PipelineStage):
                     if len(chunk) >= self.min_paragraph_length:
                         yield Paragraph(
                             content=chunk,
-                            source=source,
+                            source_id=source,
                             source_page=page_num,
                             pagenum=page_label or str(page_num + 1),
                         )
@@ -712,7 +712,7 @@ class CrossPageReparagraphizer(PipelineStage):
             Tuples of (result, next_stage).
         """
         # Get source info from paragraph
-        source = paragraph.source
+        source = paragraph.source_id
         
         base_dataset = paragraph.source_obj.dataset_objs[0]
         
