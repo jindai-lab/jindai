@@ -484,7 +484,7 @@ class MaintenanceManager:
                     new_bulk.append(
                         {
                             "id": str(p["id"]),
-                            "dataset": str(p["dataset"]),
+                            "source_id": str(p["source_id"]),
                             "chunk_id": chunk_id,
                             "content": chunk,
                         }
@@ -511,7 +511,7 @@ class MaintenanceManager:
                 embs.append(
                     TextEmbeddings(
                         id=p["id"],
-                        dataset=p["dataset"],
+                        source_id=p["source_id"],
                         chunk_id=p["chunk_id"],
                         embedding=emb,
                     )
