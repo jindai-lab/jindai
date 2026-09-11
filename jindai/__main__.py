@@ -28,7 +28,7 @@ import yaml
 
 from . import Plugin, PluginManager, Task, config, storage, app, run_service
 from .helpers import get_context, safe_import
-from .models import (Dataset, Paragraph, QueryFilters, TaskDBO, UserInfo, get_db_session)
+from .models import (Paragraph, QueryFilters, TaskDBO, UserInfo, get_db_session)
 
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 logging.basicConfig(

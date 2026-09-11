@@ -1,22 +1,22 @@
 """Pipeline stages for Bibliography Plugin.
 
-This module provides pipeline stages for saving Paragraph information to BibItem
+This module provides pipeline stages for saving Paragraph information to FileMetadata
 records and other bibliography-related operations.
 """
 
 import logging
+import uuid
 
 from typing import Any, Dict
 
-from jindai.models import Paragraph
+from jindai.models import Paragraph, FileMetadata
 from jindai.pipeline import PipelineStage
-from .models import BibItem
 
 
-class BibItemSave(PipelineStage):
-    """Pipeline stage to save Paragraph information to BibItem.
+class FileMetadataSave(PipelineStage):
+    """Pipeline stage to save Paragraph information to FileMetadata.
     
-    This stage converts Paragraph objects to BibItem records,
+    This stage converts Paragraph objects to FileMetadata records,
     supporting upsert behavior based on DOI or URL. It also handles
     merging file attachments from multiple sources.
     
@@ -31,7 +31,7 @@ class BibItemSave(PipelineStage):
         update_existing: bool = True,
         merge_attachments: bool = False
     ) -> None:
-        """Initialize BibItemSave stage.
+        """Initialize FileMetadataSave stage.
         
         Args:
             update_existing: If True, update existing BibItems by DOI/URL.
@@ -44,7 +44,7 @@ class BibItemSave(PipelineStage):
         self._log = lambda *x: logging.info(' '.join(map(str, x)))
     
     async def resolve(self, paragraph: Paragraph) -> Paragraph | None:
-        """Process a Paragraph and save to BibItem.
+        """Process a Paragraph and save to FileMetadata.
         
         Args:
             paragraph: Paragraph to process.
@@ -56,7 +56,7 @@ class BibItemSave(PipelineStage):
             return None
         
         try:
-            # Check for existing BibItem by DOI or URL
+            # Check for existing FileMetadata by DOI or URL
             existing = None
             if self.update_existing:
                     
@@ -64,36 +64,45 @@ class BibItemSave(PipelineStage):
                     # Try DOI first
                     doi = paragraph.extdata.get("doi")
                     if doi and isinstance(doi, str):
-                        existing = await BibItem.get_by_doi(self.dbsession, doi)
+                        existing = await FileMetadata.get_by_doi(self.dbsession, doi)
                     
                     # Try catalog & call_number combination
                     library_catalog, call_number = paragraph.extdata.get('library_catalog'), paragraph.extdata.get('call_number')
                     if library_catalog and call_number:
-                        existing = await BibItem.get_by_catalog(self.dbsession, library_catalog, call_number)
+                        existing = await FileMetadata.get_by_catalog(self.dbsession, library_catalog, call_number)
                 
                 # Try URL if no DOI match
                 if existing is None and paragraph.extdata and paragraph.extdata.get("url"):
-                    existing = await BibItem.get_by_url(self.dbsession, paragraph.extdata["url"])
+                    existing = await FileMetadata.get_by_url(self.dbsession, paragraph.extdata["url"])
             
             if existing:
-                # Update existing BibItem
-                self.log(f"Updating existing BibItem: {existing.title}")
+                # Update existing FileMetadata
+                self.log(f"Updating existing FileMetadata: {existing.title}")
                 self._update_bibitem_from_paragraph(existing, paragraph)
                 result_item = existing
                 await self.dbsession.merge(existing)
             else:
-                # Create new BibItem
-                self.log(f"Creating new BibItem from Paragraph: {paragraph.outline}")
+                # Create new FileMetadata
+                self.log(f"Creating new FileMetadata from Paragraph: {paragraph.outline}")
                 try:
-                    new_item = BibItem()
+                    # FileMetadata is merged into FileMetadata: path (unique, NOT NULL)
+                    # must be provided. Prefer the source file path; fall back to
+                    # a synthesized unique key for pure bibliographic entries.
+                    new_item = FileMetadata(
+                        path=(
+                            paragraph.source_obj.path
+                            if paragraph.source_obj is not None
+                            else f"bib:{uuid.uuid4()}"
+                        )
+                    )
                     self._update_bibitem_from_paragraph(new_item, paragraph)
                     self.dbsession.add(new_item)
                     result_item = new_item
                 except Exception as e:
-                    self.log_exception('BibItem creation failure', e)
+                    self.log_exception('FileMetadata creation failure', e)
                     raise e
             
-            # Store BibItem ID in Paragraph extdata for reference
+            # Store FileMetadata ID in Paragraph extdata for reference
             if paragraph.extdata is None:
                 paragraph.extdata = {}
             paragraph.extdata["bibitem_id"] = str(result_item.id)
@@ -101,25 +110,25 @@ class BibItemSave(PipelineStage):
             return paragraph
         
         except Exception as e:
-            self.log_exception("Error saving BibItem from Paragraph", e)
+            self.log_exception("Error saving FileMetadata from Paragraph", e)
             raise e
     
     def _update_bibitem_from_paragraph(
-        self, bibitem: BibItem, paragraph: Paragraph
+        self, FileMetadata: FileMetadata, paragraph: Paragraph
     ) -> None:
-        """Update BibItem fields from Paragraph data.
+        """Update FileMetadata fields from Paragraph data.
         
         Args:
-            bibitem: BibItem to update.
+            FileMetadata: FileMetadata to update.
             paragraph: Source Paragraph.
             dataset: Target dataset.
         """
         # Basic mapping
-        bibitem.title = paragraph.outline or ""
-        bibitem.authors = (paragraph.author or "").split(' & ')
-        bibitem.abstract_note = paragraph.content or ""
-        bibitem.date = paragraph.pdate
-        bibitem.language = paragraph.lang or "zh"
+        FileMetadata.title = paragraph.outline or ""
+        FileMetadata.authors = (paragraph.author or "").split(' & ')
+        FileMetadata.abstract_note = paragraph.content or ""
+        FileMetadata.date = paragraph.pdate
+        FileMetadata.language = paragraph.lang or "zh"
         
         # Map extdata fields
         if paragraph.extdata:
@@ -127,60 +136,60 @@ class BibItemSave(PipelineStage):
             
             # DOI and URL
             if isinstance(extdata.get("doi"), str):
-                bibitem.doi = extdata["doi"]
+                FileMetadata.doi = extdata["doi"]
             if isinstance(extdata.get("url"), str):
-                bibitem.url = extdata["url"]
+                FileMetadata.url = extdata["url"]
             
             # Publication info
             if "publication" in extdata:
-                bibitem.publication = extdata["publication"]
+                FileMetadata.publication = extdata["publication"]
             if "publisher" in extdata:
-                bibitem.publisher = extdata["publisher"]
+                FileMetadata.publisher = extdata["publisher"]
             if "place" in extdata:
-                bibitem.place = extdata["place"]
+                FileMetadata.place = extdata["place"]
             if "volume" in extdata:
-                bibitem.volume = extdata["volume"]
+                FileMetadata.volume = extdata["volume"]
             if "issue" in extdata:
-                bibitem.issue = extdata["issue"]
+                FileMetadata.issue = extdata["issue"]
             if "pages" in extdata:
-                bibitem.pages = extdata["pages"]
+                FileMetadata.pages = extdata["pages"]
             if "isbn" in extdata:
-                bibitem.isbn = extdata["isbn"]
+                FileMetadata.isbn = extdata["isbn"]
             if "issn" in extdata:
-                bibitem.issn = extdata["issn"]
+                FileMetadata.issn = extdata["issn"]
             
             # Series
             if "series" in extdata:
-                bibitem.series = extdata["series"]
+                FileMetadata.series = extdata["series"]
             if "series_title" in extdata:
-                bibitem.series_title = extdata["series_title"]
+                FileMetadata.series_title = extdata["series_title"]
             
             # Call number and archive
             if "call_number" in extdata:
-                bibitem.call_number = extdata["call_number"]
+                FileMetadata.call_number = extdata["call_number"]
             if "archive" in extdata:
-                bibitem.archive = extdata["archive"]
+                FileMetadata.archive = extdata["archive"]
             if "archive_location" in extdata:
-                bibitem.archive_location = extdata["archive_location"]
+                FileMetadata.archive_location = extdata["archive_location"]
             if "library_catalog" in extdata:
-                bibitem.library_catalog = extdata["library_catalog"]
+                FileMetadata.library_catalog = extdata["library_catalog"]
             if "short_title" in extdata:
-                bibitem.short_title = extdata["short_title"]
+                FileMetadata.short_title = extdata["short_title"]
             
             # Notes and item type
             if "notes" in extdata:
-                bibitem.notes = extdata["notes"]
+                FileMetadata.notes = extdata["notes"]
             if "item_type" in extdata:
-                bibitem.item_type = extdata["item_type"]
+                FileMetadata.item_type = extdata["item_type"]
             
             # Tags from keywords or tags
             if isinstance(extdata.get("keywords"), list):
-                bibitem.tags = extdata["keywords"]
+                FileMetadata.tags = extdata["keywords"]
             elif isinstance(extdata.get("tags"), list):
-                bibitem.tags = extdata["tags"]
+                FileMetadata.tags = extdata["tags"]
             else:
-                if bibitem.tags is None:
-                    bibitem.tags = []
+                if FileMetadata.tags is None:
+                    FileMetadata.tags = []
             
             # File attachments - merge if update_existing and merge_attachments
             if isinstance(extdata.get("file_attachments"), list):
@@ -188,19 +197,19 @@ class BibItemSave(PipelineStage):
                 if (
                     self.update_existing and
                     self.merge_attachments and
-                    bibitem.file_attachments
+                    FileMetadata.file_attachments
                 ):
                     # Merge attachments, avoiding duplicates by path
-                    existing_paths = {a for a in bibitem.file_attachments}
+                    existing_paths = {a for a in FileMetadata.file_attachments}
                     for path in new_attachments:
                         if path not in existing_paths:
-                            bibitem.file_attachments.append(path)
+                            FileMetadata.file_attachments.append(path)
                 else:
-                    bibitem.file_attachments = new_attachments
+                    FileMetadata.file_attachments = new_attachments
                     
             # Cover
             if "cover" in extdata:
-                bibitem.cover = extdata["cover"]
+                FileMetadata.cover = extdata["cover"]
 
 
 class BibItemDeduplicate(PipelineStage):
@@ -272,6 +281,6 @@ class BibItemDeduplicate(PipelineStage):
             return paragraph
         
         except Exception as e:
-            self.log_exception("Error during BibItem deduplication", e)
+            self.log_exception("Error during FileMetadata deduplication", e)
             raise e
     

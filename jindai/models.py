@@ -8,7 +8,7 @@ This module provides SQLAlchemy ORM models for:
 - Paragraph: Text content storage
 - Terms: Vocabulary/keyword storage
 - EmbeddingPendingQueue: Embedding processing queue
-- FileMetadata: File metadata tracking
+- FileMetadata: File metadata tracking (merged with BibItem bibliographic fields)
 - TaskDBO: Task definition storage
 - TextEmbeddings: Vector embeddings for semantic search
 - APIKey: User API key management
@@ -860,13 +860,13 @@ class Paragraph(Base):
                 .subquery()
             )
             query = (
-                select(query.c.id, query.c.dataset)
+                select(query.c.id, query.c.source_id)
                 .order_by(query.c.embedding.cosine_distance(query_embedding))
                 .subquery()
             )
             query = select(Paragraph).join(
                 query,
-                (Paragraph.dataset == query.c.dataset) & (Paragraph.id == query.c.id),
+                (Paragraph.source_id == query.c.source_id) & (Paragraph.id == query.c.id),
             )
 
         if group_field_name := query_filters.groupBy:
@@ -1007,12 +1007,97 @@ class FileDataset(MBase):
 class FileMetadata(Base):
     """File metadata model for tracking stored files.
 
-    Provides content-addressable storage tracking using SHA-1 hashes.
+    Provides content-addressable storage:
+
+    - A FileMetadata row describes a stored file AND (optionally) the
+      publication it represents.
+    - Pure bibliographic entries that have no backing file yet are stored
+      as rows whose ``path`` is a synthesized unique key (e.g.
+      ``bib:<uuid>``).
     """
 
     __tablename__ = "file_metadata"
-    
-    
+
+    __table_args__ = (
+        Index("idx_file_metadata_title", "title"),
+        Index("idx_file_metadata_authors", "authors"),
+        Index("idx_file_metadata_url", "url"),
+        Index("idx_file_metadata_item_type", "item_type"),
+        Index("idx_file_metadata_tags", "tags", postgresql_using="gin"),
+        Index("idx_file_metadata_catalog", "library_catalog", "call_number"),
+        {
+            "comment": "File metadata and bibliographic items table",
+            **Base.__table_args__
+        },
+    )
+
+    # ========== Bibliographic Information (merged from BibItem) ==========
+    item_type: Mapped[str | None] = mapped_column(
+        String(64), comment="Item type (e.g., book, journalArticle, conferencePaper)"
+    )
+    title: Mapped[str | None] = mapped_column(Text, comment="Publication title")
+    authors: Mapped[List[str] | None] = mapped_column(
+        ARRAY(Text), comment="Author(s) / Creator(s)"
+    )
+    abstract_note: Mapped[str | None] = mapped_column(
+        Text, comment="Abstract or summary"
+    )
+    publication: Mapped[str | None] = mapped_column(
+        String(512), comment="Publication name (journal, book title, etc.)"
+    )
+    date: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), comment="Publication date"
+    )
+    date_added: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), comment="Added date", server_default=func.now(),
+    )
+    volume: Mapped[str | None] = mapped_column(String(32), comment="Volume number")
+    issue: Mapped[str | None] = mapped_column(String(32), comment="Issue number")
+    pages: Mapped[str | None] = mapped_column(String(64), comment="Page range")
+    doi: Mapped[str | None] = mapped_column(
+        String(256), unique=True, comment="Digital Object Identifier"
+    )
+    url: Mapped[str | None] = mapped_column(String(1024), comment="URL to publication")
+    isbn: Mapped[str | None] = mapped_column(String(32), comment="ISBN")
+    issn: Mapped[str | None] = mapped_column(String(16), comment="ISSN")
+    archive: Mapped[str | None] = mapped_column(
+        String(256), comment="Archive name (e.g., Zotero, local library)"
+    )
+    archive_location: Mapped[str | None] = mapped_column(
+        String(512), comment="Location within archive"
+    )
+    library_catalog: Mapped[str | None] = mapped_column(
+        String(256), comment="Library catalog name"
+    )
+    call_number: Mapped[str | None] = mapped_column(
+        String(128), comment="Call number / shelf location"
+    )
+    language: Mapped[str | None] = mapped_column(
+        String(32), default="zh", comment="Publication language"
+    )
+    short_title: Mapped[str | None] = mapped_column(
+        String(256), comment="Short title abbreviation"
+    )
+    series: Mapped[str | None] = mapped_column(String(256), comment="Series name")
+    series_title: Mapped[str | None] = mapped_column(
+        String(256), comment="Series title"
+    )
+    publisher: Mapped[str | None] = mapped_column(String(256), comment="Publisher name")
+    place: Mapped[str | None] = mapped_column(String(256), comment="Publication place")
+    cover: Mapped[str] = mapped_column(
+        String(1024), default='', nullable=False, comment="Cover file path"
+    )
+    notes: Mapped[str | None] = mapped_column(Text, comment="User notes")
+    tags: Mapped[List[str] | None] = mapped_column(
+        ARRAY(Text), default=list, comment="Tag list"
+    )
+    related: Mapped[str | None] = mapped_column(
+        Text, comment="Related items/links"
+    )
+    file_attachments: Mapped[List[str] | None] = mapped_column(
+        ARRAY(Text), default=list, comment="File attachment paths"
+    )
+
     # Original filename (with extension)
     path: Mapped[str] = mapped_column(
         String(1024),
@@ -1061,8 +1146,96 @@ class FileMetadata(Base):
         index=True
     )
     
+    def as_dict(self) -> dict:
+        """Convert model instance to dictionary.
+
+        Extends the Base serialization with BibItem compatibility:
+        - ``extra`` is exposed as an alias of ``extdata`` (legacy key).
+        - ``tags`` and ``file_attachments`` default to empty lists.
+
+        Returns:
+            Dictionary with all field values.
+        """
+        data = super().as_dict()
+        data["extra"] = data.get("extdata") or {}
+        if data.get("tags") is None:
+            data["tags"] = []
+        if data.get("file_attachments") is None:
+            data["file_attachments"] = []
+        return data
+
+    @classmethod
+    async def get_by_doi(cls, session, doi: str) -> Optional["FileMetadata"]:
+        """Get a FileMetadata (bibliographic item) by DOI.
+
+        Args:
+            session: SQLAlchemy session.
+            doi: Digital Object Identifier.
+
+        Returns:
+            FileMetadata if found, None otherwise.
+        """
+        stmt = select(cls).where(cls.doi == doi)
+        result = await session.execute(stmt)
+        return result.scalar_one_or_none()
+
+    @classmethod
+    async def get_by_url(cls, session, url: str) -> Optional["FileMetadata"]:
+        """Get a FileMetadata (bibliographic item) by URL.
+
+        Args:
+            session: SQLAlchemy session.
+            url: URL to the publication.
+
+        Returns:
+            FileMetadata if found, None otherwise.
+        """
+        stmt = select(cls).where(cls.url == url)
+        result = await session.execute(stmt)
+        return result.scalar_one_or_none()
+
+    @classmethod
+    async def get_by_catalog(cls, session, library_catalog: str, call_number: str) -> Optional["FileMetadata"]:
+        """Get a bibliographic item by library catalog and call number.
+
+        Args:
+            session: SQLAlchemy session.
+            library_catalog: Name of the library catalog.
+            call_number: Call number / shelf location.
+
+        Returns:
+            FileMetadata if found, None otherwise.
+        """
+        stmt = select(cls).where(
+            cls.library_catalog == library_catalog,
+            cls.call_number == call_number
+        ).limit(1)
+        result = await session.execute(stmt)
+        return result.scalar_one_or_none()
+
+    @classmethod
+    async def search_by_title_author(
+        cls, session, title: str, author: str
+    ) -> List["FileMetadata"]:
+        """Search bibliographic items by title and author.
+
+        Args:
+            session: SQLAlchemy session.
+            title: Title to search for.
+            author: Author to search for.
+
+        Returns:
+            List of matching FileMetadata items.
+        """
+        stmt = select(cls).where(
+            cls.title.ilike(f"%{title}%"),
+            func.aggregate_strings(cls.authors, ' & ').ilike(f"%{author}%")
+        )
+        result = await session.execute(stmt)
+        return result.scalars().all()
+
     def __repr__(self):
-        return f"<FileMeta {self.filename}>"
+        return f"<FileMeta {self.path}>"
 
     @property
     def is_pdf(self) -> bool:
@@ -1141,6 +1314,140 @@ class FileMetadata(Base):
             if existing is None:
                 session.add(FileDataset(file_id=self.id, dataset_id=ds.id))
             return ds
+
+    @classmethod
+    def parse_bibtex(cls, bibtex_text: str) -> List["FileMetadata"]:
+        """Parse bibtex text and return list of bibliographic items.
+
+        Args:
+            bibtex_text: Raw bibtex text (may contain multiple entries).
+
+        Returns:
+            List of FileMetadata objects parsed from the bibtex text.
+        """
+        import re
+        from datetime import datetime
+
+        items = []
+
+        # Remove comments (lines starting with %)
+        bibtex_text = re.sub(r'^\s*%.*$', '', bibtex_text, flags=re.MULTILINE)
+
+        # Find all bibtex entries: @EntryType{key, ... } with balanced braces
+        entry_pattern = re.compile(r'@(\w+)\s*{\s*([^,]+)\s*,')
+
+        for match in entry_pattern.finditer(bibtex_text):
+            entry_type = match.group(1)
+            entry_key = match.group(2).strip()
+
+            # Balanced-brace scan for the entry body (supports nested braces)
+            depth = 1
+            i = match.end()
+            start = i
+            while i < len(bibtex_text) and depth > 0:
+                ch = bibtex_text[i]
+                if ch == '{':
+                    depth += 1
+                elif ch == '}':
+                    depth -= 1
+                i += 1
+            fields_str = bibtex_text[start:i - 1] if depth == 0 else bibtex_text[start:]
+
+            # Parse fields
+            item = cls(item_type=entry_type)
+
+            # Parse each field (balanced-brace values, quoted values, bare words)
+            field_pattern = re.compile(r'(\w+)\s*=\s*')
+
+            for field_match in field_pattern.finditer(fields_str):
+                field_name = field_match.group(1)
+                i = field_match.end()
+                while i < len(fields_str) and fields_str[i].isspace():
+                    i += 1
+                if i < len(fields_str) and fields_str[i] == '{':
+                    # {value} format (supports nested braces)
+                    depth = 1
+                    i += 1
+                    start = i
+                    while i < len(fields_str) and depth > 0:
+                        ch = fields_str[i]
+                        if ch == '{':
+                            depth += 1
+                        elif ch == '}':
+                            depth -= 1
+                        i += 1
+                    field_value = fields_str[start:i - 1]
+                elif i < len(fields_str) and fields_str[i] == '"':
+                    # "value" format
+                    i += 1
+                    start = i
+                    while i < len(fields_str) and fields_str[i] != '"':
+                        i += 1
+                    field_value = fields_str[start:i]
+                else:
+                    # bare word / numeric format
+                    start = i
+                    while i < len(fields_str) and fields_str[i] not in ',\n':
+                        i += 1
+                    field_value = fields_str[start:i]
+
+                # Map bibtex fields to item attributes
+                field_name_lower = field_name.lower()
+                field_value = field_value.strip()
+
+                # Clean up leftover quotes on bare values
+                field_value = field_value.strip('"')
+
+                # Map common bibtex fields
+                field_map = {
+                    'title': 'title',
+                    'author': 'author',
+                    'abstract': 'abstract_note',
+                    'publication': 'publication',
+                    'journal': 'publication',
+                    'year': 'date',
+                    'volume': 'volume',
+                    'number': 'issue',
+                    'pages': 'pages',
+                    'doi': 'doi',
+                    'url': 'url',
+                    'isbn': 'isbn',
+                    'issn': 'issn',
+                    'publisher': 'publisher',
+                    'address': 'place',
+                    'series': 'series',
+                    'language': 'language',
+                    'shorttitle': 'short_title',
+                    'notes': 'notes',
+                    'extra': 'extra',
+                }
+
+                if field_name_lower in field_map:
+                    attr_name = field_map[field_name_lower]
+                    if attr_name == 'date' and field_value:
+                        # Parse year to datetime
+                        try:
+                            year = int(field_value)
+                            item.date = datetime(year, 1, 1)
+                        except (ValueError, TypeError):
+                            item.date = None
+                    elif attr_name == 'tags' and field_value:
+                        # Parse tags as comma-separated values
+                        item.tags = [t.strip() for t in field_value.split(',')]
+                    else:
+                        setattr(item, attr_name, field_value)
+                else:
+                    # Store unknown fields in extdata
+                    if item.extdata is None:
+                        item.extdata = {}
+                    item.extdata[field_name_lower] = field_value
+
+            # Synthesize a unique path since FileMetadata.path is NOT NULL UNIQUE
+            item.path = item.doi or item.url or f"bib:{uuid.uuid4()}"
+
+            items.append(item)
+
+        return items
 
     @staticmethod
     async def get(
@@ -1221,6 +1528,93 @@ class FileMetadata(Base):
                 session.add(FileDataset(file_id=fm.id, dataset_id=ds.id))
 
             return fm
+
+    def export_bibtex(self) -> str:
+        """Export this bibliographic item to bibtex string.
+
+        Returns:
+            Bibtex string representation of this item.
+        """
+        import re
+        from datetime import datetime
+
+        # Field mapping from model attributes to bibtex
+        field_map = {
+            'title': 'title',
+            'author': 'author',
+            'abstract_note': 'abstract',
+            'publication': 'journal',  # Default to journal
+            'date': 'year',
+            'volume': 'volume',
+            'issue': 'number',
+            'pages': 'pages',
+            'doi': 'doi',
+            'url': 'url',
+            'isbn': 'isbn',
+            'issn': 'issn',
+            'publisher': 'publisher',
+            'place': 'address',
+            'series': 'series',
+            'language': 'language',
+            'short_title': 'shorttitle',
+            'notes': 'notes',
+        }
+
+        lines = []
+        lines.append(f"@{self.item_type or 'article'}" + " {")
+
+        # Build field string
+        fields = []
+
+        # Add key - use first 8 chars of id or title
+        key = f"{self.id.hex[:8]}" if self.id else "key"
+        if self.title:
+            # Create a more readable key from title
+            title_key = re.sub(r'[^\w\s]', '', self.title[:30])
+            title_key = re.sub(r'\s+', '_', title_key).lower()
+            key = f"{title_key}_{self.id.hex[:4]}" if self.id else title_key
+        fields.append(f"  key = {{{key}}}")
+
+        for attr_name, bibtex_name in field_map.items():
+            value = getattr(self, attr_name, None)
+            if value is None:
+                continue
+
+            # Format value
+            if attr_name == 'date' and isinstance(value, datetime):
+                value = str(value.year)
+            elif attr_name == 'tags' and value:
+                value = ', '.join(value)
+            elif isinstance(value, str):
+                # Escape special characters in bibtex
+                value = value.replace('\\', '\\\\')
+                value = value.replace('{', '\\{').replace('}', '\\}')
+                value = value.replace('&', '\\&').replace('%', '\\%')
+                value = value.replace('$', '\\$').replace('#', '\\#')
+                value = value.replace('_', '\\_').replace('@', '\\@')
+                value = value.replace('\'', '\\\'')
+                value = value.replace('"', '\\"')
+
+            fields.append(f"  {bibtex_name} = {{{value}}}")
+
+        # Add extra fields (stored in extdata after the merge)
+        if self.extdata:
+            for key, value in self.extdata.items():
+                if isinstance(value, str):
+                    # Escape special characters
+                    value = value.replace('\\', '\\\\')
+                    value = value.replace('{', '\\{').replace('}', '\\}')
+                    value = value.replace('&', '\\&').replace('%', '\\%')
+                    value = value.replace('$', '\\$').replace('#', '\\#')
+                    value = value.replace('_', '\\_').replace('@', '\\@')
+                    value = value.replace('\'', '\\\'')
+                    value = value.replace('"', '\\"')
+                    fields.append(f"  {key} = {{{value}}}")
+
+        lines.append(',\n'.join(fields))
+        lines.append("}")
+
+        return '\n'.join(lines)
 
     # Relationship to datasets via file_dataset association table
     dataset_objs: Mapped[List["Dataset"]] = relationship(
