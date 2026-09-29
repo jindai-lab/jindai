@@ -403,13 +403,23 @@ class Storage:
     def relative_path(self, p) -> str:
         """Get path relative to storage root.
 
+        A *relative* input is interpreted as already being storage-root
+        relative (that is how CalibreDataSource emits file paths) and is
+        resolved against the root, never against the process CWD: plain
+        ``os.path.relpath`` falls back to ``abspath`` via CWD, so with
+        CWD=/app and root=/storage a clean ``OneDrive/x.pdf`` came back as
+        ``../app/OneDrive/x.pdf`` — the legacy duplicate-row pollution fixed
+        on 2026-09-29. Absolute inputs behave exactly as before.
+
         Args:
-            p: Full path.
+            p: Absolute path, or a root-relative path like ``OneDrive/x.pdf``.
 
         Returns:
-            Relative path.
+            Path relative to the storage root (idempotent).
         """
-        return os.path.relpath(p, self.FILE_STORAGE_ROOT)
+        if not os.path.isabs(p):
+            p = os.path.join(self.FILE_STORAGE_ROOT, p)
+        return os.path.relpath(os.path.normpath(p), self.FILE_STORAGE_ROOT)
 
     def open(self, relpath: str, mode: str = "rb") -> IO:
         """Open file with safe path joining.

@@ -796,6 +796,16 @@ class SaveParagraph(PipelineStage):
 
     async def resolve(self, paragraph: Paragraph):
         paragraph.content = re.sub(r"\p{Other}", " ", paragraph.content)
+        # Garbage PDFs (OCR'd random-number tables) emit giant digit tokens;
+        # one oversized keyword aborts the ENTIRE import chain on the
+        # paragraph_*_keywords_idx btree (2712B limit) — crash of 2026-09-29.
+        # 600 utf-8 bytes keeps every real word, drops the junk.
+        if paragraph.keywords:
+            paragraph.keywords = [
+                kw
+                for kw in paragraph.keywords
+                if kw and len(kw.encode("utf-8")) <= 600
+            ]
         try:
             if not paragraph.id:
                 self.dbsession.add(paragraph)
