@@ -56,3 +56,21 @@ docker exec -w /app jindai /app/.venv/bin/python /app/batch_operation/clean_queu
 - `jindai/resources.py::polling_loop`：单轮异常不再杀死整个轮询协程。
 - `jindai/models.py`：`batch_encode(timeout=...)`；rerank 支持独立 `rerank_api_base/key`。
 - `jindai/config.py`：`-c` 参数不再误伤 `python -c`（argv[0]="-c" 时 IndexError）。
+
+## 本机 bge_m3 服务（2026-09-29 调优定稿）
+
+```bash
+docker run -d --name bge_m3 --restart unless-stopped --gpus all \
+  -p 8090:8080 -v /mnt/repo/llms:/models:ro --network bge-m3_default \
+  ghcr.nju.edu.cn/ggml-org/llama.cpp:server-cuda13 \
+  -m /models/bge-m3/bge-m3-FP16.gguf --embeddings --pooling cls \
+  --host 0.0.0.0 --port 8080 -ngl 99 -b 8192 -ub 8192 --no-warmup \
+  -c 16384 -np 8 -t 12 -tb 12
+```
+
+要点（慢的根因与修复）：
+- 默认 `-c 8192 -np 16` → n_ctx_slot=512，一次 256 条数组请求拼接 prompt 远超
+  512 → 溢出路径把吞吐打到 1-15 texts/s，GPU util 0%（跑在 CPU 慢路径）。
+  改 `-c 16384 -np 8`（2048 tok/槽）+ `-t 12 -tb 12` 后：
+  单请求 arr256 = 0.78s（327 texts/s），24×64 并发饱和 559 texts/s，约 230 倍。
+- `--gpus all` 必须显式传（重建容器时 DeviceRequests 不会自动带上）。
