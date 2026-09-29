@@ -169,7 +169,7 @@ def get_context(directory: str, parent_class: Type, *sub_dirs: str) -> Dict:
     ctx = {}
     for module_name in modules:
         try:
-            logging.info("Loading", module_name)
+            logging.info("Loading %s", module_name)
             module = importlib.import_module(module_name)
             for k in module.__dict__:
                 if (

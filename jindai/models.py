@@ -947,8 +947,16 @@ class Terms(MBase):  # terms has no `id`, and cannot as_dict()
         Returns:
             List of stored words.
         """
-        # Clean the input to ensure uniqueness in the batch
-        data = [{"term": w} for w in words if w and len(w) > 1]
+        # Clean the input to ensure uniqueness in the batch.
+        # Byte cap: the pk_term btree index rejects rows > 2704 bytes
+        # (ProgramLimitExceededError killed the import task on OCR garbage
+        # digit strings); 600 utf-8 bytes keeps every real word and drops
+        # the junk. See 2026-09-29 import crash log.
+        data = [
+            {"term": w}
+            for w in words
+            if w and len(w) > 1 and len(w.encode("utf-8")) <= 600
+        ]
         if not data:
             return []
         async with get_db_session() as session:

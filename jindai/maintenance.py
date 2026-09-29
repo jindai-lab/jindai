@@ -164,9 +164,18 @@ class MaintenanceManager:
                 logging.info("No keywords found to sync.")
                 return
 
-            # Perform a Bulk Upsert into the Terms table
-            # We use on_conflict_do_nothing to ignore words already in the Terms table
-            data = [{"term": w} for w in unique_words]
+            # Perform a Bulk Upsert into the Terms table.
+            # We use on_conflict_do_nothing to ignore words already in the
+            # Terms table; 600-byte cap guards pk_term's 2704-byte btree limit
+            # (OCR digit-string garbage used to abort the whole insert).
+            data = [
+                {"term": w}
+                for w in unique_words
+                if w and len(w.encode("utf-8")) <= 600
+            ]
+            if not data:
+                logging.info("No indexable terms after length filter.")
+                return
 
             insert_stmt = insert(Terms).values(data)
             upsert_stmt = insert_stmt.on_conflict_do_nothing(index_elements=["term"])

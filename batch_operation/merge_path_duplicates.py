@@ -44,7 +44,7 @@ LEGACY_ONLY_SQL = """
     SELECT l.id, l.path FROM file_metadata l
     WHERE l.path LIKE '../app/%'
       AND NOT EXISTS (SELECT 1 FROM file_metadata c
-                      WHERE c.path = substr(l.path, 7))
+                      WHERE c.path = substr(l.path, 8))
 """
 PARA_COUNT_SQL = "SELECT count(*) FROM paragraph WHERE source_id = $1"
 MOVE_MEMBERS_SQL = """
@@ -96,28 +96,44 @@ async def plan(conn) -> dict:
 
 async def apply(conn, p: dict) -> dict:
     done = {"a_renamed": 0, "b_d_deleted": 0, "e_renamed": 0}
-    # case a: legacy row takes the clean path; empty clean row is removed
+    # case a: legacy row takes the clean path; empty clean row is removed.
+    # MOVE_MEMBERS_SQL moves $1's dataset links onto $2 -> pass (clean, legacy)
+    # so the surviving legacy row inherits the clean row's memberships.
     for item in p["rename_legacy_over_clean"]:
         lid, cid = item["legacy"], item["clean"]
-        await conn.execute(MOVE_MEMBERS_SQL, lid, cid)
-        await conn.execute(RENAME_SQL, lid, item["path"])
-        await conn.execute(DROP_MEMBERS_SQL, cid)
-        await conn.execute(DELETE_FM_SQL, cid)
-        done["a_renamed"] += 1
+        # order matters: uniq_path forbids two rows holding the clean path,
+        # so delete the empty clean row BEFORE renaming legacy (first attempt
+        # crashed with UniqueViolationError renaming while cid still existed)
+        try:
+            await conn.execute(MOVE_MEMBERS_SQL, cid, lid)
+            await conn.execute(DROP_MEMBERS_SQL, cid)
+            await conn.execute(DELETE_FM_SQL, cid)
+            await conn.execute(RENAME_SQL, lid, item["path"])
+            done["a_renamed"] += 1
+        except Exception as ex:  # noqa: BLE001 - keep going per item
+            log.error("case-a failed for %s: %s", item["path"], ex)
     # cases b/d: legacy empty -> just remove it (clean row keeps its data)
     for item in p["drop_empty_legacy"]:
-        await conn.execute(DROP_MEMBERS_SQL, item["legacy"])
-        await conn.execute(DELETE_FM_SQL, item["legacy"])
-        done["b_d_deleted"] += 1
+        try:
+            await conn.execute(DROP_MEMBERS_SQL, item["legacy"])
+            await conn.execute(DELETE_FM_SQL, item["legacy"])
+            done["b_d_deleted"] += 1
+        except Exception as ex:  # noqa: BLE001
+            log.error("case-b/d failed for %s: %s", item["path"], ex)
     # case e: legacy without clean twin -> normalize its path
     for item in p["rename_legacy_only"]:
-        await conn.execute(RENAME_SQL, item["legacy"], item["path"])
-        done["e_renamed"] += 1
+        try:
+            await conn.execute(RENAME_SQL, item["legacy"], item["path"])
+            done["e_renamed"] += 1
+        except Exception as ex:  # noqa: BLE001
+            log.error("case-e failed for %s: %s", item["path"], ex)
     return done
 
 
 async def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__)
+    ap.add_argument("--dry-run", action="store_true",
+                    help="plan only (default when --apply is absent)")
     ap.add_argument("--apply", action="store_true")
     ap.add_argument("--report", default="batch_operation/reports/merge_paths.json")
     args = ap.parse_args()
