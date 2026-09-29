@@ -345,8 +345,8 @@ class EmbeddingManager:
     async def polling_loop(self):
         """Background loop for processing embedding queue."""
         logging.info("Embedding Polling Loop started.")
-        try:
-            while True:
+        while True:
+            try:
                 async with get_db_session() as session:
                     pending = await session.execute(
                         select(EmbeddingPendingQueue).limit(1)
@@ -355,9 +355,13 @@ class EmbeddingManager:
                 if has_pending:
                     logging.info("Pending queue not empty")
                     await maintenance_manager.update_text_embeddings()
-                await asyncio.sleep(60)
-        except asyncio.CancelledError:
-            logging.info("Embedding Polling Loop is being cancelled.")
+            except asyncio.CancelledError:
+                logging.info("Embedding Polling Loop is being cancelled.")
+                return
+            except Exception as ex:  # noqa: BLE001 - keep the worker alive
+                logging.exception(
+                    f"Embedding polling iteration failed: {type(ex).__name__}: {ex}")
+            await asyncio.sleep(60)
 
     def register_routes(self, router: APIRouter):
         """Register embedding-related routes.

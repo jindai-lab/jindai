@@ -24,6 +24,16 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
 from sqlalchemy import func, select
 
+# The app is started as `uvicorn jindai:app`, bypassing jindai/__main__'s
+# logging.basicConfig, which left the root logger at WARNING and silently
+# swallowed every INFO line (e.g. the embedding polling loop's progress).
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(name)s %(message)s",
+    datefmt="%Y-%m-%d %H:%M:%S",
+    force=True,
+)
+
 from .config import config
 from .helpers import get_context
 from .models import get_current_admin, get_current_user, get_current_username
@@ -34,7 +44,7 @@ app = FastAPI(
     docs_url="/api/v2/docs",
     openapi_url="/api/v2/openapi.json",
     title="Jindai",
-    version="2.0.710",
+    version="2.0.711",
 )
 
 # CORS middleware configuration

@@ -1802,8 +1802,13 @@ class TextEmbeddings(Base):
         Returns:
             Reranked list of items based on cosine similarity.
         """
-        api_base = config.embedding_api_base.rstrip("/")
-        api_key = config.embedding_api_key
+        # Rerank may use a different endpoint than embeddings (e.g. local
+        # bge_m3 for embeddings while rerank stays on the cloud provider),
+        # so prefer rerank_api_base / rerank_api_key when configured.
+        api_base = (
+            getattr(config, "rerank_api_base", "") or config.embedding_api_base
+        ).rstrip("/")
+        api_key = getattr(config, "rerank_api_key", "") or config.embedding_api_key
 
         headers = {
             "Content-Type": "application/json",
@@ -1926,7 +1931,7 @@ class TextEmbeddings(Base):
         return chunks
 
     @staticmethod
-    async def batch_encode(batch: list) -> list:
+    async def batch_encode(batch: list, timeout: float = 60.0) -> list:
         """Encode a batch of texts using external API.
 
         Args:
@@ -1955,7 +1960,7 @@ class TextEmbeddings(Base):
                 f"{api_base}/embeddings",
                 headers=headers,
                 json=payload,
-                timeout=60.0,
+                timeout=timeout,
             )
             response.raise_for_status()
             result = response.json()

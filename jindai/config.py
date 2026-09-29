@@ -133,12 +133,19 @@ def load_config_from_args() -> ConfigObject:
     Returns:
         Loaded configuration instance.
     """
+    # Only treat "-c" as our config flag when it is followed by a YAML path;
+    # otherwise `python -c "..."` (whose argv[0] is literally "-c") would
+    # crash this module at import time with IndexError.
     if "-c" in sys.argv:
         config_arg = sys.argv.index("-c")
-        config_file = sys.argv[config_arg + 1]
-        sys.argv.pop(config_arg + 1)
-        sys.argv.pop(config_arg)
-        os.environ["CONFIG_FILE"] = config_file
+        if (
+            config_arg + 1 < len(sys.argv)
+            and sys.argv[config_arg + 1].lower().endswith((".yml", ".yaml"))
+        ):
+            config_file = sys.argv[config_arg + 1]
+            sys.argv.pop(config_arg + 1)
+            sys.argv.pop(config_arg)
+            os.environ["CONFIG_FILE"] = config_file
 
     return ConfigObject.load_from_yaml(os.environ.get("CONFIG_FILE", "config.yaml"))
 

@@ -247,7 +247,10 @@ class PDFDataSource(DataSourceStage):
                     try:
                         # Get page label (e.g., "i", "1", "A-1")
                         label = doc[page].get_label()
-                    except (RuntimeError, TypeError):
+                    except Exception:
+                        # pymupdf raises FzErrorFormat (e.g. "cycle in page
+                        # tree") on corrupt PDFs -- not RuntimeError/TypeError,
+                        # it used to kill the whole import task here.
                         label = ""
 
                     try:

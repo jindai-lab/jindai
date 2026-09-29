@@ -437,7 +437,13 @@ class MaintenanceManager:
         return StorageHandler()
     
     async def update_text_embeddings(self, filters: Optional[QueryFilters] = None) -> int:
-        """Update text embeddings for paragraphs.
+        """Update text embeddings for paragraphs in the pending queue.
+
+        Processes at most 10000 queued paragraphs per cycle, skips
+        paragraphs that already have embeddings, and removes queue rows
+        once a paragraph's chunks are all present. Without those guards
+        the loop re-selects the same rows forever (queue rows were never
+        consumed) and eventually dies on duplicate primary keys.
 
         Args:
             filters: Optional QueryFilters to limit which paragraphs to process.
@@ -449,38 +455,115 @@ class MaintenanceManager:
             filters = QueryFilters(**filters)
 
         if filters:
+            # legacy path: narrow user filter; order by the queue PK so the
+            # merge/index plan is eligible (never ORDER BY paragraph.id alone)
             stmt = await Paragraph.build_query(filters)
-        else:
-            stmt = select(Paragraph)
-
-        stmt = (
-            stmt.join(
-                EmbeddingPendingQueue,
-                (EmbeddingPendingQueue.id == Paragraph.id)
-                & (EmbeddingPendingQueue.source_id == Paragraph.source_id),
+            stmt = (
+                stmt.join(
+                    EmbeddingPendingQueue,
+                    (EmbeddingPendingQueue.id == Paragraph.id)
+                    & (EmbeddingPendingQueue.source_id == Paragraph.source_id),
+                )
+                .where(~exists(select(1).where(TextEmbeddings.id == Paragraph.id)))
+                .with_only_columns(Paragraph.id, Paragraph.source_id, Paragraph.content)
+                .order_by(EmbeddingPendingQueue.id, EmbeddingPendingQueue.source_id)
+                .limit(10000)
             )
-            .with_only_columns(Paragraph.id, Paragraph.source_id, Paragraph.content)
-            .limit(10000)
-        )
 
         added = 0
-
+        stall_rounds = 0
         while True:
 
-            async with get_db_session() as session:
-                results = await session.execute(stmt)
-                results = results.mappings().all()
+            if filters:
+                async with get_db_session() as session:
+                    results = await session.execute(stmt)
+                    results = results.mappings().all()
+                stale_ids = []
+            else:
+                # Step 1: 10000 queue keys via PK (index-only, instant).
+                async with get_db_session() as session:
+                    key_rows = (
+                        await session.execute(
+                            select(
+                                EmbeddingPendingQueue.id,
+                                EmbeddingPendingQueue.source_id,
+                            )
+                            .order_by(
+                                EmbeddingPendingQueue.id,
+                                EmbeddingPendingQueue.source_id,
+                            )
+                            .limit(10000)
+                        )
+                    ).all()
+                if not key_rows:
+                    return added
+                keys = [(r[0], r[1]) for r in key_rows]
+
+                # Step 2: fetch contents through a VALUES join. The planner
+                # sees an exact row count (uuid MCV stats otherwise mis-est
+                # the queue x paragraph join as ~1000 rows and it picks a
+                # parallel hash join + sort of tens of millions of rows --
+                # one cycle then ran 8+ minutes and wedged the loop). Measured:
+                # 10000 keys -> paragraph PK probes + anti-join = ~4s.
+                values_sql = ", ".join(
+                    f"(CAST(:p{i} AS UUID), CAST(:s{i} AS UUID))"
+                    for i in range(len(keys))
+                )
+                # already-embedded; the fm INNER JOIN skips paragraphs whose
+                # file_metadata row was deleted (2813 orphan sources sit at the
+                # head of the queue because queue ids are time-ordered; their
+                # inserts violate fk_text_embeddings_source and used to wedge
+                # every cycle). Keys dropped by either join are consumed below.
+                fetch_sql = text(
+                    "SELECT p.id, p.source_id, p.content "
+                    "FROM (VALUES " + values_sql + ") AS v(id, source_id) "
+                    "JOIN paragraph p ON p.id = v.id AND p.source_id = v.source_id "
+                    "JOIN file_metadata fm ON fm.id = p.source_id "
+                    "WHERE NOT EXISTS ("
+                    "  SELECT 1 FROM text_embeddings e WHERE e.id = p.id)"
+                )
+                params = {}
+                for i, (pid, sid) in enumerate(keys):
+                    params[f"p{i}"] = str(pid)
+                    params[f"s{i}"] = str(sid)
+                async with get_db_session() as session:
+                    results = (await session.execute(fetch_sql, params)).mappings().all()
+
+                # keys dropped by the joins (already embedded, or file_metadata
+                # deleted -> FK would reject any embedding row) are consumed so
+                # the queue keeps moving forward.
+                fetched_ids = {r["id"] for r in results}
+                stale_ids = [pid for pid, _sid in keys if pid not in fetched_ids]
+                if stale_ids:
+                    async with get_db_session() as session:
+                        await session.execute(
+                            delete(EmbeddingPendingQueue).where(
+                                EmbeddingPendingQueue.id.in_(stale_ids)
+                            )
+                        )
 
             results_len = len(results)
 
             if not results_len:
+                if stale_ids:
+                    logging.info(
+                        f"embedding cycle: all {len(stale_ids)} selected queue "
+                        "rows already embedded, consumed them")
+                    stall_rounds = 0
+                    continue
                 return added
 
             new_bulk = []
+            expected = {}
+            group = []
+            consumed = 0
+            failed_flushes = 0
+
             for i, p in enumerate(results, start=1):
-                for chunk_id, chunk in enumerate(
-                    TextEmbeddings.get_chunks(p["content"], 200, 50), start=1
-                ):
+                chunks = TextEmbeddings.get_chunks(p["content"] or "", 200, 50)
+                expected[p["id"]] = len(chunks)
+                group.append(p["id"])
+                for chunk_id, chunk in enumerate(chunks, start=1):
                     new_bulk.append(
                         {
                             "id": str(p["id"]),
@@ -490,40 +573,142 @@ class MaintenanceManager:
                         }
                     )
                 if i % 100 == 0 or i == results_len:
+                    pending = len(new_bulk)
                     added += await self.update_text_embeddings_do(bulk=new_bulk)
-                    new_bulk.clear()
+                    done = await MaintenanceManager.consume_embedding_queue(
+                        group, expected
+                    )
+                    consumed += done
+                    if pending and done == 0:
+                        failed_flushes += 1
+                    new_bulk = []
+                    expected = {}
+                    group = []
+                    if failed_flushes >= 3:
+                        logging.error(
+                            "embedding API unavailable, aborting cycle after "
+                            f"{failed_flushes} failed flushes")
+                        return added
 
-    async def update_text_embeddings_do(self, bulk: list) -> int:
-        """Process a batch of embeddings.
+            if consumed == 0:
+                stall_rounds += 1
+                if stall_rounds >= 3:
+                    logging.warning(
+                        f"embedding cycle made no progress ({results_len} queued "
+                        "rows still pending), backing off")
+                    return added
+            else:
+                stall_rounds = 0
+
+    @staticmethod
+    async def consume_embedding_queue(pids: list, expected: dict) -> int:
+        """Remove queue rows for paragraphs whose embeddings are complete.
+
+        A paragraph is complete when it has no chunks to embed (empty
+        content) or when its row count in ``text_embeddings`` has reached
+        the expected chunk count.
 
         Args:
-            bulk: List of paragraph data dictionaries.
+            pids: Paragraph ids processed in the last flush group.
+            expected: Mapping of paragraph id -> expected chunk count.
 
         Returns:
-            Number of embeddings added.
+            Number of queue rows removed.
         """
-        embs = []
-        try:
-            for p, emb in zip(
-                bulk,
-                await TextEmbeddings.batch_encode([p["content"] for p in bulk]),
-            ):
-                embs.append(
-                    TextEmbeddings(
-                        id=p["id"],
-                        source_id=p["source_id"],
-                        chunk_id=p["chunk_id"],
-                        embedding=emb,
-                    )
+        if not pids:
+            return 0
+        async with get_db_session() as session:
+            rows = await session.execute(
+                select(TextEmbeddings.id, func.count(TextEmbeddings.chunk_id))
+                .where(TextEmbeddings.id.in_(pids))
+                .group_by(TextEmbeddings.id)
+            )
+            counts = {row[0]: row[1] for row in rows}
+            complete = [
+                pid for pid in pids
+                if counts.get(pid, 0) >= expected.get(pid, 0)
+            ]
+            if not complete:
+                return 0
+            result = await session.execute(
+                delete(EmbeddingPendingQueue).where(
+                    EmbeddingPendingQueue.id.in_(complete)
                 )
-                
-            async with get_db_session() as session:
-                session.add_all(embs)
-                await session.commit()
-            logging.info(f"{len(embs)} added")
-        except httpx.ReadTimeout:
-            logging.error('Read timeout')
-        return len(embs)
+            )
+            return result.rowcount or 0
+
+    async def update_text_embeddings_do(self, bulk: list) -> int:
+        """Embed a batch of chunk texts and persist them idempotently.
+
+        The batch is split into bounded API sub-requests, transient
+        failures are retried with backoff, and rows are inserted with
+        ON CONFLICT DO NOTHING so duplicate primary keys (e.g. a second
+        consumer such as batch_operation/embed_missing.py) can never
+        crash the polling loop.
+
+        Args:
+            bulk: List of paragraph chunk data dictionaries.
+
+        Returns:
+            Number of embedding rows inserted (0 on failure).
+        """
+        if not bulk:
+            return 0
+        inserted = 0
+        sub_size = 256
+        for start in range(0, len(bulk), sub_size):
+            sub = bulk[start:start + sub_size]
+            vectors = None
+            for attempt in range(3):
+                try:
+                    vectors = await TextEmbeddings.batch_encode(
+                        [p["content"] for p in sub], timeout=180.0
+                    )
+                    break
+                except (httpx.HTTPError, asyncio.TimeoutError) as ex:
+                    wait = 2 ** attempt
+                    logging.warning(
+                        f"embedding API call failed ({type(ex).__name__}: {ex}), "
+                        f"retry {attempt + 1}/3 in {wait}s")
+                    await asyncio.sleep(wait)
+                except Exception as ex:
+                    logging.error(
+                        f"embedding encode failed: {type(ex).__name__}: {ex}")
+                    break
+            if vectors is None:
+                break
+            if len(vectors) != len(sub):
+                logging.warning(
+                    f"embedding API returned {len(vectors)}/{len(sub)} vectors")
+                sub = sub[:len(vectors)]
+            stmt = (
+                insert(TextEmbeddings)
+                .values(
+                    [
+                        {
+                            "id": p["id"],
+                            "source_id": p["source_id"],
+                            "chunk_id": p["chunk_id"],
+                            "embedding": emb,
+                        }
+                        for p, emb in zip(sub, vectors)
+                    ]
+                )
+                .on_conflict_do_nothing(
+                    index_elements=["id", "source_id", "chunk_id"]
+                )
+            )
+            try:
+                async with get_db_session() as session:
+                    result = await session.execute(stmt)
+                    inserted += result.rowcount or 0
+            except Exception as ex:
+                logging.error(
+                    "embedding insert failed: "
+                    f"{type(ex).__name__}: {str(ex)[:300]}")
+                break
+        logging.info(f"{inserted} added")
+        return inserted
 
     async def custom_task(self, task_id: str = "", **params) -> Optional[dict]:
         """Execute a custom task.
