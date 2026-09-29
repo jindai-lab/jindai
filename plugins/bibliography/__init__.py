@@ -384,17 +384,37 @@ class BibliographyPlugin(Plugin):
 
         router = APIRouter(prefix="/bibliography", tags=["Bibliography"])
 
-        async def list_bibitem(offset: int = 0, limit: int = 100):
+        def item_type_cond(item_type: str):
+            """Build a FileMetadata.item_type filter condition.
+
+            Args:
+                item_type: Item type to match. An empty string or 'all'
+                    disables filtering.
+
+            Returns:
+                SQLAlchemy condition, or None when no filtering is needed.
+            """
+            if item_type and item_type != "all":
+                return FileMetadata.item_type == item_type
+            return None
+
+        async def list_bibitem(offset: int = 0, limit: int = 100, item_type: str = ""):
             """List out BibItems
             Returns:
                 Updated configuration dictionary
             """
+            cond = item_type_cond(item_type)
+            conds = [cond] if cond is not None else []
             async with get_db_session() as session:
-                res = await session.execute(select(FileMetadata).offset(offset).limit(limit))
+                res = await session.execute(
+                    select(FileMetadata).where(*conds).offset(offset).limit(limit)
+                )
                 return {
                     "results": res.scalars().all(),
                     "count": (
-                        await session.execute(select(func.count()).select_from(FileMetadata))
+                        await session.execute(
+                            select(func.count()).select_from(FileMetadata).where(*conds)
+                        )
                     ).scalar_one(),
                 }
 
@@ -518,13 +538,19 @@ class BibliographyPlugin(Plugin):
 
         @router.get("/search")
         async def search_bibitems(
-            query: str = "", type: str = "all", offset: int = 0, limit: int = 100
+            query: str = "",
+            type: str = "all",
+            item_type: str = "book",
+            offset: int = 0,
+            limit: int = 100,
         ):
             """Search bibliographic items by query.
 
             Args:
                 query: Search query string
                 type: Search type - 'all' (all fields), 'title', 'author', 'tag'
+                item_type: FileMetadata.item_type filter (default 'book');
+                    '' or 'all' disables the filter
                 offset: Number of results to skip
                 limit: Maximum number of results to return
 
@@ -570,18 +596,21 @@ class BibliographyPlugin(Plugin):
                 return cond
             
             try:
+                type_cond = item_type_cond(item_type)
 
                 async with get_db_session() as session:
                     if not query:
                         # If no query, return list results
-                        return await list_bibitem(offset, limit)
-                    
+                        return await list_bibitem(offset, limit, item_type)
+
                     if type == 'tag':
                         words = [query]
                     else:
                         words = jieba.cut_text(query)
                     cond = and_(*[build_cond(type, word) for word in words])
-                    
+                    if type_cond is not None:
+                        cond = and_(cond, type_cond)
+
                     stmt = select(FileMetadata).where(cond).order_by(FileMetadata.date_added.desc()).offset(offset).limit(limit)
                     count_stmt = select(func.count()).select_from(FileMetadata).where(cond)
                     # Execute search
