@@ -230,6 +230,16 @@ class PDFDataSource(DataSourceStage):
             source = await FileMetadata.get(storage.relative_path(filepath))
             assert source, 'Source should not be None'
 
+            # Folder author: Calibre layout <catalog>/<author>/<title (id)>/<file>.
+            # Page paragraphs carry no author column value, so derive it from
+            # the path — DatasetFromField then links 书库--{author} (author
+            # sub-dataset) instead of rendering a literal "书库--None" bucket.
+            _rel = storage.relative_path(filepath).split('/')
+            _folder_author = _rel[-3] if len(_rel) == 4 else ''
+            author_kw = ({"author": _folder_author}
+                         if _folder_author and "author" not in self.ext_params
+                         else {})
+
             # Open PDF file using the unified helper
             stream = storage.open(filepath, "rb")
             doc = open_pdf(cast(Any, stream))
@@ -329,6 +339,7 @@ class PDFDataSource(DataSourceStage):
                         source_id=source.id,
                         source_page=page,
                         pagenum=label or str(page + 1),
+                        **author_kw,
                         **self.ext_params
                     )
                     

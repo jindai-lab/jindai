@@ -657,6 +657,10 @@ class DatasetFromField(PipelineStage):
     async def resolve(self, paragraph: Paragraph) -> ResolveReturn:
         data = paragraph.as_dict()
         data.update(**paragraph.extdata or {})
+        # A None/empty field would render a literal "书库--None" dataset name;
+        # skip the link instead (base dataset membership is set elsewhere).
+        if any(data.get(k) in (None, "") for k in re.findall(r"\{(\w+)", self.pattern)):
+            return paragraph
         replaced = self.pattern.format(**data)
         if "{" not in replaced:
             if (paragraph.source_id, replaced) not in self._datasets_set:
