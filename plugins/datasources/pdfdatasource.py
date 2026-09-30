@@ -63,6 +63,11 @@ def resolve_range(page_range: str) -> Iterator[int]:
             yield int(rng) - 1
 
 
+def _norm_page_text(text: str) -> str:
+    """Whitespace-stripped lowercase text for containment dedup checks."""
+    return re.sub(r"\s+", "", text or "").lower()
+
+
 class PDFDataSource(DataSourceStage):
     """Import paragraphs from PDF documents with enhanced text processing.
     
@@ -109,6 +114,8 @@ class PDFDataSource(DataSourceStage):
         # OCR fallback parameters
         ocr_fallback: bool = False,
         ocr_workers: int = 4,
+        # Gap repair: re-import pages that never produced a paragraph row
+        reimport_gaps: bool = False,
         **params,
     ) -> None:
         """Configure the PDF data source.
@@ -134,6 +141,10 @@ class PDFDataSource(DataSourceStage):
                 no extractable text (default: True).
             ocr_workers: Parallel OCR workers per file, fanned out over
                 paddle replicas round-robin (default: 4).
+            reimport_gaps: If True, also re-import pages at or below the
+                last imported page that never produced a paragraph row
+                (silent OCR-failure drops); content already stored in an
+                earlier row is skipped to avoid duplicates (default: False).
         """
         self.dataset_name = dataset_name
         self.lang = lang
@@ -150,6 +161,7 @@ class PDFDataSource(DataSourceStage):
         self.reparagraphize = reparagraphize
         self.ocr_fallback = ocr_fallback
         self.ocr_workers = max(1, int(ocr_workers))
+        self.reimport_gaps = bool(reimport_gaps)
         
         # TextCleaner options
         self.remove_garbled = remove_garbled
@@ -226,6 +238,8 @@ class PDFDataSource(DataSourceStage):
         total = len(files)
         for i, filepath in enumerate(files):
             imported_pages = 0
+            repaired_pages = 0
+            dup_skipped = 0
             self.log(f"{i+1}/{total} importing {filepath}")
             source = await FileMetadata.get(storage.relative_path(filepath))
             assert source, 'Source should not be None'
@@ -246,12 +260,37 @@ class PDFDataSource(DataSourceStage):
             try:
                 # Determine page range to process
                 page_range = self.page_range
+                repair_blob = ""
+                repair_set: set = set()
                 if not page_range:
-                    # Process pages after the last imported one
                     min_page = existent.get(filepath)
-                    min_page = 0 if min_page is None else (min_page + 1)
-                    self.log("... from page", min_page)
-                    page_range = range(min_page, doc.page_count)
+                    if self.reimport_gaps and min_page is not None:
+                        # Gap repair: re-import every page without a
+                        # paragraph row (tail pages resume as usual;
+                        # interior gaps were silently dropped, e.g. by a
+                        # dead OCR endpoint refusing connections).
+                        async with get_db_session() as session:
+                            rows = (await session.execute(
+                                select(Paragraph.source_page, Paragraph.content)
+                                .where(Paragraph.source_id == source.id)
+                            )).all()
+                        have = {r[0] for r in rows}
+                        gap_all = set(range(doc.page_count)) - have
+                        repair_set = {p for p in gap_all if p <= min_page}
+                        repair_blob = "".join(
+                            _norm_page_text(r[1] or "") for r in rows
+                        )
+                        page_range = sorted(gap_all)
+                        if page_range:
+                            self.log(
+                                f"... reimport {len(page_range)} missing pages "
+                                f"({len(repair_set)} interior gaps)"
+                            )
+                    else:
+                        # Process pages after the last imported one
+                        min_page = 0 if min_page is None else (min_page + 1)
+                        self.log("... from page", min_page)
+                        page_range = range(min_page, doc.page_count)
 
                 # Accumulate pages for re-paragraphization
                 page_buffer = []
@@ -353,11 +392,26 @@ class PDFDataSource(DataSourceStage):
                     if lang_detector:
                         para = cast(Paragraph, lang_detector.resolve(para))
 
+                    # Gap repair: page N's text may already be stored
+                    # inside an earlier row (cross-page reparagraphization
+                    # merges page N+1 into page N's row) -- skip those to
+                    # avoid duplicate content; genuine drops are new text.
+                    if repair_blob and page in repair_set:
+                        norm = _norm_page_text(para.content)
+                        if norm and len(norm) >= 20 and (
+                                norm in repair_blob
+                                or norm[:40] in repair_blob
+                                or norm[-40:] in repair_blob):
+                            dup_skipped += 1
+                            continue
+
                     # Buffer for re-paragraphization
-                    if reparagraphizer:
+                    if reparagraphize and page not in repair_set:
                         page_buffer.append((page, label, para.content))
                     else:
                         imported_pages += 1
+                        if page in repair_set:
+                            repaired_pages += 1
                         yield para
 
                 # Process buffered pages for re-paragraphization
@@ -376,6 +430,12 @@ class PDFDataSource(DataSourceStage):
 
             finally:
                 doc.close()
+
+            if self.reimport_gaps and (repaired_pages or dup_skipped):
+                self.log(
+                    f"reimport {filepath}: {repaired_pages} recovered, "
+                    f"{dup_skipped} already-present skipped"
+                )
 
             # Log if no sufficient content was found
             if not existent.get(filepath) and imported_pages == 0:

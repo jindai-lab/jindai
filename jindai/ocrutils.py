@@ -139,17 +139,26 @@ class PaddleOCRClient:
             "visualize": False,
             "lang": paddle_lang,
         }
-        response = httpx.post(
-            self._next_url() + 'ocr',
-            json=payload,
-            timeout=self.timeout,
-        )
-        response.raise_for_status()
-        result = response.json().get('result', {}).get('ocrResults', [])
-        if not result:
-            return ""
-        texts = result[0].get('prunedResult', {}).get('rec_texts', [])
-        return '\n'.join(t for t in texts if t)
+        # Fail over across replicas: a dead/busy endpoint must not drop the
+        # page (an uncaught ConnectError used to empty the OCR result and the
+        # scanned page was silently skipped -> paragraph gap).
+        last_exc: Optional[Exception] = None
+        for _ in range(len(self._urls)):
+            url = self._next_url()
+            try:
+                response = httpx.post(url + 'ocr', json=payload, timeout=self.timeout)
+                response.raise_for_status()
+                result = response.json().get('result', {}).get('ocrResults', [])
+            except (httpx.HTTPError, ValueError) as exc:
+                last_exc = exc
+                log.warning("OCR endpoint %s failed (%s: %s); trying next replica",
+                            url, type(exc).__name__, exc)
+                continue
+            if not result:
+                return ""
+            texts = result[0].get('prunedResult', {}).get('rec_texts', [])
+            return '\n'.join(t for t in texts if t)
+        raise last_exc if last_exc else RuntimeError("no OCR endpoint configured")
 
     async def aocr_image(self, image_bytes: bytes, lang: str = 'en') -> str:
         """Asynchronously recognize text in an image.
@@ -173,10 +182,20 @@ class PaddleOCRClient:
             "lang": paddle_lang,
         }
         async with httpx.AsyncClient(timeout=self.timeout) as client:
-            response = await client.post(self._next_url() + 'ocr', json=payload)
-            response.raise_for_status()
-            result = response.json().get('result', {}).get('ocrResults', [])
-        if not result:
-            return ""
-        texts = result[0].get('prunedResult', {}).get('rec_texts', [])
-        return '\n'.join(t for t in texts if t)
+            last_exc: Optional[Exception] = None
+            for _ in range(len(self._urls)):
+                url = self._next_url()
+                try:
+                    response = await client.post(url + 'ocr', json=payload)
+                    response.raise_for_status()
+                    result = response.json().get('result', {}).get('ocrResults', [])
+                except (httpx.HTTPError, ValueError) as exc:
+                    last_exc = exc
+                    log.warning("OCR endpoint %s failed (%s: %s); trying next replica",
+                                url, type(exc).__name__, exc)
+                    continue
+                if not result:
+                    return ""
+                texts = result[0].get('prunedResult', {}).get('rec_texts', [])
+                return '\n'.join(t for t in texts if t)
+            raise last_exc if last_exc else RuntimeError("no OCR endpoint configured")
