@@ -10,8 +10,10 @@ Enhanced features:
 - Language detection optimized for zh, en, de, fr, ja, ru
 - Cross-page re-paragraphization with sliding window
 - External OCR fallback for scanned pages (no embedded text)
+- Batched parallel OCR (ocr_workers) fanned out over paddle replicas
 """
 
+from concurrent.futures import ThreadPoolExecutor
 from typing import Any, Iterator, List, Optional, cast
 
 import regex as re
@@ -106,6 +108,7 @@ class PDFDataSource(DataSourceStage):
         short_line_batch: int = 5,
         # OCR fallback parameters
         ocr_fallback: bool = False,
+        ocr_workers: int = 4,
         **params,
     ) -> None:
         """Configure the PDF data source.
@@ -129,6 +132,8 @@ class PDFDataSource(DataSourceStage):
             short_line_batch: Short lines to trigger merge (default: 5).
             ocr_fallback: If True, call external OCR service for pages with
                 no extractable text (default: True).
+            ocr_workers: Parallel OCR workers per file, fanned out over
+                paddle replicas round-robin (default: 4).
         """
         self.dataset_name = dataset_name
         self.lang = lang
@@ -144,6 +149,7 @@ class PDFDataSource(DataSourceStage):
         self.detect_language = lang == 'auto'
         self.reparagraphize = reparagraphize
         self.ocr_fallback = ocr_fallback
+        self.ocr_workers = max(1, int(ocr_workers))
         
         # TextCleaner options
         self.remove_garbled = remove_garbled
@@ -239,7 +245,60 @@ class PDFDataSource(DataSourceStage):
 
                 # Accumulate pages for re-paragraphization
                 page_buffer = []
-                
+
+                # --- Pre-extract text for the whole range (one pass) ---
+                page_text: dict = {}
+                for page in page_range:
+                    if page >= doc.page_count:
+                        break
+                    try:
+                        # Extract text content
+                        page_text[page] = (
+                            str(doc[page].get_text())
+                            .encode("utf-8", errors="ignore")
+                            .decode("utf-8")
+                        )
+                    except Exception as ex:
+                        self.log(filepath, page + 1, ex)
+                        page_text[page] = ""
+
+                # --- Batched parallel OCR for text-less pages (scanned) ---
+                ocr_text: dict = {}
+                if ocr_client:
+                    need = [
+                        p for p, t in page_text.items()
+                        if not t or len(t.strip()) < 10
+                    ]
+                    if need:
+                        self.log(
+                            f"{filepath}: OCR {len(need)}/{len(page_text)} "
+                            f"textless pages, {self.ocr_workers} workers"
+                        )
+                        for start in range(0, len(need), 12):
+                            chunk = need[start:start + 12]
+                            imgs = []
+                            for p in chunk:
+                                try:
+                                    imgs.append(
+                                        (p, render_pdf_page(cast(Any, stream), page_num=p, zoom=2.0))
+                                    )
+                                except Exception as ex:
+                                    self.log(f"render failed for {filepath} page {p + 1}: {ex}")
+                                    ocr_text[p] = ""
+                            if not imgs:
+                                continue
+                            with ThreadPoolExecutor(max_workers=self.ocr_workers) as pool:
+                                futs = [
+                                    (p, pool.submit(ocr_client.ocr_image, img, lang=lang))
+                                    for p, img in imgs
+                                ]
+                                for p, fut in futs:
+                                    try:
+                                        ocr_text[p] = fut.result()
+                                    except Exception as ex:
+                                        self.log(f"OCR failed for {filepath} page {p + 1}: {ex}")
+                                        ocr_text[p] = ""
+
                 for page in page_range:
                     if page >= doc.page_count:
                         break
@@ -253,26 +312,11 @@ class PDFDataSource(DataSourceStage):
                         # it used to kill the whole import task here.
                         label = ""
 
-                    try:
-                        # Extract text content
-                        content = (
-                            str(doc[page].get_text())
-                            .encode("utf-8", errors="ignore")
-                            .decode("utf-8")
-                        )
-                    except Exception as ex:
-                        self.log(filepath, page + 1, ex)
-                        content = ""
+                    content = page_text.get(page, "")
 
-                    # If page has little/no text, try OCR fallback via external service
+                    # OCR fallback: text-less pages served from batched results
                     if (not content or len(content.strip()) < 10) and ocr_client:
-                        try:
-                            self.log(f"{filepath} page {page + 1} has no text, running OCR...")
-                            image_bytes = render_pdf_page(cast(Any, stream), page_num=page, zoom=2.0)
-                            content = ocr_client.ocr_image(image_bytes, lang=lang)
-                        except Exception as ex:
-                            self.log(f"OCR failed for {filepath} page {page + 1}: {ex}")
-                            content = ""
+                        content = ocr_text.get(page, "")
 
                     # Skip pages with no content after OCR fallback
                     if not content or len(content.strip()) < 10:

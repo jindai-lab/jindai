@@ -8,11 +8,17 @@ Service protocol (matching ocrmypdf-paddleocr-remote plugin):
     - Endpoint: {base_url}/ocr
     - Request: JSON POST with base64-encoded JPEG image
     - Response: result.ocrResults[0].prunedResult.rec_texts (list of texts)
+
+Multi-replica support:
+    - config.paddle_remotes (list of base URLs) -> requests round-robin
+      across replicas so page-level parallel OCR fans out over GPUs.
+    - Fallback: base_url arg, then config.paddle_remote (single endpoint).
 """
 
 from __future__ import annotations
 
 import base64
+import itertools
 import logging
 from io import BytesIO
 from typing import Optional
@@ -29,7 +35,7 @@ class PaddleOCRClient:
     """Client for the remote PaddleOCR HTTP service.
 
     Attributes:
-        base_url: Base URL of the PaddleOCR remote service.
+        base_url: First configured base URL (kept for compatibility).
         timeout: Request timeout in seconds.
     """
 
@@ -73,11 +79,25 @@ class PaddleOCRClient:
         """Initialize the PaddleOCR client.
 
         Args:
-            base_url: Base URL of the service. Defaults to config.paddle_remote.
+            base_url: Base URL of the service. Overrides replica list.
             timeout: Request timeout in seconds.
         """
-        self.base_url = (base_url or config.paddle_remote).rstrip('/') + '/'
+        urls = None
+        if base_url is None:
+            try:
+                urls = getattr(config, 'paddle_remotes', None)
+            except Exception:
+                urls = None
+        if not urls:
+            urls = [base_url or config.paddle_remote]
+        self._urls = [u.rstrip('/') + '/' for u in urls]
+        self._rr = itertools.count()
+        self.base_url = self._urls[0]
         self.timeout = timeout
+
+    def _next_url(self) -> str:
+        """Round-robin next replica base URL (thread-safe: itertools.count)."""
+        return self._urls[next(self._rr) % len(self._urls)]
 
     def _prepare_image(self, image_bytes: bytes) -> str:
         """Preprocess image and return base64-encoded JPEG.
@@ -120,7 +140,7 @@ class PaddleOCRClient:
             "lang": paddle_lang,
         }
         response = httpx.post(
-            self.base_url + 'ocr',
+            self._next_url() + 'ocr',
             json=payload,
             timeout=self.timeout,
         )
@@ -153,7 +173,7 @@ class PaddleOCRClient:
             "lang": paddle_lang,
         }
         async with httpx.AsyncClient(timeout=self.timeout) as client:
-            response = await client.post(self.base_url + 'ocr', json=payload)
+            response = await client.post(self._next_url() + 'ocr', json=payload)
             response.raise_for_status()
             result = response.json().get('result', {}).get('ocrResults', [])
         if not result:
