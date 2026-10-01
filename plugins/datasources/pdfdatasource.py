@@ -114,8 +114,8 @@ class PDFDataSource(DataSourceStage):
         # OCR fallback parameters
         ocr_fallback: bool = False,
         ocr_workers: int = 4,
-        # Gap repair: re-import pages that never produced a paragraph row
-        reimport_gaps: bool = False,
+        # Page-set resume: re-import pages lacking a non-empty paragraph
+        reimport_gaps: bool = True,
         **params,
     ) -> None:
         """Configure the PDF data source.
@@ -141,10 +141,12 @@ class PDFDataSource(DataSourceStage):
                 no extractable text (default: True).
             ocr_workers: Parallel OCR workers per file, fanned out over
                 paddle replicas round-robin (default: 4).
-            reimport_gaps: If True, also re-import pages at or below the
-                last imported page that never produced a paragraph row
-                (silent OCR-failure drops); content already stored in an
-                earlier row is skipped to avoid duplicates (default: False).
+            reimport_gaps: If True (default), resume by page set: re-import
+                every page without a non-empty, non-metadata paragraph
+                (never imported, dropped by a failed OCR call, or stored
+                empty) instead of continuing after max(page#); already
+                stored text is skipped to avoid duplicates. False = legacy
+                max(page#)+1 resume.
         """
         self.dataset_name = dataset_name
         self.lang = lang
@@ -262,35 +264,54 @@ class PDFDataSource(DataSourceStage):
                 page_range = self.page_range
                 repair_blob = ""
                 repair_set: set = set()
-                if not page_range:
-                    min_page = existent.get(filepath)
-                    if self.reimport_gaps and min_page is not None:
-                        # Gap repair: re-import every page without a
-                        # paragraph row (tail pages resume as usual;
-                        # interior gaps were silently dropped, e.g. by a
-                        # dead OCR endpoint refusing connections).
-                        async with get_db_session() as session:
-                            rows = (await session.execute(
-                                select(Paragraph.source_page, Paragraph.content)
-                                .where(Paragraph.source_id == source.id)
-                            )).all()
-                        have = {r[0] for r in rows}
-                        gap_all = set(range(doc.page_count)) - have
-                        repair_set = {p for p in gap_all if p <= min_page}
-                        repair_blob = "".join(
-                            _norm_page_text(r[1] or "") for r in rows
-                        )
-                        page_range = sorted(gap_all)
-                        if page_range:
-                            self.log(
-                                f"... reimport {len(page_range)} missing pages "
-                                f"({len(repair_set)} interior gaps)"
+                if not page_range and self.skip_existed and self.reimport_gaps:
+                    # Page-set resume: a page counts as DONE only when it
+                    # has a NON-EMPTY, non-metadata paragraph row
+                    # (outline IS NULL excludes the Calibre book-metadata
+                    # paragraph). This finds every page without a paragraph
+                    # or with an empty one -- never imported, dropped by a
+                    # failed OCR call, or stored blank -- instead of just
+                    # resuming after max(page#), which misses interior gaps.
+                    async with get_db_session() as session:
+                        have = {r[0] for r in (await session.execute(
+                            select(Paragraph.source_page).where(
+                                Paragraph.source_id == source.id,
+                                Paragraph.source_page.is_not(None),
+                                Paragraph.outline.is_(None),
+                                func.btrim(func.coalesce(Paragraph.content, "")) != "",
                             )
-                    else:
-                        # Process pages after the last imported one
-                        min_page = 0 if min_page is None else (min_page + 1)
-                        self.log("... from page", min_page)
-                        page_range = range(min_page, doc.page_count)
+                        )).all()}
+                    gap_all = set(range(doc.page_count)) - have
+                    page_range = sorted(gap_all)
+                    if page_range:
+                        # Dedup only for interior gaps (<= max imported
+                        # page): cross-page merges store page N+1's text
+                        # inside page N's row -- re-import would duplicate
+                        # it. Tail pages were never imported: no dup risk.
+                        have_max = max(have) if have else -1
+                        repair_set = {p for p in gap_all if p <= have_max}
+                        if repair_set:
+                            async with get_db_session() as session:
+                                contents = [r[0] for r in (await session.execute(
+                                    select(Paragraph.content).where(
+                                        Paragraph.source_id == source.id,
+                                        Paragraph.outline.is_(None),
+                                        func.btrim(func.coalesce(Paragraph.content, "")) != "",
+                                    )
+                                )).all()]
+                            repair_blob = "".join(
+                                _norm_page_text(c) for c in contents
+                            )
+                        self.log(
+                            f"... reimport {len(page_range)} gap pages "
+                            f"({len(repair_set)} interior)"
+                        )
+                elif not page_range:
+                    # Legacy resume: continue after the max imported page
+                    min_page = existent.get(filepath)
+                    min_page = 0 if min_page is None else (min_page + 1)
+                    self.log("... from page", min_page)
+                    page_range = range(min_page, doc.page_count)
 
                 # Accumulate pages for re-paragraphization
                 page_buffer = []

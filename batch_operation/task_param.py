@@ -71,10 +71,17 @@ async def main() -> int:
             log.info("set %s: %r -> %r", k, old, params[k])
         await conn.execute(UPDATE_SQL, args.task, json.dumps(pipeline, ensure_ascii=False))
         check = await conn.fetchval(SELECT_SQL, args.task)
-        log.info("written; read-back %s stage params: %s",
-                 args.stage,
-                 json.dumps(next(n for n in check if args.stage in n)[args.stage],
-                            ensure_ascii=False))
+        if isinstance(check, str):  # asyncpg may return raw JSONB text
+            check = json.loads(check)
+        if not check:
+            log.warning("written; read-back returned no pipeline for %r", args.task)
+        else:
+            node = next((n for n in check if args.stage in n), None)
+            if node is None:
+                log.warning("written; read-back could not find stage %r", args.stage)
+            else:
+                log.info("written; read-back %s stage params: %s",
+                         args.stage, json.dumps(node[args.stage], ensure_ascii=False))
         return 0
     finally:
         await conn.close()
