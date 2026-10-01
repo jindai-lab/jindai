@@ -427,7 +427,7 @@ class PDFDataSource(DataSourceStage):
                             continue
 
                     # Buffer for re-paragraphization
-                    if reparagraphize and page not in repair_set:
+                    if reparagraphizer and page not in repair_set:
                         page_buffer.append((page, label, para.content))
                     else:
                         imported_pages += 1
