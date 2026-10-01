@@ -17,7 +17,7 @@ from concurrent.futures import ThreadPoolExecutor
 from typing import Any, Iterator, List, Optional, cast
 
 import regex as re
-from sqlalchemy import func, select
+from sqlalchemy import func, select, text
 
 from jindai.storage import storage
 from jindai.models import Dataset, FileDataset, FileMetadata, Paragraph, get_db_session
@@ -66,6 +66,23 @@ def resolve_range(page_range: str) -> Iterator[int]:
 def _norm_page_text(text: str) -> str:
     """Whitespace-stripped lowercase text for containment dedup checks."""
     return re.sub(r"\s+", "", text or "").lower()
+
+
+# Skip-state: pages permanently excluded from import (blank scan pages,
+# cross-page merged content, garbled-filtered pages). Recorded once on
+# first determination, then excluded from every future page-set sweep so
+# they are neither re-extracted nor re-OCR'd. Transient failures (OCR
+# endpoints down) are NOT recorded -- those stay gaps and get retried.
+_SKIP_STATE_DDL = """
+    CREATE TABLE IF NOT EXISTS page_skip_state (
+        source_id uuid NOT NULL REFERENCES file_metadata(id) ON DELETE CASCADE,
+        source_page integer NOT NULL,
+        reason text NOT NULL,
+        created_at timestamptz NOT NULL DEFAULT now(),
+        PRIMARY KEY (source_id, source_page)
+    )
+"""
+_skip_state_ready = False
 
 
 class PDFDataSource(DataSourceStage):
@@ -196,6 +213,12 @@ class PDFDataSource(DataSourceStage):
         files = await self.files
         self.log(f'{len(files)} files resolved')
 
+        global _skip_state_ready
+        if not _skip_state_ready:
+            async with get_db_session() as session:
+                await session.execute(text(_SKIP_STATE_DDL))
+            _skip_state_ready = True
+
         # Build mapping of file -> last imported page (0-indexed)
         if self.skip_existed:
             async with get_db_session() as session:
@@ -242,6 +265,8 @@ class PDFDataSource(DataSourceStage):
             imported_pages = 0
             repaired_pages = 0
             dup_skipped = 0
+            skip_records: list = []
+            ocr_failed: set = set()
             self.log(f"{i+1}/{total} importing {filepath}")
             source = await FileMetadata.get(storage.relative_path(filepath))
             assert source, 'Source should not be None'
@@ -255,6 +280,21 @@ class PDFDataSource(DataSourceStage):
             author_kw = ({"author": _folder_author}
                          if _folder_author and "author" not in self.ext_params
                          else {})
+
+            # Explicit force re-import: drop stale skip markers for the
+            # requested pages so they are re-evaluated honestly.
+            if self.page_range:
+                async with get_db_session() as session:
+                    ph = ",".join(f":p{i}" for i in range(len(self.page_range)))
+                    await session.execute(
+                        text(
+                            "DELETE FROM page_skip_state "
+                            "WHERE source_id = :sid "
+                            f"AND source_page IN ({ph})"
+                        ),
+                        {"sid": source.id,
+                         **{f"p{i}": p for i, p in enumerate(self.page_range)}},
+                    )
 
             # Open PDF file using the unified helper
             stream = storage.open(filepath, "rb")
@@ -274,12 +314,16 @@ class PDFDataSource(DataSourceStage):
                     # resuming after max(page#), which misses interior gaps.
                     async with get_db_session() as session:
                         have = {r[0] for r in (await session.execute(
-                            select(Paragraph.source_page).where(
-                                Paragraph.source_id == source.id,
-                                Paragraph.source_page.is_not(None),
-                                Paragraph.outline.is_(None),
-                                func.btrim(func.coalesce(Paragraph.content, "")) != "",
-                            )
+                            text(
+                                "SELECT source_page FROM paragraph "
+                                "WHERE source_id = :sid "
+                                "  AND source_page IS NOT NULL "
+                                "  AND outline IS NULL "
+                                "  AND btrim(coalesce(content, '')) <> '' "
+                                "UNION ALL "
+                                "SELECT source_page FROM page_skip_state "
+                                "WHERE source_id = :sid"
+                            ), {"sid": source.id}
                         )).all()}
                     gap_all = set(range(doc.page_count)) - have
                     page_range = sorted(gap_all)
@@ -355,6 +399,7 @@ class PDFDataSource(DataSourceStage):
                                 except Exception as ex:
                                     self.log(f"render failed for {filepath} page {p + 1}: {ex}")
                                     ocr_text[p] = ""
+                                    ocr_failed.add(p)
                             if not imgs:
                                 continue
                             with ThreadPoolExecutor(max_workers=self.ocr_workers) as pool:
@@ -368,6 +413,7 @@ class PDFDataSource(DataSourceStage):
                                     except Exception as ex:
                                         self.log(f"OCR failed for {filepath} page {p + 1}: {ex}")
                                         ocr_text[p] = ""
+                                        ocr_failed.add(p)
 
                 for page in page_range:
                     if page >= doc.page_count:
@@ -388,8 +434,11 @@ class PDFDataSource(DataSourceStage):
                     if (not content or len(content.strip()) < 10) and ocr_client:
                         content = ocr_text.get(page, "")
 
-                    # Skip pages with no content after OCR fallback
+                    # Skip pages with no content after OCR fallback; record
+                    # as permanently blank unless OCR/transient failure
                     if not content or len(content.strip()) < 10:
+                        if page not in ocr_failed:
+                            skip_records.append((page, "blank"))
                         continue
                     
                     # Create base paragraph
@@ -407,6 +456,7 @@ class PDFDataSource(DataSourceStage):
                     if text_cleaner:
                         para = cast(Paragraph, text_cleaner.resolve(para))
                         if para is None:  # Filtered as garbled
+                            skip_records.append((page, "filtered"))
                             continue
 
                     # Apply language detection
@@ -424,6 +474,7 @@ class PDFDataSource(DataSourceStage):
                                 or norm[:40] in repair_blob
                                 or norm[-40:] in repair_blob):
                             dup_skipped += 1
+                            skip_records.append((page, "merged"))
                             continue
 
                     # Buffer for re-paragraphization
@@ -449,13 +500,29 @@ class PDFDataSource(DataSourceStage):
                         imported_pages += 1
                         yield result
 
+                # Persist skip markers so the next sweep excludes these
+                # pages outright (no extraction, no OCR, no dedup scan).
+                if skip_records:
+                    async with get_db_session() as session:
+                        await session.execute(
+                            text(
+                                "INSERT INTO page_skip_state "
+                                "(source_id, source_page, reason) "
+                                "VALUES (:sid, :pg, :reason) "
+                                "ON CONFLICT DO NOTHING"
+                            ),
+                            [{"sid": source.id, "pg": p, "reason": r}
+                             for p, r in skip_records],
+                        )
+
             finally:
                 doc.close()
 
-            if self.reimport_gaps and (repaired_pages or dup_skipped):
+            if self.reimport_gaps and (repaired_pages or dup_skipped or skip_records):
                 self.log(
                     f"reimport {filepath}: {repaired_pages} recovered, "
-                    f"{dup_skipped} already-present skipped"
+                    f"{dup_skipped} already-present, "
+                    f"{len(skip_records)} marked skip-state"
                 )
 
             # Log if no sufficient content was found
