@@ -344,6 +344,12 @@ class EmbeddingManager:
 
     async def polling_loop(self):
         """Background loop for processing embedding queue."""
+        if not getattr(config, "embedding_worker_enabled", True):
+            logging.info(
+                "Embedding Polling Loop disabled "
+                "(config.embedding_worker_enabled = false)."
+            )
+            return
         logging.info("Embedding Polling Loop started.")
         while True:
             try:
