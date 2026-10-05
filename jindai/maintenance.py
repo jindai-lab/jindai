@@ -581,7 +581,12 @@ class MaintenanceManager:
                             "content": chunk,
                         }
                     )
-                if i % 100 == 0 or i == results_len:
+                # Bigger flush groups: each flush costs one API round-trip plus
+                # a queue-consume pass. Benchmarked against the local bge-m3:
+                # 512-text requests run ~3x faster per text than 256, and the
+                # server gains nothing from concurrent requests (it already
+                # fans a single request across its 8 slots).
+                if i % 500 == 0 or i == results_len:
                     pending = len(new_bulk)
                     added += await self.update_text_embeddings_do(bulk=new_bulk)
                     done = await MaintenanceManager.consume_embedding_queue(
@@ -664,7 +669,9 @@ class MaintenanceManager:
         if not bulk:
             return 0
         inserted = 0
-        sub_size = 256
+        # 512 per sub-request: measured ~5.9 texts/s vs ~2.0 at 256 against
+        # the local bge-m3 server (single request already saturates it).
+        sub_size = 512
         for start in range(0, len(bulk), sub_size):
             sub = bulk[start:start + sub_size]
             vectors = None

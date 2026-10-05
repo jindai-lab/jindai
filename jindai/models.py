@@ -24,7 +24,7 @@ import uuid
 from contextlib import asynccontextmanager
 from datetime import datetime
 from functools import wraps
-from typing import Any, AsyncIterator, Dict, List, Optional, Union, cast
+from typing import Any, AsyncIterator, ClassVar, Dict, List, Optional, Union, cast
 
 import httpx
 import redis
@@ -611,6 +611,8 @@ class Paragraph(Base):
         data["dataset_name"] = self.source_obj.dataset_objs[0].name if self.source_obj else ''
         # source_path is derived from the FileMetadata association (canonical source).
         data["source_url"] = self.source_obj.path if self.source_obj else None
+        # Authors come from the source file's bibliographic metadata (canonical).
+        data["authors"] = list(self.source_obj.authors or []) if self.source_obj else []
         return data
 
     @staticmethod
@@ -813,10 +815,14 @@ class Paragraph(Base):
             filters.append(Paragraph.lang.in_(lang))
 
         # Author Filter
+        # Authorship is governed by FileMetadata.authors (file-level bibliographic
+        # data), NOT the legacy per-paragraph Paragraph.author column.
+        # A paragraph matches when its source file lists any of the selected
+        # authors (array overlap, with NULL/empty authors arrays excluded).
         if authors := query_filters.authors:
-            filters.append(Paragraph.author.in_(authors))
+            filters.append(FileMetadata.authors.overlap(authors))
         if author := query_filters.author:
-            filters.append(Paragraph.author == author)
+            filters.append(FileMetadata.authors.overlap([author]))
 
         # Embedding Existence Filter
         if query_filters.embeddings is False:
@@ -870,13 +876,20 @@ class Paragraph(Base):
             )
 
         if group_field_name := query_filters.groupBy:
-            group_column = (
-                getattr(Paragraph, group_field_name, None) if group_field_name else None
-            )
-            if group_column is not None:
-                query = query.distinct(group_column).order_by(
-                    group_column
-                )  # DISTINCT ON requires order_by to start with group column
+            if group_field_name == "author":
+                # Group by file-level authors (FileMetadata.authors), not the
+                # legacy per-paragraph author column.
+                query = query.outerjoin(
+                    FileMetadata, Paragraph.source_id == FileMetadata.id
+                ).distinct(FileMetadata.path).order_by(FileMetadata.path)
+            else:
+                group_column = (
+                    getattr(Paragraph, group_field_name, None) if group_field_name else None
+                )
+                if group_column is not None:
+                    query = query.distinct(group_column).order_by(
+                        group_column
+                    )  # DISTINCT ON requires order_by to start with group column
 
         # Sorting
         if sort_by := query_filters.sort:
@@ -1757,6 +1770,9 @@ class TextEmbeddings(Base):
     Uses external OpenAI-compatible API for embedding generation.
     """
 
+    # Shared HTTP client for batch_encode (connection reuse across calls).
+    _encode_client: ClassVar[Optional[httpx.AsyncClient]] = None
+
     __tablename__ = "text_embeddings"
     __table_args__ = (
         Index(
@@ -1945,7 +1961,7 @@ class TextEmbeddings(Base):
         Args:
             batch: List of texts to encode.
 
-        Returns:
+    Returns:
             List of embeddings as lists of floats.
         """
         api_base = config.embedding_api_base.rstrip("/")
@@ -1963,15 +1979,20 @@ class TextEmbeddings(Base):
             "input": [text.strip() for text in batch],
         }
 
-        async with httpx.AsyncClient() as client:
-            response = await client.post(
-                f"{api_base}/embeddings",
-                headers=headers,
-                json=payload,
-                timeout=timeout,
-            )
-            response.raise_for_status()
-            result = response.json()
+        # Reuse one client across calls: opening a fresh TCP connection per
+        # encode batch cost an extra RTT, and the polling loop fires one
+        # request per flush.
+        client = TextEmbeddings._encode_client
+        if client is None or client.is_closed:
+            client = TextEmbeddings._encode_client = httpx.AsyncClient()
+        response = await client.post(
+            f"{api_base}/embeddings",
+            headers=headers,
+            json=payload,
+            timeout=timeout,
+        )
+        response.raise_for_status()
+        result = response.json()
 
         # Extract embeddings from OpenAI-compatible response
         return [item["embedding"] for item in result["data"]]
