@@ -45,6 +45,7 @@ from sqlalchemy.sql import func
 
 from .config import config, oidc_validator
 from .helpers import jieba
+from . import local_embedding
 
 engine = create_async_engine(config.database)
 session_factory = async_sessionmaker(
@@ -364,10 +365,14 @@ class History(Base):
     """
 
     __tablename__ = "history"
-    __table_args__ = {
-        "comment": "User operation history table",
-        **Base.__table_args__
-    }
+    __table_args__ = (
+        # Lists are sorted by -created_at (UI histories page).
+        Index("ix_history_created_at", "created_at"),
+        {
+            "comment": "User operation history table",
+            **Base.__table_args__
+        },
+    )
 
     user_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
@@ -997,6 +1002,13 @@ class EmbeddingPendingQueue(Base):
 
     __tablename__ = 'embedding_pending_queue'
 
+    __table_args__ = (
+        # created_at supports FIFO-style ordered processing and
+        # "recently enqueued" diagnostics on this high-volume queue.
+        Index("ix_embedding_pending_queue_created_at", "created_at"),
+        {**Base.__table_args__},
+    )
+
     # Define composite primary key
     source_id: Mapped[uuid.UUID] = mapped_column(UUID, primary_key=True)
 
@@ -1046,6 +1058,8 @@ class FileMetadata(Base):
         Index("idx_file_metadata_item_type", "item_type"),
         Index("idx_file_metadata_tags", "tags", postgresql_using="gin"),
         Index("idx_file_metadata_catalog", "library_catalog", "call_number"),
+        # Search results are ordered by -date_added (GET /bibliography/search).
+        Index("idx_file_metadata_date_added", "date_added"),
         {
             "comment": "File metadata and bibliographic items table",
             **Base.__table_args__
@@ -1832,6 +1846,12 @@ class TextEmbeddings(Base):
         api_base = (
             getattr(config, "rerank_api_base", "") or config.embedding_api_base
         ).rstrip("/")
+        if local_embedding.is_local(api_base):
+            raise RuntimeError(
+                "embedding_api_base is 'local' and rerank_api_base is empty: "
+                "rerank has no local backend, point rerank_api_base at an "
+                "OpenAI-compatible endpoint"
+            )
         api_key = getattr(config, "rerank_api_key", "") or config.embedding_api_key
 
         headers = {
@@ -1872,6 +1892,11 @@ class TextEmbeddings(Base):
         """
         logging.info(f'Get embedding for {text[:10]}...')
         
+        if local_embedding.is_local(config.embedding_api_base):
+            # embedding_api_base: local -> the HF model (embedding_model) runs
+            # on this machine's GPU inside the app; no HTTP round-trip.
+            return await local_embedding.encode_one(text)
+
         api_base = config.embedding_api_base.rstrip("/")
         api_key = config.embedding_api_key
         model = config.embedding_model
@@ -1964,6 +1989,10 @@ class TextEmbeddings(Base):
     Returns:
             List of embeddings as lists of floats.
         """
+        if local_embedding.is_local(config.embedding_api_base):
+            # Same local-GPU path as get_embedding (worker / batch route).
+            return await local_embedding.encode([t.strip() for t in batch])
+
         api_base = config.embedding_api_base.rstrip("/")
         api_key = config.embedding_api_key
         model = config.embedding_model
@@ -2050,10 +2079,13 @@ class APIKey(Base):
     """
 
     __tablename__ = "api_keys"
-    __table_args__ = {
-        "comment": "API keys table for user authentication",
-        **Base.__table_args__
-    }
+    __table_args__ = (
+        Index("ix_api_keys_created_at", "created_at"),
+        {
+            "comment": "API keys table for user authentication",
+            **Base.__table_args__
+        },
+    )
 
     # The actual API key (stored as hashed in database)
     key_hash: Mapped[str] = mapped_column(

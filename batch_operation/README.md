@@ -44,9 +44,15 @@ docker exec -w /app jindai /app/.venv/bin/python /app/batch_operation/clean_queu
   UI 的 queued 计数随之下降。触发器在 paragraph 插入时自动入队。
 - **与轮询协程共存**：`jindai/resources.py` 的 Embedding Polling Loop 也是消费者；
   写入均为 `ON CONFLICT DO NOTHING`，重复消费幂等、不报错。
-- **嵌入端点**：`config.yaml` 的 `embedding_api_base` 指向本机 bge_m3
-  （llama-server, `http://172.24.1.230:8090/v1`，1024 维）；rerank 走
-  `rerank_api_base`/`rerank_api_key`（云端，代码见 `jindai/models.py`）。
+- **嵌入端点**：`config.yaml` 的 `embedding_api_base: local` → 进程内跑 HF 模型
+  `embedding_model`（BAAI/bge-m3，onnxruntime-gpu CUDA EP，1024 维，见
+  `jindai/local_embedding.py`）；旧的本机 bge_m3 服务（端口 8090）已于 2026-10-07 删除。
+  rerank 走 `rerank_api_base`/`rerank_api_key`（云端，代码见 `jindai/models.py`）。
+  **精度**：`embedding_onnx_path` 指向低精度 ONNX，现设 `quant/bge-m3-fp16.onnx`（1.06GiB，
+  HF 官方 fp32 是 2.11GiB）；留空则回落到官方 fp32 导出。fp16 版转换脚本
+  `~/jindai-lab/scripts/build_fp16_onnx.py`（容器内跑）。
+  **注意**：`embedding_worker_enabled: false` 时轮询协程不跑（当前就是如此，等 OCR
+  导入完成后再打开），批处理脚本不受影响、照常消费队列。
 
 ## 配套后端修复（2026-09-29，见 git diff）
 
@@ -57,7 +63,10 @@ docker exec -w /app jindai /app/.venv/bin/python /app/batch_operation/clean_queu
 - `jindai/models.py`：`batch_encode(timeout=...)`；rerank 支持独立 `rerank_api_base/key`。
 - `jindai/config.py`：`-c` 参数不再误伤 `python -c`（argv[0]="-c" 时 IndexError）。
 
-## 本机 bge_m3 服务（2026-09-29 调优定稿）
+## 本机 bge_m3 服务（2026-09-29 调优定稿；**2026-10-07 已删除**）
+
+> 该服务与 `/mnt/repo/llms/bge-m3/bge-m3-FP16.gguf` 已删除，`~/stacks/bge-m3/` 也已移除；
+> 嵌入改为进程内 local 后端（见上「嵌入端点」）。以下命令仅存档备查，重跑需先重新下载 GGUF。
 
 ```bash
 docker run -d --name bge_m3 --restart unless-stopped --gpus all \

@@ -33,7 +33,7 @@ from fastapi import (
 )
 from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import delete
+from sqlalchemy import (and_, delete, func, or_, select, text)
 from sqlalchemy.sql import func, select, update
 from sse_starlette import EventSourceResponse
 
@@ -1271,6 +1271,50 @@ class ContentManager(ResourceRegistry):
                 query = query.join(
                     FileMetadata, Paragraph.source_id == FileMetadata.id
                 )
+            elif column == "author":
+                # Author options come straight from file_metadata (file-level
+                # statistics). Counting paragraphs requires aggregating over
+                # the 60M-row partitioned paragraph table -- far too slow for
+                # a dropdown. Count FILES per author instead (fast: ~1s).
+                # Keep dataset narrowing if the user restricted datasets:
+                # filter via file_dataset so options reflect current dataset
+                # selection.
+                if datasets := filters.datasets:
+                    dataset_name_filters = [Dataset.name.in_(datasets)]
+                    for dataset_prefix in datasets:
+                        dataset_name_filters.append(
+                            Dataset.name.ilike(f"{dataset_prefix}--%")
+                        )
+                    query = (
+                        select(
+                            func.unnest(FileMetadata.authors).label("value"),
+                            func.count(1).label("count"),
+                        )
+                        .select_from(FileMetadata)
+                        .join(
+                            FileDataset,
+                            FileDataset.file_id == FileMetadata.id,
+                        )
+                        .join(Dataset, Dataset.id == FileDataset.dataset_id)
+                        .where(or_(*dataset_name_filters))
+                        .group_by("value")
+                    )
+                else:
+                    query = (
+                        select(
+                            func.unnest(FileMetadata.authors).label("value"),
+                            func.count(1).label("count"),
+                        )
+                        .select_from(FileMetadata)
+                        .where(
+                            and_(
+                                FileMetadata.authors.isnot(None),
+                                func.array_length(FileMetadata.authors, 1) > 0,
+                            )
+                        )
+                        .group_by("value")
+                    )
+                return (await session.execute(query)).mappings().all() or []
             else:
                 col_attr = getattr(Paragraph, column)
             query = query.with_only_columns(
@@ -1362,10 +1406,47 @@ class StorageManager:
 emb_manager = EmbeddingManager()
 
 
-# Combined lifespan that runs both embedding polling and worker
+# Idempotent index maintenance.  The project has no migration framework, so
+# the indexes below are ensured once at startup; CREATE INDEX IF NOT EXISTS
+# makes this a no-op when they already exist (the normal case).  On a fresh
+# or restored database missing them this is a one-off blocking build.
+_ENSURE_INDEX_SQL = [
+    # pg_trgm powers the gin_trgm_ops index for ILIKE title search.
+    "CREATE EXTENSION IF NOT EXISTS pg_trgm",
+    # Time-based sorts (UI histories page: sort=-created_at).
+    "CREATE INDEX IF NOT EXISTS ix_history_created_at ON public.history (created_at)",
+    "CREATE INDEX IF NOT EXISTS ix_api_keys_created_at ON public.api_keys (created_at)",
+    "CREATE INDEX IF NOT EXISTS ix_page_skip_state_created_at ON public.page_skip_state (created_at)",
+    # created_at on the embedding queue: FIFO / "recently enqueued" queries.
+    "CREATE INDEX IF NOT EXISTS ix_embedding_pending_queue_created_at ON public.embedding_pending_queue (created_at)",
+    # Bibliography search orders by -date_added.
+    "CREATE INDEX IF NOT EXISTS idx_file_metadata_date_added ON public.file_metadata (date_added)",
+    # Trigram index for title ILIKE '%word%' searches on file_metadata.
+    "CREATE INDEX IF NOT EXISTS idx_file_metadata_title_trgm ON public.file_metadata USING gin (title gin_trgm_ops)",
+]
+
+
+async def ensure_db_indexes() -> None:
+    """Create any missing indexes (best effort; never fails startup).
+
+    Idempotent via IF NOT EXISTS; see _ENSURE_INDEX_SQL for what is covered.
+    """
+    try:
+        async with get_db_session() as session:
+            for stmt in _ENSURE_INDEX_SQL:
+                await session.execute(text(stmt))
+        logging.info("Database index check completed")
+    except Exception as ex:  # noqa: BLE001 - index maintenance must not block startup
+        logging.warning(f"Database index check failed: {ex}")
+
+
+# Combined lifespan that runs both embedding polling and worker management.
 @asynccontextmanager
 async def combined_lifespan(app: FastAPI):
     """Combined lifespan for embedding polling and worker management."""
+
+    # Make sure the query-supporting indexes exist before serving traffic.
+    await ensure_db_indexes()
 
     # Start embedding polling task
     emb_manager.polling_task = asyncio.create_task(emb_manager.polling_loop())

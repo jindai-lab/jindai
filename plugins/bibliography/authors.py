@@ -1,25 +1,37 @@
-"""Author name normalization and file name helpers for the Bibliography Plugin.
+"""Author name helpers for the Bibliography Plugin.
 
-These pure helpers back the PDF upload endpoint:
+Two layers of "normalization" live here, with different rules:
 
-- normalize_author_name: Normalize a personal name for storage and for
-  building the ``Authors/<author>/`` directory hierarchy.
-- normalize_authors_directory: Build a directory name from a list of authors.
+- clean_authors: Clean an author list FOR DATABASE STORAGE.  Only
+  whitespace is collapsed and empty entries are dropped; every symbol
+  (``.``, ``,``, ``'``, ``-`` ...) is preserved exactly as entered.
+- normalize_author_name / normalize_authors_directory /
+  normalize_first_author_directory: Build PATH SEGMENTS (the per-author
+  directory under the configurable upload base directory, default
+  ``OneDrive/``).  Only the path needs to be normalize'd: names are
+  reordered to natural order and file-system-hostile characters are
+  replaced so the segment is safe on disk.
+
+Other helpers:
+
 - extract_default_title: Extract the default publication title from a PDF
-  file name.
+  file name (a trailing ``_cropped`` suffix is dropped).
 - sanitize_filename: Make an arbitrary file name safe for use on disk while
   preserving non-Latin (e.g. Chinese/Japanese) characters.
 
-Author normalization rules:
+Path normalization rules (normalize_author_name):
 
 - Chinese/Japanese names are kept as-is.
-- Other names are converted to ``<Family>, <Given>`` form, e.g.
-  ``John Cage`` -> ``Cage, John`` (the last whitespace-separated token is
-  treated as the family name).  Names that already contain a comma are
-  assumed to be normalized already and are kept unchanged.
-- In the final directory-safe form every punctuation/symbol character except
-  the comma is replaced with ``_`` (e.g. ``Donald E. Knuth`` ->
-  ``Knuth, Donald E_``).
+- Names written as ``<Family>, <Given>`` are converted to natural
+  ``<Given> <Family>`` order (e.g. ``Cage, John`` -> ``John Cage``);
+  names already in natural order are kept unchanged (``John Cage`` ->
+  ``John Cage``).  This keeps the per-author directories under the
+  configurable upload base dir in natural-name order, matching the
+  existing folder naming across the storage tree.
+- In the final directory-safe form characters outside the path whitelist
+  are replaced with ``_`` while ``.`` and ``,`` are kept (they are legal
+  on disk and match the existing folder naming, e.g. ``Donald E. Knuth``
+  -> ``Donald E. Knuth``, but ``A/B`` -> ``A_B``).
 """
 
 import os
@@ -57,12 +69,39 @@ def contains_cjk(text: str) -> bool:
     )
 
 
+def clean_authors(authors: Iterable[str]) -> List[str]:
+    """Clean author names FOR DATABASE STORAGE, keeping every symbol.
+
+    Only whitespace is collapsed, entries are stripped and empty entries
+    are dropped.  Unlike the path helpers below, punctuation such as ``.``
+    and ``,`` is preserved exactly as entered (``Donald E. Knuth`` stays
+    ``Donald E. Knuth``, ``Cage, John`` stays ``Cage, John``).
+
+    Args:
+        authors: Author names as entered by the user.
+
+    Returns:
+        Cleaned list of author names (may be empty).
+
+    Examples:
+        >>> clean_authors(["  Donald E. Knuth ", "", "Cage, John"])
+        ['Donald E. Knuth', 'Cage, John']
+        >>> clean_authors(["李  飞飞"])
+        ['李 飞飞']
+    """
+    cleaned = [re.sub(r"\s+", " ", (a or "").strip()) for a in (authors or [])]
+    return [a for a in cleaned if a]
+
+
 def normalize_author_name(name: str) -> str:
     """Normalize a single author name.
 
-    Chinese/Japanese names are returned unchanged.  Other names are
-    reordered to ``<Family>, <Given>``.  Punctuation other than the comma is
-    replaced with ``_`` so the result is safe as a path segment.
+    Chinese/Japanese names are returned unchanged.  Names in
+    ``<Family>, <Given>`` form are converted to natural
+    ``<Given> <Family>`` order; names already in natural order are kept
+    as-is.  Characters outside the path whitelist (letters, digits,
+    spaces, ``.``, ``,``) are replaced with ``_`` so the result is safe
+    as a path segment.
 
     Args:
         name: Author name as entered by the user.
@@ -72,32 +111,36 @@ def normalize_author_name(name: str) -> str:
 
     Examples:
         >>> normalize_author_name("John Cage")
-        'Cage, John'
+        'John Cage'
+        >>> normalize_author_name("Cage, John")
+        'John Cage'
         >>> normalize_author_name("宇野常寛")
         '宇野常寛'
         >>> normalize_author_name("Donald E. Knuth")
-        'Knuth, Donald E_'
+        'Donald E. Knuth'
+        >>> normalize_author_name("A/B Test")
+        'A_B Test'
     """
     name = re.sub(r"\s+", " ", (name or "").strip())
     if not name:
         return ""
 
-    if "," in name or contains_cjk(name):
-        # Already in "<Family>, <Given>" form, or a Chinese/Japanese name:
-        # keep as-is.
-        normalized = name
-    else:
-        parts = name.split(" ")
+    normalized = name
+    if not contains_cjk(name) and ',' in name:
+        parts = name.split(", ", 1)
         if len(parts) == 1:
             normalized = name
         else:
             # Treat the last whitespace-separated token as the family name.
-            normalized = f"{parts[-1]}, {' '.join(parts[:-1])}"
+            normalized = f"{parts[1]} {parts[0]}"
 
-    # Replace punctuation/symbols with "_" (the comma is intentionally kept).
+    # Path-segment whitelist: keep letters/digits/spaces, "." and ","
+    # (legal on disk and used throughout the existing folder naming, e.g.
+    # "Donald E. Knuth"); replace everything else (e.g. "/" ":" "*") with
+    # "_" so the segment is safe as a path.
     normalized = "".join(
         ch
-        if (ch == "," or ch.isspace() or ch.isalnum() or contains_cjk(ch))
+        if (ch in ".," or ch.isspace() or ch.isalnum() or contains_cjk(ch))
         else "_"
         for ch in normalized
     )
@@ -120,11 +163,14 @@ def normalize_authors(authors: Iterable[str]) -> List[str]:
 
 
 def normalize_authors_directory(authors: Iterable[str]) -> str:
-    """Build the ``Authors/<...>`` directory name for a list of authors.
+    """Build a directory name from a list of authors.
 
     Multiple authors are joined with ", " (the comma is the only punctuation
     kept by the normalization rules).  Falls back to "Unknown" when no valid
     author name is provided.
+
+    Note: PDF uploads / relocations use :func:`normalize_first_author_directory`
+    (first author only); this all-authors variant is kept for other callers.
 
     Args:
         authors: Author names as entered by the user.
@@ -137,7 +183,11 @@ def normalize_authors_directory(authors: Iterable[str]) -> str:
 
 
 def normalize_first_author_directory(authors: Iterable[str]) -> str:
-    """Build the ``Authors/<...>`` directory name from the FIRST author.
+    """Build the per-author directory name from the FIRST author.
+
+    The result becomes the directory segment below the configurable upload
+    base directory (default ``OneDrive/``, i.e. ``/storage/OneDrive/`` in
+    the container).
 
     Only the first valid author name is used for the directory (e.g.
     ``["John Cage", "宇野常寛"]`` -> ``Cage, John``).  Falls back to
@@ -160,7 +210,9 @@ def extract_default_title(filename: str) -> str:
     """Extract the default publication title from a PDF file name.
 
     The title is the file name without its ``.pdf`` extension, with
-    whitespace collapsed.
+    whitespace collapsed.  A trailing ``_cropped`` suffix (the marker of
+    cropped scans, e.g. ``Paper_cropped.pdf``) is dropped so the upload
+    form is pre-filled with a clean title the user can edit.
 
     Args:
         filename: Uploaded file name (e.g. ``Silence_ Lectures.pdf``).
@@ -170,6 +222,9 @@ def extract_default_title(filename: str) -> str:
     """
     name = os.path.basename(filename or "").strip()
     stem = re.sub(r"\s*\.pdf$", "", name, flags=re.IGNORECASE)
+    # Drop a trailing "_cropped" / " cropped" suffix (possibly repeated).
+    stem = re.sub(r"(?i)(?:[_\s]cropped)+$", "", stem).strip(" _")
+    stem = stem.replace('_', ' ')
     return re.sub(r"\s+", " ", stem).strip()
 
 

@@ -70,6 +70,7 @@ class CalibreDataSource(DataSourceStage):
         content: str = "",
         formats: str = "epub,pdf",
         scan_for_moved: bool = True,
+        only_files: str = "",
         **params: Any
     ) -> None:
         """Configure the data source parameters.
@@ -80,12 +81,27 @@ class CalibreDataSource(DataSourceStage):
             content: Path(s) to Calibre library directory(s), one per line.
             formats: Comma-separated list of allowed file extensions.
             scan_for_moved: If True, update source URL for books that have been moved.
+            only_files: Path to a text file listing file_path values (one per
+                line) to restrict processing to. Empty = process all books.
+                Lines starting with '#' are ignored. Used for prioritized
+                re-imports (e.g. PDFs with a native text layer first).
         """
         self.dataset_name = dataset_name
         self.lang = lang
         self.paths = content
         self.formats = tuple(formats.lower().split(","))
         self.scan_for_moved = scan_for_moved
+        self.only_files: Optional[set] = None
+        if only_files:
+            try:
+                with open(only_files, "r", encoding="utf-8") as fh:
+                    self.only_files = {
+                        line.strip() for line in fh
+                        if line.strip() and not line.strip().startswith("#")
+                    }
+            except OSError as exc:
+                self.log(f"only_files {only_files!r} unreadable: {exc}; processing all books")
+                self.only_files = None
 
     def get_calibre_books_safe(self, library_path: str) -> List[Dict[str, Any]]:
         """Safely read book metadata from a Calibre library database.
@@ -285,6 +301,12 @@ class CalibreDataSource(DataSourceStage):
                 book for book in self.get_calibre_books_safe(storage.safe_join(path))
                 if not self.formats or book["file_path"].lower().endswith(self.formats)
             ]
+            if self.only_files is not None:
+                books = [book for book in books if book["file_path"] in self.only_files]
+                self.log(
+                    f"only_files filter: {len(books)} books match "
+                    f"({len(self.only_files)} listed)"
+                )
             if books:
                 libraries.append((path, books))
 

@@ -17,7 +17,7 @@ Per batch (transactional, 500 paragraphs):
   3. DELETE the old paragraph rows.
   4. INSERT the new pieces as brand-new paragraph rows (fresh uuids, every
      other column copied verbatim: source_page/outline/lang/extdata/...)
-     plus queue rows so bge_m3 picks them up.
+     plus queue rows so the embedding consumer picks them up.
 
   python batch_operation/split_long_paragraphs.py --dry-run
   python batch_operation/split_long_paragraphs.py --apply --limit 2   # 2 batches

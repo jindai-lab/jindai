@@ -10,8 +10,9 @@ Design:
     files largest-first;
   * per file, pages paragraphs by keyset (id) so a 2M-paragraph book
     never blows memory; chunks with the backend's own get_chunks (200/50);
-  * encodes pages in parallel batches against the configured API
-    (local bge_m3), inserts ON CONFLICT DO NOTHING, verifies the
+  * encodes pages in parallel batches against the configured backend
+    (embedding_api_base: local -> in-process BAAI/bge-m3 on the GPU), inserts
+    ON CONFLICT DO NOTHING, verifies the
     per-paragraph chunk count, then consumes embedding_pending_queue rows
     (same semantics as jindai/maintenance.py::consume_embedding_queue),
     so the UI queue gauge drains truthfully and re-runs are resumable.

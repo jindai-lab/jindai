@@ -173,6 +173,11 @@ class PDFDataSource(DataSourceStage):
         
         self.log(f'File Paths: {content}')
         self.files = PipelineStage.parse_paths(content)
+        # Literal fallback for listed paths glob fails on: '[...]' in real
+        # filenames is a glob character class, so such paths resolve to
+        # nothing. parse_paths is a coroutine; store raw lines and merge in
+        # fetch() after awaiting.
+        self._raw_paths = PipelineStage.parse_lines(content)
         
         # Text processing options
         self.clean_text = clean_text
@@ -211,6 +216,14 @@ class PDFDataSource(DataSourceStage):
         dataset = await Dataset.get(self.dataset_name)
         lang = self.lang
         files = await self.files
+        # Literal fallback: listed paths whose filenames contain '[...]' are
+        # glob character classes and match nothing; add raw lines that exist
+        # on disk and were missed by the glob.
+        import os as _os
+        _have = set(files)
+        for _p in getattr(self, '_raw_paths', []) or []:
+            if _p not in _have and _os.path.exists(storage.safe_join(_p)):
+                files.append(_p)
         self.log(f'{len(files)} files resolved')
 
         global _skip_state_ready

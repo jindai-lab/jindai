@@ -28,6 +28,9 @@ cors_origins:
 
 # Bibliography plugin configuration
 # BibliographyPlugin:
+#   # Base directory under the storage root for uploaded/relocated PDFs:
+#   # OneDrive/ -> /storage/OneDrive/ inside the container.
+#   upload_base_dir: OneDrive
 #   calibre_library_paths:
 #     - /path/to/calibre/library1
 #     - /path/to/calibre/library2

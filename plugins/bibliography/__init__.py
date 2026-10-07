@@ -3,42 +3,55 @@
 This module provides:
 - FileMetadata: ORM model for bibliographic items with comprehensive fields
 - BibliographyPlugin: Plugin with CRUD API endpoints for FileMetadata management,
-  including PDF upload (files stored under Authors/<normalized authors>/)
+  including PDF upload (files stored under the configurable upload base
+  directory, default ``OneDrive/<normalized first author>/`` — i.e.
+  ``/storage/OneDrive/...`` inside the container)
 - CalibreDataSource: DataSourceStage for importing from Calibre library
 - ZoteroDataSource: DataSourceStage for importing from Zotero API
 - FileMetadataSave: Pipeline stage to save Paragraph information to FileMetadata
 
-The `authors` submodule contains pure helpers for author name normalization
-(Chinese/Japanese names kept as-is, other names reordered to
-"<Family>, <Given>", punctuation other than "," replaced with "_") and for
-file naming / default title extraction from PDF file names.
+The `authors` submodule contains pure helpers separating two concerns:
+clean_authors preserves author names as entered for DATABASE STORAGE
+(symbols such as "." and "," are kept), while normalize_first_author
+etc. build safe PATH SEGMENTS (natural-name order, hostile characters
+replaced with "_") for the per-author directory name.  It also provides
+file naming / default title extraction from PDF file names (a trailing
+"_cropped" suffix is dropped).
 """
 
 import os
 import re
 import shutil
 import logging
+import json
 from typing import Dict, Any, List, Optional, cast
 
 from fastapi import APIRouter, Body, Depends, File, Form, UploadFile
-from sqlalchemy import select, func, or_, and_
+from sqlalchemy import select, func, or_, and_, text
 from uuid import UUID, uuid4
 
 from jindai.pipeline import PipelineStage
 from jindai.task import Task
 from jindai.plugin import Plugin
 from jindai.helpers import get_context, jieba
-from jindai.models import get_db_session, get_db, FileMetadata
+from jindai.models import get_db_session, get_db, FileMetadata, redis_client
 from jindai.storage import storage
 from jindai.worker import worker_manager
 
 from .authors import (
+    clean_authors,
     extract_default_title,
-    normalize_authors,
-    normalize_authors_directory,
     normalize_first_author_directory,
     sanitize_filename,
 )
+
+# Redis cache for the distinct-author list served by GET /bibliography/authors.
+# The list is produced by unnest over file_metadata.authors (O(table size),
+# 585k+ rows / 6k+ distinct authors here), so it is cached in Redis and
+# invalidated on API writes; the TTL is a safety net for direct DB writers
+# such as the batch importer (which bypasses the API hooks).
+AUTHORS_CACHE_KEY = "bibliography:authors:list"
+AUTHORS_CACHE_TTL = 600  # seconds
 
 
 class BibliographyPlugin(Plugin):
@@ -46,12 +59,14 @@ class BibliographyPlugin(Plugin):
 
     Provides:
     - Full CRUD operations for FileMetadata records via API
-    - PDF upload endpoint storing files under Authors/<normalized authors>/
+    - PDF upload endpoint storing files under the configurable upload base
+      directory (default ``OneDrive/<normalized first author>/``)
       and creating the corresponding FileMetadata records
     - Data sources for importing from Calibre and Zotero
     - Deduplication utilities for merging duplicate entries
     - Pipeline stages for saving Paragraphs to BibItems
-    - Configuration management for Calibre library paths and Zotero API tokens
+    - Configuration management for Calibre library paths, Zotero API tokens
+      and the upload base directory (default ``OneDrive/``)
     """
 
     def __init__(self, pmanager, **config) -> None:
@@ -67,6 +82,10 @@ class BibliographyPlugin(Plugin):
 
         # Initialize configuration
         self._config = {
+            # Base directory (relative to the storage root) for uploaded and
+            # relocated PDF files; the default "OneDrive" maps to
+            # /storage/OneDrive/ inside the container.
+            "upload_base_dir": "OneDrive",
             "calibre_library_paths": [],
             "zotero_api_key": "",
             "zotero_library_id": "",
@@ -92,6 +111,22 @@ class BibliographyPlugin(Plugin):
             cast(Any, storage).write_json(config_path, self._config)
         except Exception as e:
             logging.error(f"Error saving bibliography config: {e}")
+
+    def _upload_base_dir(self) -> str:
+        """Configured base directory for uploaded / relocated PDF files.
+
+        The value is relative to the application storage root, so the
+        default ``OneDrive`` corresponds to ``/storage/OneDrive/`` inside
+        the container.  Empty values and unsafe segments (``.`` / ``..``)
+        fall back to ``OneDrive``.
+
+        Returns:
+            Normalized base directory without leading/trailing slashes,
+            e.g. ``OneDrive``.
+        """
+        raw = str(self._config.get("upload_base_dir") or "").replace("\\", "/")
+        segments = [seg for seg in raw.split("/") if seg and seg not in (".", "..")]
+        return "/".join(segments) or "OneDrive"
 
     async def _sync_from_calibre(self) -> Dict[str, Any]:
         """Internal method to synchronize bibliographic data from Calibre libraries.
@@ -190,13 +225,17 @@ class BibliographyPlugin(Plugin):
         """Save an uploaded PDF and create the corresponding FileMetadata.
 
         The file is stored at the relative path
-        ``Authors/<normalized authors>/<filename>.pdf`` and a FileMetadata
+        ``<upload base dir>/<normalized first author>/<filename>.pdf`` (the
+        base directory is configurable, default ``OneDrive/`` which maps to
+        ``/storage/OneDrive/`` inside the container) and a FileMetadata
         record is created with the default title extracted from the file
         name (unless an explicit title is given).
 
-        Author normalization: Chinese/Japanese names are kept as-is, other
-        names are reordered to ``<Family>, <Given>`` (e.g. ``John Cage`` ->
-        ``Cage, John``); punctuation other than "," is replaced with ``_``.
+        Author handling: the FileMetadata record stores the names AS
+        ENTERED (cleaned only for whitespace — ``.`` and ``,`` etc. are
+        preserved); only the directory name is normalized for file-system
+        safety and natural-name ordering (see normalize_author_name,
+        e.g. ``A/B Cage`` -> directory ``A_B Cage``).
 
         Args:
             file: Uploaded file (must be a PDF).
@@ -234,6 +273,7 @@ class BibliographyPlugin(Plugin):
         default_title = extract_default_title(filename)
         final_title = re.sub(r"\s+", " ", title or "").strip() or default_title or "Untitled"
 
+        base_dir = self._upload_base_dir()
         dir_name = normalize_first_author_directory(authors)
         stem = sanitize_filename(default_title or "untitled")
 
@@ -245,7 +285,7 @@ class BibliographyPlugin(Plugin):
                 # database (FileMetadata.path is NOT NULL UNIQUE).
                 candidates = [stem] + [f"{stem}_{i}" for i in range(1, 100)]
                 for candidate in candidates:
-                    candidate_rel = f"Authors/{dir_name}/{candidate}.pdf"
+                    candidate_rel = f"{base_dir}/{dir_name}/{candidate}.pdf"
                     candidate_abs = storage.safe_join(candidate_rel)
                     if os.path.exists(candidate_abs):
                         continue
@@ -262,7 +302,7 @@ class BibliographyPlugin(Plugin):
                     target_abs = candidate_abs
                     break
                 if rel_path is None:
-                    rel_path = f"Authors/{dir_name}/{stem}_{uuid4().hex[:8]}.pdf"
+                    rel_path = f"{base_dir}/{dir_name}/{stem}_{uuid4().hex[:8]}.pdf"
                     target_abs = storage.safe_join(rel_path)
 
                 os.makedirs(os.path.dirname(target_abs), exist_ok=True)
@@ -276,7 +316,7 @@ class BibliographyPlugin(Plugin):
                     extension="pdf",
                     size_bytes=size_bytes,
                     title=final_title,
-                    authors=normalize_authors(authors) or None,
+                    authors=clean_authors(authors) or None,
                     item_type=(item_type or "").strip() or None,
                     file_attachments=[rel_path],
                 )
@@ -285,6 +325,7 @@ class BibliographyPlugin(Plugin):
                 await session.refresh(new_item)
                 result = new_item.as_dict()
 
+            self._invalidate_authors_cache()
             return {
                 "success": True,
                 "message": f"PDF saved to {rel_path}",
@@ -296,15 +337,74 @@ class BibliographyPlugin(Plugin):
             logging.error(f"Error uploading PDF: {e}")
             return {"success": False, "message": f"Error uploading PDF: {str(e)}"}
 
+    def _invalidate_authors_cache(self) -> None:
+        """Drop the cached distinct-author list (best effort).
+
+        Called after every API operation that may add, change or remove
+        authors so the next autocomplete request rebuilds the list.  Failures
+        (e.g. Redis being unavailable) are logged and swallowed: a stale list
+        still self-heals through AUTHORS_CACHE_TTL.
+        """
+        try:
+            redis_client.delete(AUTHORS_CACHE_KEY)
+        except Exception as e:
+            logging.warning(f"Failed to invalidate authors cache: {e}")
+
+    async def _all_authors(self) -> List[str]:
+        """Get all distinct author names across FileMetadata records.
+
+        Served from the Redis cache when available; on a cache miss the list
+        is rebuilt with a single ``SELECT DISTINCT unnest(authors)`` query
+        (kept out of the request hot path on purpose: unnest over the full
+        table is not cheap) and written back with AUTHORS_CACHE_TTL.
+
+        Returns:
+            Sorted (case-insensitive) list of distinct author names.
+        """
+        try:
+            cached = redis_client.get(AUTHORS_CACHE_KEY)
+            if cached:
+                names = json.loads(cached)
+                if isinstance(names, list):
+                    return names
+        except Exception as e:
+            logging.warning(f"Failed to read authors cache: {e}")
+
+        async with get_db_session() as session:
+            rows = (
+                await session.execute(
+                    text(
+                        "SELECT DISTINCT unnest(authors) FROM file_metadata "
+                        "WHERE authors IS NOT NULL"
+                    )
+                )
+            ).scalars().all()
+        names = sorted(
+            {(a or "").strip() for a in rows if (a or "").strip()},
+            key=str.lower,
+        )
+        try:
+            redis_client.setex(
+                AUTHORS_CACHE_KEY,
+                AUTHORS_CACHE_TTL,
+                json.dumps(names, ensure_ascii=False),
+            )
+        except Exception as e:
+            logging.warning(f"Failed to write authors cache: {e}")
+        return names
+
     async def _relocate_item_file(self, session, item: FileMetadata) -> Optional[str]:
         """Apply the canonical path naming to the item's file on update.
 
-        The canonical path naming is ``Authors/<first author>/<title>.pdf``:
-        the directory is derived from the FIRST author (normalized) and the
-        file name from the title (fallback: the current file stem).  Only
-        real PDF files inside the application storage are relocated; pure
-        bibliographic entries (``bib:...``), external URLs and non-PDF files
-        are left untouched.
+        The canonical path naming is
+        ``<upload base dir>/<first author>/<title>``: the base directory
+        is configurable (default ``OneDrive/``), the per-author directory
+        is derived from the FIRST author (normalized to natural-name
+        order) and the file name is derived from the title (fallback: the
+        current file stem).  The author directory is created when missing.
+        Only real files inside the application storage are relocated; pure
+        bibliographic entries (``bib:...``) and external URLs are left
+        untouched.
 
         Args:
             session: Database session (used for collision checks).
@@ -316,8 +416,6 @@ class BibliographyPlugin(Plugin):
         path = item.path or ""
         if not path or path.startswith("bib:") or "://" in path:
             return None
-        if item.extension and item.extension.lower() != "pdf":
-            return None
         try:
             old_abs = storage.safe_join(path)
         except ValueError:
@@ -326,21 +424,22 @@ class BibliographyPlugin(Plugin):
             return None
 
         old_stem, ext = os.path.splitext(os.path.basename(path))
-        ext = ext.lower() or ".pdf"
+        ext = ext.lower()
         if (item.title or "").strip():
             stem = sanitize_filename(item.title)
         else:
             stem = old_stem
 
+        base_dir = self._upload_base_dir()
         dir_name = normalize_first_author_directory(item.authors)
-        if f"Authors/{dir_name}/{stem}{ext}" == path:
+        if f"{base_dir}/{dir_name}/{stem}{ext}" == path:
             return None
 
         new_rel = None
         new_abs = None
         candidates = [stem] + [f"{stem}_{i}" for i in range(1, 100)]
         for candidate in candidates:
-            candidate_rel = f"Authors/{dir_name}/{candidate}{ext}"
+            candidate_rel = f"{base_dir}/{dir_name}/{candidate}{ext}"
             if candidate_rel == path:
                 # Same location: nothing to move.
                 return None
@@ -363,7 +462,7 @@ class BibliographyPlugin(Plugin):
             new_abs = candidate_abs
             break
         if new_rel is None:
-            new_rel = f"Authors/{dir_name}/{stem}_{uuid4().hex[:8]}{ext}"
+            new_rel = f"{base_dir}/{dir_name}/{stem}_{uuid4().hex[:8]}{ext}"
             new_abs = storage.safe_join(new_rel)
 
         os.makedirs(os.path.dirname(new_abs), exist_ok=True)
@@ -407,7 +506,7 @@ class BibliographyPlugin(Plugin):
             conds = [cond] if cond is not None else []
             async with get_db_session() as session:
                 res = await session.execute(
-                    select(FileMetadata).where(*conds).offset(offset).limit(limit)
+                    select(FileMetadata).where(*conds).order_by(FileMetadata.created_at.desc()).offset(offset).limit(limit)
                 )
                 return {
                     "results": res.scalars().all(),
@@ -428,7 +527,10 @@ class BibliographyPlugin(Plugin):
                 - count: Number of items imported
                 - message: Status message
             """
-            return await self._sync_from_calibre()
+            result = await self._sync_from_calibre()
+            if result.get("success"):
+                self._invalidate_authors_cache()
+            return result
 
         @router.post("/sync/zotero")
         async def sync_from_zotero():
@@ -440,7 +542,10 @@ class BibliographyPlugin(Plugin):
                 - count: Number of items imported
                 - message: Status message
             """
-            return await self._sync_from_zotero()
+            result = await self._sync_from_zotero()
+            if result.get("success"):
+                self._invalidate_authors_cache()
+            return result
 
         @router.post("/import/bibtex")
         async def import_bibtex(
@@ -472,6 +577,7 @@ class BibliographyPlugin(Plugin):
                         await session.flush()
                         imported_ids.append(str(item.id))
 
+                    self._invalidate_authors_cache()
                     return {
                         "success": True,
                         "count": len(items),
@@ -642,7 +748,8 @@ class BibliographyPlugin(Plugin):
             """Upload a PDF file to the bibliography.
 
             Only PDF files are allowed.  The PDF is stored at the relative
-            path ``Authors/<normalized authors>/<filename>.pdf``.  The
+            path ``<upload base dir>/<normalized first author>/<filename>.pdf``
+            (base directory configurable, default ``OneDrive/``).  The
             default title is extracted from the PDF file name unless an
             explicit title is provided, and a FileMetadata record is
             created for the upload.
@@ -670,7 +777,10 @@ class BibliographyPlugin(Plugin):
                 Dictionary with:
                 - success: Whether the operation succeeded
                 - results: List of normalized author names
-                - directory: Resulting directory name under ``Authors/``
+                - directory: Normalized FIRST author (the per-author
+                  directory below the upload base directory)
+                - root: Configured upload base directory (default
+                  ``OneDrive``, i.e. ``/storage/OneDrive/`` in the container)
             """
             try:
                 authors = data.get("authors") or []
@@ -678,16 +788,59 @@ class BibliographyPlugin(Plugin):
                     authors = [authors]
                 return {
                     "success": True,
-                    "results": normalize_authors(authors),
+                    # results: names as they will be STORED (symbols kept);
+                    # directory: normalized PATH segment preview.
+                    "results": clean_authors(authors),
                     "directory": normalize_first_author_directory(authors),
+                    "root": self._upload_base_dir(),
                 }
             except Exception as e:
                 return {
                     "success": False,
                     "results": [],
                     "directory": "",
+                    "root": self._upload_base_dir(),
                     "message": f"Error normalizing authors: {str(e)}",
                 }
+
+        @router.get("/authors")
+        async def list_authors(q: str = "", limit: int = 100):
+            """List distinct authors for autocomplete.
+
+            Backs the author suggest in the create/edit and PDF-upload forms.
+            The full distinct list comes from the Redis-cached
+            ``SELECT DISTINCT unnest(authors)`` (see
+            BibliographyPlugin._all_authors); filtering happens in-process so
+            each keystroke never hits the database.
+
+            Must be registered before ``GET /{item_id}`` so the literal path
+            is not swallowed by the parameterized route.
+
+            Args:
+                q: Optional case-insensitive substring filter.
+                limit: Maximum number of names to return (1-1000).
+
+            Returns:
+                Dictionary with:
+                - success: Whether the operation succeeded
+                - results: Matching author names (sorted, capped at limit)
+                - count: Total number of matches before the limit
+            """
+            names = await self._all_authors()
+            needle = (q or "").strip().lower()
+            matched = (
+                [n for n in names if needle in n.lower()] if needle else names
+            )
+            try:
+                limit = int(limit)
+            except (TypeError, ValueError):
+                limit = 100
+            limit = max(1, min(limit, 1000))
+            return {
+                "success": True,
+                "results": matched[:limit],
+                "count": len(matched),
+            }
 
         @router.get("/{item_id}")
         async def get_bibitem(item_id: int, session=Depends(get_db)):
@@ -748,8 +901,17 @@ class BibliographyPlugin(Plugin):
                     item.size_bytes = 0
                 session.add(item)
                 await session.flush()
+                # Move a caller-supplied file into the canonical
+                # <base dir>/<author>/<title> location (creating the author
+                # directory when needed), mirroring what updates do.
+                await self._relocate_item_file(session, item)
+                # Persist the relocated path BEFORE refresh(): refresh()
+                # reloads from the DB and would otherwise discard the
+                # unflushed path change made above.
+                await session.flush()
                 await session.refresh(item)
-                
+
+                self._invalidate_authors_cache()
                 return {
                     "success": True,
                     "result": item.as_dict(),
@@ -758,6 +920,7 @@ class BibliographyPlugin(Plugin):
             except Exception as e:
                 # Reset the failed transaction so the session dependency's
                 # final commit does not raise PendingRollbackError.
+                logging.exception("Error creating FileMetadata")
                 await session.rollback()
                 return {
                     "success": False,
@@ -793,12 +956,15 @@ class BibliographyPlugin(Plugin):
                         setattr(item, key, value)
                 
                 # Apply the canonical path naming
-                # (Authors/<first author>/<title>.pdf) to managed PDF files.
+                # (<upload base dir>/<first author>/<title>.pdf) to managed
+                # PDF files.
                 moved_to = await self._relocate_item_file(session, item)
                 
                 await session.flush()
                 await session.refresh(item)
-                
+
+                if "authors" in item_data:
+                    self._invalidate_authors_cache()
                 return {
                     "success": True,
                     "result": item.as_dict(),
@@ -844,6 +1010,7 @@ class BibliographyPlugin(Plugin):
                 await session.delete(item)
                 await session.flush()
                 
+                self._invalidate_authors_cache()
                 return {
                     "success": True,
                     "message": "FileMetadata deleted successfully",
@@ -859,6 +1026,22 @@ class BibliographyPlugin(Plugin):
 
         # Register routes with the app
         target.include_router(router)
+
+    @property
+    def upload_base_dir(self) -> str:
+        """Get configured base directory for uploaded PDF files."""
+        return self._upload_base_dir()
+
+    @upload_base_dir.setter
+    def upload_base_dir(self, path: str) -> None:
+        """Set base directory for uploaded PDF files.
+
+        Args:
+            path: Storage-root-relative directory, e.g. ``OneDrive``
+                (maps to ``/storage/OneDrive/`` inside the container).
+        """
+        self._config["upload_base_dir"] = path
+        self._save_config()
 
     @property
     def calibre_library_paths(self) -> list:

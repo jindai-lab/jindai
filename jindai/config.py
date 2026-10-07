@@ -33,7 +33,9 @@ class ConfigObject(BaseModel):
         plugins: List of plugins to load (default: ["*"] for all).
         oidc: OIDC configuration dictionary.
         port: Default port for web server (default: 8370).
-        embedding_api_base: OpenAI-compatible embedding API base URL.
+        embedding_api_base: OpenAI-compatible embedding API base URL, or the
+            literal ``local`` to run ``embedding_model`` (a Hugging Face model
+            such as BAAI/bge-m3) on this machine's GPU inside the app.
         embedding_api_key: API key for embedding service.
         embedding_model: Model name for embeddings (used with external API).
         embedding_dims: Embedding vector dimensions.
@@ -57,7 +59,8 @@ class ConfigObject(BaseModel):
     oidc: dict = Field(description="OIDC config")
     port: int = Field(default=8370, description="Default port for web server")
     embedding_api_base: str = Field(
-        description="OpenAI-compatible embedding API base URL"
+        description="OpenAI-compatible embedding API base URL, or 'local' to "
+                    "run embedding_model (Hugging Face id) on this machine's GPU"
     )
     embedding_api_key: str = Field(
         default="", description="API key for embedding service"
