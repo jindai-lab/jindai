@@ -107,7 +107,7 @@ async def main() -> int:
                 for comp in comps:
                     zipsub = comp["path"].split("#zip/", 1)[1]
                     await conn.execute(
-                        "INSERT INTO para_bak " + PARA_COLS + " "
+                        "INSERT INTO para_bak (" + PARA_COLS + ") "
                         "SELECT id, source_page, author, pdate, $3, content, pagenum, "
                         "       lang, extdata, keywords, source_id "
                         "FROM paragraph WHERE source_id = $1 AND $2 = $2",
@@ -120,7 +120,7 @@ async def main() -> int:
                     await conn.execute(
                         "DELETE FROM paragraph WHERE source_id = $1", comp["id"])
                     await conn.execute(
-                        "INSERT INTO paragraph " + PARA_COLS + " "
+                        "INSERT INTO paragraph (" + PARA_COLS + ") "
                         "SELECT id, source_page, author, pdate, outline, content, "
                         "       pagenum, lang, extdata, keywords, $2 FROM para_bak",
                         comp["id"], target)
