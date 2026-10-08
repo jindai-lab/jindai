@@ -1,0 +1,14 @@
+{
+ "classify": {
+  "dup_conflict": 123,
+  "multi": 1,
+  "safe": 7456,
+  "truly_gone": 977,
+  "missing_total": 8557
+ },
+ "apply": {
+  "updated": 7456,
+  "deleted_empty_target": 0,
+  "failed": 0
+ }
+}
