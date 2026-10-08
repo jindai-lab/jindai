@@ -5,7 +5,7 @@ Calibre 停用后本脚本改为**只依赖 jindai 的 file_metadata**——
 
 1. （可选，默认开）磁盘扫一遍 OneDrive 下的 *.pdf，把表里还没有的文件 upsert 进
    file_metadata（path 唯一；新文件此后唯一的登记入口，替代 Calibre 枚举）。
-2. SELECT file_metadata 中 `path LIKE 'OneDrive/%' AND lower(path) LIKE '%.pdf'`
+2. SELECT file_metadata 中**所有 PDF 行**（2026-10-08 用户指令：解除 OneDrive/白名单限制、导入全部 file_metadata PDF，仍排除 `Tool Books/` 与 `../` 遗留行；原为 `path LIKE 'OneDrive/%' AND lower(path) LIKE '%.pdf'`）
    的全部路径作为导入清单（已导入的由 skip_existed + reimport_gaps 按页集跳过，
    与旧路由“每轮枚举全量、按页集续传”语义一致）。
 3. 按既定“工具书不导入”规则用关键词正则剔除词典类（单独计数、单独落盘），
@@ -40,13 +40,17 @@ log = C.setup_logging(
 
 MISSING_PDF_SQL = """
     SELECT count(*) FROM file_metadata f
-    WHERE f.path LIKE $1 AND lower(f.path) LIKE '%.pdf'
+    WHERE lower(f.path) LIKE '%.pdf'
+      AND f.path NOT LIKE 'Tool Books/%'
+      AND f.path NOT LIKE '../%'
       AND NOT EXISTS (SELECT 1 FROM paragraph p WHERE p.source_id = f.id)
 """
 PARA_TOTAL_SQL = "SELECT count(*)::bigint FROM paragraph"
 LIST_SQL = """
     SELECT path FROM file_metadata
-    WHERE path LIKE $1 AND lower(path) LIKE '%.pdf'
+    WHERE lower(path) LIKE '%.pdf'
+      AND path NOT LIKE 'Tool Books/%'
+      AND path NOT LIKE '../%'
     ORDER BY path
 """
 EXISTING_ONEDRIVE_SQL = "SELECT path FROM file_metadata WHERE path LIKE $1"
@@ -60,7 +64,7 @@ TOOLBOOK_RE = re.compile(
 
 
 async def stats(conn) -> dict:
-    missing = await conn.fetchval(MISSING_PDF_SQL, C.ONEDRIVE_LIKE)
+    missing = await conn.fetchval(MISSING_PDF_SQL)
     paragraphs = await conn.fetchval(PARA_TOTAL_SQL)
     return {"onedrive_pdfs_without_paragraph": missing, "paragraph_total": paragraphs}
 
@@ -74,12 +78,13 @@ async def progress_watcher(interval: int):
             row = await conn.fetchrow(
                 """
                 SELECT (SELECT count(*)::bigint FROM file_metadata f
-                          WHERE f.path LIKE $1
+                          WHERE lower(f.path) LIKE '%.pdf'
+                            AND f.path NOT LIKE 'Tool Books/%'
+                            AND f.path NOT LIKE '../%'
                             AND NOT EXISTS (SELECT 1 FROM paragraph p
                                             WHERE p.source_id = f.id)) AS files_left,
                        (SELECT count(*)::bigint FROM paragraph) AS paras
-                """,
-                C.ONEDRIVE_LIKE,
+                """
             )
             log.info(
                 "[progress] files w/o paragraph=%s  paragraphs=%s  elapsed=%.1fmin",
@@ -136,7 +141,7 @@ async def scan_disk_upsert(conn) -> int:
 
 
 async def build_file_list(conn) -> tuple[list[str], dict]:
-    rows = await conn.fetch(LIST_SQL, C.ONEDRIVE_LIKE)
+    rows = await conn.fetch(LIST_SQL)
     all_paths = [r["path"] for r in rows]
     toolbooks = [p for p in all_paths if TOOLBOOK_RE.search(p)]
     candidates = [p for p in all_paths if p not in set(toolbooks)]
