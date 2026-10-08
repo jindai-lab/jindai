@@ -32,7 +32,8 @@ GROUP_SQL = """
     WHERE path LIKE '%#zip%'
     GROUP BY 1 ORDER BY 1
 """
-COMP_SQL = "SELECT id, path FROM file_metadata WHERE split_part(path, '#zip/', 1) = $1 ORDER BY path"
+COMP_SQL = ("SELECT id, path FROM file_metadata "
+            "WHERE path LIKE '%#zip%' AND split_part(path, '#zip/', 1) = $1 ORDER BY path")
 
 TARGET_COLS = ("dataset_id, item_type, title, authors, date, language, isbn, "
                "publisher, tags, size_bytes")

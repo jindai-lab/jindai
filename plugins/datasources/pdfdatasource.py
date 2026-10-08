@@ -234,20 +234,26 @@ class PDFDataSource(DataSourceStage):
 
         # Build mapping of file -> last imported page (0-indexed)
         if self.skip_existed:
+            existent: dict = {}
+            # Chunked IN(): asyncpg caps query arguments at 32767 — a
+            # whole-library list (44k+ paths) exceeded it and aborted
+            # fetch() before any file was imported (2026-10-08).
+            _CHUNK = 30000
             async with get_db_session() as session:
-                result = await session.execute(
-                    select(
-                        FileMetadata.path,
-                        func.max(Paragraph.source_page).label("max_page"),
+                for _i in range(0, len(files), _CHUNK):
+                    result = await session.execute(
+                        select(
+                            FileMetadata.path,
+                            func.max(Paragraph.source_page).label("max_page"),
+                        )
+                        .join(FileMetadata, Paragraph.source_id == FileMetadata.id)
+                        .where(FileMetadata.path.in_(files[_i:_i + _CHUNK]))
+                        .group_by(FileMetadata.path)
                     )
-                    .join(FileMetadata, Paragraph.source_id == FileMetadata.id)
-                    .where(FileMetadata.path.in_(files))
-                    .group_by(FileMetadata.path)
-                )
-                existent = {
-                    d["path"]: d["max_page"]
-                    for d in result.mappings()
-                }
+                    existent.update({
+                        d["path"]: d["max_page"]
+                        for d in result.mappings()
+                    })
         else:
             existent = {}
 
