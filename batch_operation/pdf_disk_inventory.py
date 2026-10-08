@@ -70,7 +70,12 @@ async def main() -> int:
         with open(tmp, "w", encoding="utf-8") as f:
             json.dump(inv, f, ensure_ascii=False, indent=1)
         os.replace(tmp, CACHE)          # 原子替换，监控读不到半截文件
-        print("written:", CACHE)
+        paths_cache = "batch_operation/reports/pdf_disk_paths.txt"
+        ptmp = paths_cache + ".tmp"
+        with open(ptmp, "w", encoding="utf-8") as f:
+            f.write("\n".join(sorted(disk)) + "\n")
+        os.replace(ptmp, paths_cache)   # 同步刷新路径清单，register/冲突脚本直接复用
+        print("written:", CACHE, "+", paths_cache)
     return 0
 
 

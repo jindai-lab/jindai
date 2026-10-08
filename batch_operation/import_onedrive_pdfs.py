@@ -95,22 +95,32 @@ async def progress_watcher(interval: int):
         await conn.close()
 
 
+# 2026-10-09 用户指令「全部补」：登记入口从 OneDrive 扩到 /storage 全库
+# （Tool Books 与隐藏目录除外）；item_type 按顶层目录。
+SCAN_ITEM_TYPE = {"Journals": "proceedings", "Series": "proceedings",
+                  "Zotero": "journal article", "Albums": None}
+SCAN_SKIP_DIRS = {"Tool Books"}
+
+
 async def scan_disk_upsert(conn) -> int:
-    """把磁盘上存在、file_metadata 还没有的 OneDrive PDF 补进表里（幂等）。
+    """把磁盘上存在、file_metadata 还没有的 PDF 补进表里（幂等，全库扫描）。
 
     Calibre 停用后没有别的东西会登记新文件——这一步就是新文件进入导入队列的入口。
+    2026-10-09 起覆盖 /storage 全部顶层目录（Tool Books 除外）。
     """
     from jindai.storage import storage
-    root = storage.safe_join("OneDrive")
+    root = storage.safe_join("OneDrive")[: -len("OneDrive")]
     disk: dict[str, int] = {}
     n_dirs = 0
-    for dirpath, _dirnames, filenames in os.walk(root):
+    for dirpath, dirnames, filenames in os.walk(root):
+        dirnames[:] = [d for d in dirnames
+                       if not d.startswith(".") and d not in SCAN_SKIP_DIRS]
         n_dirs += 1
         for fn in filenames:
             if not fn.lower().endswith(".pdf"):
                 continue
             full = os.path.join(dirpath, fn)
-            rel = "OneDrive/" + os.path.relpath(full, root).replace(os.sep, "/")
+            rel = os.path.relpath(full, root).replace(os.sep, "/")
             try:
                 disk[rel] = os.path.getsize(full)
             except OSError:
@@ -118,12 +128,15 @@ async def scan_disk_upsert(conn) -> int:
         if n_dirs % 2000 == 0:
             log.info("[scan] walked %d dirs, %d pdfs so far", n_dirs, len(disk))
 
-    existing = {r["path"] for r in await conn.fetch(EXISTING_ONEDRIVE_SQL, C.ONEDRIVE_LIKE)}
-    new = [(p, disk[p]) for p in disk if p not in existing]
+    existing = {r["path"] for r in await conn.fetch(
+        "SELECT path FROM file_metadata WHERE lower(path) LIKE '%.pdf' "
+        "AND path NOT LIKE 'Tool Books/%'")}
+    new = [(p, disk[p], SCAN_ITEM_TYPE.get(p.split("/")[0], "book"))
+           for p in disk if p not in existing]
     if new:
         await conn.executemany(
             "INSERT INTO file_metadata (path, extension, size_bytes, item_type) "
-            "VALUES ($1, 'pdf', $2, 'book') ON CONFLICT (path) DO NOTHING",
+            "VALUES ($1, 'pdf', $2, $3) ON CONFLICT (path) DO NOTHING",
             new,
         )
     # 表里有、磁盘没有的（陈旧路径）单独留档，不在此删行
