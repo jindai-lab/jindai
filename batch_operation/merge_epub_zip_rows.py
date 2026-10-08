@@ -32,7 +32,7 @@ GROUP_SQL = """
     WHERE path LIKE '%#zip%'
     GROUP BY 1 ORDER BY 1
 """
-COMP_SQL = "SELECT id, path FROM file_metadata WHERE path LIKE $1 || '#zip/%' ORDER BY path"
+COMP_SQL = "SELECT id, path FROM file_metadata WHERE split_part(path, '#zip/', 1) = $1 ORDER BY path"
 
 TARGET_COLS = ("dataset_id, item_type, title, authors, date, language, isbn, "
                "publisher, tags, size_bytes")
@@ -108,10 +108,10 @@ async def main() -> int:
                     zipsub = comp["path"].split("#zip/", 1)[1]
                     await conn.execute(
                         "INSERT INTO para_bak (" + PARA_COLS + ") "
-                        "SELECT id, source_page, author, pdate, $3, content, pagenum, "
+                        "SELECT id, source_page, author, pdate, $2, content, pagenum, "
                         "       lang, extdata, keywords, source_id "
-                        "FROM paragraph WHERE source_id = $1 AND $2 = $2",
-                        comp["id"], target, zipsub)
+                        "FROM paragraph WHERE source_id = $1",
+                        comp["id"], zipsub)
                     n_para += await conn.fetchval(
                         "SELECT count(*) FROM para_bak")
                     await conn.execute(
@@ -122,12 +122,12 @@ async def main() -> int:
                     await conn.execute(
                         "INSERT INTO paragraph (" + PARA_COLS + ") "
                         "SELECT id, source_page, author, pdate, outline, content, "
-                        "       pagenum, lang, extdata, keywords, $2 FROM para_bak",
-                        comp["id"], target)
+                        "       pagenum, lang, extdata, keywords, $1 FROM para_bak",
+                        target)
                     await conn.execute(
-                        "INSERT INTO text_embeddings " 
-                        "SELECT id, $2, chunk_id, embedding FROM emb_bak "
-                        "ON CONFLICT DO NOTHING", comp["id"], target)
+                        "INSERT INTO text_embeddings "
+                        "SELECT id, $1, chunk_id, embedding FROM emb_bak "
+                        "ON CONFLICT DO NOTHING", target)
                     # 清掉重插段落自动入队的行（嵌入已随迁，无需重算）
                     await conn.execute(
                         "DELETE FROM embedding_pending_queue "
