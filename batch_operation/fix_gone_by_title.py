@@ -152,6 +152,10 @@ async def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--apply", action="store_true")
     ap.add_argument("--limit", type=int, default=0)
+    ap.add_argument("--fuzzy-sim", type=float, default=SIM_AUTHORKEY,
+                    help="题名近似命中时的自动门槛（默认 0.70）")
+    ap.add_argument("--min-sim", type=float, default=SIM_MIN,
+                    help="题名精确+作者相容时的自动门槛（默认 0.30）")
     args = ap.parse_args()
 
     from jindai.storage import storage
@@ -288,11 +292,11 @@ async def main() -> int:
         authorlike = any(key_is_author(k, old_adir, tgt["author_dir"])
                          for k in okeys)
         if not exact:
-            thr = SIM_AUTHORKEY          # 题名只近似命中 → 内容必须高度一致
+            thr = args.fuzzy_sim     # 题名只近似命中 → 内容必须高度一致
         elif authorlike:
-            thr = SIM_AUTHORKEY          # 文件名是 Author - Title 式，key 实为作者名
+            thr = SIM_AUTHORKEY      # 文件名是 Author - Title 式，key 实为作者名
         else:
-            thr = SIM_MIN                # 题名精确 + 作者相容 → 低门槛
+            thr = args.min_sim       # 题名精确 + 作者相容 → 低门槛
         if sim >= thr:
             st["dup_merge"] += 1
             ent["cls"] = "dup_merge"
