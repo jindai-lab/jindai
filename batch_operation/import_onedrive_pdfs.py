@@ -98,7 +98,7 @@ async def progress_watcher(interval: int):
 # 2026-10-09 用户指令「全部补」：登记入口从 OneDrive 扩到 /storage 全库
 # （Tool Books 与隐藏目录除外）；item_type 按顶层目录。
 SCAN_ITEM_TYPE = {"Journals": "proceedings", "Series": "proceedings",
-                  "Zotero": "journal article", "Albums": None}
+                  "Zotero": "journalArticle", "Albums": "multimedia"}
 SCAN_SKIP_DIRS = {"Tool Books"}
 
 

@@ -1,8 +1,8 @@
 """把磁盘上从未登记的 PDF 全部 upsert 进 file_metadata（2026-10-09 用户指令：全部补，除 Tool Books）。
 
 来源：`reports/pdf_disk_paths.txt`（≤6h 的全盘清单缓存；过期则现场 os.walk 全树 10–18 分钟）。
-item_type 按顶层目录：Journals/Series → `proceedings`（合订本）、Zotero → `journal article`、
-其余（Authors/…/`..`）→ `book`、Albums → 留空。顺带写 size_bytes（逐文件 stat）。
+item_type 按顶层目录：Journals/Series → `proceedings`（合订本）、Zotero → `journalArticle`、
+其余（Authors/…/`..`）→ `book`、Albums → `multimedia`（2026-10-09 用户定）。顺带写 size_bytes（逐文件 stat）。
 幂等：`ON CONFLICT (path) DO NOTHING`；dry-run 默认。
 
   docker exec -w /app jindai /app/.venv/bin/python \
@@ -25,7 +25,7 @@ log = C.setup_logging("register_untracked",
 OUT = "batch_operation/reports/register_untracked.json"
 
 ITEM_TYPE = {"Journals": "proceedings", "Series": "proceedings",
-             "Zotero": "journal article", "Albums": None}
+             "Zotero": "journalArticle", "Albums": "multimedia"}
 BATCH = 2000
 
 

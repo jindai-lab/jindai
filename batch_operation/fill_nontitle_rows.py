@@ -2,8 +2,8 @@
 
 item_type（当前为 NULL 才写）：
   Journals / Series → `proceedings`（合订本，暂且这么对应）
-  Zotero            → `journal article`
-  其余（Authors/Supplementary Books/`..`/…）→ `book`；Albums 留空
+  Zotero            → `journalArticle`
+  其余（Authors/Supplementary Books/`..`/…）→ `book`；Albums → `multimedia`
 title 解析：
   Zotero  : `作者_…_YYYY_题名.pdf` → 题名取年份之后**原样**，作者取年份之前的 _ 段
   其余    : 文件名含 ` - ` → 题名=前段、作者=后段（Calibre 约定）；否则整名作题名
@@ -29,7 +29,7 @@ log = C.setup_logging("fill_nontitle", "batch_operation/reports/fill_nontitle.lo
 OUT = "batch_operation/reports/fill_nontitle.json"
 
 ITEM_TYPE = {"Journals": "proceedings", "Series": "proceedings",
-             "Zotero": "journal article", "Albums": None}
+             "Zotero": "journalArticle", "Albums": "multimedia"}
 YEAR = re.compile(r"^\d{4}$")
 BATCH = 2000
 
