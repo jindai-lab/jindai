@@ -42,6 +42,7 @@ MISSING_PDF_SQL = """
     SELECT count(*) FROM file_metadata f
     WHERE lower(f.path) LIKE '%.pdf'
       AND f.path NOT LIKE 'Tool Books/%'
+      AND f.path NOT LIKE '.trash/%'
       AND f.path NOT LIKE '../%'
       AND NOT EXISTS (SELECT 1 FROM paragraph p WHERE p.source_id = f.id)
 """
@@ -50,6 +51,7 @@ LIST_SQL = """
     SELECT path FROM file_metadata
     WHERE lower(path) LIKE '%.pdf'
       AND path NOT LIKE 'Tool Books/%'
+      AND path NOT LIKE '.trash/%'
       AND path NOT LIKE '../%'
     ORDER BY path
 """
@@ -80,6 +82,7 @@ async def progress_watcher(interval: int):
                 SELECT (SELECT count(*)::bigint FROM file_metadata f
                           WHERE lower(f.path) LIKE '%.pdf'
                             AND f.path NOT LIKE 'Tool Books/%'
+                            AND f.path NOT LIKE '.trash/%'
                             AND f.path NOT LIKE '../%'
                             AND NOT EXISTS (SELECT 1 FROM paragraph p
                                             WHERE p.source_id = f.id)) AS files_left,
@@ -97,6 +100,8 @@ async def progress_watcher(interval: int):
 
 # 2026-10-09 用户指令「全部补」：登记入口从 OneDrive 扩到 /storage 全库
 # （Tool Books 与隐藏目录除外）；item_type 按顶层目录。
+# 隐藏目录剪枝就是回收站 `.trash/`（删除记录时文件的去处）不被重新登记的保障，
+# 两个口径（隐藏目录剪枝 + 各 SQL 的 path NOT LIKE '.trash/%'）都要留着。
 SCAN_ITEM_TYPE = {"Journals": "proceedings", "Series": "proceedings",
                   "Zotero": "journalArticle", "Albums": "multimedia"}
 SCAN_SKIP_DIRS = {"Tool Books"}
@@ -130,7 +135,7 @@ async def scan_disk_upsert(conn) -> int:
 
     existing = {r["path"] for r in await conn.fetch(
         "SELECT path FROM file_metadata WHERE lower(path) LIKE '%.pdf' "
-        "AND path NOT LIKE 'Tool Books/%'")}
+        "AND path NOT LIKE 'Tool Books/%' AND path NOT LIKE '.trash/%'")}
     new = [(p, disk[p], SCAN_ITEM_TYPE.get(p.split("/")[0], "book"))
            for p in disk if p not in existing]
     if new:

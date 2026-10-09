@@ -27,7 +27,10 @@ import json
 from typing import Dict, Any, List, Optional, cast
 
 from fastapi import APIRouter, Body, Depends, File, Form, UploadFile
-from sqlalchemy import select, func, or_, and_, text
+# 注意：本文件后面有 `from uuid import UUID, uuid4`，会覆盖 sqlalchemy 的 UUID，
+# 所以这里必须起别名，否则 bindparam(type_=UUID(as_uuid=True)) 会撞上 uuid.UUID 的签名。
+from sqlalchemy import ARRAY, Text, bindparam, select, func, or_, and_, text
+from sqlalchemy import UUID as SqlaUUID
 from uuid import UUID, uuid4
 
 from jindai.pipeline import PipelineStage
@@ -36,6 +39,7 @@ from jindai.plugin import Plugin
 from jindai.helpers import get_context, jieba
 from jindai.models import get_db_session, get_db, FileMetadata, redis_client
 from jindai.storage import storage
+from jindai.trash import move_to_trash
 from jindai.worker import worker_manager
 
 from .authors import (
@@ -477,6 +481,60 @@ class BibliographyPlugin(Plugin):
             ]
         logging.info(f"Relocated bibliography file: {old_path} -> {new_rel}")
         return new_rel
+
+    async def _trash_candidates(
+        self, session, item: FileMetadata
+    ) -> tuple[List[str], List[str]]:
+        """收集删除该记录时应当进回收站的文件路径。
+
+        覆盖 ``path``、``file_attachments``、``cover``（三者都可能是
+        storage 内的真实文件；URL / ``bib:`` / 不存在的路径由
+        ``move_to_trash`` 自行跳过）。
+
+        Returns:
+            ``(kept, shared)`` —— ``kept`` 搬进回收站；``shared`` 仍被
+            **别的记录**引用（同一篇 PDF 被两条记录共用/重复登记），留下不动，
+            否则搬走会让幸存的那条记录失去文件。
+
+        判定必须逐候选比对（候选本身作为返回值），而不是拿别的记录的
+        ``path`` 去比对候选——后者永远匹配不上 ``file_attachments`` 里的共享。
+        """
+        cands: List[str] = []
+        for p in [item.path or ""] + list(item.file_attachments or []) + [item.cover or ""]:
+            p = p.strip()
+            if p and p not in cands:
+                cands.append(p)
+        if not cands:
+            return [], []
+        try:
+            stmt = (
+                text(
+                    "SELECT x.p FROM unnest(CAST(:ps AS text[])) AS x(p) "
+                    "WHERE EXISTS (SELECT 1 FROM file_metadata f "
+                    "  WHERE f.id <> CAST(:iid AS uuid) "
+                    "    AND (f.path = x.p "
+                    "         OR f.file_attachments && ARRAY[x.p] "
+                    "         OR f.cover = x.p))"
+                ).bindparams(
+                    bindparam("ps", type_=ARRAY(Text)),
+                    bindparam("iid", type_=SqlaUUID(as_uuid=True)),
+                )
+            )
+            taken = set(
+                (await session.execute(stmt, {"ps": cands, "iid": item.id}))
+                .scalars()
+                .all()
+            )
+        except Exception as ex:  # noqa: BLE001 - 查不清就不搬（共享文件优先保全）
+            logging.error(
+                "_trash_candidates 引用检查失败，保守起见本次不搬任何文件: %s", ex)
+            taken = set(cands)
+        kept = [p for p in cands if p not in taken]
+        shared = [p for p in cands if p in taken]
+        if shared:
+            logging.info("删除 %s 时留下仍被其他记录引用的文件: %s", item.id, shared)
+        return kept, shared
+
 
     def register_routes(self, target: APIRouter) -> None:
         """Register plugin-specific API routes."""
@@ -989,6 +1047,10 @@ class BibliographyPlugin(Plugin):
         async def delete_bibitem(item_id: UUID, session=Depends(get_db)):
             """Delete a FileMetadata.
 
+            删除记录时，记录关联的文件（path / file_attachments / cover）
+            会被移入存储根目录的回收站 ``.trash``（隐藏目录，导入器不扫），
+            而不是留在原地变成孤儿文件；回收站由每周 cron 清空。
+
             Args:
                 item_id: FileMetadata ID to delete
                 session: Database session (injected via Depends)
@@ -1006,14 +1068,39 @@ class BibliographyPlugin(Plugin):
                         "success": False,
                         "message": f"FileMetadata with id {item_id} not found",
                     }
-                
+
+                # 删除前先记下要进回收站的文件（需读 item 字段）。
+                trash_paths, shared_paths = await self._trash_candidates(session, item)
+                title, authors = item.title, list(item.authors or [])
+
                 await session.delete(item)
                 await session.flush()
-                
+                # 先落库再动磁盘：行没删掉就绝不碰文件。
+                await session.commit()
+
+                trashed = {"batch_dir": None, "moved": [], "skipped": []}
+                try:
+                    trashed = move_to_trash(
+                        trash_paths, item_id=str(item_id), title=title, authors=authors
+                    )
+                except Exception as ex:  # noqa: BLE001 - 记录已删，搬运失败只报告
+                    logging.exception("删除记录后移入回收站失败")
+                    trashed = {
+                        "batch_dir": None,
+                        "moved": [],
+                        "skipped": [
+                            {"path": p, "reason": f"{type(ex).__name__}: {ex}"}
+                            for p in trash_paths
+                        ],
+                    }
+
                 self._invalidate_authors_cache()
                 return {
                     "success": True,
                     "message": "FileMetadata deleted successfully",
+                    "trashed": trashed,
+                    # 仍被其他记录引用、按规则留下的文件（不会被搬走）
+                    "shared_paths_kept": shared_paths,
                 }
             except Exception as e:
                 # Reset the failed transaction so the session dependency's

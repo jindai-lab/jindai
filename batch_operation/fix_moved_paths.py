@@ -58,7 +58,8 @@ async def main() -> int:
     by_name: dict[str, list[tuple[str, int]]] = collections.defaultdict(list)
     by_size: dict[int, list[str]] = collections.defaultdict(list)
     n_files = 0
-    for dirpath, _dns, fns in os.walk(base):
+    for dirpath, dns, fns in os.walk(base):
+        dns[:] = [x for x in dns if not x.startswith(".")]  # 隐藏目录=回收站等，不索引
         for fn in fns:
             if not fn.lower().endswith(".pdf"):
                 continue

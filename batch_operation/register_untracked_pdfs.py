@@ -37,7 +37,10 @@ def disk_list(base: str) -> list[str]:
         log.info("[disk] cache hit: %d paths", len(out))
         return out
     out = []
-    for dirpath, _d, fns in os.walk(base):
+    for dirpath, dns, fns in os.walk(base):
+        # 隐藏目录（含回收站 .trash/）不登记：那里是被删除记录的文件，
+        # 每周清空一次，绝不能重新入队。
+        dns[:] = [d for d in dns if not d.startswith(".")]
         for fn in fns:
             if fn.lower().endswith(".pdf"):
                 out.append(os.path.relpath(os.path.join(dirpath, fn), base)
@@ -60,16 +63,20 @@ async def main() -> int:
     existing = {r["path"] for r in await conn.fetch(
         "SELECT path FROM file_metadata WHERE lower(path) LIKE '%.pdf'")}
     new = [p for p in paths
-           if p not in existing and not p.startswith("Tool Books/")]
+           if p not in existing and not p.startswith("Tool Books/")
+           and not p.startswith(".trash/")]
     skipped_tool = len([p for p in paths
                         if p.startswith("Tool Books/") and p not in existing])
+    skipped_trash = len([p for p in paths
+                         if p.startswith(".trash/") and p not in existing])
     if args.limit:
         new = new[:args.limit]
     by_dir = collections.Counter(p.split("/")[0] for p in new)
     log.info("[plan] %d to insert (tool_books excluded); by dir: %s", len(new),
              json.dumps(dict(by_dir), ensure_ascii=False))
 
-    applied = {"inserted": 0, "failed": 0, "tool_books_excluded": skipped_tool}
+    applied = {"inserted": 0, "failed": 0, "tool_books_excluded": skipped_tool,
+               "trash_excluded": skipped_trash}
     if args.apply:
         rows = []
         stat_fail = 0

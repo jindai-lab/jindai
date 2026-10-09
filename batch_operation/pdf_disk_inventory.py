@@ -36,7 +36,8 @@ async def main() -> int:
 
     t0 = time.time()
     disk: set[str] = set()
-    for dirpath, _d, fns in os.walk(base):
+    for dirpath, d, fns in os.walk(base):
+        d[:] = [x for x in d if not x.startswith(".")]  # 跳过 .trash 等隐藏目录
         for fn in fns:
             if fn.lower().endswith(".pdf"):
                 disk.add(os.path.relpath(os.path.join(dirpath, fn), base)

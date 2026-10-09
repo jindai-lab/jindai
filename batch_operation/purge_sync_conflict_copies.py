@@ -76,7 +76,8 @@ async def main() -> int:
                     disk[line.rsplit("/", 1)[-1]].append(line)
         used_cache = True
     if not disk:
-        for dirpath, _d, fns in os.walk(base):
+        for dirpath, d, fns in os.walk(base):
+            d[:] = [x for x in d if not x.startswith(".")]  # 跳过回收站等隐藏目录
             for fn in fns:
                 if fn.lower().endswith(".pdf"):
                     rel = os.path.relpath(os.path.join(dirpath, fn), base)
