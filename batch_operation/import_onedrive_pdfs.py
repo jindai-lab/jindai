@@ -246,6 +246,17 @@ async def main() -> int:
         if not args.no_scan:
             await scan_disk_upsert(conn)
         keep, list_meta = await build_file_list(conn)
+        # 段错误毒文件清单：reports/import_skip.txt（每行一个 path，# 注释）。
+        # 看门狗 import_watchdog.sh 崩溃后会自动把肇事文件追加进来再重启。
+        skip_file = "batch_operation/reports/import_skip.txt"
+        if os.path.exists(skip_file):
+            skip = {ln.strip() for ln in open(skip_file, encoding="utf-8")
+                    if ln.strip() and not ln.startswith("#")}
+            before = len(keep)
+            keep = [p_ for p_ in keep if p_ not in skip]
+            if before != len(keep):
+                log.warning("skip-file: 从清单剔除 %d 个毒文件",
+                            before - len(keep))
     finally:
         await conn.close()
     log.info("pre: files without paragraph=%s, paragraph total=%s, import list=%s",

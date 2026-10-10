@@ -1,0 +1,2 @@
+# 导入看门狗自动维护：会让 PDF 导入进程崩溃的文件（2026-10-10 Segfault）
+Zotero/Handman_2026_Responding from the Vector Space.pdf
