@@ -378,8 +378,18 @@ class PDFDataSource(DataSourceStage):
                     )
 
             # Open PDF file using the unified helper
-            stream = storage.open(filepath, "rb")
-            doc = open_pdf(cast(Any, stream))
+            # 2026-10-11 用户指令：**单文件出错 → 跳过本文件继续**。
+            # 原来这两行在 try 之外：空文件/坏文件（EmptyFileError、
+            # FileDataError）会把整个 fetch() 迭代器打死，后面 6 万多个文件
+            # 全都轮不到 —— 21:38 那次"又退出"就停在这里（第 5399 个文件）。
+            try:
+                stream = storage.open(filepath, "rb")
+                doc = open_pdf(cast(Any, stream))
+            except Exception as ex:
+                self.log(
+                    f"[skip] open failed, next file: {filepath} :: {ex!r}"
+                )
+                continue
             try:
                 # Determine page range to process
                 page_range = self.page_range
@@ -596,6 +606,14 @@ class PDFDataSource(DataSourceStage):
                              for p, r in skip_records],
                         )
 
+            except Exception as ex:
+                # 页面处理阶段出错也只跳过本文件（2026-10-11 用户指令），
+                # 否则一次 OCR/写库异常同样会打死 fetch() 迭代器、中断整单。
+                self.log(
+                    f"[skip] page loop failed, next file: "
+                    f"{filepath} :: {ex!r}"
+                )
+                continue
             finally:
                 doc.close()
 
