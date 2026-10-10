@@ -68,6 +68,39 @@ def _norm_page_text(text: str) -> str:
     return re.sub(r"\s+", "", text or "").lower()
 
 
+def folder_dataset_names(rel: List[str], authors) -> List[str]:
+    """按顶层文件夹规则算出该文件应挂的数据集名（2026-10-10 用户指令）。
+
+    与 ``batch_operation/backfill_folder_datasets.py`` 同一套规则：
+
+    - ``Zotero/*``                      -> ``Zotero``
+    - ``Journals/<二级目录>/...``        -> ``报刊--<二级目录>``
+    - ``Series/<二级目录>/...``          -> ``特辑--<二级目录>``（沿用现有特辑前缀）
+    - ``OneDrive/<作者>/<书名 (id)>/f``  -> ``书库--<作者>``
+    - ``Supplementary Books/<作者>/f``   -> ``书库--<作者>``
+
+    OneDrive/Supplementary **不挂「书库」基础绑定**（查询书库时已包含全部下级
+    数据集）。返回空列表 = 不在规则内或不可解析（缺目录且 authors 为空），不挂。
+    """
+    authors = [a for a in (authors or []) if a]
+    top = rel[0] if rel else ""
+    if top == "Zotero":
+        return ["Zotero"]
+    if top == "Journals":
+        return [f"报刊--{rel[1]}"] if len(rel) >= 3 else []
+    if top == "Series":
+        return [f"特辑--{rel[1]}"] if len(rel) >= 3 else []
+    if top == "OneDrive":
+        if len(rel) == 4:
+            return [f"书库--{rel[1]}"]
+        return [f"书库--{authors[0]}"] if authors else []
+    if top == "Supplementary Books":
+        if len(rel) == 3:
+            return [f"书库--{rel[1]}"]
+        return [f"书库--{authors[0]}"] if authors else []
+    return []
+
+
 # Skip-state: pages permanently excluded from import (blank scan pages,
 # cross-page merged content, garbled-filtered pages). Recorded once on
 # first determination, then excluded from every future page-set sweep so
@@ -226,6 +259,20 @@ class PDFDataSource(DataSourceStage):
                 files.append(_p)
         self.log(f'{len(files)} files resolved')
 
+        # 本轮运行内缓存：每个文件已挂好的 (path, dataset) 对。规则挂载只补缺，
+        # 避免每轮对全量清单重复 upsert（约 7 万文件 × 1–2 个数据集）。
+        self._linked_pairs = set()
+        _DSCHUNK = 30000
+        async with get_db_session() as session:
+            for _i in range(0, len(files), _DSCHUNK):
+                _ds_rows = await session.execute(
+                    select(FileMetadata.path, Dataset.name)
+                    .join(FileDataset, FileDataset.file_id == FileMetadata.id)
+                    .join(Dataset, Dataset.id == FileDataset.dataset_id)
+                    .where(FileMetadata.path.in_(files[_i:_i + _DSCHUNK]))
+                )
+                self._linked_pairs.update((d[0], d[1]) for d in _ds_rows)
+
         global _skip_state_ready
         if not _skip_state_ready:
             async with get_db_session() as session:
@@ -299,6 +346,14 @@ class PDFDataSource(DataSourceStage):
             author_kw = ({"author": _folder_author}
                          if _folder_author and "author" not in self.ext_params
                          else {})
+
+            # 按顶层文件夹规则挂数据集（2026-10-10 用户指令）：新登记/新同步的
+            # 文件进入导入队列时自动落位；存量已由 backfill_folder_datasets.py
+            # 改齐，这里只补缺（运行内按 (path, dataset) 缓存去重）。
+            for _dsn in folder_dataset_names(_rel, getattr(source, "authors", None)):
+                if (source.path, _dsn) not in self._linked_pairs:
+                    await FileDataset.link(source.id, _dsn)
+                    self._linked_pairs.add((source.path, _dsn))
 
             # Explicit force re-import: drop stale skip markers for the
             # requested pages so they are re-evaluated honestly.

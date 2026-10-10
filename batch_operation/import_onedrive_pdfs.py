@@ -12,7 +12,9 @@ Calibre 停用后本脚本改为**只依赖 jindai 的 file_metadata**——
    再剔除磁盘上已不存在的陈旧路径（交给日后的 fix_path_drift 处理）。
 4. 克隆存好的任务管线、**去掉 CalibreDataSource（若仍在）**，把清单注入
    PDFDataSource.content，其余 LanguageDetect/Reparagraph/DatasetFromField/
-   SaveParagraph 链不变；dataset_name 书库 由 PDFDataSource 自己挂。
+   SaveParagraph 链不变；数据集按 folder_dataset_names() 规则挂
+   （2026-10-10：Zotero→Zotero、Journals→报刊--<二级>、Series→特辑--<二级>、
+   OneDrive/Supplementary→书库--<作者>，不挂「书库」基础绑定）。
 
 统计口径与监控一致（jindai_progress.sh 的 pending 就是 file_metadata 反连接）。
 
@@ -47,13 +49,25 @@ MISSING_PDF_SQL = """
       AND NOT EXISTS (SELECT 1 FROM paragraph p WHERE p.source_id = f.id)
 """
 PARA_TOTAL_SQL = "SELECT count(*)::bigint FROM paragraph"
+# 2026-10-10 用户指令：按文件夹优先级导入
+#   Zotero → Series → OneDrive → Journals → Supplementary Books → 其余
+# 清单顺序即处理顺序（已导入的靠 skip_existed + reimport_gaps 按页集快速跳过，
+# 所以全量排序不会浪费时间，只会让未导入部分按此优先级推进）。
 LIST_SQL = """
     SELECT path FROM file_metadata
     WHERE lower(path) LIKE '%.pdf'
       AND path NOT LIKE 'Tool Books/%'
       AND path NOT LIKE '.trash/%'
       AND path NOT LIKE '../%'
-    ORDER BY path
+    ORDER BY CASE split_part(path, '/', 1)
+               WHEN 'Zotero'              THEN 1
+               WHEN 'Series'              THEN 2
+               WHEN 'OneDrive'            THEN 3
+               WHEN 'Journals'            THEN 4
+               WHEN 'Supplementary Books' THEN 5
+               ELSE 6
+             END,
+             path
 """
 EXISTING_ONEDRIVE_SQL = "SELECT path FROM file_metadata WHERE path LIKE $1"
 
