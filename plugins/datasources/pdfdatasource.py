@@ -87,7 +87,13 @@ def folder_dataset_names(rel: List[str], authors) -> List[str]:
     if top == "Zotero":
         return ["Zotero"]
     if top == "Journals":
-        return [f"报刊--{rel[1]}"] if len(rel) >= 3 else []
+        if len(rel) >= 3:
+            return [f"报刊--{rel[1]}"]
+        # 根级散刊：文件名（不含后缀）即刊名（2026-10-10 用户指令）
+        if len(rel) == 2:
+            stem = re.sub(r"\.[Pp][Dd][Ff]$", "", rel[1])
+            return [f"报刊--{stem}"]
+        return []
     if top == "Series":
         return [f"特辑--{rel[1]}"] if len(rel) >= 3 else []
     if top == "OneDrive":
