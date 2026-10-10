@@ -810,10 +810,12 @@ class ContentManager(ResourceRegistry):
             ds = await Dataset.get(resource_id, False)
             if not ds:
                 raise HTTPException(404, detail="Dataset not found")
+            # 别名双向展开：选中 现当代--郭沫若 等同于选中 书库--郭沫若
+            ds_ids = await Dataset.resolve_ids([ds.name], prefix=False)
             result = await session.execute(
                 select(FileMetadata.path)
                 .join(FileDataset, FileDataset.file_id == FileMetadata.id)
-                .filter(FileDataset.dataset_id == ds.id)
+                .filter(FileDataset.dataset_id.in_(ds_ids))
                 .order_by(FileMetadata.path)
             )
             return {"paths": list(result.scalars())}
@@ -868,10 +870,12 @@ class ContentManager(ResourceRegistry):
                     session.add(FileDataset(file_id=fm.id, dataset_id=ds.id))
 
             await session.commit()
+            # 响应口径与 GET 一致：别名双向展开（2026-10-10）
+            resp_ids = await Dataset.resolve_ids([ds.name], prefix=False)
             result = await session.execute(
                 select(FileMetadata.path)
                 .join(FileDataset, FileDataset.file_id == FileMetadata.id)
-                .filter(FileDataset.dataset_id == ds.id)
+                .filter(FileDataset.dataset_id.in_(resp_ids))
                 .order_by(FileMetadata.path)
             )
             return {"paths": list(result.scalars())}
@@ -941,10 +945,12 @@ class ContentManager(ResourceRegistry):
                 )
 
             await session.commit()
+            # 响应口径与 GET 一致：别名双向展开（2026-10-10）
+            resp_ids = await Dataset.resolve_ids([ds.name], prefix=False)
             result = await session.execute(
                 select(FileMetadata.path)
                 .join(FileDataset, FileDataset.file_id == FileMetadata.id)
-                .filter(FileDataset.dataset_id == ds.id)
+                .filter(FileDataset.dataset_id.in_(resp_ids))
                 .order_by(FileMetadata.path)
             )
             return {"paths": list(result.scalars())}
@@ -1280,11 +1286,8 @@ class ContentManager(ResourceRegistry):
                 # filter via file_dataset so options reflect current dataset
                 # selection.
                 if datasets := filters.datasets:
-                    dataset_name_filters = [Dataset.name.in_(datasets)]
-                    for dataset_prefix in datasets:
-                        dataset_name_filters.append(
-                            Dataset.name.ilike(f"{dataset_prefix}--%")
-                        )
+                    # 别名双向展开（Dataset.resolve_ids）：与段落检索口径一致
+                    ds_ids = await Dataset.resolve_ids(datasets)
                     query = (
                         select(
                             func.unnest(FileMetadata.authors).label("value"),
@@ -1295,8 +1298,7 @@ class ContentManager(ResourceRegistry):
                             FileDataset,
                             FileDataset.file_id == FileMetadata.id,
                         )
-                        .join(Dataset, Dataset.id == FileDataset.dataset_id)
-                        .where(or_(*dataset_name_filters))
+                        .where(FileDataset.dataset_id.in_(ds_ids))
                         .group_by("value")
                     )
                 else:

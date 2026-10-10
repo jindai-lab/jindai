@@ -235,6 +235,49 @@ class Dataset(Base):
     )
     name: Mapped[str] = mapped_column(String(128), nullable=False, comment="Dataset name")
     tags: Mapped[List[str] | None] = mapped_column(ARRAY(Text), comment="Tag list")
+    # 2026-10-10 用户指令：dataset 新增「别名」栏位。非空 = 本数据集是别名，
+    # 等同于指向的规范数据集（如 现当代--郭沫若 → 书库--郭沫若）。
+    alias_of: Mapped[Optional[uuid.UUID]] = mapped_column(
+        UUID,
+        ForeignKey("public.dataset.id", ondelete="SET NULL"),
+        nullable=True,
+        comment="别名：本数据集等同于该规范数据集",
+    )
+
+    @staticmethod
+    async def resolve_ids(names, prefix: bool = True) -> list[uuid.UUID]:
+        """名称选择器 → **等价**数据集 id 集合（别名双向展开）。
+
+        名称匹配沿用既有语义：精确命中 ``names``，以及 ``X`` → ``X--%`` 的
+        下级展开（``prefix=False`` 时只取精确名）。命中集合再按 ``alias_of``
+        做闭包：别名 → 其规范数据集（书库--X），规范 → 其全部别名。
+
+        于是选中「现当代」= 其下所有二级别名 = 书库下对应数据集的文件集合
+        （2026-10-10 用户要求的达成结果）。
+        """
+        names = [n for n in (names or []) if n]
+        if not names:
+            return []
+        conds = [Dataset.name.in_(names)]
+        if prefix:
+            conds += [Dataset.name.ilike(f"{n}--%") for n in names]
+        async with get_db_session() as session:
+            rows = (await session.execute(
+                select(Dataset.id, Dataset.alias_of).where(or_(*conds)))).all()
+        ids = {r[0] for r in rows}
+        frontier = list(ids | {r[1] for r in rows if r[1]})
+        for _ in range(3):          # 别名/规范各一跳，3 轮足够闭合
+            if not frontier:
+                break
+            async with get_db_session() as session:
+                more = (await session.execute(
+                    select(Dataset.id, Dataset.alias_of).where(
+                        or_(Dataset.id.in_(frontier),
+                            Dataset.alias_of.in_(frontier))))).all()
+            new = ({r[0] for r in more} | {r[1] for r in more if r[1]}) - ids
+            ids |= new
+            frontier = list(new)
+        return list(ids)
 
     @staticmethod
     async def get(name: str, auto_create: bool = True) -> "Dataset":
@@ -787,15 +830,13 @@ class Paragraph(Base):
         # Filter paragraphs through the source file association chain:
         # paragraph.source_id -> file_metadata -> file_dataset -> dataset
         if datasets := query_filters.datasets:
-            dataset_name_filters = [Dataset.name.in_(datasets)]
-            for dataset_prefix in datasets:
-                dataset_name_filters.append(Dataset.name.ilike(f"{dataset_prefix}--%"))
-
+            # 数据集筛选走 Dataset.resolve_ids：名称匹配后按 alias_of 双向展开，
+            # 选中「现当代」即等同于书库下对应的那批数据集（2026-10-10）。
+            ds_ids = await Dataset.resolve_ids(datasets)
             # Find file IDs associated with the matching datasets
             file_ids = (
                 select(FileDataset.file_id)
-                .join(Dataset, Dataset.id == FileDataset.dataset_id)
-                .where(or_(*dataset_name_filters))
+                .where(FileDataset.dataset_id.in_(ds_ids))
             )
             # Filter paragraphs whose source file belongs to one of the datasets
             filters.append(Paragraph.source_id.in_(file_ids))
