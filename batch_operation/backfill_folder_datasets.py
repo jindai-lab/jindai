@@ -6,8 +6,7 @@
   Zotero/*                       -> Zotero
   Journals/<二级目录>/...         -> 报刊--<二级目录>
   Series/<二级目录>/...           -> 特辑--<二级目录>
-  OneDrive/<作者>/<书名 (id)>/f   -> 书库--<作者>
-  OneDrive/<书名 (id)>/f          -> 书库--<authors[0]>（无作者目录兜底）
+  OneDrive/<作者>/<书名 (id)>/f   -> 书库--<作者>（3 层 <作者>/f 同规则）
   Supplementary Books/<作者>/f    -> 书库--<作者>
   Supplementary Books/<f>         -> 书库--<authors[0]>（目前 authors 全空 → 不可解析）
 
@@ -61,7 +60,8 @@ def desired_datasets(path: str, authors: list) -> list[str] | None:
     if top == "Series":
         return [f"特辑--{seg[1]}"] if len(seg) >= 3 else None
     if top == "OneDrive":
-        if len(seg) == 4:
+        # 4 层 <作者>/<书名 (id)>/f 与 3 层 <作者>/f 的第 2 段都是作者目录
+        if len(seg) >= 3:
             return [f"书库--{seg[1]}"]
         return [f"书库--{authors[0]}"] if authors else None
     if top == "Supplementary Books":

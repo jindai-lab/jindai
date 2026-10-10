@@ -76,7 +76,7 @@ def folder_dataset_names(rel: List[str], authors) -> List[str]:
     - ``Zotero/*``                      -> ``Zotero``
     - ``Journals/<二级目录>/...``        -> ``报刊--<二级目录>``
     - ``Series/<二级目录>/...``          -> ``特辑--<二级目录>``（沿用现有特辑前缀）
-    - ``OneDrive/<作者>/<书名 (id)>/f``  -> ``书库--<作者>``
+    - ``OneDrive/<作者>/<...>/f``        -> ``书库--<作者>``（3 层/4 层同规则）
     - ``Supplementary Books/<作者>/f``   -> ``书库--<作者>``
 
     OneDrive/Supplementary **不挂「书库」基础绑定**（查询书库时已包含全部下级
@@ -91,7 +91,8 @@ def folder_dataset_names(rel: List[str], authors) -> List[str]:
     if top == "Series":
         return [f"特辑--{rel[1]}"] if len(rel) >= 3 else []
     if top == "OneDrive":
-        if len(rel) == 4:
+        # 4 层 <作者>/<书名 (id)>/f 与 3 层 <作者>/f 的第 2 段都是作者目录
+        if len(rel) >= 3:
             return [f"书库--{rel[1]}"]
         return [f"书库--{authors[0]}"] if authors else []
     if top == "Supplementary Books":
