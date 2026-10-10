@@ -279,6 +279,10 @@ async def main() -> int:
     _init_plugins()
 
     clone = clone_pipeline(dbo, keep)
+    # 2026-10-10 用户指令：**单个文件出错时跳过该文件继续**，不要让整单停。
+    # task.py::_run_chain 在 except 里 `if not self.resume_next: self.alive = False`，
+    # resume_next=True 即"continue on error"（jindai/models.py TaskDBO 注释同义）。
+    clone.resume_next = True
     logfile = open(args.report + ".log", "a", encoding="utf-8")
 
     def logfn(*x):
