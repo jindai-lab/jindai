@@ -39,6 +39,7 @@ CTX.verify_mode = ssl.CERT_NONE
 
 
 def render(path, pages=PAGES):
+    path = path[7:] if path.startswith("../app/") else path   # 容器相对前缀归一化
     p = os.path.join(STORE, path)
     if not os.path.exists(p):
         return None
@@ -54,7 +55,7 @@ def ask(imgs, timeout=180):
     content = [{"type": "text", "text": f"这是该文献前 {len(imgs)} 页的图像。"}]
     content += [{"type": "image_url",
                  "image_url": {"url": "data:image/png;base64," + b}} for b in imgs]
-    body = json.dumps({"model": "openrouter/free", "temperature": 0,
+    body = json.dumps({"model": os.environ.get("VLMODEL", "qwen3.8-omni-flash"), "temperature": 0,
                        "messages": [{"role": "system", "content": SYS},
                                     {"role": "user", "content": content}]}).encode()
     req = urllib.request.Request(BASE + "/chat/completions", data=body,

@@ -96,6 +96,13 @@ def main():
             if len(tails) != len(set(tails)):
                 stat["manual(共享姓)"] += 1
                 continue
+            # ④ 防回退：新旧几乎同名（仅拼写/重音差异，如 Alain-Fournier→Alan Fournier）→ 转人工
+            import difflib
+            o1 = re.sub(r"[^a-z]", "", "".join(old).lower())
+            n1 = re.sub(r"[^a-z]", "", "".join(new).lower())
+            if o1 and n1 and o1 != n1 and difflib.SequenceMatcher(None, o1, n1).ratio() > 0.82:
+                stat["manual(疑似拼写回退)"] += 1
+                continue
             if new != old:
                 w.writerow([r["id"], r["path"], "|".join(old), "|".join(new), "V", "; ".join(hit)])
                 stat["apply"] += 1
