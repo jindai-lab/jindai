@@ -41,7 +41,9 @@ log = C.setup_logging("author_unify", "batch_operation/reports/authors_unify.log
 
 LATINISH = re.compile(r"^[A-Za-zÀ-ÖØ-öø-ÿ][A-Za-zÀ-ÖØ-öø-ÿ .'\-]*$")
 CJK_PURE = re.compile(r"^[一-鿿·、，]+$")
-NATION_TAIL = re.compile(r"[（(][一-鿿]{1,6}[)）]\s*$")
+NATION_TAIL = re.compile(
+    r"[（(](?:奥|苏|古罗马|西|希腊|保加利亚|塞尔维亚|格鲁吉亚|葡|澳|黎|保|荷|中|美|英|"
+    r"法|德|日|意|俄|匈|波|丹|挪威|芬|瑞典|瑞士|印度|土耳其|韩国|朝鲜|以色列)[)）]\s*$")
 NATION_MARK = re.compile(
     r"[〔\[（(]\s*(?:美|英|法|德|日|俄|意|西|奥|苏|荷兰|比利时|瑞典|挪威|丹麦|芬兰|波兰|"
     r"捷克|匈牙利|希腊|葡萄牙|瑞士|以色列|加拿大|澳大利亚|印度|韩国|朝鲜|墨西哥|保加利亚|"
@@ -204,6 +206,7 @@ CURATED_FULL: dict[str, str] = {
     "路·贝·德·格瓦拉": "Luis Vélez de Guevara",     # 《瘸腿魔鬼》作者
     "阿德里安·德姆莱特纳": "Adrian Demleitner",      # 《数字人文研究》2025
     "阿琼·萨巴瓦尔": "Arjun Sabharwal",             # 《数字人文研究》2022
+    "扬布里柯": "Iamblichus",                      # 新柏拉图主义者（《哲学规劝录》）
     "弗雷格": "Gottlob Frege", "鲁滨逊": "David Robinson",
     "施拉姆": "Wilbur Schramm",
     "彼得森": "Theodore Peterson",                  # 《传媒的四种理论》合著者
@@ -221,12 +224,25 @@ CURATED_ALL: dict[str, str] = {**CURATED, **CURATED_FULL}
 MULTI: dict[str, list[str]] = {
     "[美]欧文·M·柯匹 卡尔·柯恩": ["Irving M. Copi", "Carl Cohen"],
     "欧文·M·柯匹 卡尔·柯恩": ["Irving M. Copi", "Carl Cohen"],
+    # 一条元素里两位作者 + 国籍/角色标记：拆成两人（原文名查不到，保留中译名）
+    "〔法〕丹尼尔·施密特 米歇尔·拉布（著） 〔中〕陈莉（译）":
+        ["丹尼尔·施密特", "米歇尔·拉布"],
+    # 扬布里柯=新柏拉图主义者 Iamblichus、波爱修=Boethius（《哲学规劝录·哲学的慰藉》）
+    "扬布里柯、波爱修(古罗马)": ["Iamblichus", "Boethius"],
+    "扬布里柯、波爱修": ["Iamblichus", "Boethius"],
 }
 
 # 明确保留的中文/日文/机构名：既不做译名转换，也不因「同行有拉丁作者」被删
+ANY_TAIL_PAREN = re.compile(r"[（(][^（()）]{1,24}[)）]\s*$")
+
+LEAD_NATION = re.compile(
+    r"^\s*(?:〔|\[|【|（|\()\s*(?:美|英|法|德|日|俄|意|西|奥|苏|荷兰|比利时|瑞典|"
+    r"挪威|丹麦|芬兰|波兰|捷克|匈牙利|希腊|葡萄牙|瑞士|以色列|加拿大|澳大利亚|印度|"
+    r"韩国|朝鲜|墨西哥|保加利亚|塞尔维亚|格鲁吉亚|智利|黎巴嫩|中)\s*(?:〕|\]|】|）|\))\s*")
+
 KEEP_CJK = {"滨下武志", "牧尾晴喜", "永原康史", "凯丽比努尔·色提尼牙孜",
             "奥斯特洛夫斯基", "东之海神·西之沧海",
-            "芸術アルゴリズム研究会·多摩美術大学", "扬布里柯"}
+            "芸術アルゴリズム研究会·多摩美術大学"}
 LEAD_TAG = re.compile(r"^\s*(?:[\[【〔（(]\s*[^\]】〕）)]{1,6}\s*[\]】〕）)])\s*")
 TAIL_ROLE = re.compile(
     r"\s*(?:et al\.?|等编著|等编译|等译|等|编著|编译|著|译|编|校)\s*$")
@@ -442,6 +458,39 @@ async def build_plan() -> tuple[list[dict], dict]:
                 why = (why + "; " if why else "") + "删中文译者/编者 " + ",".join(dropped)
                 new = keep
                 ev["T5drop"] += 1
+
+        # ---- T6clean：删国籍标记（开头 〔法〕[美]【法】（德）／结尾 (奥)(古罗马)）
+        #      以及紧随其后的角色词（编译/著/译）—— 用户 2026-10-11 指令 ----
+        cleaned, chit = [], []
+        for a in new:
+            if a in KEEP_CJK:
+                cleaned.append(a)
+                continue
+            b = LEAD_NATION.sub("", a)
+            had_nation = b != a
+            b2 = NATION_TAIL.sub("", b)
+            if b2 != b:
+                had_nation, b = True, b2
+            # 只在确实剥掉了国籍标记时，才顺手剥紧跟的角色词（柯雷编译(荷)→柯雷）；
+            # 不做全库的 et al/等 清理——那超出指令范围（实测会动 823 行）
+            # 非国籍的括注（别名/化名/版本：吕征（吕澂）、momo（发财版））也一并删
+            b3 = ANY_TAIL_PAREN.sub("", b)
+            if b3 != b:
+                had_nation, b = True, b3
+            if had_nation:
+                b = TAIL_ROLE.sub("", b).strip(" ,;、")
+            if b != a and b:
+                cleaned.append(b)
+                chit.append(a)
+            else:
+                cleaned.append(a)
+        cleaned = list(dict.fromkeys(cleaned))
+        if chit and cleaned != new:
+            if tier == "-":
+                tier, why = "T6clean", ""
+            why = (why + "; " if why else "") + "去国籍标记 " + "/".join(chit[:3])
+            new = cleaned
+            ev["T6clean"] += 1
 
         # ---- X1 未知→补名（单独档，默认不写） ----
         if tier == "-" and junky:
