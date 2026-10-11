@@ -18,7 +18,7 @@ th { background: #eee; font-size: 7.5pt; } td.n { text-align: right; color: #666
 .path { font-family: "Sarasa Mono SC",monospace; font-size: 7pt; }
 </style></head><body>"""]
 h.append("<h1>jindai 文库：仍未修复的「文件不在盘」记录（盘上确无文件）</h1>")
-h.append(f"""<div>初始盘点命中 1,305 行；已批量修复/清理 <b>1,110</b> 行（改路径 / 删除重复及冗余记录 / 盘上双后缀重命名，全库 274,000 → 273,479 行）；
+h.append(f"""<div>初始盘点命中 1,305 行；已批量修复/清理 <b>1,157</b> 行（改路径 / 删除重复·冗余·无文件记录 / 盘上双后缀重命名，全库 274,000 → 273,434 行）；
 本清单为剩余 <b>{len(rows)}</b> 行——逐行复验过盘上确实没有对应文件，无法自动修复，需人工判断（补文件 或 删除记录）。<br>
 分类：{ '、'.join(f'{k} {len(v)} 行' for k,v in sorted(by.items(), key=lambda x:-len(x[1]))) }</div>""")
 for t, rs in sorted(by.items(), key=lambda x: -len(x[1])):

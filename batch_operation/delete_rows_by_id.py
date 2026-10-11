@@ -9,7 +9,7 @@ sys.path.insert(0, "/app/batch_operation")
 import common as C  # noqa: E402
 
 STORE = "/storage"
-CHILD = [("paragraph", "source_id"), ("embedding_pending_queue", "source_id"),
+CHILD = [("text_embeddings", "source_id"), ("paragraph", "source_id"), ("embedding_pending_queue", "source_id"),
          ("page_skip_state", "source_id"), ("file_dataset", "file_id")]
 
 
@@ -41,8 +41,6 @@ async def main():
         cnt = collections.Counter()
         for t, col in CHILD:
             cnt[t] = await conn.fetchval(f"SELECT count(*) FROM {t} WHERE {col} = ANY($1::uuid[])", ids)
-        cnt["text_embeddings"] = await conn.fetchval(
-            "SELECT count(*) FROM text_embeddings WHERE source_id = ANY($1::uuid[])", ids)
         print("  关联行:", dict(cnt))
         stamp = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
         bak = f"batch_operation/reports/deleted_rows_{stamp}.tsv"
