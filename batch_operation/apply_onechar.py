@@ -15,6 +15,8 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--plan", required=True)
     ap.add_argument("--apply", action="store_true")
+    ap.add_argument("--force", action="store_true",
+                    help="跳过「像人名」校验（外文原名/机构名等已人工确认的行）")
     a = ap.parse_args()
 
     BAD = re.compile(r"[的了著译编说话是们等]|老师|教授|先生|女士|同学")
@@ -36,6 +38,9 @@ def main():
         if len(f) < 4 or f[0] == "id" or not f[3]:
             continue
         old, new = f[2].split("|"), f[3].split("|")
+        if a.force:                      # 人工档：只留旧值护栏，不做形状校验
+            rows.append((f[0], f[1], old, new))
+            continue
         if len(old) != len(new):
             continue
         # 只接受「全部单字作者都被补全」的行（`X et al.` 也算单字作者）
@@ -44,7 +49,7 @@ def main():
             continue
         if not any(isone(x) for x in old):
             continue
-        if not all(namelike(o, n) for o, n in zip(old, new)):
+        if not a.force and not all(namelike(o, n) for o, n in zip(old, new)):
             print(f"  跳过（不像人名）: {f[2]} -> {f[3]}  {f[1].split('/')[-1][:40]}")
             continue
         rows.append((f[0], f[1], old, new))
