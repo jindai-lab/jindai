@@ -44,7 +44,7 @@ app = FastAPI(
     docs_url="/api/v2/docs",
     openapi_url="/api/v2/openapi.json",
     title="Jindai",
-    version="2.0.770",
+    version="2.0.771",
 )
 
 # CORS middleware configuration
