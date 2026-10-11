@@ -188,6 +188,25 @@ CURATED_FULL: dict[str, str] = {
     "西蒙娜·德·波伏瓦": "Simone de Beauvoir",
     "伊丹·本-巴拉克": "Idan Ben-Barak", "卡梅伦·韦斯特": "Cameron West",
     "约翰娜· 德鲁克 朱子彤／译": "Johanna Drucker",
+    # 联网取证（2026-10-11）
+    "亚历山大杰弗里·查尔斯": "Jeffrey C. Alexander",   # 《社会》2015 英文署名 Jeffrey Charles Alexander
+    "斯蒂文·拉格斯": "Steven Ruggles",               # 《数字人文研究》2021，明尼苏达人口中心
+    "朱利安·胡斯": "Julian Huss",                   # 《上海视觉》2021 英文署名
+    "迪弗蒂埃里·德": "Thierry de Duve",             # 《从美的艺术到一般艺术》作者
+    "妮科尔·福斯格伦": "Nicole Forsgren",           # Accelerate 作者
+    "劳伦斯·艾莉森": "Laurence Alison",
+    "艾米丽·艾莉森": "Emily Alison",                # Rapport 合著者
+    "埃米利·罗萨莱斯": "Emili Rosales",             # 《看不见的城市》作者
+    "大卫·崔沛特": "David Trippett",
+    "杰里米·阿罗尔斯": "Jeremy Aroles",
+    "格雷格·D.贾克布": "Gregg D. Jacobs",           # Say Good Night to Insomnia
+    "理查德·沃尔特": "Richard Walter",              # UCLA 编剧
+    "路·贝·德·格瓦拉": "Luis Vélez de Guevara",     # 《瘸腿魔鬼》作者
+    "阿德里安·德姆莱特纳": "Adrian Demleitner",      # 《数字人文研究》2025
+    "阿琼·萨巴瓦尔": "Arjun Sabharwal",             # 《数字人文研究》2022
+    "弗雷格": "Gottlob Frege", "鲁滨逊": "David Robinson",
+    "施拉姆": "Wilbur Schramm",
+    "彼得森": "Theodore Peterson",                  # 《传媒的四种理论》合著者
     "皮埃尔·布吕奈尔": "Pierre Brunel", "利昂·庞帕": "Leon Pompa",
     "弗里德里希·尼采": "Friedrich Nietzsche",
     "让-保罗·萨特": "Jean-Paul Sartre", "居伊·德波": "Guy Debord",
@@ -197,6 +216,17 @@ CURATED_FULL: dict[str, str] = {
     "瓦尔特·本雅明": "Walter Benjamin", "西奥多·阿多诺": "Theodor W. Adorno",
 }
 CURATED_ALL: dict[str, str] = {**CURATED, **CURATED_FULL}
+
+# 一条元素里塞了两个人：直接给整串的拆分结果
+MULTI: dict[str, list[str]] = {
+    "[美]欧文·M·柯匹 卡尔·柯恩": ["Irving M. Copi", "Carl Cohen"],
+    "欧文·M·柯匹 卡尔·柯恩": ["Irving M. Copi", "Carl Cohen"],
+}
+
+# 明确保留的中文/日文/机构名：既不做译名转换，也不因「同行有拉丁作者」被删
+KEEP_CJK = {"滨下武志", "牧尾晴喜", "永原康史", "凯丽比努尔·色提尼牙孜",
+            "奥斯特洛夫斯基", "东之海神·西之沧海",
+            "芸術アルゴリズム研究会·多摩美術大学", "扬布里柯"}
 LEAD_TAG = re.compile(r"^\s*(?:[\[【〔（(]\s*[^\]】〕）)]{1,6}\s*[\]】〕）)])\s*")
 TAIL_ROLE = re.compile(
     r"\s*(?:et al\.?|等编著|等编译|等译|等|编著|编译|著|译|编|校)\s*$")
@@ -318,6 +348,10 @@ async def build_plan() -> tuple[list[dict], dict]:
         if tier == "-":
             conv, hit = [], []
             for a in authors:
+                if a.strip() in MULTI:                # 一条元素塞两个人
+                    conv.extend(MULTI[a.strip()])
+                    hit.append(a.strip())
+                    continue
                 base = NATION_TAIL.sub("", a).strip()
                 if base in JP_NAMES:
                     conv.append(JP_NAMES[base])       # 日韩统一简体中文
@@ -384,6 +418,31 @@ async def build_plan() -> tuple[list[dict], dict]:
                 tier, why = "Z1", f"Zotero精确 {cjk[0]}→{zn[0]}"
                 ev["Z1"] += 1
 
+        # ---- T5cn：中文作者被写成「中文名_拼音名」两遍（Zotero/<中文>_<拼音>_<年>_…）
+        #      → 保留中文名、删拼音（中文作者按 姓+名 约定写作） ----
+        if tier == "-" and len(cjk) == 1 and path.startswith("Zotero/"):
+            lat_all = [x for x in new if looks_latin_person(NATION_TAIL.sub("", x))]
+            stem = os.path.basename(path).rsplit(".", 1)[0]
+            segs0 = [x.strip() for x in stem.split("_") if x.strip()]
+            if len(lat_all) == 1 and len(segs0) >= 2 \
+                    and segs0[0] == cjk[0] and segs0[1] == lat_all[0]:
+                new, tier = [cjk[0]], "T5cn"
+                why = "中文名_拼音名重复 → 保留中文（中文作者 姓+名）"
+                ev["T5cn"] += 1
+
+        # ---- T5drop：同行已有拉丁作者 → 纯中文元素是译者/编者，删掉 ----
+        # 用户 2026-10-11 指令：「删掉中文名」。KEEP_CJK 例外。
+        if any(looks_latin_person(NATION_TAIL.sub("", x)) for x in new):
+            keep = [x for x in new if x in KEEP_CJK
+                    or not (CJK_PURE.match(x.strip()) and x.strip() not in KEEP_CJK)]
+            if keep != new and keep:
+                dropped = [x for x in new if x not in keep]
+                if tier == "-":
+                    tier, why = "T5drop", ""
+                why = (why + "; " if why else "") + "删中文译者/编者 " + ",".join(dropped)
+                new = keep
+                ev["T5drop"] += 1
+
         # ---- X1 未知→补名（单独档，默认不写） ----
         if tier == "-" and junky:
             cid = calibre_id(path)
@@ -395,6 +454,7 @@ async def build_plan() -> tuple[list[dict], dict]:
                 tier, why = "X1", f"未知→{cand}"
                 ev["X1"] += 1
 
+        new = list(dict.fromkeys(x for x in new if x))
         plan.append({"id": str(r["id"]), "path": path, "old_title": title,
                      "old_authors": authors, "new_authors": new,
                      "tier": tier, "why": why, "change": new != authors})
