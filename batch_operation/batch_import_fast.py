@@ -384,6 +384,9 @@ async def main() -> int:
     ap.add_argument("--progress-secs", type=int, default=600)
     ap.add_argument("--limit", type=int, default=0,
                     help="只处理清单前 N 个文件（测试用）")
+    ap.add_argument("--only", default="",
+                    help="只处理该清单文件（每行一个 path）里列出的文件；"
+                         "与 --no-scan 搭配做小批增量导入（自动入库用）")
     ap.add_argument("--report", default="batch_operation/reports/import_fast.json")
     args = ap.parse_args()
 
@@ -400,7 +403,20 @@ async def main() -> int:
         pre = await legacy.stats(conn)
         if not args.no_scan:
             await legacy.scan_disk_upsert(conn)
-        keep, list_meta = await legacy.build_file_list(conn)
+        if args.only:
+            # 小批增量（自动入库）：清单直接来自文件，跳过全库 build_file_list
+            # （后者要对 ~70k 路径做磁盘存在性检查，分钟级，小批不值得）。
+            only_paths = [ln.strip() for ln in open(args.only, encoding="utf-8")
+                          if ln.strip() and not ln.startswith("#")]
+            q = ("SELECT path FROM file_metadata WHERE path = ANY($1::text[]) "
+                 "AND lower(path) LIKE '%.pdf'")
+            known = {r["path"] for r in await conn.fetch(q, only_paths)}
+            keep = [p for p in only_paths if p in known]
+            list_meta = {"only_list": args.only, "only_requested": len(only_paths),
+                         "only_known": len(keep)}
+            log.info("[only] %s", json.dumps(list_meta, ensure_ascii=False))
+        else:
+            keep, list_meta = await legacy.build_file_list(conn)
     finally:
         await conn.close()
 
