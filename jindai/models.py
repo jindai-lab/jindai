@@ -784,7 +784,8 @@ class Paragraph(Base):
         elif token in ('|', '&', ')'):
             raise ValueError(f"Unexpected token '{token}'")
         else:
-            return token, pos + 1
+            tokens = jieba.cut_query(token)
+            return Paragraph.keywords.overlap(tokens), pos + 1
 
     @staticmethod
     async def _parse_search_expression(search: str) -> Any:
