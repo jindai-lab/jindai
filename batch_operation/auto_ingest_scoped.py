@@ -9,9 +9,9 @@ Tool Books 不在范围内）。流程：
      DO NOTHING；item_type：Zotero→journalArticle，其余→book，与全库
      scan_disk_upsert 同口径）；
   3. 有新登记 → fill_nontitle_rows.py --apply 回填 title/authors/item_type；
-  4. 有新登记且当前无导入进程在跑（batch_import_fast / import_onedrive_pdfs /
-     import_watchdog_fast）→ 后台拉起
-     batch_import_fast.py --no-scan --only batch_operation/reports/auto_ingest_new.txt；
+  4. 有新登记且当前无导入进程在跑（batch_import_direct / batch_import_fast /
+     import_onedrive_pdfs / import_watchdog_fast）→ 后台拉起
+     batch_import_direct.py --no-scan --only batch_operation/reports/auto_ingest_new.txt；
      导入进程在跑时不重复拉起——其下一轮清单自会带上新登记的行。
   5. 结果 JSON 写 reports/auto_ingest_state.json（含 ts，监控脚本读它出报告行）。
 
@@ -104,8 +104,8 @@ async def main() -> int:
     # 4. 触发导入（仅在空闲时；在跑则等它下一轮带上）
     # ps auxww：容器里 ps aux 会把命令截断到 80 列（".venv/bin/py"），
     # grep 脚本名必落空（2026-10-14 实测误报空闲）——必须 ww 不截断。
-    procs = sh("ps auxww | grep -E '[b]atch_import_fast|[i]mport_onedrive_pdfs|"
-               "[i]mport_watchdog_fast'").strip()
+    procs = sh("ps auxww | grep -E '[b]atch_import_direct|[b]atch_import_fast|"
+               "[i]mport_onedrive_pdfs|[i]mport_watchdog_fast'").strip()
     importer_running = bool(procs)
 
     # 重试上一轮已登记但还没出段落的（全量导入当轮清单是轮初建的，
@@ -132,7 +132,7 @@ async def main() -> int:
         with open(NEWLIST, "w", encoding="utf-8") as f:
             f.write("\n".join(todo) + "\n")
         subprocess.Popen(
-            "/app/.venv/bin/python batch_operation/batch_import_fast.py --no-scan "
+            "/app/.venv/bin/python batch_operation/batch_import_direct.py --no-scan "
             "--only batch_operation/reports/auto_ingest_new.txt --progress-secs 600 "
             ">> batch_operation/reports/auto_ingest_import.log 2>&1",
             shell=True, cwd="/app", start_new_session=True)
