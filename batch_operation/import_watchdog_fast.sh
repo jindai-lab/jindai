@@ -1,10 +1,12 @@
 #!/bin/sh
-# 导入看门狗 fast 版（2026-10-12）：驱动 batch_import_fast.py（脱离 jindai.task）
+# 导入看门狗（2026-10-18）：驱动 batch_import_direct.py
+#   —— 该引擎不读 Task/TaskDBO，stage 链按 plugins 模块就地构造。
+#   旧引擎 batch_import_fast.py 同日退役（保留文件，看门狗不再调用）。
 #
-# 与 import_watchdog.sh 的区别 —— 崩溃归因改为「在飞集合取交集」：
-#   fast 版有 --workers 个文件并发在飞，单轮 crash 时在飞的 N 个文件里
-#   只有 1 个是毒文件，按"最后一条 importing 行"拉黑会误伤。于是：
-#     crash 轮读 reports/import_fast_inflight/w* 得到本轮在飞集合，
+# 与 legacy import_watchdog.sh 的区别 —— 崩溃归因改为「在飞集合取交集」：
+#   文件级并发下，单轮 crash 时在飞的 N 个文件里只有 1 个是毒文件，
+#   按"最后一条 importing 行"拉黑会误伤。于是：
+#     crash 轮读 reports/import_direct_inflight/w* 得到本轮在飞集合，
 #     与**上一连续 crash 轮**的在飞集合取交集，交集里的文件才拉黑
 #     （连续两轮崩在同一文件上 = 毒文件）。
 #   规则：
@@ -15,7 +17,8 @@
 cd /app || exit 1
 LOG=batch_operation/reports/import_onedrive.log
 SKIP=batch_operation/reports/import_skip.txt
-INFL=batch_operation/reports/import_fast_inflight
+INFL=batch_operation/reports/import_direct_inflight
+ENGINE=batch_operation/batch_import_direct.py
 [ -f "$SKIP" ] || : > "$SKIP"
 mkdir -p "$INFL"
 rm -f "$INFL"/w* "$INFL"/.cur "$INFL"/.prev "$INFL"/.inter 2>/dev/null
@@ -25,7 +28,7 @@ export LC_ALL=C
 for i in $(seq 1 60); do
   echo "[watchdog] round $i start $(date +%T)" >> "$LOG"
   start=$(wc -l < "$LOG")
-  .venv/bin/python batch_operation/batch_import_fast.py --progress-secs 600 >> "$LOG" 2>&1
+  .venv/bin/python "$ENGINE" --progress-secs 600 >> "$LOG" 2>&1
   rc=$?
   echo "[watchdog] round $i exit=$rc" >> "$LOG"
   tail_from() { awk -v s="$start" 'NR>s' "$LOG"; }
