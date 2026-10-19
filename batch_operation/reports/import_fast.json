@@ -1,0 +1,26 @@
+{
+ "task": "导入 OneDrive PDF",
+ "engine": "batch_import_fast (no jindai.task)",
+ "workers": 4,
+ "batch": 200,
+ "list": {
+  "filemeta_pdf_rows": 70770,
+  "toolbook_excluded": 195,
+  "missing_on_disk": 148,
+  "list_size": 70427
+ },
+ "pre": {
+  "onedrive_pdfs_without_paragraph": 20131,
+  "paragraph_total": 75256027
+ },
+ "post": {
+  "onedrive_pdfs_without_paragraph": 20131,
+  "paragraph_total": 75256027
+ },
+ "imported_files": 0,
+ "files_processed": 600,
+ "files_failed": 0,
+ "paragraphs_saved": 0,
+ "rows_dropped": 0,
+ "elapsed_min": 4.9
+}

@@ -1,0 +1,5880 @@
+{
+ "mode": "dry-run",
+ "limit": null,
+ "counters": {
+  "dup_old_row_missing": 123,
+  "gone_kept_paras": 977,
+  "gone_kept_paras_total": 1557443
+ },
+ "dup_plan": [],
+ "gone_report": [
+  {
+   "path": "Authors/Adorno, Theodor/Adorno, Theodor W._Lonitz, Henri - Towards a theory of musical reproduction_ notes, a draft, and two schemata-Polity (2007).pdf",
+   "paras": 1129,
+   "chars": 679629,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Adorno, Theodor/Dialektik der Aufklarung_ philo - Theodor W. Adorno.pdf",
+   "paras": 1080,
+   "chars": 710610,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Adorno, Theodor/Einleitung in die Musiksoziologie _ Zwölf - Theodor W. Adorno.pdf",
+   "paras": 1259,
+   "chars": 596578,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Adorno, Theodor/Einleitung in die Musiksoziologie _ Zwölf theoretische Vorlesungen - Theodor W. Adorno.pdf",
+   "paras": 1259,
+   "chars": 596578,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Adorno, Theodor/Fou Ding De Bian Zheng Fa - Theodor W. Adorno.pdf",
+   "paras": 1919,
+   "chars": 273793,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Adorno, Theodor/Gesammelte Schriften Bd. 1 Philosophische - Theodor W. Adorno.pdf",
+   "paras": 797,
+   "chars": 813119,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Adorno, Theodor/MINIMA MORALIA REFLECTIONS ON A - Theodor W. Adorno.pdf",
+   "paras": 465,
+   "chars": 532765,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Adorno, Theodor/Musikalische Schriften II_ Quasi una fanta - Theodor W. Adorno.pdf",
+   "paras": 659,
+   "chars": 640903,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Adorno, Theodor/Theorie der Halbbildung-Suhrkam - Theodor W. Adorno.pdf",
+   "paras": 96,
+   "chars": 70775,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Adorno, Theodor/Vermischte Schriften I - Theodor W. Adorno.pdf",
+   "paras": 2719,
+   "chars": 1833089,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Adorno, Theodor/本真性的黑话：评德意志意识形 - Theodor W. Adorno.pdf",
+   "paras": 224,
+   "chars": 78766,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Agamben, Giorgio/Giorgio Agamben--What-Is-an-Apparatus-and-Other-Essays-.pdf",
+   "paras": 194,
+   "chars": 73193,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Agamben, Giorgio/万物的签名：论方法.pdf",
+   "paras": 646,
+   "chars": 112373,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Agamben, Giorgio/剩余的时间 解读《罗马书》.pdf",
+   "paras": 3,
+   "chars": 48,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Alliez, Eric/De l'impossibilite de la phenomenologie Sur la philosophie francaise contemporaine (Problems et controverses)-J. Vrin (1995).pdf",
+   "paras": 787,
+   "chars": 298659,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Alliez, Eric/Signature Of The World Or, What Is Deleuze And Guattari's Philosophy -Continuum (2004), The.pdf",
+   "paras": 382,
+   "chars": 322122,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Alliez, Eric/Wars and Capital-Semiotext(e) (2018).pdf",
+   "paras": 1332,
+   "chars": 855124,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Arendt, Hannah/Arendt Hannah The Origins of Totalitarianism 1979.pdf",
+   "paras": 2606,
+   "chars": 1838591,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Arendt, Hannah/On revolution.pdf",
+   "paras": 891,
+   "chars": 767950,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Bachelard, Gaston/The_Formation_of_the_Scientific_Mind_Gaston_Bachelard.pdf",
+   "paras": 842,
+   "chars": 677318,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Bachelard, Gaston/巴什拉：空间的诗学（中文版）.pdf",
+   "paras": 1255,
+   "chars": 166249,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Badiou, Alain/Alain Badiou - Being and Event-Continuum (2007).pdf",
+   "paras": 2078,
+   "chars": 1182028,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Badiou, Alain/Alain Badiou - The True Life.pdf",
+   "paras": 287,
+   "chars": 92621,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Badiou, Alain/Badiou Alain - Theory of the Subject.pdf",
+   "paras": 2268,
+   "chars": 851245,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Badiou, Alain/In Praise of Love_Alain Badiou, Nicolas Truong, Translated by Peter Bush.pdf",
+   "paras": 170,
+   "chars": 91818,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Badiou, Alain/[Alain_Badiou]_Handbook_of_Inaesthetics_(Meridian(BookZZ.org)(cut).pdf",
+   "paras": 1346,
+   "chars": 709392,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Badiou, Alain/存在与事件_阿兰·巴迪欧.pdf",
+   "paras": 2919,
+   "chars": 387239,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Barthes, Roland/Elements de semiologie - Roland Barthes.pdf",
+   "paras": 5,
+   "chars": 1906,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Barthes, Roland/Myth Today_Barthes Roland..pdf",
+   "paras": 1,
+   "chars": 359,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Barthes, Roland/Mythologies_Roland Barthes, Annette Lavers.pdf",
+   "paras": 385,
+   "chars": 246654,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Barthes, Roland/The Semiotic Challenge_Roland Barthes.pdf",
+   "paras": 898,
+   "chars": 606226,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Barthes, Roland/明室 摄影纵横谈 (无) (Z-Library).pdf",
+   "paras": 1048,
+   "chars": 70172,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Barthes, Roland/神话修辞术 - Roland Barthes.pdf",
+   "paras": 1282,
+   "chars": 169711,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Bateson, Gregory/Gregory Bateson - Mind and Nature.pdf",
+   "paras": 1389,
+   "chars": 467617,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Bateson, Gregory/Gregory Bateson - Steps to an Ecology of Mind-Ballantine Books (1977).pdf",
+   "paras": 2794,
+   "chars": 1129140,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Bateson, Gregory/心灵与自然 贝特森.pdf",
+   "paras": 1409,
+   "chars": 163439,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Bauman, Richard/Explorations_in_the_Ethnography_of_Speaking_Joel_Sherzer;_Richard_Bauman.pdf",
+   "paras": 3761,
+   "chars": 1441123,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Baxandall, Michael/Shadows and Enlightenment_Michael Baxandall.pdf",
+   "paras": 670,
+   "chars": 450548,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Beller, Jonathan/Jonathan Beller - The Message Is Murder_ Substrates of Computational Capital-Pluto Press (2018).pdf",
+   "paras": 584,
+   "chars": 521557,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Benjamin, Walter/Band 1 (1974, Suhrkamp).pdf",
+   "paras": 3586,
+   "chars": 3026601,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Benjamin, Walter/Band 2 AufsACURtze, Essays, VortrACURge. 3 TeilbACURnde -Suhrkamp (1977).pdf",
+   "paras": 3960,
+   "chars": 3650863,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Benjamin, Walter/Band 3 Kritiken und Rezensionen (1991, Suhrkamp).pdf",
+   "paras": 1858,
+   "chars": 1592600,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Benjamin, Walter/Band 4 Kleine Prosa. Baudelaire-A bertragungen. 2 TeilbACURnde (1972, Suhrkamp).pdf",
+   "paras": 3759,
+   "chars": 2324956,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Benjamin, Walter/Band 5 Das Passagen-Werk. 2 Teilbände.pdf",
+   "paras": 4067,
+   "chars": 3188553,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Benjamin, Walter/Band 6 Fragmente vermischten Inhalts. Autobiographische Schriften.pdf",
+   "paras": 2432,
+   "chars": 1847611,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Benjamin, Walter/Band 7 Nachträge. 2 Teilbände.pdf",
+   "paras": 3533,
+   "chars": 2264522,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Benjamin, Walter/本雅明文选-中国社会科学出版社 (2011).pdf",
+   "paras": 1067,
+   "chars": 319196,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Bennett, Tony/Popular fiction _ technology, ideology, production, reading - Tony Bennett.pdf",
+   "paras": 4367,
+   "chars": 919741,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Bennett, Tony/文化、治理与社会  托尼·本尼特自选集 - Tony Bennett.pdf",
+   "paras": 1902,
+   "chars": 449966,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Bense, Max/Ausgewählte Schriften Band 1 Philosophie-J.B. Metzler (1997).pdf",
+   "paras": 1568,
+   "chars": 936023,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Bense, Max/Die Realität der Literatur. Autoren und ihre Texte-Kiepenheuer & Witsch (1971).pdf",
+   "paras": 814,
+   "chars": 291592,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Berry, David M/Copy, Rip, Burn The Politics of Copyleft and Open Source-Pluto Press (2008) - Berry David.pdf",
+   "paras": 911,
+   "chars": 605322,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Berry, David M/Critical Theory and the Digital-Bloomsbury Academic (2014) - David M. Berry.pdf",
+   "paras": 650,
+   "chars": 719488,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Berry, David M/Postdigital Aesthetics Art, Computation and Design-Palgrave Macmillan UK (2015) - David M. Berry.pdf",
+   "paras": 1514,
+   "chars": 914517,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Blanchot, Maurice/无尽的谈话_[法]_莫里斯·布朗肖_著;_尉光吉_译.pdf",
+   "paras": 2244,
+   "chars": 461622,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Boden, Margaret/Creativity and Art Three Roads - A. Boden Margaret.pdf",
+   "paras": 1255,
+   "chars": 651992,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Boden, Margaret/Dimensions of creativity.pdf",
+   "paras": 1217,
+   "chars": 641592,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Boden, Margaret/Margaret A. Boden - Fingers to Digits From.pdf",
+   "paras": 2228,
+   "chars": 922538,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Bonitz, Hermann/Hermann Bonitz, Eduard Wellmann - Metaphysik des Aristoteles (deutsche Übersetzung)-GEORG REIMER (1890).pdf",
+   "paras": 3297,
+   "chars": 717074,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Bourdieu, Pierre/Logic Of Practice_Bourdieu.pdf",
+   "paras": 2224,
+   "chars": 2070682,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Bourdieu, Pierre/The Logic of Practice_Pierre Bourdieu et al., Richard Nice.pdf",
+   "paras": 1047,
+   "chars": 1050530,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Brecht, Bertolt/Brecht SCHRIFTEN ZUR LITERATUR UND KUNST Band I.pdf",
+   "paras": 838,
+   "chars": 475804,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Brecht, Bertolt/Brecht SCHRIFTEN ZUR LITERATUR UND KUNST Band II.pdf",
+   "paras": 981,
+   "chars": 501452,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Brecht, Bertolt/Brecht-on-Film-and-Radio.pdf",
+   "paras": 1970,
+   "chars": 587665,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Brenner, Neil/New Urban Spaces_ Urban Theory and the Sca - Neil Brenner.pdf",
+   "paras": 1882,
+   "chars": 1286059,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Brenner, Neil/Spaces of Neoliberalism_ Urban Restructuring in North (7971).pdf",
+   "paras": 915,
+   "chars": 822748,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Butterfield, Herbert/Herbert Butterfield - The Origins of Modern Science, 1300–1800-The Free Press (1965).pdf",
+   "paras": 2504,
+   "chars": 1059382,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Calvino, Italo/文字世界和非文字世界.pdf",
+   "paras": 1107,
+   "chars": 194942,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Calvino, Italo/文学机器.pdf",
+   "paras": 1489,
+   "chars": 272569,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Carroll, Noel/Philosophy of Art_Noël Carroll.pdf",
+   "paras": 1157,
+   "chars": 785682,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Carroll, Noel/Theorizing the Moving Image_Noel Carroll.pdf",
+   "paras": 2609,
+   "chars": 1689752,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Cassirer, Ernst/符号形式哲学 第一卷.pdf",
+   "paras": 812,
+   "chars": 252131,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Cassirer, Ernst/符号形式哲学 第二卷.pdf",
+   "paras": 836,
+   "chars": 248873,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Cavell, Stanley/Disowning knowledge in seven plays of Shak - Stanley Cavell.pdf",
+   "paras": 1009,
+   "chars": 637774,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Cavell, Stanley/In Quest of the Ordinary_ Lines - Stanley Cavell.pdf",
+   "paras": 661,
+   "chars": 534356,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Cavell, Stanley/The Claim of Reason_ Wittgenste - Stanley Cavell.pdf",
+   "paras": 1575,
+   "chars": 1418476,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Cavell, Stanley/The World Viewed_ Reflections on the Ontol - Stanley Cavell.pdf",
+   "paras": 600,
+   "chars": 555891,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Chun, Wendy Hui Kyong/Control and Freedom_ Power and - Wendy Hui Kyong Chun.pdf",
+   "paras": 1147,
+   "chars": 487807,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Culler, Jonathan/Culler, Jonathan D. - Theory of the lyric-Harvard University Press (2017).pdf",
+   "paras": 1601,
+   "chars": 845894,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Culler, Jonathan/文学理论入门_英汉对照_by_美_乔纳森卡勒_李平_z_lib_org.pdf",
+   "paras": 920,
+   "chars": 319662,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Danto, Arthur C/Arthur C. Danto The Philosophical Disenfranchisement of Art - 未知.pdf",
+   "paras": 457,
+   "chars": 458964,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Danto, Arthur C/Arthur C. Danto The Transfiguration of the Commonplace A Philosophy of Art - 未知.pdf",
+   "paras": 453,
+   "chars": 616532,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Danto, Arthur C/The Abuse of Beauty - 2003.pdf",
+   "paras": 477,
+   "chars": 396510,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Danto, Arthur C/艺术的终结之后：当代艺术与历史的界限（阿瑟.C. - Arthur C. Danto.pdf",
+   "paras": 1001,
+   "chars": 228736,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Deleuze, Gilles/Joe Hughes - Deleuze's 'Difference and Repetition'_ A Reader's Guide (Reader's Guides) (2009, Continuum).pdf",
+   "paras": 834,
+   "chars": 513312,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Deleuze, Gilles/【德勒兹】弗朗西斯·培根：感觉的逻辑.pdf",
+   "paras": 492,
+   "chars": 392989,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Deleuze, Gilles/【德勒兹】普鲁斯特和符号（法文）.pdf",
+   "paras": 105,
+   "chars": 2741,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Deleuze, Gilles/【德勒兹】荒岛及其他文本.pdf",
+   "paras": 1165,
+   "chars": 900383,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Deleuze, Gilles/【德勒兹】電影1：運動一影像.pdf",
+   "paras": 872,
+   "chars": 247166,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Dennett, Daniel/Brainchildren_ Essays on Designing Minds_Daniel C. Dennett.pdf",
+   "paras": 1255,
+   "chars": 962011,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Deren, Maya/Bill Nichols - Maya Deren and the American Avant-Garde-University of California Press (2001).pdf",
+   "paras": 1843,
+   "chars": 701113,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Deren, Maya/Maya Deren - Divine Horsemen_ The Living Gods of Haiti-McPherson (1983).pdf",
+   "paras": 1165,
+   "chars": 740590,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Deren, Maya/Maya Deren - Divine Horsemen_ The Living Gods of Haiti-Thames and Hudson (1953).pdf",
+   "paras": 1138,
+   "chars": 752711,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Derrida, Jacques/Jacques Derrida - The Truth in Painting (1987).pdf",
+   "paras": 1317,
+   "chars": 791597,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Dickie, George/Art and Value Dickie.pdf",
+   "paras": 480,
+   "chars": 283278,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Dilthey, Wilhelm/(Galaxy Books) R. G. Collingwood - Idea of History-OUP Australia and New Zealand (1956).pdf",
+   "paras": 661,
+   "chars": 590061,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Dufrenne, Mikel/美学与哲学（杜夫海纳）.pdf",
+   "paras": 517,
+   "chars": 156103,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Durkheim, Emile/Emile Durkheim, Neil Gross, Robert Alun Jones, Hans Joas - Durkheim's Philosophy Lectures_ Notes from the Lycée de Sens Course, 1883-1884-Cambridge University Press (2004).pdf",
+   "paras": 1326,
+   "chars": 703894,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Durkheim, Emile/Émile Durkheim - Socialism and Saint Simon-Taylor and Francis (2009).pdf",
+   "paras": 651,
+   "chars": 636376,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Dyer-Witheford, Nick/Stephen Kline, Nick Dyer-Witheford, Greig de Peuter - Digital play_ the interaction of technology, culture, and marketing-McGill Queen University Press (2003).pdf",
+   "paras": 1891,
+   "chars": 963223,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Eagleton, Terry/Literary Theory_ An Introduction_Terry Eagleton.pdf",
+   "paras": 619,
+   "chars": 664931,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Eagleton, Terry/The Event of Literature_Terry Eagleton.pdf",
+   "paras": 797,
+   "chars": 576770,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Eagleton, Terry/美学意识形态_ （修订版）_[英] 特里·伊格尔顿(Terry Eagleton).pdf",
+   "paras": 1126,
+   "chars": 319046,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Eco, Umberto/Umberto Eco - The Open Work-Harvard University Press (1989).pdf",
+   "paras": 1802,
+   "chars": 1497299,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Elkins, James/The_Endurance_of_National_Constitutions_Zachary_Elkins,_Tom_Ginsburg,_James_Melton.pdf",
+   "paras": 1053,
+   "chars": 685303,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Elkins, James/绘画与眼泪_詹姆斯·埃尔金斯.pdf",
+   "paras": 1215,
+   "chars": 199080,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Elkins, James/绘画是什么？如何用炼金术语言思考油画 -- 詹姆斯·埃尔金斯 -- 2021 -- 重庆大学出版社 -- 9787568926607 -- 34b91dfbb0ae3e97934da47536a1fb75 -- Anna’s Archive.pdf",
+   "paras": 942,
+   "chars": 206873,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Elkins, James/西方艺术史中的中国山水画 -- [美]詹姆斯·埃尔金斯（James Elkins） -- 9787547917404 -- 51bb952fd13c9ba3afc80498c9fb1bb5 -- Anna’s Archive.pdf",
+   "paras": 1168,
+   "chars": 192769,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Ernst, Wolfgang/Technológos in Being_ Radical Media Archaeology and the Computational Machine - Wolfgang Ernst.pdf",
+   "paras": 743,
+   "chars": 550495,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Esposito, Roberto/人与物.pdf",
+   "paras": 331,
+   "chars": 61540,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Fabian, Johannes/Time and the Other How Anthropology Makes Its Object-Columbia University Press (1983) - Fabian Johannes.pdf",
+   "paras": 783,
+   "chars": 475108,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Feenberg, Andrew/Between Reason and Experience Essays in Technology and Modernity-The MIT Press (2010).pdf",
+   "paras": 1001,
+   "chars": 626780,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Feenberg, Andrew/可选择的现代性 芬伯格.pdf",
+   "paras": 1407,
+   "chars": 221916,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Feenberg, Andrew/在理性与经验之间——论技术与现代性 芬伯格.pdf",
+   "paras": 1279,
+   "chars": 233795,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Feenberg, Andrew/技术体系 理性的社会生活 （加）安德鲁·芬伯格著；上海社会科学院科学技术哲学创新团队译.pdf",
+   "paras": 1014,
+   "chars": 168217,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Feenberg, Andrew/技术批判理论 （美）安德鲁·芬伯格（Andrew Feenberg）著；韩连庆，曹观法译.pdf",
+   "paras": 1312,
+   "chars": 245899,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Feenberg, Andrew/海德格尔和马尔库塞——历史的灾难与救赎 芬伯格.pdf",
+   "paras": 988,
+   "chars": 189310,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Fiske, John/Introduction to Communication Studies_John Fiske.pdf",
+   "paras": 1045,
+   "chars": 529464,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Fiske, John/Power Plays Power Works_John Fiske.pdf",
+   "paras": 2105,
+   "chars": 882648,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Fiske, John/Reading television  _John Fiske, John Hartley.pdf",
+   "paras": 636,
+   "chars": 416466,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Fiske, John/Reading the Popular_John Fiske.pdf",
+   "paras": 734,
+   "chars": 486588,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Fiske, John/Television Culture_ Popular Pleasures and Politics (Studies in Communication Series)_John Fiske.pdf",
+   "paras": 1320,
+   "chars": 915536,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Floridi, Luciano/Philosophy and Computing_ An Introduction_Luciano Floridi.pdf",
+   "paras": 1098,
+   "chars": 726373,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Floridi, Luciano/The Ethics of Information_Luciano Floridi.pdf",
+   "paras": 1621,
+   "chars": 1105440,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Floridi, Luciano/The Fourth Revolution_ How the infosphere is reshaping human reality_Luciano Floridi.pdf",
+   "paras": 959,
+   "chars": 531985,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Floridi, Luciano/The Logic Of Information_ A Theory Of Philosophy As Conceptual Design_Luciano Floridi.pdf",
+   "paras": 1000,
+   "chars": 724461,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Floridi, Luciano/The Philosophy of Information Quality_Luciano Floridi, Phyllis Illari (eds.).pdf",
+   "paras": 1618,
+   "chars": 865043,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Floridi, Luciano/The Philosophy of Information_Luciano Floridi.pdf",
+   "paras": 1957,
+   "chars": 1236466,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Floridi, Luciano/The Routledge Handbook of Philosophy of Information_Luciano Floridi.pdf",
+   "paras": 1871,
+   "chars": 1379567,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Flusser, Vilem/Bodenlos_ ein philosophische Autobiographi - Vilém Flusser.pdf",
+   "paras": 687,
+   "chars": 519780,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Flusser, Vilem/Flusser, Vilém - Philosophy of Language (2016) - libgen.li.pdf",
+   "paras": 275,
+   "chars": 247298,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Flusser, Vilem/METAFLUXUS.pdf",
+   "paras": 596,
+   "chars": 257033,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Flusser, Vilem/Vilem Flusser - Into the Universe of Technical Images   (2011, Univ Of Minnesota Press) - libgen.lc.pdf",
+   "paras": 584,
+   "chars": 403306,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Flusser, Vilem/Vilem Flusser - Kommunikologie.pdf",
+   "paras": 807,
+   "chars": 690393,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Flusser, Vilem/Vilem Flusser - Medienkultur.pdf",
+   "paras": 595,
+   "chars": 456357,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Flusser, Vilem/Vilém Flusser - Für eine Philosophie der Fotografie-European Photgraphy (2011).pdf",
+   "paras": 214,
+   "chars": 132528,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Flusser, Vilem/Vilém Flusser - Lob der Oberflächlichkeit. Für eine Phänomenologie der Medien (1993, Bollmann) - libgen.lc.pdf",
+   "paras": 802,
+   "chars": 636923,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Flusser, Vilem/[Metaflux __ Vilém Flusser] Vilem Flusser - The Surprising Phenomenon of Human Communication (2016, Metaflux Publishing) - libgen.lc.pdf",
+   "paras": 177,
+   "chars": 166059,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Flusser, Vilem/传播学：历史、理论与哲学 - Vilem Flusser.pdf",
+   "paras": 979,
+   "chars": 220147,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Flusser, Vilem/技术图像的宇宙 弗鲁塞尔.pdf",
+   "paras": 474,
+   "chars": 103878,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Flusser, Vilem/摄影哲学的思考_威廉_弗卢塞尔,Vilém_Flusser_z_lib_org.pdf",
+   "paras": 418,
+   "chars": 58904,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Fodor, Jerry/RePresentations_ Philosophical Essays on the Foundations of -- Fodor, Jerry 1981.pdf",
+   "paras": 1242,
+   "chars": 800814,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Fodor, Jerry/心理模块性 (（美）J.A.福多（Jerry A.Fodor）著；李丽译 etc.) (Z-Library).pdf",
+   "paras": 704,
+   "chars": 132354,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Foster, Hal/Anti-aesthetic Essays on postmodern culture-Bay Press (1983), The.pdf",
+   "paras": 671,
+   "chars": 451113,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Foster, Hal/Return of the Real The Avant-Garde at the End of the Century-The MIT Press (1996), The.pdf",
+   "paras": 869,
+   "chars": 556253,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Foucault, Michel/对活人的治理 福柯.pdf",
+   "paras": 1953,
+   "chars": 444172,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Foucault, Michel/知识意志讲稿 福柯.pdf",
+   "paras": 1960,
+   "chars": 235982,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Franke, Herbert W/Einsteins Erben_Herbert W. Franke.pdf",
+   "paras": 2304,
+   "chars": 1008111,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Franke, Herbert W/Franke, Herbert W - Der Orchideenkäfig.pdf",
+   "paras": 944,
+   "chars": 344867,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Galloway, Alexander R/Alexander R. Galloway - Protocol_ How Control Exists after Decentralization (Leonardo Books) (2004).pdf",
+   "paras": 1101,
+   "chars": 547295,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Galloway, Alexander R/Alexander R. Galloway - The Interface Effect-Polity (2012).pdf",
+   "paras": 504,
+   "chars": 365202,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Geertz, Clifford/Geertz Clifford The Interpretation of Cultures Selected Essays.pdf",
+   "paras": 2664,
+   "chars": 2447086,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Geertz, Clifford/烛幽之光.pdf",
+   "paras": 7900,
+   "chars": 729475,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Gell, Alfred/Art and Agency.pdf",
+   "paras": 900,
+   "chars": 756378,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Goethe, Johann Wolfgang von/Johann Wolfgang von Goethe - Goethes Werke, Bd. 12_ Schriften zur Kunst, Schriften zur Literatur, Maximen und Reflexionen.pdf",
+   "paras": 4370,
+   "chars": 1705346,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Goethe, Johann Wolfgang von/歌德文集B/歌德文集.第7卷.戏剧.钱春绮等译.pdf",
+   "paras": 5831,
+   "chars": 228429,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Gombrich, E H/木马沉思录.pdf",
+   "paras": 371,
+   "chars": 77011,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Gombrich, E H/艺术与错觉：图画再现的心理学 - E.H. Gombrich.pdf",
+   "paras": 2931,
+   "chars": 457434,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Gombrich, E H/艺术的故事.pdf",
+   "paras": 818,
+   "chars": 141341,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Gombrich, E H/象征的图像.pdf",
+   "paras": 2352,
+   "chars": 434330,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Goodman, Nelson/Fact, Fiction, and Forecast.pdf",
+   "paras": 444,
+   "chars": 242162,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Goodman, Nelson/Springer) Nelson Goodman - The Structure of Appearance (1977.pdf",
+   "paras": 1437,
+   "chars": 714480,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Goodman, Nelson/事实、虚构和预测.pdf",
+   "paras": 442,
+   "chars": 76679,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Goodman, Nelson/构造世界的多种方式.pdf",
+   "paras": 510,
+   "chars": 109864,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Goodman, Nelson/艺术的语言.pdf",
+   "paras": 712,
+   "chars": 132192,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Graeber, David/Toward An Anthropological Theor - David Graeber.pdf",
+   "paras": 1378,
+   "chars": 932489,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Graeber, David/无政府主义人类学碎片 - 大卫·格雷伯.pdf",
+   "paras": 394,
+   "chars": 64463,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Greenberg, Clement/Art and Culture Critical Essays - Greenberg Clement.pdf",
+   "paras": 738,
+   "chars": 523609,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Groys, Boris/[Columbia Themes in Philosophy, Social Criticism, and the Arts] Boris Groys, Carsten Strathausen - Under Suspicion_ A Phenomenology of Media (2012, Columbia University Press) - libgen.li.pdf",
+   "paras": 1278,
+   "chars": 975660,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Habermas, Jurgen/(社会理论译丛) （德）尤尔根・哈贝马斯 - 重建历史唯物主义-社会科学文献出版社 (2000).pdf",
+   "paras": 1086,
+   "chars": 288293,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Habermas, Jurgen/Karl Jaspers - General Psychopathology-University of Chicago Press, University of Toronto Press (1963).pdf",
+   "paras": 5649,
+   "chars": 2917973,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Habermas, Jurgen/交往行动理论 第一卷.pdf",
+   "paras": 1182,
+   "chars": 316882,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Habermas, Jurgen/交往行动理论 第二卷.pdf",
+   "paras": 1521,
+   "chars": 398136,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Hacking, Ian/Rewriting the Soul_ Multiple Personality a - Ian Hacking.pdf",
+   "paras": 1872,
+   "chars": 845549,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Handke, Peter/Handbook on the Digital Creative Economy_Ruth Towse (editor), Christian Handke (editor).pdf",
+   "paras": 2456,
+   "chars": 1430273,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Hardt, Michael/Assembly_Michael Hardt, Antonio Negri.pdf",
+   "paras": 1113,
+   "chars": 894175,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Hardt, Michael/Gilles Deleuze_ An Apprenticeship in Philosophy_Michael Hardt.pdf",
+   "paras": 415,
+   "chars": 436060,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Hardt, Michael/Labor of Dionysus_ A Critique of the State-Form  _Michael Hardt & Antonio Negri.pdf",
+   "paras": 1471,
+   "chars": 1014784,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Hardt, Michael/Multitude_ War and Democracy in the Age of Empire  _Michael Hardt, Antonio Negri.pdf",
+   "paras": 1315,
+   "chars": 1020633,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Hardt, Michael/Radical Thought in Italy_ A Potential Politics_Paolo Virno, Michael Hardt.pdf",
+   "paras": 817,
+   "chars": 656454,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Harman, Graham/Art_and_Objects_Graham_Harman.pdf",
+   "paras": 680,
+   "chars": 566003,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Harman, Graham/immaterialism-objects-and-social-theory-graham-1--annas-archive--libgenrs-nf-2225539.pdf",
+   "paras": 275,
+   "chars": 158053,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Hartmann, Nicolai/Media Events_ The Live Broadcasting of History_Daniel Dayan, Elihu Katz.pdf",
+   "paras": 882,
+   "chars": 435939,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Harvey, David/大卫·哈维_ David Harvey - 巴黎城记：现代性之都的诞生-广西师范大学出版社 (2010).pdf",
+   "paras": 1712,
+   "chars": 432816,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Harvey, David/大卫·哈维_ David Harvey - 资本之谜：人人需要知道的资本主义真相-电子工业出版社 (2011).pdf",
+   "paras": 942,
+   "chars": 238659,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Hayles, N Katherine/How We Became Posthuman_ Virtual Bodies in Cybernetics, Literature, and Informatics - N. Katherine Hayles.pdf",
+   "paras": 1153,
+   "chars": 977165,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Hayles, N Katherine/How We Think_ Digital Media and Contemporary Technogenesis - N. Katherine Hayles.pdf",
+   "paras": 911,
+   "chars": 689251,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Hayles, N Katherine/My Mother Was a Computer_ Digital Subjects and Literary Texts - N. Katherine Hayles.pdf",
+   "paras": 1053,
+   "chars": 807053,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Hayles, N Katherine/N. Katherine Hayles - Postprint_ Books and Becoming Computational-Columbia University Press (2021).pdf",
+   "paras": 719,
+   "chars": 464640,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Hayles, N Katherine/N. Katherine Hayles - Unthought_ The Power of the Cognitive Nonconscious-University of Chicago Press (2017).pdf",
+   "paras": 816,
+   "chars": 614443,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Hegel, GWF/Hegel - Werke - Band 11 - Berliner Schriften 1818-1831 Hegel.pdf",
+   "paras": 1364,
+   "chars": 1615262,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Hegel, GWF/Hegel - Werke - Band 20 - Vorlesungen über die Geschichte der Philosophie III - OCRed.pdf",
+   "paras": 1386,
+   "chars": 1020921,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Heidegger, Martin/(海德格尔文集) [德] 马丁·海德格尔 - 哲学论稿（从本有而来）-商务印书馆 (2014).pdf",
+   "paras": 3337,
+   "chars": 389812,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Heidegger, Martin/(海德格尔文集) [德] 马丁·海德格尔 - 时间概念史导论-商务印书馆 (2014).pdf",
+   "paras": 1496,
+   "chars": 347808,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Heidegger, Martin/(海德格尔文集) [德]马丁·海德格尔 - 在通向语言的途中-商务印书馆 (2015).pdf",
+   "paras": 1637,
+   "chars": 145679,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Heidegger, Martin/(海德格尔文集) [德]马丁·海德格尔 - 论哲学的规定-商务印书馆 (2015).pdf",
+   "paras": 896,
+   "chars": 148135,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Heidegger, Martin/(海德格尔文集) 海德格尔 - 柏拉图的智者-商务印书馆 (2015).pdf",
+   "paras": 2637,
+   "chars": 722479,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Heidegger, Martin/(海德格尔文集) 马丁·海德格尔 - 不莱梅和弗莱堡演讲-商务印书馆 (2018).pdf",
+   "paras": 684,
+   "chars": 126352,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Heidegger, Martin/(海德格尔文集) 马丁·海德格尔 - 同一与差异-商务印书馆 (2014).pdf",
+   "paras": 464,
+   "chars": 81217,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Heidegger, Martin/AUS DER ERFAHRUNG DES DENKENS.pdf",
+   "paras": 1043,
+   "chars": 319696,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Heidegger, Martin/Aristoteles Metaphysik IX, 1-3 Vom Wesen und Wirklichkeit der Kraft (Sommersemester 1931).pdf",
+   "paras": 588,
+   "chars": 447804,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Heidegger, Martin/Beiträge zur Philosophie (Vom Ereignis) (1936-1938).pdf",
+   "paras": 2226,
+   "chars": 909524,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Heidegger, Martin/Heidegger - Grundbegriffe der aristotelischen Philosophie.pdf",
+   "paras": 7788,
+   "chars": 1639047,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Heidegger, Martin/Martin Heidegger - Aus der Erfahrung des Denkens.pdf",
+   "paras": 1043,
+   "chars": 322156,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Heidegger, Martin/Martin Heidegger - Beiträge zur Philosophie (Vom Ereignis) (1936-1938).pdf",
+   "paras": 2226,
+   "chars": 909654,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Heidegger, Martin/Martin Heidegger - Bremer und Freiburger Vorträge.pdf",
+   "paras": 531,
+   "chars": 320257,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Heidegger, Martin/Martin Heidegger - Das Ereignis (1941_42).pdf",
+   "paras": 2228,
+   "chars": 606379,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Heidegger, Martin/Martin Heidegger - Der Begriff der Zeit (1924).pdf",
+   "paras": 505,
+   "chars": 241618,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Heidegger, Martin/Martin Heidegger - Der Deutsche Idealismus.pdf",
+   "paras": 1449,
+   "chars": 688575,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Heidegger, Martin/Martin Heidegger - Der Satz vom Grund (1955-1956).pdf",
+   "paras": 520,
+   "chars": 344495,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Heidegger, Martin/Martin Heidegger - Die Frage nach dem Ding. Zu Kants Lehre von den transzendentalen Grundsätzen.pdf",
+   "paras": 734,
+   "chars": 508526,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Heidegger, Martin/Martin Heidegger - Die Geschichte des Seyns.pdf",
+   "paras": 953,
+   "chars": 290990,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Heidegger, Martin/Martin Heidegger - Die Grundbegriffe der Metaphysik_ Welt - Endlichkeit - Einsamkeit (Wintersemester 1929_30).pdf",
+   "paras": 1327,
+   "chars": 1098072,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Heidegger, Martin/Martin Heidegger - Die Grundprobleme der Phänomenologie (Sommersemester 1927).pdf",
+   "paras": 1185,
+   "chars": 961594,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Heidegger, Martin/Martin Heidegger - Einführung in die Metaphysik (Sommersemester 1935).pdf",
+   "paras": 761,
+   "chars": 458087,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Heidegger, Martin/Martin Heidegger - Einleitung in die Philosophie (Wintersemester 1928–29).pdf",
+   "paras": 1300,
+   "chars": 826362,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Heidegger, Martin/Martin Heidegger - Erläuterungen zu Hölderlins Dichtung.pdf",
+   "paras": 698,
+   "chars": 366420,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Heidegger, Martin/Martin Heidegger - Feldweg-Gespräche (1944_45).pdf",
+   "paras": 1744,
+   "chars": 373225,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Heidegger, Martin/Martin Heidegger - Frühe Schriften (1912-1916).pdf",
+   "paras": 2085,
+   "chars": 782174,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Heidegger, Martin/Martin Heidegger - Gedachtes.pdf",
+   "paras": 34,
+   "chars": 11322,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Heidegger, Martin/Martin Heidegger - Grundbegriffe der antiken Philosophie.pdf",
+   "paras": 1705,
+   "chars": 615413,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Heidegger, Martin/Martin Heidegger - Grundprobleme der Phänomenologie (Wintersemester 1919-20).pdf",
+   "paras": 1009,
+   "chars": 494823,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Heidegger, Martin/Martin Heidegger - Hegel_ 1. Die Negativität (1938_39), 2. Erläuterungen der __Einleitung__ zu Hegels __Phänomenologie des Geistes__ (1942).pdf",
+   "paras": 619,
+   "chars": 269155,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Heidegger, Martin/Martin Heidegger - Hegels Phänomenologie des Geistes (Wintersemester 1930_31).pdf",
+   "paras": 80,
+   "chars": 47037,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Heidegger, Martin/Martin Heidegger - Holzwege (1935–1946).pdf",
+   "paras": 1089,
+   "chars": 758021,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Heidegger, Martin/Martin Heidegger - Hölderlins Hymne __Der Ister__ (Sommersemester 1942).pdf",
+   "paras": 604,
+   "chars": 402172,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Heidegger, Martin/Martin Heidegger - Hölderlins Hymnen 'Germanien' und 'Der Rhein'.pdf",
+   "paras": 966,
+   "chars": 534618,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Heidegger, Martin/Martin Heidegger - Identität und Differenz (1955-1957).pdf",
+   "paras": 484,
+   "chars": 237929,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Heidegger, Martin/Martin Heidegger - Kant und das Problem der Metaphysik (1929).pdf",
+   "paras": 1216,
+   "chars": 607220,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Heidegger, Martin/Martin Heidegger - Leitgedanken zur Entstehung der Metaphysik, der neuzeitlichen Wissenschaft und der modernen Technik.pdf",
+   "paras": 2107,
+   "chars": 621585,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Heidegger, Martin/Martin Heidegger - Metaphysik und Nihilismus 1. Die Uberwindung der Metaphysik (1938-39) 2. Das Wesen des Nihilismus (1946-1948).pdf",
+   "paras": 1131,
+   "chars": 452087,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Heidegger, Martin/Martin Heidegger - Metaphysische Anfangsgründe der Logik im Ausgang von Leibniz (Sommersemester 1928).pdf",
+   "paras": 902,
+   "chars": 539374,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Heidegger, Martin/Martin Heidegger - Nietzsche I.pdf",
+   "paras": 1710,
+   "chars": 1218251,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Heidegger, Martin/Martin Heidegger - Nietzsche II (1939-1946).pdf",
+   "paras": 1196,
+   "chars": 870405,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Heidegger, Martin/Martin Heidegger - Nietzsches Lehre vom Willen zur Macht als Erkenntnis.pdf",
+   "paras": 1065,
+   "chars": 659084,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Heidegger, Martin/Martin Heidegger - Nietzsches Metaphysik - Einleitung in die Philosophie - Denken und Dichten.pdf",
+   "paras": 533,
+   "chars": 291522,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Heidegger, Martin/Martin Heidegger - Ontologie. Hermeneutik der Faktizität.pdf",
+   "paras": 506,
+   "chars": 187985,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Heidegger, Martin/Martin Heidegger - Parmenides (Wintersemester 1942_43).pdf",
+   "paras": 671,
+   "chars": 511737,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Heidegger, Martin/Martin Heidegger - Phänomenologie der Anschauung und des Ausdrucks. Theorie der philosophischen Begriffsbildung.pdf",
+   "paras": 622,
+   "chars": 394517,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Heidegger, Martin/Martin Heidegger - Phänomenologische Interpretation von Kants Kritik der reinen Vernunft (Wintersemester 1927–28).pdf",
+   "paras": 81,
+   "chars": 52473,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Heidegger, Martin/Martin Heidegger - Phänomenologische Interpretationen ausgewählter Abhandlungen des Aristoteles zur Ontologie und Logik.pdf",
+   "paras": 1937,
+   "chars": 916484,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Heidegger, Martin/Martin Heidegger - Platon_ Sophistes (Wintersemester 1924-25).pdf",
+   "paras": 1690,
+   "chars": 1323886,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Heidegger, Martin/Martin Heidegger - Prolegomena zur Geschichte des Zeitbegriffs (Sommersemester 1925).pdf",
+   "paras": 1151,
+   "chars": 903011,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Heidegger, Martin/Martin Heidegger - Schellings Abhandlung über das Wesen der menschlichen Freiheit 1809.pdf",
+   "paras": 855,
+   "chars": 573476,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Heidegger, Martin/Martin Heidegger - Sein und Zeit (1927).pdf",
+   "paras": 1868,
+   "chars": 1166239,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Heidegger, Martin/Martin Heidegger - Seminare.pdf",
+   "paras": 1862,
+   "chars": 782166,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Heidegger, Martin/Martin Heidegger - Seminare_ Kant-Leibniz-Schiller.pdf",
+   "paras": 8849,
+   "chars": 1342419,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Heidegger, Martin/Martin Heidegger - Unterwegs zur Sprache (1950-1959).pdf",
+   "paras": 1071,
+   "chars": 409168,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Heidegger, Martin/Martin Heidegger - Wegmarken (1919-1961).pdf",
+   "paras": 1489,
+   "chars": 986979,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Heidegger, Martin/Martin Heidegger - Zu Ernst Jünger.pdf",
+   "paras": 2094,
+   "chars": 671261,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Heidegger, Martin/Martin Heidegger - Zu Hölderlin — Griechenlandreisen.pdf",
+   "paras": 2193,
+   "chars": 610065,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Heidegger, Martin/Martin Heidegger - Zum Wesen der Sprache und Zur Frage nach der Kunst.pdf",
+   "paras": 3787,
+   "chars": 268566,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Heidegger, Martin/Martin Heidegger - Zur Auslegung von Nietzsches II. Unzeitgemäßer Betrachtung.pdf",
+   "paras": 1604,
+   "chars": 574260,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Heidegger, Martin/Martin Heidegger - Über den Anfang (1941).pdf",
+   "paras": 1407,
+   "chars": 381367,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Heidegger, Martin/Martin Heidegger, Günter Seubold (ed.) - Logik als die Frage nach dem Wesen der Sprache.pdf",
+   "paras": 677,
+   "chars": 335818,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Heidegger, Martin/Martin Heidegger, H. Vetter - Geschichte der Philosophie von Thomas von Aquin bis Kant (Wintersemester 1926–27).pdf",
+   "paras": 265,
+   "chars": 102426,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Heidegger, Martin/Martin Heidegger, Hermann Heidegger - Reden und andere Zeugnisse eines Lebensweges.pdf",
+   "paras": 3860,
+   "chars": 1269528,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Heidegger, Martin/Martin Heidegger, Hermann Heidegger - Überlieferte Sprache und technische Sprache-Erker (1989).pdf",
+   "paras": 81,
+   "chars": 41147,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Heidegger, Martin/Martin Heidegger, Mark Michalski - Seminare. Platon - Aristoteles - Augustinus.pdf",
+   "paras": 5998,
+   "chars": 1291266,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Heidegger, Martin/Martin Heidegger, Peter Trawny - Anmerkungen I-V.pdf",
+   "paras": 2748,
+   "chars": 907145,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Heidegger, Martin/Martin Heidegger, Peter Trawny - Seminare_ Hegel-Schelling.pdf",
+   "paras": 11685,
+   "chars": 1389970,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Heidegger, Martin/Martin Heidegger, Peter Trawny - Überlegungen VII - XI_.pdf",
+   "paras": 1269,
+   "chars": 812118,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Heidegger, Martin/Martin Heidegger, Peter Trawny - Überlegungen XII - XV_.pdf",
+   "paras": 972,
+   "chars": 489710,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Heidegger, Martin/Martin Heidegger, Peter von Ruckteschell - Nietzsche_ Seminare 1937 und 1944 1. Nietzsches metaphysische Grundstellung.pdf",
+   "paras": 1695,
+   "chars": 433125,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Heidegger, Martin/Martin Heidegger, Walter Biemel (ed.) - Logik_ Die Frage nach der Wahrheit.pdf",
+   "paras": 1193,
+   "chars": 851196,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Heidegger, Martin/海德格尔选集（上下）.pdf",
+   "paras": 4556,
+   "chars": 886856,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Heller, Agnes/Aesthetics_and_Modernity__Essays_by_Agnes_Heller_Heller,_Agnes;_Rundell,_John_F.pdf",
+   "paras": 804,
+   "chars": 668728,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Heller, Agnes/The_three_logics_of_modernity_and_the_double_bind_of_the_modern_imagination_Agnes_Heller..pdf",
+   "paras": 70,
+   "chars": 61294,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Hempel, Carl G/Aspects of Scientific Explanation and Other Essays in the Philosophy of Science.pdf",
+   "paras": 2037,
+   "chars": 1439245,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Hempel, Carl G/Carl G. Hempel (auth.), Wolfgang Spohn (eds.) - Erkenntnis Orientated_ A Centennial Volume for Rudolf Carnap and Hans Reichenbach-Springer Netherlands (1991).pdf",
+   "paras": 1942,
+   "chars": 1125025,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Henrich, Dieter/Aesthetic Judgment and the Moral Image of the World_ Studies in Kant (Studies in Kant and German Idealism)_Dieter Henrich.pdf",
+   "paras": 287,
+   "chars": 188183,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Henrich, Dieter/The Unity of Reason_ Essays on Kant's Philosophy_Dieter Henrich.pdf",
+   "paras": 909,
+   "chars": 682439,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Honnett, Axel/自由的权利.pdf",
+   "paras": 1137,
+   "chars": 327470,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Humboldt, Alexander von/Cosmos, Volume 2_ Sketch of a Physical Description of the Universe.pdf",
+   "paras": 3095,
+   "chars": 960892,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Husserl, Edmund/(Husserliana_ Edmund Husserl — Gesammelte Werke, Band 14) Edmund Husserl, Iso Kern - Zur Phänomenologie der Intersubjektivität_ Texte aus dem Nachlaß. Zweiter Teil. 1921-1928-Springer (1973).pdf",
+   "paras": 2292,
+   "chars": 1600541,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Husserl, Edmund/(Husserliana_ Edmund Husserl — Gesammelte Werke, Band 15) Edmund Husserl, Iso Kern - Zur Phänomenologie der Intersubjektivität_ Texte aus dem Nachlaß. Dritter Teil. 1929–1935-Springer (1973).pdf",
+   "paras": 2667,
+   "chars": 1977651,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Ihde, Don/Experimental Phenomenology_ Multistabiliti - Don Ihde.pdf",
+   "paras": 681,
+   "chars": 448527,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Ihde, Don/Heidegger's Technologies - Don Ihde.pdf",
+   "paras": 665,
+   "chars": 404211,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Ihde, Don/Husserl's Missing Technologies - Don Ihde.pdf",
+   "paras": 572,
+   "chars": 294876,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Ihde, Don/Material Hermeneutics; Reversing the lingu - Don Ihde.pdf",
+   "paras": 527,
+   "chars": 360574,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Ihde, Don/Postphenomenology _ essays in the postmode - Don Ihde.pdf",
+   "paras": 645,
+   "chars": 353867,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Ihde, Don/Postphenomenology _ essays in the postmode - 未知.pdf",
+   "paras": 645,
+   "chars": 353867,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Ihde, Don/Technology and the Lifeworld_ F - Don Ihde.pdf",
+   "paras": 1660,
+   "chars": 653161,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Jaspers, Karl/Karl Jaspers - Truth and Symbol-Twayne Publishers (1959).pdf",
+   "paras": 488,
+   "chars": 111646,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Jaspers, Karl/Karl Jaspers-The Origin and Goal of History-Greenwood Press Reprint (1977).pdf",
+   "paras": 1932,
+   "chars": 737979,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Jaspers, Karl/【世纪人文·世纪文库·西学部分】08时代的精神状况.pdf",
+   "paras": 658,
+   "chars": 146314,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Jenkins, Henry/Confronting the Challenges of Participatory Culture (Henry Jenkins) (Z-Library).pdf",
+   "paras": 386,
+   "chars": 216506,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Jenkins, Henry/Fans, Bloggers, and Gamers_ Exploring Part - Henry Jenkins.pdf",
+   "paras": 1044,
+   "chars": 643044,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Jenkins, Henry/Henry Jenkins - Fans, Bloggers, and Gamers_ Exploring Participatory Culture-New York University Press (2006).pdf",
+   "paras": 1044,
+   "chars": 643044,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Jenkins, Henry/参与的胜利：网络时代的参与文 - Henry Jenkins.pdf",
+   "paras": 769,
+   "chars": 156819,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Jenkins, Henry/融合文化：新媒体和旧媒体的冲 - Henry Jenkins.pdf",
+   "paras": 1738,
+   "chars": 326247,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Juul, Jesper/Juul, Jesper - Half-Real_ Video Games between Real Rules and Fictional Worlds (2011) - libgen.li.pdf",
+   "paras": 750,
+   "chars": 342377,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Kant, Immanuel/AA B 21 Handschriflicher Nachlass 8 OP.pdf",
+   "paras": 15196,
+   "chars": 1573456,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Kant, Immanuel/AA B 22 Handschriflicher Nachlass 9 OP.pdf",
+   "paras": 20409,
+   "chars": 1989840,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Kant, Immanuel/AA B 24.1,Vorlesungen über Logik. Teilband 1 (Akademie-Ausgabe).pdf",
+   "paras": 2605,
+   "chars": 1090620,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Kant, Immanuel/AA B 24.2,Vorlesungen über Logik. Teilband 2 (Akademie-Ausgabe).pdf",
+   "paras": 2904,
+   "chars": 1506773,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Kant, Immanuel/康德著作全集 第1卷 前批判时期著作Ⅰ（1747-1756）.pdf",
+   "paras": 1478,
+   "chars": 320599,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Kant, Immanuel/康德著作全集 第2卷 前批判时期著作Ⅱ（1757-1777）.pdf",
+   "paras": 1271,
+   "chars": 289102,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Kant, Immanuel/康德著作全集 第3卷 纯粹理性批判 （第二版）.pdf",
+   "paras": 1648,
+   "chars": 396529,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Kant, Immanuel/康德著作全集 第4卷 纯粹理性批判 未来形而上学.pdf",
+   "paras": 1694,
+   "chars": 397218,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Kant, Immanuel/康德著作全集 第5卷 实践理性批判、判断力批判 康德著作全集.pdf",
+   "paras": 1479,
+   "chars": 363828,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Kant, Immanuel/康德著作全集 第6卷 纯然理性界限内的宗教、道德.pdf",
+   "paras": 1712,
+   "chars": 336839,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Kant, Immanuel/康德著作全集 第7卷 学科之争 实用人类学.pdf",
+   "paras": 1320,
+   "chars": 218059,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Kant, Immanuel/康德著作全集 第8卷 1781年之后的论文.pdf",
+   "paras": 1223,
+   "chars": 274121,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Kant, Immanuel/康德著作全集 第9卷 逻辑学、自然地理学、教育学.pdf",
+   "paras": 2792,
+   "chars": 315445,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Kitcher, Philip/(Oxford studies in philosophy of science) Philip Kitcher - Science, Truth, and Democracy-Oxford University Press (2001).pdf",
+   "paras": 740,
+   "chars": 614832,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Kitcher, Philip/Philip Kitcher - The Ethical Project-Harvard University Press (2011).pdf",
+   "paras": 1361,
+   "chars": 1005332,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Kitcher, Philip/Philip Kitcher - The Nature of Mathematical Knowledge (1985).pdf",
+   "paras": 999,
+   "chars": 800462,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Kitcher, Philip/民主社会中的科学 Phillip Kitcher.pdf",
+   "paras": 1021,
+   "chars": 202733,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Kittler, Friedrich/Aufschreibesysteme 1800-1900.pdf",
+   "paras": 2947,
+   "chars": 1320481,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Kittler, Friedrich/Gramophone, Film, Typewriter (1999, Stanford University Press).pdf",
+   "paras": 1901,
+   "chars": 813997,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Kittler, Friedrich/Gramophone, Film, Typewriter-Stanford University Press (1999).pdf",
+   "paras": 1901,
+   "chars": 813997,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Kittler, Friedrich/Optical media Berlin lectures 1999-Polity (2012).pdf",
+   "paras": 802,
+   "chars": 656370,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Kivy, Peter/Antithetical_arts___on_the_ancient_quarrel_between_literature_and_music_Kivy,_Peter.pdf",
+   "paras": 1026,
+   "chars": 590598,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Kivy, Peter/Introduction_to_a_Philosophy_of_Music_Peter_Kivy.pdf",
+   "paras": 1325,
+   "chars": 845477,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Klee, Paul/艺术·自然·自我 日记选.pdf",
+   "paras": 1021,
+   "chars": 103733,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Koestler, Arthur/(Martinus Nijhoff Philosophy Library 6) Arthur Koestler (auth.), Denis Dutton, Michael Krausz (eds.) - The Concept of Creativity in Science and Art-Springer Netherlands (1985).pdf",
+   "paras": 804,
+   "chars": 492426,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Kracauer, Siegfried/History-The Last Things Before the Last-Markus Wiener Publishers (2013).pdf",
+   "paras": 874,
+   "chars": 542022,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Kracauer, Siegfried/Salaried Masses Duty and Distraction in Weimar Germany-Verso (1998), The.pdf",
+   "paras": 378,
+   "chars": 304803,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Kramer, Sibylle/Berechenbare Vernunft.pdf",
+   "paras": 3141,
+   "chars": 1150599,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Kramer, Sibylle/Medium, Bote, Übertragung Kleine Metaphysik der Medialität.pdf",
+   "paras": 1723,
+   "chars": 697878,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Kramer, Sibylle/Medium, messenger, transmission an approach to media philosophy.pdf",
+   "paras": 1946,
+   "chars": 691898,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Kramer, Sibylle/Thinking with Diagrams The Semiotic Basis of Human Cognition.pdf",
+   "paras": 856,
+   "chars": 560484,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Kripke, Saul A/命名与必然性.pdf",
+   "paras": 512,
+   "chars": 125270,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Lakatos, Imre/证明与反驳  数学发现的逻辑 - Imre Lakatos.pdf",
+   "paras": 1,
+   "chars": 79,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Lefebvre, Henri/State, Space, World Selected Essays-Univ Of Minnesota Press (2009).pdf",
+   "paras": 1063,
+   "chars": 832131,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Lefebvre, Henri/Writings on Cities-Wiley-Blackwell (1996).pdf",
+   "paras": 745,
+   "chars": 578019,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Lefebvre, Henri/空间的生产.pdf",
+   "paras": 2351,
+   "chars": 415347,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Lefebvre, Henri/美学概论.pdf",
+   "paras": 2261,
+   "chars": 345394,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Levi-Strauss, Claude/Claude Levi-Strauss Myth and Meaning (Routledge Classics.pdf",
+   "paras": 240,
+   "chars": 158300,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Levi-Strauss, Claude/Claude Levi-Strauss.pdf",
+   "paras": 1447,
+   "chars": 866367,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Levi-Strauss, Claude/Claude Levi-strauss Structural Anthropology.pdf",
+   "paras": 3256,
+   "chars": 1864842,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Levi-Strauss, Claude/Claude Lévi-Strauss-Tristes tropiques-Plon.pdf",
+   "paras": 1322,
+   "chars": 960194,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Levi-Strauss, Claude/人类学讲演集 列维-斯特劳斯著；张毅声，张祖建，杨珊译 中国人民大学出版社 , 2007.pdf",
+   "paras": 857,
+   "chars": 177431,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Levi-Strauss, Claude/列维 斯特劳斯传 德尼·贝多莱著；于秀荣译 中国人民大学出版社 , 2008.pdf",
+   "paras": 2229,
+   "chars": 436195,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Levi-Strauss, Claude/猞猁的故事 列维-斯特劳斯著；庄晨燕，刘存孝译 中国人民大学出版社 , 2006.pdf",
+   "paras": 1254,
+   "chars": 190194,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Levi-Strauss, Claude/看 听 读 列维-斯特劳斯著；顾嘉琛译 中国人民大学出版社 , 2006.pdf",
+   "paras": 604,
+   "chars": 108111,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Levi-Strauss, Claude/神话学 从蜂蜜到烟灰 克洛德·列维-斯特劳斯著；周昌忠译 中国人民大学出版社 , 2007.pdf",
+   "paras": 2488,
+   "chars": 384501,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Levi-Strauss, Claude/神话学 生食和熟食.pdf",
+   "paras": 4910,
+   "chars": 676494,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Levi-Strauss, Claude/神话学 裸人 列维-斯特劳斯著；周昌忠译 中国人民大学出版社 , 2007.pdf",
+   "paras": 4121,
+   "chars": 685896,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Levi-Strauss, Claude/种族与历史 种族与文化 （法）克洛德·列维-斯特劳斯著；于秀英译 中国人民大学出版社 , 2006.pdf",
+   "paras": 291,
+   "chars": 57042,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Levi-Strauss, Claude/结构人类学 1 克洛德·列维-斯特劳斯著；张祖建译 中国人民大学出版社 , 2006.pdf",
+   "paras": 1693,
+   "chars": 351202,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Levi-Strauss, Claude/结构人类学 2 克洛德·列维-斯特劳斯著；张祖建译 中国人民大学出版社 , 2006.pdf",
+   "paras": 1694,
+   "chars": 310471,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Levi-Strauss, Claude/野性的思维 列维-斯特劳斯著；李幼蒸译 中国人民大学出版社 2006.pdf",
+   "paras": 1362,
+   "chars": 260062,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Levi-Strauss, Claude/面具的奥秘 （法）列维·斯特劳斯着.pdf",
+   "paras": 750,
+   "chars": 126481,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Levinas, Emmanuel/时间与他者-le-temps-et-l-autre-伊曼努尔-列维纳斯-著-王嘉军-译-拜德雅--annas-archive--libgenrs-nf-2761855.pdf",
+   "paras": 323,
+   "chars": 66487,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Levinson, Jerrold/Jerrold Levinson (eds.)-Suffering Art Gladly The Paradox of Negative Emotion in Art-Palgrave Macmillan UK (2014).pdf",
+   "paras": 1220,
+   "chars": 733779,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Levinson, Jerrold/Jerrold Levinson Music, Art, and Metaphysics Essays in Philosophical Aesthetics.pdf",
+   "paras": 1311,
+   "chars": 1064864,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Levinson, Jerrold/Jerrold Levinson-Aesthetic Pursuits Essays in Philosophy of Art-Oxford University Press (2017).pdf",
+   "paras": 750,
+   "chars": 489079,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Levinson, Paul/Digital McLuhan_ A Guide to the Information Millennium -- Paul Levinson -- New edition, 2001 -- Routledge -- 9780203278154 -- b76343b548bf65d2340997a8b637a2a5 -- Anna’s Archive.pdf",
+   "paras": 872,
+   "chars": 575278,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Levinson, Paul/Paul Levinson - Borrowed Tides-Tor Books (2001).pdf",
+   "paras": 1954,
+   "chars": 428559,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Levinson, Paul/Paul Levinson - Cellphone_ The Story of the World's Most Mobile Medium and How It Has Transformed Everything! (2004).pdf",
+   "paras": 664,
+   "chars": 449525,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Levinson, Paul/Paul Levinson - The soft edge _ a natural history and future of the information revolution-Routledge (1997).pdf",
+   "paras": 1048,
+   "chars": 691309,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Lewis, David/David Lewis On the Plurality of Worlds.pdf",
+   "paras": 1224,
+   "chars": 823894,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Lopes, Dominic/A Philosophy of Computer Art.pdf",
+   "paras": 631,
+   "chars": 302776,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Lopes, Dominic/超越艺术.pdf",
+   "paras": 1318,
+   "chars": 232623,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Luhman, Niklas/Die Kunst der Gesellschaft German.pdf",
+   "paras": 2547,
+   "chars": 1160731,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Luhman, Niklas/Love A Sketch.pdf",
+   "paras": 145,
+   "chars": 88736,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Luhman, Niklas/Theory of Society, Volume 1.pdf",
+   "paras": 1756,
+   "chars": 1265100,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Luhman, Niklas/Theory of Society, Volume 2.pdf",
+   "paras": 1646,
+   "chars": 1235643,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Luhman, Niklas/differentiation of society, The.pdf",
+   "paras": 2481,
+   "chars": 1242867,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Luhman, Niklas/大衆媒體的實在.pdf",
+   "paras": 687,
+   "chars": 139019,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Luhman, Niklas/社会中的艺术.pdf",
+   "paras": 4315,
+   "chars": 448597,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Manovich, Lev/Language of New Media, The - Lev Manovich.pdf",
+   "paras": 1022,
+   "chars": 821599,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Manovich, Lev/新媒体的语言.pdf",
+   "paras": 2552,
+   "chars": 627572,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Marcuse, Herbert/(现代西方学术文库)  - 审美之维_ 马尔库塞美学论著集-生活·读书·新知三联书店 (1989).pdf",
+   "paras": 707,
+   "chars": 165856,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Marcuse, Herbert/[二十世纪西方哲学译丛]单向度的人-发达工业社会意识形态研究·[美]赫伯特·马尔库塞 著.pdf",
+   "paras": 786,
+   "chars": 160980,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Marcuse, Herbert/苏联的马克思主义 一种批判的分析-中国人民大学出版社 (2012).pdf",
+   "paras": 776,
+   "chars": 169088,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Margolis, Joseph/Joseph Margolis (auth.) - Culture and Cultural Entities_ Toward a New Unity of Science.pdf",
+   "paras": 805,
+   "chars": 505700,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Margolis, Joseph/Joseph Margolis (auth.), Edmund F. Byrne, Joseph C. Pitt (eds.) - Technological Transformation_ Contextual and Conceptual Implications.pdf",
+   "paras": 1386,
+   "chars": 745522,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Margolis, Joseph/Joseph Margolis - Pragmatism's Advantage_ American and European Philosophy at the End of the Twentieth Century  -Stanford University Press (2010) (1).pdf",
+   "paras": 582,
+   "chars": 487095,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Margolis, Joseph/Joseph Margolis - Selves and Other Texts_ The Case for Cultural Realism-Pennsylvania State Univ Pr (Txt) (2001).pdf",
+   "paras": 804,
+   "chars": 512160,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Margolis, Joseph/What, after all, is a work of art_ _ lectu - Joseph Margolis.pdf",
+   "paras": 620,
+   "chars": 384294,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Marion, Jean-Luc/The_Visible_and_the_Revealed_(Perspectives_in_Continental_Philosophy)_Jean-Luc_Marion.pdf",
+   "paras": 637,
+   "chars": 538961,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Martin, Reinhold/Pedro Fiori Arantes_ Adriana Kauffmann_ Timothy Frye_ Reinhold Martin - The Rent of Form_ Architecture and Labor in the Digital Age-University of Minnesota Press (2019).pdf",
+   "paras": 1147,
+   "chars": 668682,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Martin, Reinhold/The Organizational Complex_ Architecture, Media, and -- Reinhold Martin -- 2003 -- The MIT Press -- 9780262134262 -- 449c16265d681416ee7cc11597fbe188 -- Anna’s Archive.pdf",
+   "paras": 936,
+   "chars": 675016,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Martin, Reinhold/The Urban Apparatus_ Mediapolitics and the - Reinhold Martin.pdf",
+   "paras": 616,
+   "chars": 416612,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Martin, Reinhold/Utopia’s Ghost_ Architecture and Postmodernism, Again -- Reinhold Martin -- 2010 -- University of Minnesota Press -- 9780816669639 -- 5fc126784419350dae0c4b667fce415c -- Anna’s Archive.pdf",
+   "paras": 1019,
+   "chars": 616720,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Marx & Engels/资本论 第一卷.pdf",
+   "paras": 3,
+   "chars": 423,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Marx & Engels/资本论(第一卷·上下).pdf",
+   "paras": 5346,
+   "chars": 793828,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Marx & Engels/资本论(第三卷·上下).pdf",
+   "paras": 8310,
+   "chars": 814423,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Marx & Engels/马克思恩格斯全集01a.pdf",
+   "paras": 2469,
+   "chars": 296834,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Marx & Engels/马克思恩格斯全集01b.pdf",
+   "paras": 4803,
+   "chars": 333291,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Marx & Engels/马克思恩格斯全集02.pdf",
+   "paras": 3807,
+   "chars": 537787,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Marx & Engels/马克思恩格斯全集03.pdf",
+   "paras": 4845,
+   "chars": 577940,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Marx & Engels/马克思恩格斯全集04.pdf",
+   "paras": 4672,
+   "chars": 462470,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Marx & Engels/马克思恩格斯全集05.pdf",
+   "paras": 5221,
+   "chars": 448991,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Marx & Engels/马克思恩格斯全集06.pdf",
+   "paras": 11348,
+   "chars": 1355791,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Marx & Engels/马克思恩格斯全集07.pdf",
+   "paras": 4525,
+   "chars": 543201,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Marx & Engels/马克思恩格斯全集08.pdf",
+   "paras": 4977,
+   "chars": 581621,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Marx & Engels/马克思恩格斯全集09.pdf",
+   "paras": 4400,
+   "chars": 552273,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Marx & Engels/马克思恩格斯全集10.pdf",
+   "paras": 5858,
+   "chars": 631659,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Marx & Engels/马克思恩格斯全集11.pdf",
+   "paras": 5088,
+   "chars": 631120,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Marx & Engels/马克思恩格斯全集12.pdf",
+   "paras": 5049,
+   "chars": 647153,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Marx & Engels/马克思恩格斯全集13.pdf",
+   "paras": 5321,
+   "chars": 611827,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Marx & Engels/马克思恩格斯全集14a.pdf",
+   "paras": 3278,
+   "chars": 616151,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Marx & Engels/马克思恩格斯全集14b.pdf",
+   "paras": 3083,
+   "chars": 142188,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Marx & Engels/马克思恩格斯全集15.pdf",
+   "paras": 4489,
+   "chars": 564226,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Marx & Engels/马克思恩格斯全集16.pdf",
+   "paras": 6805,
+   "chars": 638474,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Marx & Engels/马克思恩格斯全集17.pdf",
+   "paras": 5617,
+   "chars": 613404,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Marx & Engels/马克思恩格斯全集18.pdf",
+   "paras": 5780,
+   "chars": 645481,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Marx & Engels/马克思恩格斯全集19.pdf",
+   "paras": 5403,
+   "chars": 517388,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Marx & Engels/马克思恩格斯全集20.pdf",
+   "paras": 6544,
+   "chars": 679035,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Marx & Engels/马克思恩格斯全集21.pdf",
+   "paras": 5297,
+   "chars": 606559,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Marx & Engels/马克思恩格斯全集22.pdf",
+   "paras": 5444,
+   "chars": 602283,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Marx & Engels/马克思恩格斯全集23.pdf",
+   "paras": 5647,
+   "chars": 792599,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Marx & Engels/马克思恩格斯全集24.pdf",
+   "paras": 4267,
+   "chars": 495252,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Marx & Engels/马克思恩格斯全集25a.pdf",
+   "paras": 2307,
+   "chars": 386329,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Marx & Engels/马克思恩格斯全集25b.pdf",
+   "paras": 3396,
+   "chars": 477152,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Marx & Engels/马克思恩格斯全集26a.pdf",
+   "paras": 2765,
+   "chars": 374798,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Marx & Engels/马克思恩格斯全集26b.pdf",
+   "paras": 3579,
+   "chars": 533792,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Marx & Engels/马克思恩格斯全集27.pdf",
+   "paras": 6132,
+   "chars": 561364,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Marx & Engels/马克思恩格斯全集29.pdf",
+   "paras": 7022,
+   "chars": 595607,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Marx & Engels/马克思恩格斯全集32.pdf",
+   "paras": 8015,
+   "chars": 641685,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Marx & Engels/马克思恩格斯全集33.pdf",
+   "paras": 5897,
+   "chars": 607089,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Marx & Engels/马克思恩格斯全集34.pdf",
+   "paras": 5316,
+   "chars": 443835,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Marx & Engels/马克思恩格斯全集35.pdf",
+   "paras": 4615,
+   "chars": 426227,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Marx & Engels/马克思恩格斯全集36.pdf",
+   "paras": 7392,
+   "chars": 641665,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Marx & Engels/马克思恩格斯全集37.pdf",
+   "paras": 4193,
+   "chars": 460475,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Marx & Engels/马克思恩格斯全集38.pdf",
+   "paras": 5579,
+   "chars": 507364,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Marx & Engels/马克思恩格斯全集40.pdf",
+   "paras": 7308,
+   "chars": 510597,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Marx & Engels/马克思恩格斯全集41.pdf",
+   "paras": 5471,
+   "chars": 478968,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Marx & Engels/马克思恩格斯全集42.pdf",
+   "paras": 2533,
+   "chars": 386304,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Marx & Engels/马克思恩格斯全集43.pdf",
+   "paras": 4265,
+   "chars": 426326,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Marx & Engels/马克思恩格斯全集44.pdf",
+   "paras": 5240,
+   "chars": 652827,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Marx & Engels/马克思恩格斯全集45.pdf",
+   "paras": 5266,
+   "chars": 653537,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Marx & Engels/马克思恩格斯文选 1.pdf",
+   "paras": 4084,
+   "chars": 744695,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Marx & Engels/马克思恩格斯文选 2.pdf",
+   "paras": 3231,
+   "chars": 710250,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Marx & Engels/马克思恩格斯文选 3.pdf",
+   "paras": 4711,
+   "chars": 865613,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Marx & Engels/马克思恩格斯文选 4.pdf",
+   "paras": 6089,
+   "chars": 869220,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Marx & Engels/马克思恩格斯文集[第01卷]马克思和恩格斯1843-1848.pdf",
+   "paras": 4217,
+   "chars": 694973,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Marx & Engels/马克思恩格斯文集[第02卷] 1848-1859.pdf",
+   "paras": 4146,
+   "chars": 677067,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Marx & Engels/马克思恩格斯文集[第03卷]. 1864-1883.pdf",
+   "paras": 3818,
+   "chars": 600845,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Marx & Engels/马克思恩格斯文集[第04卷]. 1884-1895.pdf",
+   "paras": 4094,
+   "chars": 582924,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Marx & Engels/马克思恩格斯文集[第06卷] 资本论.pdf",
+   "paras": 2674,
+   "chars": 482134,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Marx & Engels/马克思恩格斯文集[第07卷] 资本论.pdf",
+   "paras": 4840,
+   "chars": 873073,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Marx & Engels/马克思恩格斯文集[第08卷] 57-58 61-63 63-65.pdf",
+   "paras": 4006,
+   "chars": 573927,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Marx & Engels/马克思恩格斯文集[第09卷] 反杜林论 自然辩证法.pdf",
+   "paras": 4133,
+   "chars": 541129,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Marx & Engels/马克思恩格斯文集[第10卷]. 1842-1895 280书信.pdf",
+   "paras": 5296,
+   "chars": 758301,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Marx & Engels/马克思早期政治着作选.pdf",
+   "paras": 797,
+   "chars": 536635,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Marx & Engels/马克思晚期政治着作选.pdf",
+   "paras": 995,
+   "chars": 678743,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Maugham, W Somerset/毛姆作品集_套装共14册_上海译文出品_by_毛姆W_Somerset_Maugh_z_lib_or.pdf",
+   "paras": 26706,
+   "chars": 2250124,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/McLuhan, Marshall/Marshall McLuhan, W. Terrence Gordon - Counterblast  -Gingko Press, Inc (2011).pdf",
+   "paras": 178,
+   "chars": 63568,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/McLuhan, Marshall/Marshall McLuhan_ Wilfred Watson - From cliche to archetype-Viking Press (1970).pdf",
+   "paras": 1710,
+   "chars": 338735,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/McLuhan, Marshall/[加拿大] 马歇尔·麦克卢汉 - 机器新娘_工业人的民俗-中国人民大学出版社 (2004).pdf",
+   "paras": 3256,
+   "chars": 441284,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Meillassoux, Quentin/Maidens,_Meal_and_Money_Claude_Meillassoux.pdf",
+   "paras": 1041,
+   "chars": 504567,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Meillassoux, Quentin/The_Number_and_the_Siren__A_Decipherment_of_Mallarme's_Coup_De_Des_Quentin_Meillassoux.pdf",
+   "paras": 587,
+   "chars": 334934,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Merleau-Ponty, Moris/世界的散文.pdf",
+   "paras": 579,
+   "chars": 127952,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Merleau-Ponty, Moris/意义与无意义.pdf",
+   "paras": 600,
+   "chars": 152031,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Merleau-Ponty, Moris/眼与心.pdf",
+   "paras": 485,
+   "chars": 120156,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Merleau-Ponty, Moris/行为的结构.pdf",
+   "paras": 806,
+   "chars": 211504,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Moretti, Franco/Graphs, maps, trees abstract models for a - Franco Moretti.pdf",
+   "paras": 270,
+   "chars": 187962,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Moretti, Franco/The Novel History, Geography, and Culture. - Franco Moretti.pdf",
+   "paras": 3517,
+   "chars": 2386792,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Nagel, Ernest/Nagel, Ernest - The Structure of Science_ Problems in the Logic of Scientific Explanation-Harcourt, Brace & World, INC. (1961).pdf",
+   "paras": 2225,
+   "chars": 1848093,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Nagel, Thomas/Thomas Nagel - The view from nowhere.pdf",
+   "paras": 1045,
+   "chars": 660766,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Negri, Antonio/(Heretical Thought) Michael Hardt, Antonio Negri - Assembly-Oxford University Press (2017).pdf",
+   "paras": 1113,
+   "chars": 894175,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Negri, Antonio/艺术与诸众：论艺术的九封信.pdf",
+   "paras": 304,
+   "chars": 61188,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Nietzsche, Friedrich/看哪这人：尼采自述.pdf",
+   "paras": 3,
+   "chars": 305,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Noe, Alva/Out of Our Heads_ Why You Are Not Your Brain, and Other Lessons from the Biology of Consciousness_Alva Noë.pdf",
+   "paras": 586,
+   "chars": 406131,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Noe, Alva/The Entanglement_ How Art and Philosophy Make Us What We Are_Alva Noë.pdf",
+   "paras": 1033,
+   "chars": 514723,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Novalis/Novalis Schriften.pdf",
+   "paras": 3889,
+   "chars": 500896,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Nussbaum, Martha/Martha C. Nussbaum, Amelie Oksenberg Rorty - Essays on Aristotle's De Anima.pdf",
+   "paras": 2238,
+   "chars": 1400867,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Nussbaum, Martha/Martha C. Nussbaum, Saul Levmore - Aging Thoughtfully_ Conversations about Retirement, Romance, Wrinkles, and Regret.pdf",
+   "paras": 815,
+   "chars": 613119,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Nussbaum, Martha/Nussbaum, Martha C - Women and Human Development _ The Capabilities Approach.pdf",
+   "paras": 963,
+   "chars": 838982,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Panofsky, Erwin/潘诺夫斯基论丢勒的《忧郁之一 - Erwin Panofsky.pdf",
+   "paras": 65,
+   "chars": 18296,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Panofsky, Erwin/西方艺术中的文艺复兴和历次复 - Erwin Panofsky.pdf",
+   "paras": 1971,
+   "chars": 442410,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Panofsky, Erwin/风格三论.pdf",
+   "paras": 1035,
+   "chars": 162427,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Peters, John Durham/Kenneth Cmiel_ John Durham Peters - Promiscuous Knowledge_ Information, Image, and Other Truth Games in History (2020, University of Chicago Press) - libgen.li.pdf",
+   "paras": 2151,
+   "chars": 911021,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Pinker, Steven/The Better Angels of Our Nature_ Why Violence Has Declined_Pinker, Steven.pdf",
+   "paras": 4356,
+   "chars": 2542004,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Pinker, Steven/The Blank Slate. Modern Denial of Human Nature [html,ugly]_Steven Pinker.pdf",
+   "paras": 2708,
+   "chars": 1476629,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Pinker, Steven/Vision_ A Computational Investigation into the Human Representation and Processing of Visual Information  _David Marr.pdf",
+   "paras": 1482,
+   "chars": 834406,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Poster, Mark/信息方式.pdf",
+   "paras": 494,
+   "chars": 157940,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Poster, Mark/第二媒介时代.pdf",
+   "paras": 556,
+   "chars": 166626,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Poulantzas, Nicos/Nicos Poulantzas - State, Power, Socialism (2001).pdf",
+   "paras": 974,
+   "chars": 619150,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Quine, Willard Van Orman/Quine, Quine Willard Van Orman - Philosophy of logic-Harvard University Press (1986).pdf",
+   "paras": 440,
+   "chars": 259555,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Ranciere, Jacques/(当代激进思想家译丛) [法] 雅克·朗西埃 - 文学的政治-南京大学出版社 (2014).pdf",
+   "paras": 673,
+   "chars": 139168,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Ranciere, Jacques/(当代激进思想家译丛) 雅克·朗西埃 - 审美无意识-南京大学出版社 (2020).pdf",
+   "paras": 160,
+   "chars": 33154,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Ranciere, Jacques/Aisthesis Scenes from the Aesthetic Regime of Art-Verso (2013).pdf",
+   "paras": 576,
+   "chars": 591580,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Ranciere, Jacques/Jacques Ranciere - Aesthetics and Its Discontents (2009.pdf",
+   "paras": 20,
+   "chars": 240,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Ranciere, Jacques/Jacques Ranciere - Hatred of Democracy (2009).pdf",
+   "paras": 223,
+   "chars": 190540,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Ranciere, Jacques/Jacques Ranciere - The Emancipated Spectator (2009).pdf",
+   "paras": 253,
+   "chars": 237854,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Ranciere, Jacques/Jacques Ranciere - The Flesh of Words The Politics of Writing (2004).pdf",
+   "paras": 744,
+   "chars": 416098,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Ranciere, Jacques/Jacques Ranciere - The Future of the Image (2007).pdf",
+   "paras": 312,
+   "chars": 255682,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Ranciere, Jacques/Jacques Ranciere - The Nights Of Labor The Workers Dream in Nineteenth-Century France (1991).pdf",
+   "paras": 1401,
+   "chars": 1141748,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Ranciere, Jacques/On Politics and Aesthetics.pdf",
+   "paras": 628,
+   "chars": 559209,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Ranciere, Jacques/On the Shores of Politics.pdf",
+   "paras": 265,
+   "chars": 243564,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Ranciere, Jacques/Politics of Aesthetics-Bloomsbury Academic (2013), The.pdf",
+   "paras": 367,
+   "chars": 261357,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Ricoeur, Paul/(Marquette Studies in Philosophy 10) Paul Ricoeur-A Key to Husserl's Ideas I-Marquette University Press (1996).pdf",
+   "paras": 824,
+   "chars": 381289,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Ricoeur, Paul/Paul Ricoeur-Time and Narrative, Volume 3 (Time & Narrative)-University Of Chicago Press (1988).pdf",
+   "paras": 2229,
+   "chars": 1133720,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Ricoeur, Paul/Ricoeur Time and Narrative V3-1.pdf",
+   "paras": 1534,
+   "chars": 1126660,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Ricoeur, Paul/作为一个他者的自身-商务印书馆 (2013).pdf",
+   "paras": 2026,
+   "chars": 376741,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Ricoeur, Paul/活的隐喻.pdf",
+   "paras": 1619,
+   "chars": 323803,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Riegl, Alois/Der moderne Denkmalkultus _ sein Wesen und - Alois Riegl.pdf",
+   "paras": 375,
+   "chars": 125511,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Rorty, Richard/Philosophy as Cultural Politics - Richard Rorty.pdf",
+   "paras": 978,
+   "chars": 699540,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Rorty, Richard/The Linguistic Turn_ Essays in - Richard Rorty.pdf",
+   "paras": 2933,
+   "chars": 1529159,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Rosa, Hartmut/Resonance.pdf",
+   "paras": 1508,
+   "chars": 1291766,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Roszak, Theodore/信息崇拜.pdf",
+   "paras": 693,
+   "chars": 150231,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Roy, Arundhati/Arundhati Roy - Azadi_ Freedom. Fascism. Fiction.-Haymarket Books (2020).pdf",
+   "paras": 621,
+   "chars": 350480,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Roy, Arundhati/Arundhati Roy - Power Politics-South End Press (2001).pdf",
+   "paras": 532,
+   "chars": 166775,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Roy, Arundhati/Arundhati Roy - The God of Small Things-Harper Perennial (1998).pdf",
+   "paras": 2446,
+   "chars": 549159,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Roy, Arundhati/Arundhati Roy - The Ministry of Utmost Happiness-Penguin Books (2017).pdf",
+   "paras": 1402,
+   "chars": 749768,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Roy, Arundhati/Arundhati Roy - Walking with the comrades-Penguin Books (2014).pdf",
+   "paras": 447,
+   "chars": 258343,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Roy, Arundhati/Arundhati Roy, John Cusack - Things That Can and Cannot Be Said_ Essays and Conversations-Haymarket Books (2016).pdf",
+   "paras": 380,
+   "chars": 114550,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Ryan, Marie-Laura/Marie-Laure Ryan - Possible Worlds, Artificial lntelligence, and Narrative Theory (1991, Indiana University Press) - libgen.li.pdf",
+   "paras": 1201,
+   "chars": 791252,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Said, Edward W/Edward W Said - Orientalism.pdf",
+   "paras": 1079,
+   "chars": 1047951,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Schapiro, Meyer/Modern_Art__19th_and_20th_Centuries__Selected_Papers_Meyer_Schapiro.pdf",
+   "paras": 1065,
+   "chars": 668595,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Schapiro, Meyer/Theory and philosophy of art.pdf",
+   "paras": 1034,
+   "chars": 521004,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Schapiro, Meyer/Words_and_Pictures._On_the_Literal_and_the_Symbolic_in_the_Illustration_of_a_Text_Meyer_Schapiro.pdf",
+   "paras": 287,
+   "chars": 175927,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Schelling, FWJ/谢林著作集 论人类自由的本质及相关对象.pdf",
+   "paras": 674,
+   "chars": 168449,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Schiller, Dan/信息拜物教-批判与解构-丹-席勒-2008--annas-archive--libgenrs-nf-2582978.pdf",
+   "paras": 1356,
+   "chars": 268097,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Schiller, Friedrich/审美教育书简[德]席勒.冯至、范大灿译.北京大学出版社(1985).pdf",
+   "paras": 466,
+   "chars": 97301,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Schlegel, Friedrich von/August Wilhelm Schlegel (Hrsg.), Friedrich Schlegel (Hrsg.) - Athenaeum. 1798-1800-Cotta (1960).pdf",
+   "paras": 3066,
+   "chars": 1572399,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Seel, Martin/The arts of cinema - Seel; Kizer S. Walker Martin.pdf",
+   "paras": 476,
+   "chars": 393214,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Sellars, Wilfrid/自然主义与存在论_ 1974年约翰·杜威讲座 - 塞拉斯.pdf",
+   "paras": 1207,
+   "chars": 132909,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Shields, Rob/Lefebvre Love & Struggle_ Spatial dialecti - Rob Shields.pdf",
+   "paras": 1073,
+   "chars": 655544,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Shields, Rob/Lifestyle Shopping_ The Subject of Consump - Rob Shields.pdf",
+   "paras": 899,
+   "chars": 530722,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Shields, Rob/Places on the margin_ alternative geograph - Rob Shields.pdf",
+   "paras": 864,
+   "chars": 501009,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Shields, Rob/Spatial questions _ cultural topologies an - Rob Shields.pdf",
+   "paras": 882,
+   "chars": 545788,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Shields, Rob/空间问题：文化拓扑学和社会空 - Rob Shields.pdf",
+   "paras": 1125,
+   "chars": 211377,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Shusterman, Richard/Ars Erotica Sex and Somaesthetics in the Classical Arts of Love-Cambridge University Press (2021).pdf",
+   "paras": 2479,
+   "chars": 1328370,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Shusterman, Richard/Body Consciousness A Philosophy of Mindfulness and Somaesthetics-Cambridge University Press (2008).pdf",
+   "paras": 743,
+   "chars": 706140,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Shusterman, Richard/Bourdieu A Critical Reader (Blackwell Critical Reader)-Blackwell Publishers (1999).pdf",
+   "paras": 1174,
+   "chars": 725125,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Siegert, Bernhard/Lorenz Engell_ Bernhard Siegert - Entwerfen_ Zeitschrift für Medien- und Kulturforschung (2012, Meiner, F) - libgen.li.pdf",
+   "paras": 738,
+   "chars": 586939,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Siegert, Bernhard/Lorenz Engell_ Bernhard Siegert - Producing Places_ Zeitschrift für Medien- und Kulturforschung, Heft 5_1_2014-Meiner, F (2014).pdf",
+   "paras": 598,
+   "chars": 447228,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Simanowski, Roberto/Digital Humanities and Digital Media.pdf",
+   "paras": 827,
+   "chars": 642753,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Simanowski, Roberto/Sociophobia Political Change in the Digital Utopia ( etc.) (Z-Library).pdf",
+   "paras": 563,
+   "chars": 415626,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Simondon, Gilbert/Gilbert Simondon-Du mode d'existence des objets techniques-Aubier (2001).pdf",
+   "paras": 977,
+   "chars": 846200,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Simondon, Gilbert/Imagination and Invention.pdf",
+   "paras": 542,
+   "chars": 567999,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Sloterdijk, Peter/Peter Sloterdijk - You Must Change Your Life_ On Anthropotechnics-Polity (2013).pdf",
+   "paras": 1593,
+   "chars": 1298322,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Sperber, Dan/Meaning and relevance_Sperber, Dan;Wilson, Deirdre.pdf",
+   "paras": 2153,
+   "chars": 1085122,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Stiegler, Bernard/Echographies of Television Filmed Interviews (2002) - Bernard Stiegler Jacques Derrida.pdf",
+   "paras": 422,
+   "chars": 366712,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Stiegler, Bernard/人类纪里的艺术：斯蒂格勒中国美院讲座.pdf",
+   "paras": 708,
+   "chars": 121775,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Stiegler, Bernard/技术与时间3 斯蒂格勒.pdf",
+   "paras": 1506,
+   "chars": 247913,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Strauss, Leo/(Phoenix Books) Leo Strauss, Elsa M. Sinclair - The Political Philosophy of Hobbes_ Its Basis and Its Genesis -University Of Chicago Press (1996).pdf",
+   "paras": 1009,
+   "chars": 451720,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Strauss, Leo/Leo Strauss - An Introduction to Political Philosophy_ Ten Essays-Wayne State University Press (1989).pdf",
+   "paras": 866,
+   "chars": 759290,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Strauss, Leo/Leo Strauss - The Argument and the Action of Plato's Laws-University Of Chicago Press (1975).pdf",
+   "paras": 1850,
+   "chars": 493037,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Turkle, Sherry/Alone_Together__Why_We_Expect_More_From_Technology_and_Less_From_Each_Other_Sherry_Turkle.pdf",
+   "paras": 1332,
+   "chars": 977476,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Turkle, Sherry/Life_on_the_Screen__Identity_in_the_Age_of_the_Internet_Sherry_Turkle.pdf",
+   "paras": 2323,
+   "chars": 913420,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Valery, Paul/Oeuvres I.pdf",
+   "paras": 10244,
+   "chars": 3539018,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Valery, Paul/Oeuvres II.pdf",
+   "paras": 10718,
+   "chars": 3038587,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Virilio, Paul/Accident of Art (2005), The.pdf",
+   "paras": 419,
+   "chars": 162591,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Virilio, Paul/Aesthetics of Disappearance-Semiotext(e) (1991), The.pdf",
+   "paras": 348,
+   "chars": 166834,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Virilio, Paul/Art and Fear (Athlone Contemporary European Thinkers)-Continuum (2006).pdf",
+   "paras": 350,
+   "chars": 135239,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Virilio, Paul/Bunker Archaeology-Princeton Architectural Press (2008).pdf",
+   "paras": 538,
+   "chars": 224930,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Virilio, Paul/El Cibermundo, La Politica De Lo Peor (Teorema Serie Menor) (Spanish Edition) (2004).pdf",
+   "paras": 298,
+   "chars": 156996,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Virilio, Paul/Lost Dimension (1991).pdf",
+   "paras": 427,
+   "chars": 265561,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Virilio, Paul/Negative Horizon An Essay in Dromoscopy-Continuum (2006).pdf",
+   "paras": 751,
+   "chars": 534325,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Virilio, Paul/Speed and Politics-Semiotext(e) (2006).pdf",
+   "paras": 463,
+   "chars": 290372,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Virilio, Paul/Vision Machine, The.pdf",
+   "paras": 379,
+   "chars": 216548,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Virilio, Paul/War and Cinema.pdf",
+   "paras": 420,
+   "chars": 268276,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Virilio, Paul/city of panic.pdf",
+   "paras": 569,
+   "chars": 199053,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Virilio, Paul/战争与电影.pdf",
+   "paras": 562,
+   "chars": 102133,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Virilio, Paul/无边的艺术.pdf",
+   "paras": 398,
+   "chars": 39973,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Virilio, Paul/视觉机器.pdf",
+   "paras": 481,
+   "chars": 62537,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Virilio, Paul/解放的速度.pdf",
+   "paras": 725,
+   "chars": 89448,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Watson, Gary/Gary Watson - Agency and Answerability_ Selected Essays (2004).pdf",
+   "paras": 1543,
+   "chars": 798735,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Welsch, Wolfgang/Wolfgang Welsch - Unsere postmoderne Moderne-Akademie Verlag (2008).pdf",
+   "paras": 1737,
+   "chars": 1033595,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Welsch, Wolfgang/我们的后现代的现代 (（德）沃尔夫冈·韦尔施（Wolfgang Welsch）著；洪天富译 etc.) (Z-Library).pdf",
+   "paras": 1764,
+   "chars": 374214,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Welsch, Wolfgang/超越美学的美学.pdf",
+   "paras": 1244,
+   "chars": 186767,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Wiener, Norbert/人有人的用处  控制论与社会 - Norbert Wiener.pdf",
+   "paras": 916,
+   "chars": 148257,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Williams, Raymond/Raymond Williams - Culture and Society, 1780-1950  -Doubleday Anchor (1958).pdf",
+   "paras": 2447,
+   "chars": 797457,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Wittgenstein, Ludwig/NORM.pdf",
+   "paras": 72726,
+   "chars": 16211713,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Wittgenstein, Ludwig/Tractatus Logico-Philosophicus _ Side-by-side-by-side edition.pdf",
+   "paras": 2992,
+   "chars": 454940,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Wittgenstein, Ludwig/Wittgenstein's Lectures on the Foundations of Mathematics.pdf",
+   "paras": 1741,
+   "chars": 577370,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Zizek, Slavoj/[斯洛文尼亚] 斯拉沃热·齐泽克（Slavoj Žižek） - 易碎的绝对.pdf",
+   "paras": 362,
+   "chars": 100787,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Zizek, Slavoj/[斯洛文尼亚] 斯拉沃热·齐泽克（Slavoj Žižek） - 有人说过集权主义吗？.pdf",
+   "paras": 734,
+   "chars": 156344,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Zizek, Slavoj/[斯诺文尼亚] 斯拉沃热·齐泽克 - 突破可能性的极限-福建教育出版社有限责任公司 (2017).pdf",
+   "paras": 695,
+   "chars": 138296,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/Zizek, Slavoj/齐泽克 - 享受你的症状：好莱坞内外的拉康.pdf",
+   "paras": 780,
+   "chars": 263138,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/de Certeau, Michel/The Practice of Everyday Life  _Michel de Certeau.pdf",
+   "paras": 925,
+   "chars": 621114,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/de Certeau, Michel/The Practice of Everyday Life, Vol. 2_ Living and Cooking  _Michel de Certeau, Luce Giard, Pierre Mayol.pdf",
+   "paras": 1341,
+   "chars": 820721,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/von Foerster, Heinz/Heinz Von Foerster - Understanding Understanding_ Essays on Cybernetics and Cognition.pdf",
+   "paras": 4086,
+   "chars": 1561998,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/von Uexkull, Jakob/Jakob von Uexküll - A Foray Into the Worlds of Animals and Humans_ With a Theory of Meaning-U of Minnesota Press (2010).pdf",
+   "paras": 3148,
+   "chars": 1963958,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/三木清/三木清全集 1.pdf",
+   "paras": 2264,
+   "chars": 264356,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/三木清/三木清全集 10.pdf",
+   "paras": 1857,
+   "chars": 311184,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/三木清/三木清全集 11.pdf",
+   "paras": 1206,
+   "chars": 288526,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/三木清/三木清全集 12.pdf",
+   "paras": 1903,
+   "chars": 288689,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/三木清/三木清全集 13.pdf",
+   "paras": 1786,
+   "chars": 266602,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/三木清/三木清全集 14.pdf",
+   "paras": 1505,
+   "chars": 331778,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/三木清/三木清全集 15.pdf",
+   "paras": 2047,
+   "chars": 340837,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/三木清/三木清全集 16.pdf",
+   "paras": 1676,
+   "chars": 300077,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/三木清/三木清全集 17.pdf",
+   "paras": 3159,
+   "chars": 345964,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/三木清/三木清全集 18.pdf",
+   "paras": 1236,
+   "chars": 304443,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/三木清/三木清全集 19.pdf",
+   "paras": 4713,
+   "chars": 424691,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/三木清/三木清全集 2.pdf",
+   "paras": 1396,
+   "chars": 234517,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/三木清/三木清全集 20-e.pdf",
+   "paras": 34,
+   "chars": 21082,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/三木清/三木清全集 20.pdf",
+   "paras": 8937,
+   "chars": 188342,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/三木清/三木清全集 2nddp.pdf",
+   "paras": 169,
+   "chars": 76345,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/三木清/三木清全集 3.pdf",
+   "paras": 2054,
+   "chars": 321221,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/三木清/三木清全集 4.pdf",
+   "paras": 1158,
+   "chars": 243297,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/三木清/三木清全集 5.pdf",
+   "paras": 1272,
+   "chars": 253556,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/三木清/三木清全集 6.pdf",
+   "paras": 967,
+   "chars": 277015,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/三木清/三木清全集 7.pdf",
+   "paras": 1513,
+   "chars": 286917,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/三木清/三木清全集 8.pdf",
+   "paras": 1045,
+   "chars": 319244,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/三木清/三木清全集 9.pdf",
+   "paras": 1499,
+   "chars": 267748,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/三木清/人間学的文学論 人类学的文学论 三木清.pdf",
+   "paras": 863,
+   "chars": 104368,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/三木清/哲学入门 技术哲学.pdf",
+   "paras": 539,
+   "chars": 139475,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/余英时/余英时：中国知识人之史的考察.pdf",
+   "paras": 2418,
+   "chars": 407800,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/余英时/犹记风吹水上鳞：钱穆与现代中国学术.余英时.三民书局股份有限公司1991.pdf",
+   "paras": 766,
+   "chars": 139489,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/史铁生/我与地坛：史铁生散文、小说选.pdf",
+   "paras": 2346,
+   "chars": 237562,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/唐君毅/唐君毅：《中国哲学原论》原教篇.pdf",
+   "paras": 11684,
+   "chars": 1013080,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/唐君毅/唐君毅：中国哲学原论·原性篇.pdf",
+   "paras": 971,
+   "chars": 391556,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/唐君毅/唐君毅：中国哲学原论·原教篇.pdf",
+   "paras": 5844,
+   "chars": 508163,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/唐君毅/唐君毅：中国哲学原论·导论篇.pdf",
+   "paras": 1120,
+   "chars": 392540,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/唐君毅/唐君毅：中国文化之精神价值.pdf",
+   "paras": 716,
+   "chars": 272456,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/唐君毅/文化意识与道德理性（唐君毅）.pdf",
+   "paras": 886,
+   "chars": 417060,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/川野洋/ネットワーク美学の誕生——下 - 川野洋.pdf",
+   "paras": 1158,
+   "chars": 240283,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/川野洋/芸術·記号·情報 艺术·符号·信 - 川野洋.pdf",
+   "paras": 1142,
+   "chars": 180458,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/川野洋/芸術情報の理論 艺术信息之理 - 川野洋.pdf",
+   "paras": 1913,
+   "chars": 316143,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/巫鸿/作品与展场巫鸿论中国当代艺术.pdf",
+   "paras": 1149,
+   "chars": 183861,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/巫鸿/礼仪中的美术：巫鸿中国古代美术史文编 （上册）.pdf",
+   "paras": 1768,
+   "chars": 213844,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/巫鸿/礼仪中的美术：巫鸿中国古代美术史文编 （下册）.pdf",
+   "paras": 2572,
+   "chars": 313985,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/巫鸿/空间的美术史 巫鸿.pdf",
+   "paras": 747,
+   "chars": 117415,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/徐复观/中国人的生命精神：徐复观自述.pdf",
+   "paras": 2,
+   "chars": 75,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/徐复观/徐复观文集 第1卷.pdf",
+   "paras": 951,
+   "chars": 232537,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/徐复观/徐复观文集 第2卷.pdf",
+   "paras": 1068,
+   "chars": 302563,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/徐复观/徐复观文集 第3卷 中国人性论史 先秦篇.pdf",
+   "paras": 916,
+   "chars": 266985,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/徐复观/徐复观文集 第4卷.pdf",
+   "paras": 1341,
+   "chars": 274937,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/徐复观/徐复观文集 第5卷.pdf",
+   "paras": 1596,
+   "chars": 399746,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/徐复观/徐复观新儒学论著辑要——中国人文精神阐扬.pdf",
+   "paras": 1361,
+   "chars": 291372,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/徐复观/徐复观论经学史二种.pdf",
+   "paras": 883,
+   "chars": 239703,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/徐复观/徐復觀-最後雜文集.pdf",
+   "paras": 1083,
+   "chars": 211067,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/徐复观/徐復觀-雜文續集.pdf",
+   "paras": 1006,
+   "chars": 193994,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/徐复观/徐復觀·中國人性論史.pdf",
+   "paras": 3050,
+   "chars": 416786,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/徐复观/徐復觀·中國思想史論集續篇.pdf",
+   "paras": 2335,
+   "chars": 359964,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/徐复观/徐復觀·中國文學論集.pdf",
+   "paras": 2829,
+   "chars": 340588,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/徐复观/徐復觀·中國文學論集續編.pdf",
+   "paras": 1663,
+   "chars": 149252,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/徐复观/徐復觀·中國經學史的基礎.pdf",
+   "paras": 1694,
+   "chars": 162250,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/徐复观/徐復觀·中國藝術精神.pdf",
+   "paras": 2494,
+   "chars": 298227,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/徐复观/徐復觀·儒家政治思想與民主自由人權.pdf",
+   "paras": 962,
+   "chars": 212790,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/徐复观/徐復觀·兩漢思想史 卷一.pdf",
+   "paras": 2281,
+   "chars": 317075,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/徐复观/徐復觀·兩漢思想史 卷三.pdf",
+   "paras": 10092,
+   "chars": 392463,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/徐复观/徐復觀·公孫龍子講疏.pdf",
+   "paras": 752,
+   "chars": 59063,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/徐复观/徐復觀·周官成立之時代及其思想性格.pdf",
+   "paras": 872,
+   "chars": 111956,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/徐复观/徐復觀·憶往事.pdf",
+   "paras": 688,
+   "chars": 140721,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/徐复观/徐復觀·新版学术与政治之间 甲乙集.pdf",
+   "paras": 1389,
+   "chars": 345924,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/徐复观/徐復觀·看世局.pdf",
+   "paras": 931,
+   "chars": 196551,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/徐复观/徐復觀·記所思.pdf",
+   "paras": 1566,
+   "chars": 243681,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/徐复观/徐復觀·論中共.pdf",
+   "paras": 825,
+   "chars": 185948,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/徐复观/徐復觀·黃大癡兩山水長卷的真偽問題.pdf",
+   "paras": 585,
+   "chars": 74450,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/徐复观/徐復觀先生出版著作繫年表 黎漢基.pdf",
+   "paras": 1165,
+   "chars": 40036,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/徐复观/徐復觀文錄選粹.pdf",
+   "paras": 1122,
+   "chars": 197046,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/徐复观/徐復觀雜文補集·兩岸三地卷上.pdf",
+   "paras": 3588,
+   "chars": 241895,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/徐复观/徐復觀雜文補集·国际政治卷上.pdf",
+   "paras": 3772,
+   "chars": 257694,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/徐复观/徐復觀雜文補集·国际政治卷下.pdf",
+   "paras": 3485,
+   "chars": 238489,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/徐复观/徐復觀雜文補集·思想文化卷上.pdf",
+   "paras": 4054,
+   "chars": 287049,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/徐复观/徐復觀雜文補集·思想文化卷下.pdf",
+   "paras": 2317,
+   "chars": 304777,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/李泽厚/中国古代思想史论.李泽厚著.三联书店2008.pdf",
+   "paras": 1101,
+   "chars": 199182,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/李泽厚/中国现代思想史论.李泽厚著.三联书店2008.pdf",
+   "paras": 1460,
+   "chars": 229235,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/李泽厚/中国近代思想史论.李泽厚著.三联书店2008.pdf",
+   "paras": 2238,
+   "chars": 312118,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/李泽厚/人类学历史本体论 李泽厚 天津社会科学院2008年.pdf",
+   "paras": 1403,
+   "chars": 259422,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/李泽厚/华夏美学·美学四讲(增订本).李泽厚著.三联书店2008.pdf",
+   "paras": 1517,
+   "chars": 264902,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/李泽厚/历史本体论·己卯五说(增订本).李泽厚著.三联书店2008.pdf",
+   "paras": 1513,
+   "chars": 242930,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/李泽厚/批判哲学的批判_康德述评(修订第6版).李泽厚著.三联书店2007.pdf",
+   "paras": 1248,
+   "chars": 277271,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/李泽厚/杂著集.李泽厚著.三联书店2008.pdf",
+   "paras": 1278,
+   "chars": 231173,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/李泽厚/美的历程.李泽厚著.三联书店2009.pdf",
+   "paras": 875,
+   "chars": 131914,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/柄谷行人/(社会批判译丛) [日] 柄谷行人 著_ 中田友美 译 - 马克思，其可能性的中心-中央编译出版社 (2006).pdf",
+   "paras": 857,
+   "chars": 124318,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/柄谷行人/作为隐喻的建筑_柄谷行人 著; 应杰 译.pdf",
+   "paras": 577,
+   "chars": 96815,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/柄谷行人/哲学的起源_（日）柄谷行人.pdf",
+   "paras": 991,
+   "chars": 168224,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/柄谷行人/探究（一）.pdf",
+   "paras": 787,
+   "chars": 110605,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/柄谷行人/探究（二）.pdf",
+   "paras": 1034,
+   "chars": 156538,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/柄谷行人/日本现代文学的起源_[日]柄谷行人 著; 赵京华 译.pdf",
+   "paras": 1151,
+   "chars": 188921,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/柄谷行人/民族与美学_[日] 柄谷行人 著; 薛羽 译.pdf",
+   "paras": 763,
+   "chars": 132563,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/段义孚/Passing Strange and Wonderful_ Aesthetics, Nature, and Culture (Kodansha Globe)_Yi-Fu Tuan.pdf",
+   "paras": 981,
+   "chars": 547643,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/汤一介/汤一介集 (1).pdf",
+   "paras": 2287,
+   "chars": 361876,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/汤一介/汤一介集 (10).pdf",
+   "paras": 2337,
+   "chars": 386571,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/汤一介/汤一介集 (2).pdf",
+   "paras": 2503,
+   "chars": 348304,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/汤一介/汤一介集 (3).pdf",
+   "paras": 1917,
+   "chars": 273356,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/汤一介/汤一介集 (4).pdf",
+   "paras": 1311,
+   "chars": 206891,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/汤一介/汤一介集 (5).pdf",
+   "paras": 1243,
+   "chars": 234459,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/汤一介/汤一介集 (6).pdf",
+   "paras": 1434,
+   "chars": 287312,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/汤一介/汤一介集 (7).pdf",
+   "paras": 1494,
+   "chars": 309973,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/汤一介/汤一介集 (8).pdf",
+   "paras": 1241,
+   "chars": 229484,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/汤一介/汤一介集 (9).pdf",
+   "paras": 848,
+   "chars": 186939,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/汪民安/城市文化读本_汪民安;_陈永国;_马海良.pdf",
+   "paras": 1967,
+   "chars": 442360,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/汪民安/身体、空间与后现代性_汪民安.pdf",
+   "paras": 2,
+   "chars": 431,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/沟口雄三/作为方法的中国.pdf",
+   "paras": 1202,
+   "chars": 165403,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/熊十力/熊十力全集·第4卷.pdf",
+   "paras": 1413,
+   "chars": 369970,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/熊十力/熊十力全集·第5卷.pdf",
+   "paras": 1730,
+   "chars": 467404,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/熊十力/熊十力全集·第6卷.pdf",
+   "paras": 1803,
+   "chars": 479773,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/熊十力/熊十力全集·第7卷.pdf",
+   "paras": 2489,
+   "chars": 563228,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/熊十力/熊十力全集·附卷上.pdf",
+   "paras": 2974,
+   "chars": 477483,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/蒋孔阳/美学原理（蒋孔阳） 0.pdf",
+   "paras": 2,
+   "chars": 64,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/蒋孔阳/蒋孔阳全集1.pdf",
+   "paras": 2213,
+   "chars": 439248,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/蒋孔阳/蒋孔阳全集2.pdf",
+   "paras": 1614,
+   "chars": 406163,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/蒋孔阳/蒋孔阳全集3美学论文选.pdf",
+   "paras": 552,
+   "chars": 124741,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/蒋孔阳/蒋孔阳全集4.pdf",
+   "paras": 2048,
+   "chars": 427767,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/蒋孔阳/蒋孔阳全集5.pdf",
+   "paras": 2268,
+   "chars": 348739,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/蒋孔阳/蒋孔阳全集6.pdf",
+   "paras": 3564,
+   "chars": 375245,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/西西/像我这样的一个女子◎西西.pdf",
+   "paras": 50,
+   "chars": 8879,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/西西/胡子有脸.pdf",
+   "paras": 1,
+   "chars": 59,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/许煜/On the existence of digital objects-University of Minnesota Press (2017) - 许煜.pdf",
+   "paras": 758,
+   "chars": 297943,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/许煜/Question Concerning Technology in China An Essay in Cosmotechnics, The - 许煜.pdf",
+   "paras": 1201,
+   "chars": 531022,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/许煜/论数码物的存在.pdf",
+   "paras": 1489,
+   "chars": 361941,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/许煜/递归与偶然 许煜.pdf",
+   "paras": 2084,
+   "chars": 479246,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/郑元者/艺术之根 - 未知.pdf",
+   "paras": 3344,
+   "chars": 510454,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/郑元者/艺术之根.pdf",
+   "paras": 1623,
+   "chars": 228436,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/郑振铎/《中国古代木刻画史略》_郑振铎 编著_上海书店出版社 2006年.pdf",
+   "paras": 1044,
+   "chars": 149829,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/郑振铎/《郑振铎全集 18 希腊神话与英雄传说》.pdf",
+   "paras": 1478,
+   "chars": 458792,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/郑振铎/《郑振铎全集 19 俄国小说译文集》.pdf",
+   "paras": 3128,
+   "chars": 360943,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/郑振铎/《郑振铎全集 20 太戈尔诗选及其他译文》.pdf",
+   "paras": 1768,
+   "chars": 310701,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/郑振铎/《郑振铎全集 7_中国俗文学史》.pdf",
+   "paras": 2942,
+   "chars": 337569,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/金在权/（Jaegwon Kim）Philosophy of mind.pdf",
+   "paras": 903,
+   "chars": 713027,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/钱学森/钱学森论建筑科学.pdf",
+   "paras": 755,
+   "chars": 129408,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/钱锺书/钱锺书集(三联版)·写在人生边上·人生边上的边上·石语.pdf",
+   "paras": 1689,
+   "chars": 251057,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/阮元/揅经室集  上册.pdf",
+   "paras": 16084,
+   "chars": 330863,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/阮元/揅经室集  下册.pdf",
+   "paras": 16286,
+   "chars": 334727,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/陈嘉映/走出唯一真理观.pdf",
+   "paras": 1664,
+   "chars": 245430,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/韩炳哲/In the Swarm_ Digital Prospects_Byung-Chul Han, Erik Butler.pdf",
+   "paras": 301,
+   "chars": 108651,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/韩炳哲/The Agony of Eros_Byung-Chul Han, Erik Butler, Alain Badiou.pdf",
+   "paras": 257,
+   "chars": 92361,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/韩炳哲/Tod und Alterität_Byung-Chul Han.pdf",
+   "paras": 1,
+   "chars": 95,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/马克思恩格斯/马克思恩格斯文集[第05卷] 资本论.pdf",
+   "paras": 4842,
+   "chars": 894226,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Authors/高亨/高亨着作集林第07卷.墨经校诠.商君书注译.清华大学出版社.2004年1版1刷.pdf",
+   "paras": 4517,
+   "chars": 228874,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Ernst Bloch/[Historical Materialism Book Series 202] Cat Noir - Ernst Bloch’s Speculative Materialism_ Ontology, Epistemology, Politics (2019, Brill) - libgen.lc.pdf",
+   "paras": 1084,
+   "chars": 486659,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Journals/COMPUTER_GRAPHICS_AND_ART_Aug1976.pdf",
+   "paras": 416,
+   "chars": 126483,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Journals/COMPUTER_GRAPHICS_AND_ART_Aug1977.pdf",
+   "paras": 302,
+   "chars": 118685,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Journals/COMPUTER_GRAPHICS_AND_ART_Aug1978.pdf",
+   "paras": 276,
+   "chars": 108020,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Journals/COMPUTER_GRAPHICS_AND_ART_Feb1977.pdf",
+   "paras": 332,
+   "chars": 113196,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Journals/COMPUTER_GRAPHICS_AND_ART_Feb1978.pdf",
+   "paras": 258,
+   "chars": 123521,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Journals/COMPUTER_GRAPHICS_AND_ART_May1976.pdf",
+   "paras": 344,
+   "chars": 112050,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Journals/COMPUTER_GRAPHICS_AND_ART_May1977.pdf",
+   "paras": 344,
+   "chars": 131448,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Journals/COMPUTER_GRAPHICS_AND_ART_May1978.pdf",
+   "paras": 264,
+   "chars": 90151,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Journals/COMPUTER_GRAPHICS_AND_ART_Nov1976.pdf",
+   "paras": 426,
+   "chars": 109394,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Journals/COMPUTER_GRAPHICS_AND_ART_Nov1977.pdf",
+   "paras": 381,
+   "chars": 117174,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Journals/Whole Earth Catalog/WEC 1969-1.pdf",
+   "paras": 205,
+   "chars": 58520,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Journals/Whole Earth Catalog/WEC 1971-99.pdf",
+   "paras": 29295,
+   "chars": 4251075,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Series/桐城派名家文集/桐城派名家文集 1 姚范集 方树东集 吴德旋集.pdf",
+   "paras": 7160,
+   "chars": 657969,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Series/桐城派名家文集/桐城派名家文集 10 薛福成集.pdf",
+   "paras": 5145,
+   "chars": 831600,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Series/桐城派名家文集/桐城派名家文集 11 姚永朴集 姚永概集.pdf",
+   "paras": 3660,
+   "chars": 316922,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Series/桐城派名家文集/桐城派名家文集 12 戴名世选集 方苞选集.pdf",
+   "paras": 3812,
+   "chars": 473076,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Series/桐城派名家文集/桐城派名家文集 13 刘大櫆选集 姚鼐选集 梅曾亮选集.pdf",
+   "paras": 16226,
+   "chars": 461529,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Series/桐城派名家文集/桐城派名家文集 14 曾国藩选集 张裕钊选集 黎庶昌选集.pdf",
+   "paras": 3553,
+   "chars": 448885,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Series/桐城派名家文集/桐城派名家文集 15 吴汝纶选集 贺涛选集 范当世选集.pdf",
+   "paras": 2329,
+   "chars": 299092,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Series/桐城派名家文集/桐城派名家文集 2 姚椿集.pdf",
+   "paras": 5770,
+   "chars": 354656,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Series/桐城派名家文集/桐城派名家文集 3 陈用光集.pdf",
+   "paras": 4313,
+   "chars": 383680,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Series/桐城派名家文集/桐城派名家文集 4 刘开集.pdf",
+   "paras": 3612,
+   "chars": 335096,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Series/桐城派名家文集/桐城派名家文集 5 管同集 吴敏树集.pdf",
+   "paras": 5336,
+   "chars": 413010,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Series/桐城派名家文集/桐城派名家文集 6 姚莹集.pdf",
+   "paras": 4743,
+   "chars": 633370,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Series/桐城派名家文集/桐城派名家文集 7 龙启瑞集 王拯集.pdf",
+   "paras": 6790,
+   "chars": 512292,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Series/桐城派名家文集/桐城派名家文集 8 马其昶集 戴钧衡集.pdf",
+   "paras": 4225,
+   "chars": 490579,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Series/桐城派名家文集/桐城派名家文集 9 方宗诚集.pdf",
+   "paras": 5663,
+   "chars": 751131,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Zotero/102679129-05-01-acc.pdf",
+   "paras": 79,
+   "chars": 19294,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Zotero/2021_History of blockchain-Blockchain 1.0 Currency.pdf",
+   "paras": 99,
+   "chars": 34848,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Zotero/Alguliyev_2021_Information security as a national security component.pdf",
+   "paras": 158,
+   "chars": 77998,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Zotero/Armaselu and Fickers_2024_Zoomland Exploring Scale in Digital History and Humanities.pdf",
+   "paras": 316,
+   "chars": 142344,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Zotero/Ault_2006_Wolfgang Tillmans in conjunction with the Exhibition Wolfgang Tillmans, which was co-organized by.pdf",
+   "paras": 4,
+   "chars": 347,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Zotero/Bhyravajjula et al._2025_so much depends  upon  a whitespace Why Whitespace Matters for Poets and LLMs.pdf",
+   "paras": 223,
+   "chars": 63786,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Zotero/Bingham_2024_Education and Artificial Intelligence at the Scene of Writing A Derridean Consideration.pdf",
+   "paras": 70,
+   "chars": 39526,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Zotero/Christou_2010_European Union security governance putting the ‘security’ back in.pdf",
+   "paras": 212,
+   "chars": 135170,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Zotero/Dubberly and Pangaro_2009_On Modeling - What is conversation, and how can we design for it.pdf",
+   "paras": 151,
+   "chars": 29310,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Zotero/Ecarnot_2015_Writing a scientific article A step-by-step guide for beginners.pdf",
+   "paras": 176,
+   "chars": 83654,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Zotero/Eschert_2017_Gaining economic profit or losing cultural security Framing persuasive arguments for two types of c.pdf",
+   "paras": 164,
+   "chars": 145193,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Zotero/Fu_2022_Recalibrating, reconfiguring, and appropriating innovation a semantic network analysis of China’s m.pdf",
+   "paras": 78,
+   "chars": 61045,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Zotero/GENHSI-2.pdf",
+   "paras": 112,
+   "chars": 67522,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Zotero/Li_2015_Proceedings of 2015 2nd International Conference on Industrial Economics System and Industrial Secur.pdf",
+   "paras": 3048,
+   "chars": 2079564,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Zotero/Liang_2026_Watermarking techniques for large language models a survey.pdf",
+   "paras": 286,
+   "chars": 97702,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Zotero/Los Angeles County Museum of Art_1971_A report on the Art and Technology Program of the Los Angeles County Museum of Art, 1967-1971.pdf",
+   "paras": 2190,
+   "chars": 903616,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Zotero/Misselhorn_2009_Imaginative Resistance. An Emotion-Based Account.pdf",
+   "paras": 41,
+   "chars": 8257,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Zotero/Mohr_2013_Graphing the grammar of motives in National Security Strategies Cultural interpretation, automated.pdf",
+   "paras": 187,
+   "chars": 113452,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Zotero/O'Sullivan_2024_The Bloomsbury handbook to the digital humanities.pdf",
+   "paras": 5,
+   "chars": 3478,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Zotero/Ostrovskaya_2015_The Discourse of the Russian Elite in the ERA of “Liquid” Modernity as a Problem of Ethnic, Social a.pdf",
+   "paras": 106,
+   "chars": 77502,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Zotero/Proletarianisation_b2_article_Final_.pdf",
+   "paras": 120,
+   "chars": 75472,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Zotero/Rancière_WHAT MEDIUM CAN MEAN.pdf",
+   "paras": 46,
+   "chars": 75855,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Zotero/Rothbaum_2000_Attachment and culture Security in the United States and Japan..pdf",
+   "paras": 168,
+   "chars": 71443,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Zotero/Sari_2021_Information security cultural differences among health care facilities in Indonesia.pdf",
+   "paras": 402,
+   "chars": 134672,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Zotero/Sattaka_2017_Agricultural extension services to foster production sustainability for food and cultural security o.pdf",
+   "paras": 98,
+   "chars": 41471,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Zotero/Tomczak and Stachowiak_2015_Location Patterns And Location Factors In Cultural And Creative Industries1.pdf",
+   "paras": 203,
+   "chars": 82314,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Zotero/greenberg_modernistPainting.pdf",
+   "paras": 24,
+   "chars": 23170,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Zotero/krauss_voyage-on-the-north-sea_cropped.pdf",
+   "paras": 538,
+   "chars": 188940,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Zotero/“饭圈”身份认同建构研究_刘念念.pdf",
+   "paras": 570,
+   "chars": 142767,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Zotero/万_2018_“网络喷子”语言暴力的演变及引导思考.pdf",
+   "paras": 64,
+   "chars": 6668,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Zotero/严_2023_元宇宙图书馆的理论进展、实践问题与未来展望.pdf",
+   "paras": 139,
+   "chars": 20411,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Zotero/中国旅游产业融合发展机制理论及其应用研究_刘雪婷.pdf",
+   "paras": 990,
+   "chars": 68817,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Zotero/习近平关于历史文化遗产保护利用重要论述研究_宁静.pdf",
+   "paras": 302,
+   "chars": 103732,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Zotero/习近平文化强国观研究_蔡洁.pdf",
+   "paras": 1134,
+   "chars": 247406,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Zotero/于悠悠_社会网络视角下韧性艺术界的危机应对.pdf",
+   "paras": 249,
+   "chars": 258902,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Zotero/付_2020_数字经济中国经济发展的新动能.pdf",
+   "paras": 54,
+   "chars": 13422,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Zotero/代_2023_加速社会中的传播媒介与虚无主义解蔽及超越.pdf",
+   "paras": 98,
+   "chars": 26326,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Zotero/佘_2021_智慧城市实践与智慧建设.pdf",
+   "paras": 28,
+   "chars": 4033,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Zotero/侍_2014_空间叙事方法缘起及在城市研究中的应用.pdf",
+   "paras": 138,
+   "chars": 10924,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Zotero/侯_2009_基于城市意象变迁的城市旅游形象塑造研究——以江苏省扬州市为例.pdf",
+   "paras": 138,
+   "chars": 22273,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Zotero/侯_2014_基于语义文法的网络舆情精准分析方法研究.pdf",
+   "paras": 202,
+   "chars": 29246,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Zotero/党_2022_城市信息模型（CIM）赋能新型智慧城市发展综述.pdf",
+   "paras": 178,
+   "chars": 28576,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Zotero/刘 and 马_2019_当今国外左翼加速主义思想研究.pdf",
+   "paras": 27,
+   "chars": 8530,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Zotero/刘_2013_智慧伦敦未来智慧城市的范本.pdf",
+   "paras": 17,
+   "chars": 3335,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Zotero/刘_2015_中文网络文本的语义信息处理研究综述.pdf",
+   "paras": 52,
+   "chars": 18818,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Zotero/刘_2016_北京东四片区历史街区的城市意象研究.pdf",
+   "paras": 88,
+   "chars": 22446,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Zotero/刘_2018_空间与媒介电影艺术中未来城市的诗意性表达.pdf",
+   "paras": 49,
+   "chars": 8513,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Zotero/刘_2019_中国建设智慧社会的国外经验借鉴.pdf",
+   "paras": 160,
+   "chars": 26499,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Zotero/刘_2021_中国智慧城市试点政策对城市发展质量的影响——基于韧性发展的视角.pdf",
+   "paras": 57,
+   "chars": 22264,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Zotero/刘_2022_总体国家安全观的历史唯物主义审视.pdf",
+   "paras": 27,
+   "chars": 5224,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Zotero/刘_2022_日本智慧城市PPP平台的合作模式解读.pdf",
+   "paras": 98,
+   "chars": 12138,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Zotero/刘立宇_2010_新媒介与中国当代艺术变革.pdf",
+   "paras": 918,
+   "chars": 156384,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Zotero/单_2023_城市管理“一网统管”建设研究与思考.pdf",
+   "paras": 16,
+   "chars": 4223,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Zotero/叶_2014_新加坡政府的立国智慧一场全民参与的智慧行动.pdf",
+   "paras": 46,
+   "chars": 10002,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Zotero/向_2018_中国城市文化力发展评价指标体系研究.pdf",
+   "paras": 61,
+   "chars": 12242,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Zotero/吕_2021_新型智慧城市网络安全协同防护框架研究.pdf",
+   "paras": 15,
+   "chars": 9470,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Zotero/吴_2018_上海2035信息化引领“卓越的全球城市”建设.pdf",
+   "paras": 49,
+   "chars": 7812,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Zotero/吴_2022_智慧城市热潮下的“冷”思考学术笔谈.pdf",
+   "paras": 112,
+   "chars": 25013,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Zotero/吴_2022_特色打造与可持续发展：南京乡村文旅IP塑造策略研究.pdf",
+   "paras": 49,
+   "chars": 9929,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Zotero/周苑_2026_技术逻辑与艺术表征：新大众文艺视域中的网络微短剧 2.pdf",
+   "paras": 3,
+   "chars": 1031,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Zotero/国_2013_全球十大智慧城市巴黎绿色之城的建设经验.pdf",
+   "paras": 32,
+   "chars": 4105,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Zotero/复 and 周_2015_空间可沟通性“微游上海”的城市意象及其生产.pdf",
+   "paras": 406,
+   "chars": 16899,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Zotero/夏_2019_农业高质量发展：数字赋能与实现路径.pdf",
+   "paras": 150,
+   "chars": 34640,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Zotero/姚_2021_中国智慧城市研究的进展与展望.pdf",
+   "paras": 122,
+   "chars": 57846,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Zotero/姚_2022_智慧城市建设提高企业全要素生产率了吗.pdf",
+   "paras": 226,
+   "chars": 44320,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Zotero/姜_2010_“具身化”知识、行动与时间性——从安迪·克拉克到吉尔·德勒兹.pdf",
+   "paras": 46,
+   "chars": 9517,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Zotero/姜_2018_智慧·城市,基于国际视野下的思考.pdf",
+   "paras": 222,
+   "chars": 33636,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Zotero/姜宇辉_2026_数字时代的主体性技术：操演、拥有或修补附视频.pdf",
+   "paras": 145,
+   "chars": 18997,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Zotero/孔_2020_网络媒介：重塑城市空间意象的新途径 1.pdf",
+   "paras": 50,
+   "chars": 10763,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Zotero/孙_2024_基于网络照片数据的工业遗产旅游地意象分析：以上海国际时尚中心为例.pdf",
+   "paras": 56,
+   "chars": 13890,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Zotero/孟 and 吴_2022_重新审视“智慧城市”三个基本研究问题——基于英文文献系统性综述.pdf",
+   "paras": 438,
+   "chars": 82392,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Zotero/宁小敏_2009_语义关联数据模型及其检索机制的研究.pdf",
+   "paras": 892,
+   "chars": 126037,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Zotero/安东尼奥·索马尼 and 易雨潇 - 2025 - “潜在空间”理论.pdf",
+   "paras": 318,
+   "chars": 54874,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Zotero/山之辺ハサクィ_2026_シュトックハマー「フランシス・ポンジュと電気」を読む _20260627.pdf",
+   "paras": 11,
+   "chars": 5041,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Zotero/崔_2022_全球元宇宙产业化布局策略及启示.pdf",
+   "paras": 22,
+   "chars": 4055,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Zotero/巴_2016_基于关键词语义网络的领域主题演化分析方法研究.pdf",
+   "paras": 154,
+   "chars": 26268,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Zotero/常_2022_中国5G新型智慧城市：内涵、问题与路径.pdf",
+   "paras": 48,
+   "chars": 16447,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Zotero/张_1997_技术、组织与文化的协同创新模式研究.pdf",
+   "paras": 40,
+   "chars": 10167,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Zotero/张_2013_角色神圣到世俗异化体育明星崇拜变迁的动因与理性审视.pdf",
+   "paras": 31,
+   "chars": 11281,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Zotero/张_2014_智慧城市建设模式比较研究.pdf",
+   "paras": 33,
+   "chars": 7889,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Zotero/张_2015_文化创新城市、空间与经济复兴.pdf",
+   "paras": 29,
+   "chars": 7210,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Zotero/张_2016_基于城市意象的旅游节庆品牌认知研究.pdf",
+   "paras": 63,
+   "chars": 15700,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Zotero/张_2017_纽约科技创新要素集聚路径与启示借鉴.pdf",
+   "paras": 148,
+   "chars": 9084,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Zotero/张_2018_大数据背景下中国与新加坡智慧城市建设比较研究.pdf",
+   "paras": 53,
+   "chars": 16841,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Zotero/张_2020_基于文化产业企业网络视角的中国城市网络空间结构研究.pdf",
+   "paras": 85,
+   "chars": 28348,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Zotero/张_2020_基于社会网络分析研究中国创客政策.pdf",
+   "paras": 18,
+   "chars": 4235,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Zotero/张_2020_实践性与物质性粉丝文化研究的新理论框架.pdf",
+   "paras": 62,
+   "chars": 9062,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Zotero/张_2021_数字经济能否成为促进我国经济高质量发展的新动能.pdf",
+   "paras": 119,
+   "chars": 59183,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Zotero/张_2021_都市演艺集聚区的文化生产力研究基于百老汇、伦敦西区、上海演艺大世界的比较.pdf",
+   "paras": 39,
+   "chars": 13218,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Zotero/张_2023_回应AIGC的信息资源管理学人思考.pdf",
+   "paras": 438,
+   "chars": 88350,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Zotero/张晶_2011_艺术媒介论.pdf",
+   "paras": 60,
+   "chars": 9146,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Zotero/张绍江,辛萍,盖小飞,周玉丽_1995_关于劳动力商品属性的探讨.pdf",
+   "paras": 13,
+   "chars": 2251,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Zotero/徐 and 汪_2020_社会语境变迁下的中国科学家媒介形象研究——基于《人民日报》(1949—2019)的语义网络分析.pdf",
+   "paras": 72,
+   "chars": 18168,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Zotero/徐_2012_旅游意象图基于游客感知的旅游景区规划新设想.pdf",
+   "paras": 34,
+   "chars": 14495,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Zotero/徐_2020_想象的城市与城市的想象空间视阈下城市文化产业的价值探讨.pdf",
+   "paras": 32,
+   "chars": 7115,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Zotero/徐_2023_理解平台资本主义：概念生成、现实表征与公共性隐忧.pdf",
+   "paras": 74,
+   "chars": 13902,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Zotero/徐露 and 马睿 - 2025 - 表面转向：当代批评与知识生成的新范式.pdf",
+   "paras": 61,
+   "chars": 11995,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Zotero/戴_2023_基于Unity的在线地方特色卡牌游戏设计.pdf",
+   "paras": 102,
+   "chars": 13652,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Zotero/房 and 王_2017_智慧城市建设中外模式比较与文化产业创生逻辑.pdf",
+   "paras": 96,
+   "chars": 21188,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Zotero/方_2022_多中心治理理论视角下乡村文化治理.pdf",
+   "paras": 72,
+   "chars": 13561,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Zotero/无面者归来：数字时代的面容溃散及其抵抗_施畅.pdf",
+   "paras": 56,
+   "chars": 14930,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Zotero/智慧城市信息安全风险评估指标体系构建_高凯.pdf",
+   "paras": 75,
+   "chars": 18640,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Zotero/曹_2017_基于网络照片数据的城市意象研究——以中国24个主要城市为例.pdf",
+   "paras": 53,
+   "chars": 12921,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Zotero/曾_2021_情感慰藉、柔性社交、价值变现青年亚文化视域下的盲盒潮玩.pdf",
+   "paras": 51,
+   "chars": 17988,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Zotero/朱 and 韩_2017_拟态亲密关系一项关于养成系偶像粉丝社群的新观察——以TFboys个案为例.pdf",
+   "paras": 46,
+   "chars": 8680,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Zotero/朱 and 风_2019_国家社科基金社会学类项目研究趋势与成果评价分析(1991—2016).pdf",
+   "paras": 36,
+   "chars": 14672,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Zotero/朱竑 and 高权_2015_西方地理学“情感转向”与情感地理学研究述评.pdf",
+   "paras": 152,
+   "chars": 33576,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Zotero/朱迪·瓦克曼的女性主义社会加速理论研究_周琪.pdf",
+   "paras": 290,
+   "chars": 68138,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Zotero/李 and 彭_2008_文化与创意产业集群的研究谱系和前沿走向文化生态隐喻.pdf",
+   "paras": 126,
+   "chars": 19951,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Zotero/李_2010_从地理学视角看城市历史文化景观集体记忆的研究.pdf",
+   "paras": 95,
+   "chars": 17797,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Zotero/李_2018_城市文化产业生态位测度及空间网络效应.pdf",
+   "paras": 95,
+   "chars": 15990,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Zotero/李_2019_精神负载母职实践过程中的性别关系再生产.pdf",
+   "paras": 46,
+   "chars": 12500,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Zotero/李_2021_文化产业成长对城市空间形态演变的影响——以西安市核心区为例.pdf",
+   "paras": 99,
+   "chars": 33793,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Zotero/李_2021_智慧城市网络安全保障研究进展.pdf",
+   "paras": 33,
+   "chars": 15724,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Zotero/李_2021_消费符号下城市新旧电影院空间生产及功能演化——以西安市为例.pdf",
+   "paras": 149,
+   "chars": 21544,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Zotero/李_2021_跨区域合作智慧城市拓展新方向.pdf",
+   "paras": 42,
+   "chars": 6650,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Zotero/李_2023_总体国家安全观视域下我国网络文化安全法治保障研究.pdf",
+   "paras": 29,
+   "chars": 8042,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Zotero/杨_2012_“智慧城市”的建设策略对全球优秀实践的分析与思考.pdf",
+   "paras": 47,
+   "chars": 8204,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Zotero/杨_2019_技术女性主义视角下的时间经验——瓦克曼《时间逼迫数字资本主义中生命的加速》解读.pdf",
+   "paras": 151,
+   "chars": 13279,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Zotero/杨_2020_基于网络图景的重庆主城空间意象研究.pdf",
+   "paras": 49,
+   "chars": 8694,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Zotero/杨_2022_人工智能文化产业创新逻辑及其价值风险与治理路径.pdf",
+   "paras": 66,
+   "chars": 13274,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Zotero/杨光影 and 马睿 - 2024 - 论科技艺术研究的“新媒介”之困.pdf",
+   "paras": 122,
+   "chars": 17573,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Zotero/杨光影 and 马睿 - 2025 - 感知的重审：新媒体艺术家的媒介研究.pdf",
+   "paras": 115,
+   "chars": 14832,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Zotero/林_2016_产业融合与空间融合文化产业融合发展的思维创新.pdf",
+   "paras": 84,
+   "chars": 26374,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Zotero/栗_2021_基于WOS和CNKI可视化的智慧城市研究知识图谱分析.pdf",
+   "paras": 125,
+   "chars": 32157,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Zotero/梁_2023_数字技术下“电影-元宇宙”工业模型搭建逻辑支撑与实践校验.pdf",
+   "paras": 79,
+   "chars": 14627,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Zotero/武_2022_智慧城市建设对绿色技术创新的影响——基于地级市面板数据的实证研究.pdf",
+   "paras": 179,
+   "chars": 29570,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Zotero/段 and 陈_2020_文化伦理人工智能的价值与悖论.pdf",
+   "paras": 378,
+   "chars": 31806,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Zotero/殷_2014_“大流转”中国都市文学的梦想与纠结.pdf",
+   "paras": 53,
+   "chars": 7766,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Zotero/殷_2019_“思想战”关于“文化战争”的前奏和先导——20世纪中国文学批评百年记忆.pdf",
+   "paras": 56,
+   "chars": 13221,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Zotero/殷_2024_作为媒介的城市数字媒介技术在城市品牌传播中的应用分析——以南京文旅夜游品牌为例.pdf",
+   "paras": 59,
+   "chars": 6819,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Zotero/毕_2022_沉浸式旅游演艺：内涵、特征及发展动力.pdf",
+   "paras": 58,
+   "chars": 12482,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Zotero/毛 and 王_2023_应用元宇宙促进城市空间规划变革研究.pdf",
+   "paras": 41,
+   "chars": 11220,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Zotero/毛哲涵_王鹏_2023_应用元宇宙促进城市空间规划变革研究.pdf",
+   "paras": 41,
+   "chars": 11220,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Zotero/江_2024_我国城市夜间文旅消费集聚区网络口碑空间格局及影响因素分析.pdf",
+   "paras": 54,
+   "chars": 15880,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Zotero/汪_2024_城市空间生产与形象建构中的身体悖论 1.pdf",
+   "paras": 54,
+   "chars": 18761,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Zotero/沈_2014_辣妈个体化进程中母职与女权.pdf",
+   "paras": 57,
+   "chars": 13039,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Zotero/沈_2020_智慧城市建设中公民参与的实践探索与启示.pdf",
+   "paras": 102,
+   "chars": 15020,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Zotero/涂_2020_伦敦智慧城市用户信息安全保障机制及其对我国的启示.pdf",
+   "paras": 77,
+   "chars": 24006,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Zotero/温_2022_数字化背景下智慧城市的治理效应及治理过程研究.pdf",
+   "paras": 185,
+   "chars": 37914,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Zotero/焦_2020_数字经济赋能制造业转型从价值重塑到价值创造.pdf",
+   "paras": 47,
+   "chars": 11711,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Zotero/王 and 刘_2021_长三角文化产业集群发展实践成效、现实困境与战略路径.pdf",
+   "paras": 90,
+   "chars": 12701,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Zotero/王 et al_2023_消解与重构：数字媒介时代青年亚文化的“去污名化”分析——以二次元为例.pdf",
+   "paras": 86,
+   "chars": 10949,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Zotero/王_2013_国内外智慧城市理论研究与实践思考.pdf",
+   "paras": 58,
+   "chars": 18230,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Zotero/王_2013_艺术介入空间生产城市闲置工业空间的旅游开发.pdf",
+   "paras": 78,
+   "chars": 19772,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Zotero/王_2015_一些国家智慧城市建设的做法及其重要启示(上).pdf",
+   "paras": 10,
+   "chars": 5016,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Zotero/王_2015_一些国家智慧城市建设的做法及其重要启示(下).pdf",
+   "paras": 24,
+   "chars": 4432,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Zotero/王_2017_以“智能”实现城市公平——美国纽约的智慧城市创建行动及启示.pdf",
+   "paras": 43,
+   "chars": 7095,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Zotero/王_2017_浅议英国格林威治智慧城市战略对我国的启示.pdf",
+   "paras": 33,
+   "chars": 6276,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Zotero/王_2019_智慧城市发展的经验分析与趋势展望.pdf",
+   "paras": 146,
+   "chars": 29462,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Zotero/王_2020_城市智慧化理念演进从工具理性到价值理性——基于上海智慧城市十年发展考察.pdf",
+   "paras": 51,
+   "chars": 9106,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Zotero/王_2020_数字文化产业中政府角色定位欧美国家经验与中国对策.pdf",
+   "paras": 39,
+   "chars": 16388,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Zotero/王_2021_组织因素对重大工程项目绩效影响研究.pdf",
+   "paras": 48,
+   "chars": 26823,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Zotero/王_2022_公共文化治理理念、模式与实践路向.pdf",
+   "paras": 110,
+   "chars": 15432,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Zotero/王_2022_西安市文化娱乐业空间结构图谱及其形成机理.pdf",
+   "paras": 218,
+   "chars": 98064,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Zotero/王千桂_2015_走向“再生现实”的新媒体戏剧  基于新媒体戏剧演艺的舞台美术现状解读与分析.pdf",
+   "paras": 121,
+   "chars": 8415,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Zotero/王睿琦_2016_从形式到结构——作为结构主义文本的《恋人絮语》.pdf",
+   "paras": 185,
+   "chars": 56909,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Zotero/田_2022_智慧城市信息安全保障体系研究.pdf",
+   "paras": 48,
+   "chars": 7280,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Zotero/由_2021_文化企业承担社会责任会提高其融资效率吗.pdf",
+   "paras": 123,
+   "chars": 17145,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Zotero/盖小飞 and 解学芳_2015_我国文化创意产业制度变迁与困境.pdf",
+   "paras": 52,
+   "chars": 5426,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Zotero/盖小飞 and 解学芳_2015_文化创意产业制度环境的优化策略.pdf",
+   "paras": 92,
+   "chars": 9580,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Zotero/盖小飞 and 解学芳_2016_新能源汽车产业与大众传播媒介的互动关系研究.pdf",
+   "paras": 200,
+   "chars": 27196,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Zotero/盖小飞_2016_“犬儒主义”与收视率——布尔迪厄《关于电视》解析.pdf",
+   "paras": 23,
+   "chars": 2967,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Zotero/盖小飞_2016_哈尼梯田地区文化消费现状研究.pdf",
+   "paras": 57,
+   "chars": 7819,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Zotero/盖小飞_2016_哈尼梯田文化旅游开发现状初探——以“长街宴”和“梯田红米”为例.pdf",
+   "paras": 126,
+   "chars": 18226,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Zotero/盖小飞_2016_真人秀节目《奔跑吧兄弟》版权引进研究综述.pdf",
+   "paras": 33,
+   "chars": 5190,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Zotero/盖小飞_2016_论消费主义中选择的自由与困惑.pdf",
+   "paras": 46,
+   "chars": 7513,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Zotero/秦_2013_用“智慧规划”助推上海智慧城市建设刍议.pdf",
+   "paras": 119,
+   "chars": 11775,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Zotero/罗_2017_从“赋权”到“赋能”的企业组织结构演进——基于韩都衣舍案例的研究.pdf",
+   "paras": 96,
+   "chars": 26580,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Zotero/罗_2022_文化产业数字化的创新衍进模式研究.pdf",
+   "paras": 321,
+   "chars": 45744,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Zotero/翟_2017_旅游空间生产语境下的乡村文化景观失忆与重构研究——以成都市红砂村乡村旅游发展为例.pdf",
+   "paras": 54,
+   "chars": 11299,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Zotero/胡 and 姬_2017_网络文化安全概念、规范与趋势.pdf",
+   "paras": 54,
+   "chars": 8715,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Zotero/胡 and 罗_2016_城市形象塑造基于文化产业视角.pdf",
+   "paras": 37,
+   "chars": 9403,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Zotero/胡_2000_国家文化安全经济全球化背景下中国文化产业发展策论.pdf",
+   "paras": 187,
+   "chars": 14624,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Zotero/臧 and 解_2019_人工智能时代文化产业主流价值传播重塑与建构.pdf",
+   "paras": 142,
+   "chars": 66082,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Zotero/范 and 张_2016_城市文化空间传承与创意的映射.pdf",
+   "paras": 76,
+   "chars": 9797,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Zotero/茅明睿 et al_2023_基于游戏和元宇宙技术的城市研究与空间干预探索.pdf",
+   "paras": 59,
+   "chars": 10859,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Zotero/葛 and 吴_2021_数字经济赋能经济高质量发展理论机制与经验证据.pdf",
+   "paras": 78,
+   "chars": 16172,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Zotero/董_2022_基于分阶段创新活动需求的城市创新集聚区类型解析与构建引导.pdf",
+   "paras": 156,
+   "chars": 24100,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Zotero/蔡 and 卞_2018_青蛙游戏代际冲突下的青年成长.pdf",
+   "paras": 48,
+   "chars": 9351,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Zotero/薛_2022_城市历史街区公共空间更新的新文旅视角与新赋能机制——以哈尔滨市为例.pdf",
+   "paras": 66,
+   "chars": 13545,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Zotero/袁_2020_基于“义利”分析框架的文化企业社会责任与经济绩效关系研究——来自72家文化产业上市公司的实证分析.pdf",
+   "paras": 232,
+   "chars": 22078,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Zotero/袁_2023_粉丝经济视域下虚拟偶像的发展策略.pdf",
+   "paras": 43,
+   "chars": 5466,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Zotero/解 and 张_2020_AI赋能人工智能与媒体产业链重构.pdf",
+   "paras": 104,
+   "chars": 16910,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Zotero/解 and 高_2022_“智能+”时代AI文化科技伦理反思创新边界与伦理准则.pdf",
+   "paras": 51,
+   "chars": 14189,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Zotero/解_2011_网络文化产业管理体制改革技术创新驱动的缺位与突破.pdf",
+   "paras": 34,
+   "chars": 8867,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Zotero/解_2023_文化元宇宙语境下的数字藏品运作机理与善治机制研究.pdf",
+   "paras": 24,
+   "chars": 3594,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Zotero/解学芳 and 盖小飞_2017_技术创新、制度创新协同与文化产业发展综述与研判.pdf",
+   "paras": 47,
+   "chars": 15359,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Zotero/解学芳_2015_文化创意产业科技创新环境优化研究——基于上海全球科技创新中心建设的思考.pdf",
+   "paras": 94,
+   "chars": 18124,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Zotero/言ルル_アンデパンダン展_20260529_4_f.pdf",
+   "paras": 54,
+   "chars": 7836,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Zotero/许_2022_时空破壁与场域重构面向文化数字化领域的元宇宙.pdf",
+   "paras": 34,
+   "chars": 14385,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Zotero/许峰_2025_城市数字化转型中的文化数字化发展研究——以政策演进为视角.pdf",
+   "paras": 111,
+   "chars": 28524,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Zotero/谢_2020_大数据成为现实生产要素的企业实现机制：产品创新视角.pdf",
+   "paras": 180,
+   "chars": 29263,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Zotero/谢永俊_2017_基于微博数据的北京市热点区域意象感知.pdf",
+   "paras": 81,
+   "chars": 21056,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Zotero/谭_2019_语义网络发展历程与现状研究.pdf",
+   "paras": 79,
+   "chars": 24422,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Zotero/贺_2023_华立科技游艺设备行业龙头  卡牌业务驱动成长.pdf",
+   "paras": 10,
+   "chars": 1234,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Zotero/赵_2014_信息社会的城市空间策略——智慧城市热潮的冷思考.pdf",
+   "paras": 92,
+   "chars": 15132,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Zotero/赵_2015_互联网媒介中的城市意象图景——以广东21个城市为例.pdf",
+   "paras": 58,
+   "chars": 11794,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Zotero/赵_陈_2023_网络社会视角下的城市意象理论辨析与规划应用.pdf",
+   "paras": 69,
+   "chars": 18769,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Zotero/赵薇_2024_如何在“建造”中思辨——数字人文论争反思_1.pdf",
+   "paras": 55,
+   "chars": 18588,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Zotero/连 and 邓_2020_媒介、时间与现代性的“谎言”社会加速理论的传播批判研究.pdf",
+   "paras": 50,
+   "chars": 7921,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Zotero/邵 and 廖_2009_横店中国影视文化产业集群发展的一个样本——基于共享性资源观理论的案例分析.pdf",
+   "paras": 50,
+   "chars": 10648,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Zotero/邹_2021_大数据环境下智慧城市信息安全保障体系构建研究.pdf",
+   "paras": 112,
+   "chars": 17085,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Zotero/郭 and 申_2022_国家安全视阈下语言问题新表征语言恐怖主义的缘起、识别与应对.pdf",
+   "paras": 328,
+   "chars": 30350,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Zotero/郭_2019_文化产业集聚、空间溢出与区域创新能力.pdf",
+   "paras": 47,
+   "chars": 16979,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Zotero/郭_2019_过渡仪式视域下中国本命年文化习俗探究.pdf",
+   "paras": 522,
+   "chars": 23644,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Zotero/郭_2021_文旅融合背景下我国文化产业园区高质量发展路径研究——以江苏为例.pdf",
+   "paras": 39,
+   "chars": 15781,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Zotero/郭_2022_从技术中心主义到人本主义：智慧城市研究进展与展望.pdf",
+   "paras": 190,
+   "chars": 58142,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Zotero/郭新茹 and 陈天宇_2020_长三角文化市场区域合作与一体化路径研究.pdf",
+   "paras": 112,
+   "chars": 14091,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Zotero/郭新茹 and 陈天宇_2021_地理集聚能否提升我国文化产业发展质量——基于空间杜宾模型和门槛模型的检验.pdf",
+   "paras": 225,
+   "chars": 25083,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Zotero/郭新茹_2021_场景视域下大运河非遗生活性保护的策略研究.pdf",
+   "paras": 36,
+   "chars": 11196,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Zotero/金_2016_“同时代性”文学批评的“起跑线”.pdf",
+   "paras": 18,
+   "chars": 4429,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Zotero/闫宏秀 and 宋胜男_2024_双重脆弱性与适度信任：从ChatGPT到Sora_1.pdf",
+   "paras": 27,
+   "chars": 4712,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Zotero/陆_2019_《2018上海智慧城市发展水平评估报告》解析.pdf",
+   "paras": 46,
+   "chars": 8072,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Zotero/陈 and 黄_2018_协同治理我国城市社区公共文化服务供给机制创新的个案研究.pdf",
+   "paras": 114,
+   "chars": 24947,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Zotero/陈_2015_基本公共文化服务概念演变与协同.pdf",
+   "paras": 80,
+   "chars": 11280,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Zotero/陈_2020_从赋能到使能——数字化环境下的企业运营管理.pdf",
+   "paras": 111,
+   "chars": 28991,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Zotero/陈_2020_大数据环境下的决策范式转变与使能创新.pdf",
+   "paras": 88,
+   "chars": 22975,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Zotero/陈_2021_《美国数字公共图书馆2019—2022年战略规划》分析及启示.pdf",
+   "paras": 58,
+   "chars": 10007,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Zotero/陈_2021_创新型城市管理与决策研究前沿——第234期双清论坛学术综述.pdf",
+   "paras": 142,
+   "chars": 39552,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Zotero/陈_2021_基于动态语义网络分析的主题演化路径识别研究.pdf",
+   "paras": 216,
+   "chars": 43148,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Zotero/陈_2022_数字赋能文化产业的发展趋势与策略选择.pdf",
+   "paras": 100,
+   "chars": 14371,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Zotero/陈勇 and 李想_2026_导航与探索：AI时代网络文学中的人机协同创作.pdf",
+   "paras": 61,
+   "chars": 8547,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Zotero/陶_2023_展高机甲+卡牌  创领变形玩具新风潮.pdf",
+   "paras": 23,
+   "chars": 3027,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Zotero/韦_2021_“沉浸式”的消费与革新当代戏剧观演关系批判.pdf",
+   "paras": 36,
+   "chars": 11780,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Zotero/韦_2022_智慧城市建设对企业研发操纵的影响研究.pdf",
+   "paras": 160,
+   "chars": 31780,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Zotero/马睿 - 2025 - 艺术史视域下的数字技术及其美学伦理.pdf",
+   "paras": 22,
+   "chars": 5723,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Zotero/高_2023_数字文化新范式与人文创新研究.pdf",
+   "paras": 214,
+   "chars": 50762,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Zotero/高峰 - 2026 - 概率建模视角下的AIGC艺术生成——人机共创的训练机制与创作范式重构.pdf",
+   "paras": 86,
+   "chars": 20448,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Zotero/魏_2020_城市文化空间塑造的国际经验与启示——以伦敦、纽约、巴黎、东京为例.pdf",
+   "paras": 290,
+   "chars": 49622,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Zotero/鹿_2022_利益相关者视角下社会责任履责对企业财务绩效的影响研究——基于文化娱乐产业的实证分析.pdf",
+   "paras": 65,
+   "chars": 11669,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Zotero/黄_2016_“恶之花”清末民初上海夜花园与女学生的“黑幕叙事”.pdf",
+   "paras": 44,
+   "chars": 9723,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Zotero/黄_2022_乡村振兴下的四川乡村文旅融合：困境、路径及模式.pdf",
+   "paras": 59,
+   "chars": 10089,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Zotero/黄_2023_文化数字化的多维观察与前瞻(笔谈).pdf",
+   "paras": 121,
+   "chars": 31589,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Zotero/黄_2024_数字赋能文旅深度融合的理论逻辑与研究框架.pdf",
+   "paras": 85,
+   "chars": 21256,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Zotero/黎_2023_二次元文化、数字交往与民族共同体意识的建构.pdf",
+   "paras": 39,
+   "chars": 13610,
+   "action": "kept_has_paragraphs"
+  },
+  {
+   "path": "Zotero/龙_2020_中国智慧城市发展现状及未来发展趋势研究.pdf",
+   "paras": 66,
+   "chars": 14894,
+   "action": "kept_has_paragraphs"
+  }
+ ],
+ "multi": [
+  {
+   "old": "Authors/Rorty, Richard/哲学、文学和政治 - Richard Rorty.pdf",
+   "action": "manual_review_only"
+  }
+ ]
+}

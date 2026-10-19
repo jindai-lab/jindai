@@ -1,0 +1,13 @@
+{
+  "applied": true,
+  "scope_files": 70366,
+  "already_compliant": 70360,
+  "to_add": 6,
+  "to_delete": 4,
+  "added": 6,
+  "deleted": 4,
+  "unresolved_skipped": 0,
+  "post_mismatch": 0,
+  "unresolved_sample": [],
+  "datasets_created": []
+}

@@ -1,0 +1,815 @@
+{
+ "summary": {
+  "applied": false,
+  "scope_rows": 47,
+  "T1_可自动改": 0,
+  "T2_仅列清单": 0,
+  "keep_不动": 47,
+  "actions": {
+   "keep": 47
+  }
+ },
+ "plans": [
+  {
+   "id": "53553322-1a3f-4c76-af80-3e4016a13d91",
+   "path": "OneDrive/Jr. E. San Juan/Beyond Postcolonial Theory (10285)/Beyond Postcolonial Theory - E. San Juan_ Jr..pdf",
+   "action": "keep",
+   "tier": "-",
+   "old_title": "Beyond Postcolonial Theory",
+   "new_title": "Beyond Postcolonial Theory",
+   "old_authors": [
+    "E. San Juan, Jr."
+   ],
+   "new_authors": [
+    "E. San Juan, Jr."
+   ],
+   "acts": [
+    "keep[合规不动]"
+   ]
+  },
+  {
+   "id": "5e5cf50f-0b5d-40cd-8732-487eadc6322c",
+   "path": "OneDrive/John F. Simon_ Jr_/Outside in _ ten years of software art (8808)/Outside in _ ten years of software art - John F. Simon_ Jr..pdf",
+   "action": "keep",
+   "tier": "-",
+   "old_title": "Outside in : ten years of software art",
+   "new_title": "Outside in : ten years of software art",
+   "old_authors": [
+    "John F. Simon, Jr."
+   ],
+   "new_authors": [
+    "John F. Simon, Jr."
+   ],
+   "acts": [
+    "keep[合规不动]"
+   ]
+  },
+  {
+   "id": "d6dcddbc-7f4c-434c-a04b-d7bece044535",
+   "path": "OneDrive/Robert T. Tally_ Jr_/Spatiality (7516)/Spatiality - Robert T. Tally_ Jr..pdf",
+   "action": "keep",
+   "tier": "-",
+   "old_title": "Spatiality",
+   "new_title": "Spatiality",
+   "old_authors": [
+    "Robert T. Tally, Jr."
+   ],
+   "new_authors": [
+    "Robert T. Tally, Jr."
+   ],
+   "acts": [
+    "keep[合规不动]"
+   ]
+  },
+  {
+   "id": "914d66c6-2768-4498-a50f-ced9dcd76697",
+   "path": "OneDrive/Robert T. Tally_ Jr_/Literary Cartographies_ Spatiality, Representation (7514)/Literary Cartographies_ Spatiality, Representation - Robert T. Tally_ Jr..pdf",
+   "action": "keep",
+   "tier": "-",
+   "old_title": "Literary Cartographies: Spatiality, Representation, and Narrative",
+   "new_title": "Literary Cartographies: Spatiality, Representation, and Narrative",
+   "old_authors": [
+    "Robert T. Tally, Jr."
+   ],
+   "new_authors": [
+    "Robert T. Tally, Jr."
+   ],
+   "acts": [
+    "keep[合规不动]"
+   ]
+  },
+  {
+   "id": "6c87c151-9e85-4e6a-8eca-0fbe8bf793e4",
+   "path": "OneDrive/Robert T. Tally_ Jr_/The Routledge Handbook of Literature and Space (7517)/The Routledge Handbook of Literature and Space - Robert T. Tally_ Jr..pdf",
+   "action": "keep",
+   "tier": "-",
+   "old_title": "The Routledge Handbook of Literature and Space",
+   "new_title": "The Routledge Handbook of Literature and Space",
+   "old_authors": [
+    "Robert T. Tally, Jr."
+   ],
+   "new_authors": [
+    "Robert T. Tally, Jr."
+   ],
+   "acts": [
+    "keep[合规不动]"
+   ]
+  },
+  {
+   "id": "0d818c70-9838-403f-a031-2e9222c06e8c",
+   "path": "OneDrive/Robert T. Tally_ Jr_/Geocritical Explorations_ Space, Place, and Mappin (7515)/Geocritical Explorations_ Space, Place, and Mappin - Robert T. Tally_ Jr..pdf",
+   "action": "keep",
+   "tier": "-",
+   "old_title": "Geocritical Explorations_ Space, Place, and Mapping in Literary and Cultural Studies",
+   "new_title": "Geocritical Explorations_ Space, Place, and Mapping in Literary and Cultural Studies",
+   "old_authors": [
+    "Robert T. Tally, Jr."
+   ],
+   "new_authors": [
+    "Robert T. Tally, Jr."
+   ],
+   "acts": [
+    "keep[合规不动]"
+   ]
+  },
+  {
+   "id": "d973da0a-5689-441a-a623-4b6bf62c1362",
+   "path": "OneDrive/Robert T. Tally_ Jr_/空间性 (7518)/空间性 - Robert T. Tally_ Jr..pdf",
+   "action": "keep",
+   "tier": "-",
+   "old_title": "空间性",
+   "new_title": "空间性",
+   "old_authors": [
+    "Robert T. Tally, Jr."
+   ],
+   "new_authors": [
+    "Robert T. Tally, Jr."
+   ],
+   "acts": [
+    "keep[合规不动]"
+   ]
+  },
+  {
+   "id": "cc776c24-fa1a-4a72-b902-018d9fceb039",
+   "path": "OneDrive/伯恩哈德/维特根斯坦的侄子 (19833)/维特根斯坦的侄子 - 伯恩哈德.pdf",
+   "action": "keep",
+   "tier": "-",
+   "old_title": "维特根斯坦的侄子[奥]伯恩哈德.马文韬译.上海人民出版社(2010)",
+   "new_title": "维特根斯坦的侄子[奥]伯恩哈德.马文韬译.上海人民出版社(2010)",
+   "old_authors": [
+    "伯恩哈德(奥)"
+   ],
+   "new_authors": [
+    "伯恩哈德(奥)"
+   ],
+   "acts": [
+    "keep[合规不动]"
+   ]
+  },
+  {
+   "id": "f16701f6-b171-480a-ac78-53079f40c6df",
+   "path": "OneDrive/卡夫卡/卡夫卡日记 (19865)/卡夫卡日记 - 卡夫卡.pdf",
+   "action": "keep",
+   "tier": "-",
+   "old_title": "卡夫卡日记.陆洁、金坚范译.青海人民出版社(1987)",
+   "new_title": "卡夫卡日记.陆洁、金坚范译.青海人民出版社(1987)",
+   "old_authors": [
+    "卡夫卡(奥)"
+   ],
+   "new_authors": [
+    "卡夫卡(奥)"
+   ],
+   "acts": [
+    "keep[合规不动]"
+   ]
+  },
+  {
+   "id": "22dbfba1-8732-48cd-82b6-76ea4eeb20f8",
+   "path": "OneDrive/卡夫卡/城堡 (19866)/城堡 - 卡夫卡.pdf",
+   "action": "keep",
+   "tier": "-",
+   "old_title": "城堡[奥]卡夫卡.高年生译.人民文学出版社(1998)",
+   "new_title": "城堡[奥]卡夫卡.高年生译.人民文学出版社(1998)",
+   "old_authors": [
+    "卡夫卡(奥)"
+   ],
+   "new_authors": [
+    "卡夫卡(奥)"
+   ],
+   "acts": [
+    "keep[合规不动]"
+   ]
+  },
+  {
+   "id": "56d7f598-c687-4f88-b721-256ed92b07e2",
+   "path": "OneDrive/卡夫卡/误入世界：卡夫卡悖谬论集 (19867)/误入世界：卡夫卡悖谬论集 - 卡夫卡.pdf",
+   "action": "keep",
+   "tier": "-",
+   "old_title": "误入世界：卡夫卡悖谬论集.叶廷芳等译.天津人民出版社(2007)",
+   "new_title": "误入世界：卡夫卡悖谬论集.叶廷芳等译.天津人民出版社(2007)",
+   "old_authors": [
+    "卡夫卡(奥)"
+   ],
+   "new_authors": [
+    "卡夫卡(奥)"
+   ],
+   "acts": [
+    "keep[合规不动]"
+   ]
+  },
+  {
+   "id": "27a22b3b-30ea-45ec-a205-eef74f813f10",
+   "path": "OneDrive/卡尔德隆/卡尔德隆戏剧选 (19868)/卡尔德隆戏剧选 - 卡尔德隆.pdf",
+   "action": "keep",
+   "tier": "-",
+   "old_title": "卡尔德隆戏剧选.吕臣重译.昆仑出版社(2000)",
+   "new_title": "卡尔德隆戏剧选.吕臣重译.昆仑出版社(2000)",
+   "old_authors": [
+    "卡尔德隆(西)"
+   ],
+   "new_authors": [
+    "卡尔德隆(西)"
+   ],
+   "acts": [
+    "keep[合规不动]"
+   ]
+  },
+  {
+   "id": "83646cb4-eda2-4153-b918-2a601a84f0cf",
+   "path": "OneDrive/叶夫图申科/叶夫图申科诗选 (19874)/叶夫图申科诗选 - 叶夫图申科.pdf",
+   "action": "keep",
+   "tier": "-",
+   "old_title": "[诗苑译林]叶夫图申科诗选[苏]叶夫图申科.王守仁译.湖南人民出版社(1988)",
+   "new_title": "[诗苑译林]叶夫图申科诗选[苏]叶夫图申科.王守仁译.湖南人民出版社(1988)",
+   "old_authors": [
+    "叶夫图申科(苏)"
+   ],
+   "new_authors": [
+    "叶夫图申科(苏)"
+   ],
+   "acts": [
+    "keep[合规不动]"
+   ]
+  },
+  {
+   "id": "25bd478a-f819-48a9-9453-f15661001ff1",
+   "path": "OneDrive/埃米利·罗萨莱斯/看不见的城市 (19887)/看不见的城市 - 埃米利·罗萨莱斯.pdf",
+   "action": "keep",
+   "tier": "-",
+   "old_title": "看不见的城市[西]埃米利·罗萨莱斯.尹承东译.人民文学出版社(2008)",
+   "new_title": "看不见的城市[西]埃米利·罗萨莱斯.尹承东译.人民文学出版社(2008)",
+   "old_authors": [
+    "埃米利·罗萨莱斯(西)"
+   ],
+   "new_authors": [
+    "埃米利·罗萨莱斯(西)"
+   ],
+   "acts": [
+    "keep[合规不动]"
+   ]
+  },
+  {
+   "id": "0681abf7-04f0-4dd1-b769-0ea2f1d2c384",
+   "path": "OneDrive/塞万提斯/塞万提斯全集.第3卷.喜剧 (19890)/塞万提斯全集.第3卷.喜剧 - 塞万提斯.pdf",
+   "action": "keep",
+   "tier": "-",
+   "old_title": "塞万提斯全集.第3卷.喜剧.董燕生、刘玉树等译",
+   "new_title": "塞万提斯全集.第3卷.喜剧.董燕生、刘玉树等译",
+   "old_authors": [
+    "塞万提斯(西)"
+   ],
+   "new_authors": [
+    "塞万提斯(西)"
+   ],
+   "acts": [
+    "keep[合规不动]"
+   ]
+  },
+  {
+   "id": "d2c4920e-8f6c-4fa8-8d1b-c49db219bb1f",
+   "path": "OneDrive/奥维德/变形记 (19904)/变形记 - 奥维德.pdf",
+   "action": "keep",
+   "tier": "-",
+   "old_title": "变形记[古罗马]奥维德.杨周翰译.人民文学出版社(2008)",
+   "new_title": "变形记[古罗马]奥维德.杨周翰译.人民文学出版社(2008)",
+   "old_authors": [
+    "奥维德(古罗马)"
+   ],
+   "new_authors": [
+    "奥维德(古罗马)"
+   ],
+   "acts": [
+    "keep[合规不动]"
+   ]
+  },
+  {
+   "id": "700c198f-c0d9-461a-9438-8b8016ffc51e",
+   "path": "OneDrive/奥维德/爱的艺术 (19905)/爱的艺术 - 奥维德.pdf",
+   "action": "keep",
+   "tier": "-",
+   "old_title": "爱的艺术[古罗马]奥维德.寒川子译.内蒙古大学出版社(2007)",
+   "new_title": "爱的艺术[古罗马]奥维德.寒川子译.内蒙古大学出版社(2007)",
+   "old_authors": [
+    "奥维德(古罗马)"
+   ],
+   "new_authors": [
+    "奥维德(古罗马)"
+   ],
+   "acts": [
+    "keep[合规不动]"
+   ]
+  },
+  {
+   "id": "5d6c97d9-f228-4c57-860e-a272c23b0a95",
+   "path": "OneDrive/尼可斯·卡赞扎基斯/中国纪行 (19915)/中国纪行 - 尼可斯·卡赞扎基斯.pdf",
+   "action": "keep",
+   "tier": "-",
+   "old_title": "中国纪行[希腊]尼可斯·卡赞扎基斯.李成贵译.译林出版社(2007)",
+   "new_title": "中国纪行[希腊]尼可斯·卡赞扎基斯.李成贵译.译林出版社(2007)",
+   "old_authors": [
+    "尼可斯·卡赞扎基斯(希腊)"
+   ],
+   "new_authors": [
+    "尼可斯·卡赞扎基斯(希腊)"
+   ],
+   "acts": [
+    "keep[合规不动]"
+   ]
+  },
+  {
+   "id": "46cee8b3-00a7-4675-b347-1da711e8358f",
+   "path": "OneDrive/扬布里柯、波爱修(古罗马)/哲学规劝录·哲学的慰藉 (19994)/哲学规劝录·哲学的慰藉 - 扬布里柯、波爱修(古罗马).pdf",
+   "action": "keep",
+   "tier": "-",
+   "old_title": "[两希文明哲学经典译丛]哲学规劝录·哲学的慰藉[古罗马]扬布里柯、波爱修.詹文杰、朱东华译.中国社会科学出版社(2008)",
+   "new_title": "[两希文明哲学经典译丛]哲学规劝录·哲学的慰藉[古罗马]扬布里柯、波爱修.詹文杰、朱东华译.中国社会科学出版社(2008)",
+   "old_authors": [
+    "扬布里柯",
+    "波爱修(古罗马)"
+   ],
+   "new_authors": [
+    "扬布里柯",
+    "波爱修(古罗马)"
+   ],
+   "acts": [
+    "keep[合规不动]"
+   ]
+  },
+  {
+   "id": "f3cf922c-5320-4e04-905b-d06fdd94dcf3",
+   "path": "OneDrive/柯雷编译/荷兰现代诗选.马高明、 (20035)/荷兰现代诗选.马高明、 - 柯雷编译.pdf",
+   "action": "keep",
+   "tier": "-",
+   "old_title": "[域外诗丛]荷兰现代诗选.马高明、[荷]柯雷编译.漓江出版社(1988)",
+   "new_title": "[域外诗丛]荷兰现代诗选.马高明、[荷]柯雷编译.漓江出版社(1988)",
+   "old_authors": [
+    "柯雷编译(荷)"
+   ],
+   "new_authors": [
+    "柯雷编译(荷)"
+   ],
+   "acts": [
+    "keep[合规不动]"
+   ]
+  },
+  {
+   "id": "e9d2f48b-c366-4646-9dec-25c9547374a2",
+   "path": "OneDrive/格拉宁/奇特的一生 (20036)/奇特的一生 - 格拉宁.pdf",
+   "action": "keep",
+   "tier": "-",
+   "old_title": "[当代外国文学]奇特的一生[苏]格拉宁.侯焕闳、唐其慈译.外国文学出版社(1979)",
+   "new_title": "[当代外国文学]奇特的一生[苏]格拉宁.侯焕闳、唐其慈译.外国文学出版社(1979)",
+   "old_authors": [
+    "格拉宁(苏)"
+   ],
+   "new_authors": [
+    "格拉宁(苏)"
+   ],
+   "acts": [
+    "keep[合规不动]"
+   ]
+  },
+  {
+   "id": "66b2122c-01a9-48a1-8a45-3d6d094a486e",
+   "path": "OneDrive/波爱修斯/哲学的慰藉 (20067)/哲学的慰藉 - 波爱修斯.pdf",
+   "action": "keep",
+   "tier": "-",
+   "old_title": "哲学的慰藉[古罗马]波爱修斯.贺国坤译.陕西师范大学出版社(2009)",
+   "new_title": "哲学的慰藉[古罗马]波爱修斯.贺国坤译.陕西师范大学出版社(2009)",
+   "old_authors": [
+    "波爱修斯(古罗马)"
+   ],
+   "new_authors": [
+    "波爱修斯(古罗马)"
+   ],
+   "acts": [
+    "keep[合规不动]"
+   ]
+  },
+  {
+   "id": "c5400d2f-1865-417b-a523-9f002bd4ee55",
+   "path": "OneDrive/瓦普察洛夫/瓦普察洛夫诗选 (20095)/瓦普察洛夫诗选 - 瓦普察洛夫.pdf",
+   "action": "keep",
+   "tier": "-",
+   "old_title": "瓦普察洛夫诗选.林繁、圭木同译.新文艺出版社(1953)",
+   "new_title": "瓦普察洛夫诗选.林繁、圭木同译.新文艺出版社(1953)",
+   "old_authors": [
+    "瓦普察洛夫(保加利亚)"
+   ],
+   "new_authors": [
+    "瓦普察洛夫(保加利亚)"
+   ],
+   "acts": [
+    "keep[合规不动]"
+   ]
+  },
+  {
+   "id": "05fbec9f-6165-475a-aa80-f9ac556700b9",
+   "path": "OneDrive/米洛拉德·帕维奇/哈扎尔辞典-一部十万个词语的辞典小说 (20117)/哈扎尔辞典-一部十万个词语的辞典小说 - 米洛拉德·帕维奇.pdf",
+   "action": "keep",
+   "tier": "-",
+   "old_title": "哈扎尔辞典-一部十万个词语的辞典小说[塞尔维亚]米洛拉德·帕维奇.南山等译.上海译文出版社(1998)",
+   "new_title": "哈扎尔辞典-一部十万个词语的辞典小说[塞尔维亚]米洛拉德·帕维奇.南山等译.上海译文出版社(1998)",
+   "old_authors": [
+    "米洛拉德·帕维奇(塞尔维亚)"
+   ],
+   "new_authors": [
+    "米洛拉德·帕维奇(塞尔维亚)"
+   ],
+   "acts": [
+    "keep[合规不动]"
+   ]
+  },
+  {
+   "id": "94a5f030-c25c-40eb-ab74-8d58a4f4eac8",
+   "path": "OneDrive/维任诺夫/爱的障碍 (20129)/爱的障碍 - 维任诺夫.pdf",
+   "action": "keep",
+   "tier": "-",
+   "old_title": "爱的障碍[保]维任诺夫.石国雄译.文化艺术出版社(1988)",
+   "new_title": "爱的障碍[保]维任诺夫.石国雄译.文化艺术出版社(1988)",
+   "old_authors": [
+    "维任诺夫(保)"
+   ],
+   "new_authors": [
+    "维任诺夫(保)"
+   ],
+   "acts": [
+    "keep[合规不动]"
+   ]
+  },
+  {
+   "id": "e3255d5e-e06e-495d-b6a6-a18727bc5664",
+   "path": "OneDrive/维加/戏剧选 (20130)/戏剧选 - 维加.pdf",
+   "action": "keep",
+   "tier": "-",
+   "old_title": "[外国文学名著丛书]戏剧选[西]维加.朱葆光译.上海译文出版社(1983)",
+   "new_title": "[外国文学名著丛书]戏剧选[西]维加.朱葆光译.上海译文出版社(1983)",
+   "old_authors": [
+    "维加(西)"
+   ],
+   "new_authors": [
+    "维加(西)"
+   ],
+   "acts": [
+    "keep[合规不动]"
+   ]
+  },
+  {
+   "id": "6b8a0a82-027c-42ad-b34a-20ccc77b81be",
+   "path": "OneDrive/维吉尔/埃涅阿斯纪 (20131)/埃涅阿斯纪 - 维吉尔.pdf",
+   "action": "keep",
+   "tier": "-",
+   "old_title": "埃涅阿斯纪[古罗马]维吉尔.杨周翰译.译林出版社(1999)",
+   "new_title": "埃涅阿斯纪[古罗马]维吉尔.杨周翰译.译林出版社(1999)",
+   "old_authors": [
+    "维吉尔(古罗马)"
+   ],
+   "new_authors": [
+    "维吉尔(古罗马)"
+   ],
+   "acts": [
+    "keep[合规不动]"
+   ]
+  },
+  {
+   "id": "2196c3b1-6054-4fd8-afbf-cc8a5982f5b7",
+   "path": "OneDrive/考琳·麦卡洛/荆棘鸟 (20136)/荆棘鸟 - 考琳·麦卡洛.pdf",
+   "action": "keep",
+   "tier": "-",
+   "old_title": "荆棘鸟[澳]考琳·麦卡洛.曾胡译.译林出版社(1989)",
+   "new_title": "荆棘鸟[澳]考琳·麦卡洛.曾胡译.译林出版社(1989)",
+   "old_authors": [
+    "考琳·麦卡洛(澳)"
+   ],
+   "new_authors": [
+    "考琳·麦卡洛(澳)"
+   ],
+   "acts": [
+    "keep[合规不动]"
+   ]
+  },
+  {
+   "id": "b4e0a339-d46c-431a-9f09-382cad28d886",
+   "path": "OneDrive/艾特玛托夫/我的包着红头巾的小白杨 (20149)/我的包着红头巾的小白杨 - 艾特玛托夫.pdf",
+   "action": "keep",
+   "tier": "-",
+   "old_title": "我的包着红头巾的小白杨[苏]艾特玛托夫.力冈等译.人民文学出版社(1999)",
+   "new_title": "我的包着红头巾的小白杨[苏]艾特玛托夫.力冈等译.人民文学出版社(1999)",
+   "old_authors": [
+    "艾特玛托夫(苏)"
+   ],
+   "new_authors": [
+    "艾特玛托夫(苏)"
+   ],
+   "acts": [
+    "keep[合规不动]"
+   ]
+  },
+  {
+   "id": "fe5ffaaa-9aab-4506-92e9-d30ec51c885d",
+   "path": "OneDrive/艾特玛托夫/白轮船 (20150)/白轮船 - 艾特玛托夫.pdf",
+   "action": "keep",
+   "tier": "-",
+   "old_title": "白轮船[苏]艾特玛托夫.雷延中译.上海人民出版社(1973)",
+   "new_title": "白轮船[苏]艾特玛托夫.雷延中译.上海人民出版社(1973)",
+   "old_authors": [
+    "艾特玛托夫(苏)"
+   ],
+   "new_authors": [
+    "艾特玛托夫(苏)"
+   ],
+   "acts": [
+    "keep[合规不动]"
+   ]
+  },
+  {
+   "id": "c4367f7b-9c2a-4c29-92f3-c2dd3a5257de",
+   "path": "OneDrive/茨威格/一个陌生女人的来信 (20163)/一个陌生女人的来信 - 茨威格.pdf",
+   "action": "keep",
+   "tier": "-",
+   "old_title": "一个陌生女人的来信[奥]茨威格.张玉书译.上海译文出版社(2007)",
+   "new_title": "一个陌生女人的来信[奥]茨威格.张玉书译.上海译文出版社(2007)",
+   "old_authors": [
+    "茨威格(奥)"
+   ],
+   "new_authors": [
+    "茨威格(奥)"
+   ],
+   "acts": [
+    "keep[合规不动]"
+   ]
+  },
+  {
+   "id": "1a94057c-03c1-4b96-9b7e-d2d78e53cd0f",
+   "path": "OneDrive/茨威格/昨日的世界：一个欧洲人的回忆 (20164)/昨日的世界：一个欧洲人的回忆 - 茨威格.pdf",
+   "action": "keep",
+   "tier": "-",
+   "old_title": "昨日的世界：一个欧洲人的回忆[奥]茨威格.舒昌善等译.三联书店(1991)",
+   "new_title": "昨日的世界：一个欧洲人的回忆[奥]茨威格.舒昌善等译.三联书店(1991)",
+   "old_authors": [
+    "茨威格(奥)"
+   ],
+   "new_authors": [
+    "茨威格(奥)"
+   ],
+   "acts": [
+    "keep[合规不动]"
+   ]
+  },
+  {
+   "id": "e5e92814-eef9-4464-b142-c70c17a638d4",
+   "path": "OneDrive/萨拉依瓦/葡萄牙文学史 (20182)/葡萄牙文学史 - 萨拉依瓦.pdf",
+   "action": "keep",
+   "tier": "-",
+   "old_title": "葡萄牙文学史[葡]萨拉依瓦.张维民译.澳门文化学会(1982)",
+   "new_title": "葡萄牙文学史[葡]萨拉依瓦.张维民译.澳门文化学会(1982)",
+   "old_authors": [
+    "萨拉依瓦(葡)"
+   ],
+   "new_authors": [
+    "萨拉依瓦(葡)"
+   ],
+   "acts": [
+    "keep[合规不动]"
+   ]
+  },
+  {
+   "id": "7797daf4-a25f-4f10-9fe6-2d1b10e9172b",
+   "path": "OneDrive/西塞罗/有节制的生活 (20191)/有节制的生活 - 西塞罗.pdf",
+   "action": "keep",
+   "tier": "-",
+   "old_title": "有节制的生活[古罗马]西塞罗.徐奕春译.天津人民出版社2007)",
+   "new_title": "有节制的生活[古罗马]西塞罗.徐奕春译.天津人民出版社2007)",
+   "old_authors": [
+    "西塞罗(古罗马)"
+   ],
+   "new_authors": [
+    "西塞罗(古罗马)"
+   ],
+   "acts": [
+    "keep[合规不动]"
+   ]
+  },
+  {
+   "id": "b2273a94-812e-431d-b236-8d6579de3489",
+   "path": "OneDrive/路·贝·德·格瓦拉/瘸腿魔鬼 (20206)/瘸腿魔鬼 - 路·贝·德·格瓦拉.pdf",
+   "action": "keep",
+   "tier": "-",
+   "old_title": "瘸腿魔鬼[西]路·贝·德·格瓦拉.尹承东译.黑龙江人民出版社(1996)",
+   "new_title": "瘸腿魔鬼[西]路·贝·德·格瓦拉.尹承东译.黑龙江人民出版社(1996)",
+   "old_authors": [
+    "路·贝·德·格瓦拉(西)"
+   ],
+   "new_authors": [
+    "路·贝·德·格瓦拉(西)"
+   ],
+   "acts": [
+    "keep[合规不动]"
+   ]
+  },
+  {
+   "id": "bd01906e-4e84-4ec8-bef6-4d02d0dc62e1",
+   "path": "OneDrive/里尔克/里尔克诗选 (20214)/里尔克诗选 - 里尔克.pdf",
+   "action": "keep",
+   "tier": "-",
+   "old_title": "[20世纪世界诗歌译丛]里尔克诗选[奥]里尔克.黄灿然译.河北教育出版社(2002)",
+   "new_title": "[20世纪世界诗歌译丛]里尔克诗选[奥]里尔克.黄灿然译.河北教育出版社(2002)",
+   "old_authors": [
+    "里尔克(奥)"
+   ],
+   "new_authors": [
+    "里尔克(奥)"
+   ],
+   "acts": [
+    "keep[合规不动]"
+   ]
+  },
+  {
+   "id": "43630ff9-3ac8-4cdd-8e94-684f723f9b0c",
+   "path": "OneDrive/里尔克/里尔克散文选 (20215)/里尔克散文选 - 里尔克.pdf",
+   "action": "keep",
+   "tier": "-",
+   "old_title": "[外国名家散文丛书]里尔克散文选.绿原、张黎、钱春绮译.百花文艺出版社(2005)",
+   "new_title": "[外国名家散文丛书]里尔克散文选.绿原、张黎、钱春绮译.百花文艺出版社(2005)",
+   "old_authors": [
+    "里尔克(奥)"
+   ],
+   "new_authors": [
+    "里尔克(奥)"
+   ],
+   "acts": [
+    "keep[合规不动]"
+   ]
+  },
+  {
+   "id": "48cb8f00-3964-4a03-9e94-71f3b3712afa",
+   "path": "OneDrive/里尔克/三诗人书简 (20216)/三诗人书简 - 里尔克.pdf",
+   "action": "keep",
+   "tier": "-",
+   "old_title": "三诗人书简.刘文飞译.中央编译出版社(2007)",
+   "new_title": "三诗人书简.刘文飞译.中央编译出版社(2007)",
+   "old_authors": [
+    "里尔克(奥)"
+   ],
+   "new_authors": [
+    "里尔克(奥)"
+   ],
+   "acts": [
+    "keep[合规不动]"
+   ]
+  },
+  {
+   "id": "91d777f4-1c98-4ce1-a697-7831a7e402ba",
+   "path": "OneDrive/里尔克/上帝的故事：里尔克散文随笔集 (20217)/上帝的故事：里尔克散文随笔集 - 里尔克.pdf",
+   "action": "keep",
+   "tier": "-",
+   "old_title": "上帝的故事：里尔克散文随笔集.叶廷芳、李永平编.中国广播电视出版社(2000)",
+   "new_title": "上帝的故事：里尔克散文随笔集.叶廷芳、李永平编.中国广播电视出版社(2000)",
+   "old_authors": [
+    "里尔克(奥)"
+   ],
+   "new_authors": [
+    "里尔克(奥)"
+   ],
+   "acts": [
+    "keep[合规不动]"
+   ]
+  },
+  {
+   "id": "02ecd5bf-cf01-4489-9098-6c47c3b5369f",
+   "path": "OneDrive/里尔克/里尔克诗选 (20218)/里尔克诗选 - 里尔克.pdf",
+   "action": "keep",
+   "tier": "-",
+   "old_title": "里尔克诗选[奥]里尔克.Dasha等译",
+   "new_title": "里尔克诗选[奥]里尔克.Dasha等译",
+   "old_authors": [
+    "里尔克(奥)"
+   ],
+   "new_authors": [
+    "里尔克(奥)"
+   ],
+   "acts": [
+    "keep[合规不动]"
+   ]
+  },
+  {
+   "id": "7a7cd4c3-e6bf-4e65-aa06-8ca994761ecf",
+   "path": "OneDrive/阿·托尔斯泰/论文学 (20222)/论文学 - 阿·托尔斯泰.pdf",
+   "action": "keep",
+   "tier": "-",
+   "old_title": "论文学[苏]阿·托尔斯泰.程代熙译.人民文学出版社",
+   "new_title": "论文学[苏]阿·托尔斯泰.程代熙译.人民文学出版社",
+   "old_authors": [
+    "阿·托尔斯泰(苏)"
+   ],
+   "new_authors": [
+    "阿·托尔斯泰(苏)"
+   ],
+   "acts": [
+    "keep[合规不动]"
+   ]
+  },
+  {
+   "id": "71e6eb0a-2c36-4e25-9036-c1036ec45243",
+   "path": "OneDrive/阿拉斯/独生子 (20236)/独生子 - 阿拉斯.pdf",
+   "action": "keep",
+   "tier": "-",
+   "old_title": "独生子[西]阿拉斯.沈根发译.上海译文出版社(1987)",
+   "new_title": "独生子[西]阿拉斯.沈根发译.上海译文出版社(1987)",
+   "old_authors": [
+    "阿拉斯(西)"
+   ],
+   "new_authors": [
+    "阿拉斯(西)"
+   ],
+   "acts": [
+    "keep[合规不动]"
+   ]
+  },
+  {
+   "id": "16c5c754-25dd-43a1-8b45-ad1aec179a8b",
+   "path": "OneDrive/鲁斯塔维里/虎皮武士 (20270)/虎皮武士 - 鲁斯塔维里.pdf",
+   "action": "keep",
+   "tier": "-",
+   "old_title": "[世界英雄史诗译丛]虎皮武士[格鲁吉亚]鲁斯塔维里.严永兴译.译林出版社(2002)",
+   "new_title": "[世界英雄史诗译丛]虎皮武士[格鲁吉亚]鲁斯塔维里.严永兴译.译林出版社(2002)",
+   "old_authors": [
+    "鲁斯塔维里(格鲁吉亚)"
+   ],
+   "new_authors": [
+    "鲁斯塔维里(格鲁吉亚)"
+   ],
+   "acts": [
+    "keep[合规不动]"
+   ]
+  },
+  {
+   "id": "7383602b-0bdb-46d3-9471-313d3b05705b",
+   "path": "OneDrive/卡图卢斯/卡图卢斯《歌集》拉中对照译注本 (19864)/卡图卢斯《歌集》拉中对照译注本 - 卡图卢斯.pdf",
+   "action": "keep",
+   "tier": "-",
+   "old_title": "卡图卢斯《歌集》拉中对照译注本[古罗马]卡图卢斯.李永毅译.中国青年出版社(2008)",
+   "new_title": "卡图卢斯《歌集》拉中对照译注本[古罗马]卡图卢斯.李永毅译.中国青年出版社(2008)",
+   "old_authors": [
+    "卡图卢斯(古罗马)"
+   ],
+   "new_authors": [
+    "卡图卢斯(古罗马)"
+   ],
+   "acts": [
+    "keep[合规不动]"
+   ]
+  },
+  {
+   "id": "1a0bdd80-1f21-4e36-b120-d7ef4f29dcf1",
+   "path": "OneDrive/塞涅卡/道德和政治论文集 (19894)/道德和政治论文集 - 塞涅卡.pdf",
+   "action": "keep",
+   "tier": "-",
+   "old_title": "道德和政治论文集[古罗马]塞涅卡.袁瑜琤译.北京大学出版社(2010)",
+   "new_title": "道德和政治论文集[古罗马]塞涅卡.袁瑜琤译.北京大学出版社(2010)",
+   "old_authors": [
+    "塞涅卡(古罗马)"
+   ],
+   "new_authors": [
+    "塞涅卡(古罗马)"
+   ],
+   "acts": [
+    "keep[合规不动]"
+   ]
+  },
+  {
+   "id": "38f09c31-315b-476d-843c-1e1bc6fdf564",
+   "path": "OneDrive/波爱修斯/哲学的慰藉 (20066)/哲学的慰藉 - 波爱修斯.pdf",
+   "action": "keep",
+   "tier": "-",
+   "old_title": "哲学的慰藉[古罗马]波爱修斯.代国强译.江西人民出版社(2007)",
+   "new_title": "哲学的慰藉[古罗马]波爱修斯.代国强译.江西人民出版社(2007)",
+   "old_authors": [
+    "波爱修斯(古罗马)"
+   ],
+   "new_authors": [
+    "波爱修斯(古罗马)"
+   ],
+   "acts": [
+    "keep[合规不动]"
+   ]
+  },
+  {
+   "id": "8b772162-6155-4904-b213-5b32764ffac0",
+   "path": "OneDrive/纪伯伦/先知·沙与沫 (20123)/先知·沙与沫 - 纪伯伦.pdf",
+   "action": "keep",
+   "tier": "-",
+   "old_title": "[诗苑译林]先知·沙与沫[黎]纪伯伦.冰心译.湖南人民出版社(1982)",
+   "new_title": "[诗苑译林]先知·沙与沫[黎]纪伯伦.冰心译.湖南人民出版社(1982)",
+   "old_authors": [
+    "纪伯伦(黎)"
+   ],
+   "new_authors": [
+    "纪伯伦(黎)"
+   ],
+   "acts": [
+    "keep[合规不动]"
+   ]
+  }
+ ]
+}

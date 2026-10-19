@@ -44,6 +44,7 @@ import re
 import sys
 import time
 from collections import deque
+from typing import Any
 
 import regex as re  # \p{Other} 等 Unicode 属性需要 regex 模块
 
@@ -237,8 +238,12 @@ def substitute_save(obj, batch: int):
     return obj
 
 
-async def import_one(path: str, head, ds_params: dict, logfn) -> None:
-    """单文件：直接构造 PDFDataSource 调 fetch()，段落走内联链。"""
+async def import_one(path: str, head, ds_params: dict, logfn) -> int | None:
+    """单文件：直接构造 PDFDataSource 调 fetch()，段落走内联链。
+
+    Returns:
+        该 PDF 的总页数（盖章用；打不开时 None）。
+    """
     from plugins.datasources.pdfdatasource import PDFDataSource
 
     params = dict(ds_params)
@@ -251,6 +256,7 @@ async def import_one(path: str, head, ds_params: dict, logfn) -> None:
     ds.apply_params(**params)
     async for para in ds.fetch():
         await run_chain(para, head)
+    return getattr(ds, "last_page_count", None)
 
 
 async def worker(
@@ -263,9 +269,11 @@ async def worker(
     args,
     logfn,
     state: dict,
+    store_state: bool,
 ) -> None:
     """一个文件级 worker：独立 stage 链 + 独立缓冲，共享文件队列。"""
     from jindai.pipeline import Pipeline
+    import import_onedrive_pdfs as legacy
 
     pipeline = Pipeline(copy.deepcopy(chain_dicts), log=logfn, verbose=args.verbose)
     pipeline.gctx = {}
@@ -277,11 +285,14 @@ async def worker(
     marker = os.path.join(INFLIGHT_DIR, f"w{wid}")
     my_saved = 0
     my_failed_rows = 0
+    state_conn: Any = None  # 盖章（file_import_state）用；懒建，--no-state 时不建
 
     while True:
         try:
             path = files.popleft()
         except IndexError:
+            if state_conn is not None:
+                await state_conn.close()
             return
         pos = next(counter)
         try:
@@ -291,8 +302,28 @@ async def worker(
             pass
         try:
             logfn(f"{pos}/{total} importing {path}")
-            await import_one(path, head, ds_params, logfn)
+            pages_total = await import_one(path, head, ds_params, logfn)
             state["files"] += 1
+            # 盖章（2026-10-17）：全部页被覆盖（非空段落或 page_skip_state）
+            # → complete，下一轮出队列；否则 partial，下一轮重试。
+            if store_state and pages_total:
+                if state_conn is None:
+                    state_conn = await C.get_conn()
+                try:
+                    sid = await state_conn.fetchval(
+                        "SELECT id FROM file_metadata WHERE path = $1", path)
+                    if sid:
+                        covered = await legacy.count_covered_pages(
+                            state_conn, sid)
+                        st = await legacy.record_import_state(
+                            state_conn, sid, pages_total, covered)
+                        state[st] = state.get(st, 0) + 1
+                        if st == "partial":
+                            logfn(f"[state] partial {covered}/{pages_total} 页"
+                                  f"（下轮重试）: {path}")
+                except Exception as ex:
+                    logfn(f"[state] 盖章失败（不影响导入）: {path} :: "
+                          f"{type(ex).__name__}: {ex}")
         except Exception as ex:
             state["failed"] += 1
             logfn(f"[skip] file failed, next file: {path} :: "
@@ -318,30 +349,47 @@ async def worker(
                 pass
 
 
-async def progress_watcher(interval: int, state: dict, t0: float):
-    """与旧脚本同口径的 [progress] 行；段落增速用 pg_stat 增量（免全表 count）。"""
+async def progress_watcher(interval: int, state: dict, t0: float,
+                           count_secs: float = 1800):
+    """与旧脚本同口径的 [progress] 行；段落增速用 pg_stat 增量（免全表 count）。
+
+    `files w/o paragraph` 那个反连接是**分钟级**查询（70k 行 × 32 个
+    paragraph 分区的 index-only 探测），每个 tick 都查等于长期占库；
+    `count_secs` 限定它的真查频率，中间 tick 复用上次结果并标 `(cached)`。
+    传 0 = 每个 tick 都真查（旧行为）。
+    """
     conn = await C.get_conn()
     last_ins: int | None = None
     last_t = time.time()
+    last_files_left: int | None = None
+    last_count_t = 0.0
     try:
         while True:
             await asyncio.sleep(interval)
-            files_left = await conn.fetchval(
-                """
-                SELECT count(*) FROM file_metadata f
-                WHERE lower(f.path) LIKE '%.pdf'
-                  AND f.path NOT LIKE 'Tool Books/%'
-                  AND f.path NOT LIKE '.trash/%'
-                  AND f.path NOT LIKE '../%'
-                  AND NOT EXISTS (SELECT 1 FROM paragraph p
-                                  WHERE p.source_id = f.id)
-                """
-            )
+            now = time.time()
+            if last_files_left is None or now - last_count_t >= count_secs:
+                last_files_left = await conn.fetchval(
+                    """
+                    SELECT count(*) FROM file_metadata f
+                    WHERE lower(f.path) LIKE '%.pdf'
+                      AND f.path NOT LIKE 'Tool Books/%'
+                      AND f.path NOT LIKE '.trash/%'
+                      AND f.path NOT LIKE '../%'
+                      AND NOT EXISTS (SELECT 1 FROM paragraph p
+                                      WHERE p.source_id = f.id)
+                      AND NOT EXISTS (SELECT 1 FROM file_import_state s
+                                      WHERE s.source_id = f.id
+                                        AND s.status = 'complete')
+                    """
+                )
+                last_count_t = now
+                left_str = str(last_files_left)
+            else:
+                left_str = f"{last_files_left} (cached)"
             ins = await conn.fetchval(
                 "SELECT coalesce(sum(n_tup_ins), 0) FROM pg_stat_user_tables "
                 "WHERE relname LIKE 'paragraph%'"
             )
-            now = time.time()
             rate = ""
             if last_ins is not None and now > last_t:
                 rate = f"  paras+{(ins - last_ins) / (now - last_t) * 60:,.0f}/min"
@@ -349,7 +397,7 @@ async def progress_watcher(interval: int, state: dict, t0: float):
             log.info(
                 "[progress] files w/o paragraph=%s%s  files_done=%s failed=%s "
                 "saved=%s  elapsed=%.1fmin",
-                files_left, rate, state["files"], state["failed"],
+                left_str, rate, state["files"], state["failed"],
                 state["saved"], (time.time() - t0) / 60,
             )
     finally:
@@ -382,6 +430,19 @@ async def main() -> int:
                     help="跳过磁盘→file_metadata 登记扫描")
     ap.add_argument("--verbose", action="store_true")
     ap.add_argument("--progress-secs", type=int, default=600)
+    ap.add_argument("--stats-cache-secs", type=int, default=3600,
+                    help="files-without-paragraph/paragraph-total 统计的缓存秒数"
+                         "（0=每次真查；那个反连接实测 18–91s，默认 1 小时内复用，"
+                         "与磁盘清单同 TTL，让重启只需一次冷启动）")
+    ap.add_argument("--scan-cache-secs", type=int, default=3600,
+                    help="磁盘清单缓存秒数（0=每次走盘；走盘 ~70k 文件 8–9 分钟，"
+                         "默认 1 小时内复用，新文件最迟 1 小时进队列）")
+    ap.add_argument("--progress-count-secs", type=int, default=1800,
+                    help="进度行里 files-w/o-paragraph 的真查间隔秒数"
+                         "（0=每次进度 tick 都查；中间 tick 复用上次值）")
+    ap.add_argument("--no-state", action="store_true",
+                    help="关闭文件级导入状态（file_import_state）：不盖章、"
+                         "清单也不排除已完成文件（回退到每轮全量重访）")
     ap.add_argument("--limit", type=int, default=0,
                     help="只处理清单前 N 个文件（测试用）")
     ap.add_argument("--only", default="",
@@ -399,10 +460,12 @@ async def main() -> int:
     legacy.log = log
 
     conn = await C.get_conn()
+    disk: dict | None = None
     try:
-        pre = await legacy.stats(conn)
+        pre = await legacy.stats(conn, cache_secs=args.stats_cache_secs)
         if not args.no_scan:
-            await legacy.scan_disk_upsert(conn)
+            disk = await legacy.scan_disk_upsert(
+                conn, cache_secs=args.scan_cache_secs)
         if args.only:
             # 小批增量（自动入库）：清单直接来自文件，跳过全库 build_file_list
             # （后者要对 ~70k 路径做磁盘存在性检查，分钟级，小批不值得）。
@@ -416,7 +479,8 @@ async def main() -> int:
                          "only_known": len(keep)}
             log.info("[only] %s", json.dumps(list_meta, ensure_ascii=False))
         else:
-            keep, list_meta = await legacy.build_file_list(conn)
+            keep, list_meta = await legacy.build_file_list(
+                conn, disk=disk, exclude_complete=not args.no_state)
     finally:
         await conn.close()
 
@@ -487,15 +551,18 @@ async def main() -> int:
     files = deque(keep)
     counter = itertools.count(1)
     total = len(keep)
-    state = {"files": 0, "failed": 0, "saved": 0, "failed_rows": 0}
+    state = {"files": 0, "failed": 0, "saved": 0, "failed_rows": 0,
+             "complete": 0, "partial": 0}
 
     t0 = time.time()
     watcher = asyncio.create_task(
-        progress_watcher(args.progress_secs, state, t0)
+        progress_watcher(args.progress_secs, state, t0,
+                         count_secs=args.progress_count_secs)
     )
     workers = [
         asyncio.create_task(worker(
-            i, files, counter, total, chain_dicts, ds_params, args, logfn, state
+            i, files, counter, total, chain_dicts, ds_params, args, logfn,
+            state, store_state=not args.no_state
         ))
         for i in range(max(1, args.workers))
     ]
@@ -527,6 +594,8 @@ async def main() -> int:
         ),
         "files_processed": state["files"],
         "files_failed": state["failed"],
+        "marked_complete": state["complete"],
+        "marked_partial": state["partial"],
         "paragraphs_saved": state["saved"],
         "rows_dropped": state["failed_rows"],
         "elapsed_min": round((time.time() - t0) / 60, 1),

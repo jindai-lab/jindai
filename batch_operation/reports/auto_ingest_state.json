@@ -1,0 +1,19 @@
+{
+ "ts": "10-19 23:00",
+ "scope": "OneDrive+Zotero",
+ "disk_pdfs_scoped": 27484,
+ "rows_scoped_before": 27489,
+ "new_registered": 17,
+ "new_sample": [
+  "OneDrive/Henry David Thoreau/梭罗日记 (15787)/梭罗日记 - 梭罗.pdf",
+  "OneDrive/Henry David Thoreau/梭罗集 (15788)/梭罗集 - 梭罗.pdf",
+  "OneDrive/Henry David Thoreau/瓦尔登湖 (20040)/瓦尔登湖 - 梭罗.pdf",
+  "OneDrive/Henry David Thoreau/瓦尔登湖 (20041)/瓦尔登湖 - 梭罗.pdf",
+  "OneDrive/Henry David Thoreau/瓦尔登湖 (20042)/瓦尔登湖 - 梭罗.pdf"
+ ],
+ "pending_retry": 1,
+ "todo": 18,
+ "importer_running": false,
+ "import_launched": true,
+ "elapsed_min": 3.0
+}

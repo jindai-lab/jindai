@@ -1,0 +1,13 @@
+{
+ "scanned": 250810,
+ "split": 250810,
+ "pieces": 517760,
+ "hard_cuts": 1313,
+ "emb_deleted": 1877581,
+ "queue_deleted": 149165,
+ "queue_added": 517760,
+ "max_piece": 2000,
+ "batches": 502,
+ "applied": true,
+ "finished": true
+}

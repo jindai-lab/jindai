@@ -1,0 +1,53 @@
+dataset_id	name	members	action
+259144d6-5a03-43e8-a557-639aad20cbb1	《中国天文学史文集》编辑组	0	merge_into:《中国天文学史文集》 编辑组
+db75b497-693a-44c7-bf7d-44aaedabd1bd	Vilem Flusser	0	merge_into:Vilém Flusser
+5788a64d-a86c-4df2-b900-c4445dac80d1	PMS Hacker	0	merge_into:P. M. S. Hacker
+9a354d3d-78fd-494f-a7c3-26d40af49b49	P.M.S. Hacker	0	merge_into:P. M. S. Hacker
+3581293e-ea14-475d-9616-f06339fb9685	E H Gombrich	0	merge_into:E. H. Gombrich
+fa8d24b7-5306-47ac-94ab-0725778abb4e	Nestor Garcia Canclini	0	merge_into:Néstor García Canclini
+18cf42bd-e0d0-4613-b8b7-0f100a8cb829	R.S.Woolhouse	0	merge_into:R. S. Woolhouse
+1380bb86-4cb1-4f73-9503-7bc32cb4490e	V.O. Klyuchevsky	0	merge_into:V. O. Klyuchevsky
+096d446b-93a6-4742-83b7-61346514f71e	Leslie A White	0	merge_into:Leslie A. White
+400a1c0c-f578-497a-aad3-b6552ac0e3cc	G.H. Hardy	0	merge_into:G. H. Hardy
+186c45f8-93da-48b1-8b4b-c067181c7eed	Saul A Kripke	0	merge_into:Saul A. Kripke
+2f96e001-3a24-49ee-951a-5c6d51b09a7c	Otfried Hoffe	0	merge_into:Otfried Höffe
+1a7fc28c-f903-4c53-b2e1-dd1f488d864a	世界文学编辑部	0	merge_into:《世界文学》编辑部
+c5b461a0-b37f-455d-8027-d761953fd6a4	Alva Noe	0	merge_into:Alva Noë
+ecc9005f-1c89-484f-9834-2f87f2ad19b9	Phil Hubbard	0	merge_into:Phil. Hubbard
+282a2ded-32c5-4ffb-9fb3-60c97f9ac556	luce irigaray	0	merge_into:Luce Irigaray
+21e69053-d1f9-49f6-b959-bb24c0cd1d19	Hugh J Silverman	0	merge_into:Hugh J. Silverman
+34bb4148-ed2f-4fa3-9438-6e2e97d6a181	Kevin-Kelly	0	merge_into:Kevin Kelly
+943baf39-e189-4f93-ab33-d3a80f9bd7ae	Carolyn L Kane	0	merge_into:Carolyn L. Kane
+278ada63-9522-4138-ae23-4c4f07717be0	HENRY DAVID THOREAU	0	merge_into:Henry David Thoreau
+9336f562-e643-4ee0-8e00-c94744a77763	Eric Alliez	0	merge_into:Éric Alliez
+607430d0-fbd0-4ff8-bab0-2b995478e8c3	GWF Hegel	0	merge_into:G W F Hegel
+02a69fe5-0508-4c4b-8cca-841276a61ccf	Janice A Radway	0	merge_into:Janice A. Radway
+1a8e6e37-6d0f-47d7-859d-79680cdbdab2	James C Scott	0	merge_into:James C. Scott
+b1425fad-b6da-4d28-9ef4-d0f00a5ce804	Slavoj Zizek	0	merge_into:Slavoj Žižek
+45edc267-2ea3-4e72-9b23-f5d7413241bb	Jacques Ranciere	0	merge_into:Jacques Rancière
+259144d6-5a03-43e8-a557-639aad20cbb1	《中国天文学史文集》编辑组	0	drop
+db75b497-693a-44c7-bf7d-44aaedabd1bd	Vilem Flusser	0	drop
+5788a64d-a86c-4df2-b900-c4445dac80d1	PMS Hacker	0	drop
+9a354d3d-78fd-494f-a7c3-26d40af49b49	P.M.S. Hacker	0	drop
+3581293e-ea14-475d-9616-f06339fb9685	E H Gombrich	0	drop
+fa8d24b7-5306-47ac-94ab-0725778abb4e	Nestor Garcia Canclini	0	drop
+18cf42bd-e0d0-4613-b8b7-0f100a8cb829	R.S.Woolhouse	0	drop
+1380bb86-4cb1-4f73-9503-7bc32cb4490e	V.O. Klyuchevsky	0	drop
+096d446b-93a6-4742-83b7-61346514f71e	Leslie A White	0	drop
+400a1c0c-f578-497a-aad3-b6552ac0e3cc	G.H. Hardy	0	drop
+186c45f8-93da-48b1-8b4b-c067181c7eed	Saul A Kripke	0	drop
+2f96e001-3a24-49ee-951a-5c6d51b09a7c	Otfried Hoffe	0	drop
+1a7fc28c-f903-4c53-b2e1-dd1f488d864a	世界文学编辑部	0	drop
+c5b461a0-b37f-455d-8027-d761953fd6a4	Alva Noe	0	drop
+ecc9005f-1c89-484f-9834-2f87f2ad19b9	Phil Hubbard	0	drop
+282a2ded-32c5-4ffb-9fb3-60c97f9ac556	luce irigaray	0	drop
+21e69053-d1f9-49f6-b959-bb24c0cd1d19	Hugh J Silverman	0	drop
+34bb4148-ed2f-4fa3-9438-6e2e97d6a181	Kevin-Kelly	0	drop
+943baf39-e189-4f93-ab33-d3a80f9bd7ae	Carolyn L Kane	0	drop
+278ada63-9522-4138-ae23-4c4f07717be0	HENRY DAVID THOREAU	0	drop
+9336f562-e643-4ee0-8e00-c94744a77763	Eric Alliez	0	drop
+607430d0-fbd0-4ff8-bab0-2b995478e8c3	GWF Hegel	0	drop
+02a69fe5-0508-4c4b-8cca-841276a61ccf	Janice A Radway	0	drop
+1a8e6e37-6d0f-47d7-859d-79680cdbdab2	James C Scott	0	drop
+b1425fad-b6da-4d28-9ef4-d0f00a5ce804	Slavoj Zizek	0	drop
+45edc267-2ea3-4e72-9b23-f5d7413241bb	Jacques Ranciere	0	drop

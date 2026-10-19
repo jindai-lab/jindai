@@ -1,0 +1,13 @@
+{
+ "mode": "dry-run",
+ "disk": 70745,
+ "already": 71504,
+ "plan_by_dir": {},
+ "applied": {
+  "inserted": 0,
+  "failed": 0,
+  "tool_books_excluded": 2,
+  "trash_excluded": 0
+ },
+ "pdf_rows_after": 71504
+}

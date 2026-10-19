@@ -1,0 +1,986 @@
+[
+ {
+  "old": "Authors/Adorno, Theodor/Aesthetic Theory - Theodor W. Adorno.pdf",
+  "new": "OneDrive/Theodor W. Adorno/Aesthetic Theory (4655)/Aesthetic Theory - Theodor W. Adorno.pdf",
+  "old_uniq": 7407,
+  "new_uniq": 2624473,
+  "old_total": 7407,
+  "new_total": 2624473
+ },
+ {
+  "old": "Authors/Adorno, Theodor/Aesthetische Theorie - Theodor W. Adorno.pdf",
+  "new": "OneDrive/Theodor W. Adorno/Aesthetische Theorie (3616)/Aesthetische Theorie - Theodor W. Adorno.pdf",
+  "old_uniq": 146455,
+  "new_uniq": 1294473,
+  "old_total": 1410920,
+  "new_total": 2821910
+ },
+ {
+  "old": "Authors/Adorno, Theodor/Against Epistemology - Theodor W. Adorno.pdf",
+  "new": "OneDrive/Theodor W. Adorno/Against Epistemology (5268)/Against Epistemology - Theodor W. Adorno.pdf",
+  "old_uniq": 124793,
+  "new_uniq": 124680,
+  "old_total": 564703,
+  "new_total": 564590
+ },
+ {
+  "old": "Authors/Adorno, Theodor/Dialectic of Enlightenment - Theodor W. Adorno.pdf",
+  "new": "OneDrive/Theodor W. Adorno/Dialectic of Enlightenment (3464)/Dialectic of Enlightenment - Theodor W. Adorno.pdf",
+  "old_uniq": 264291,
+  "new_uniq": 822919,
+  "old_total": 740052,
+  "new_total": 1480020
+ },
+ {
+  "old": "Authors/Adorno, Theodor/Die musikalischen Monographien - Theodor W. Adorno.pdf",
+  "new": "OneDrive/Theodor W. Adorno/Die musikalischen Monographien (7831)/Die musikalischen Monographien - Theodor W. Adorno.pdf",
+  "old_uniq": 596125,
+  "new_uniq": 596087,
+  "old_total": 1115291,
+  "new_total": 1115253
+ },
+ {
+  "old": "Authors/Adorno, Theodor/Musikalische Schriften II_ Quasi una fantasia - Theodor W. Adorno.pdf",
+  "new": "OneDrive/Theodor W. Adorno/Musikalische Schriften II_ Quasi una fantasia (7781)/Musikalische Schriften II_ Quasi una fantasia - Theodor W. Adorno.pdf",
+  "old_uniq": 191980,
+  "new_uniq": 191999,
+  "old_total": 640903,
+  "new_total": 640922
+ },
+ {
+  "old": "Authors/Adorno, Theodor/Musikalische Schriften IV - Theodor W. Adorno.pdf",
+  "new": "OneDrive/Theodor W. Adorno/Musikalische Schriften IV (7826)/Musikalische Schriften IV - Theodor W. Adorno.pdf",
+  "old_uniq": 329506,
+  "new_uniq": 329474,
+  "old_total": 736065,
+  "new_total": 736033
+ },
+ {
+  "old": "Authors/Adorno, Theodor/Musikalische Schriften I_ Klangfiguren - Theodor W. Adorno.pdf",
+  "new": "OneDrive/Theodor W. Adorno/Musikalische Schriften I_ Klangfiguren (7780)/Musikalische Schriften I_ Klangfiguren - Theodor W. Adorno.pdf",
+  "old_uniq": 6656,
+  "new_uniq": 6656,
+  "old_total": 551166,
+  "new_total": 551166
+ },
+ {
+  "old": "Authors/Adorno, Theodor/Musikalische Schriften VI - Theodor W. Adorno.pdf",
+  "new": "OneDrive/Theodor W. Adorno/Musikalische Schriften VI (7793)/Musikalische Schriften VI - Theodor W. Adorno.pdf",
+  "old_uniq": 592016,
+  "new_uniq": 591467,
+  "old_total": 1427737,
+  "new_total": 1427188
+ },
+ {
+  "old": "Authors/Adorno, Theodor/Negative Dialektik - Theodor W. Adorno.pdf",
+  "new": "OneDrive/Theodor W. Adorno/Negative Dialektik (4660)/Negative Dialektik - Theodor W. Adorno.pdf",
+  "old_uniq": 635840,
+  "new_uniq": 1490556,
+  "old_total": 909678,
+  "new_total": 1831573
+ },
+ {
+  "old": "Authors/Adorno, Theodor/新音乐的哲学 - Theodor W. Adorno.pdf",
+  "new": "OneDrive/Theodor W. Adorno/新音乐的哲学 (7032)/新音乐的哲学 - Theodor W. Adorno.pdf",
+  "old_uniq": 113200,
+  "new_uniq": 115184,
+  "old_total": 169483,
+  "new_total": 171467
+ },
+ {
+  "old": "Authors/Adorno, Theodor/贝多芬：阿多诺的音乐哲学 - Theodor W. Adorno.pdf",
+  "new": "OneDrive/Theodor W. Adorno/贝多芬：阿多诺的音乐哲学 (7771)/贝多芬：阿多诺的音乐哲学 - Theodor W. Adorno.pdf",
+  "old_uniq": 173574,
+  "new_uniq": 178036,
+  "old_total": 242296,
+  "new_total": 246758
+ },
+ {
+  "old": "Authors/Adorno, Theodor/音乐社会学导论 - Theodor W. Adorno.pdf",
+  "new": "OneDrive/Theodor W. Adorno/音乐社会学导论 (7779)/音乐社会学导论 - Theodor W. Adorno.pdf",
+  "old_uniq": 96306,
+  "new_uniq": 97958,
+  "old_total": 202174,
+  "new_total": 203826
+ },
+ {
+  "old": "Authors/Austin, John Langshaw/How to do things with words - J. L. Austin.pdf",
+  "new": "OneDrive/J. L. Austin/How to do things with words (5094)/How to do things with words - J. L. Austin.pdf",
+  "old_uniq": 8661,
+  "new_uniq": 8616,
+  "old_total": 240798,
+  "new_total": 240753
+ },
+ {
+  "old": "Authors/Austin, John Langshaw/感觉与可感物 - J. L. Austin.pdf",
+  "new": "OneDrive/J. L. Austin/感觉与可感物 (6690)/感觉与可感物 - J. L. Austin.pdf",
+  "old_uniq": 56405,
+  "new_uniq": 140306,
+  "old_total": 108823,
+  "new_total": 218816
+ },
+ {
+  "old": "Authors/Barthes, Roland/Sur La Photographie - Roland Barthes.pdf",
+  "new": "OneDrive/Roland Barthes/Sur La Photographie (2971)/Sur La Photographie - Roland Barthes.pdf",
+  "old_uniq": 9241,
+  "new_uniq": 35120,
+  "old_total": 54250,
+  "new_total": 108884
+ },
+ {
+  "old": "Authors/Barthes, Roland/文之悦 - Roland Barthes.pdf",
+  "new": "OneDrive/Roland Barthes/文之悦 (4744)/文之悦 - Roland Barthes.pdf",
+  "old_uniq": 84208,
+  "new_uniq": 85356,
+  "old_total": 104098,
+  "new_total": 105242
+ },
+ {
+  "old": "Authors/Barthes, Roland/显义与晦义 - Roland Barthes.pdf",
+  "new": "OneDrive/Roland Barthes/显义与晦义 (4753)/显义与晦义 - Roland Barthes.pdf",
+  "old_uniq": 192611,
+  "new_uniq": 199083,
+  "old_total": 202537,
+  "new_total": 208853
+ },
+ {
+  "old": "Authors/Barthes, Roland/符号学美学 - Roland Barthes.pdf",
+  "new": "OneDrive/Roland Barthes/符号学美学 (6944)/符号学美学 - Roland Barthes.pdf",
+  "old_uniq": 100164,
+  "new_uniq": 102011,
+  "old_total": 113164,
+  "new_total": 115011
+ },
+ {
+  "old": "Authors/Barthes, Roland/让快乐排好队 - Roland Barthes.pdf",
+  "new": "OneDrive/Roland Barthes/让快乐排好队 (4490)/让快乐排好队 - Roland Barthes.pdf",
+  "old_uniq": 109974,
+  "new_uniq": 231131,
+  "old_total": 160965,
+  "new_total": 326273
+ },
+ {
+  "old": "Authors/Baudrillard, Jean/为何一切尚未消失 - Jean Baudrillard.pdf",
+  "new": "OneDrive/Jean Baudrillard/为何一切尚未消失 (7036)/为何一切尚未消失 - Jean Baudrillard.pdf",
+  "old_uniq": 19456,
+  "new_uniq": 19835,
+  "old_total": 38617,
+  "new_total": 38996
+ },
+ {
+  "old": "Authors/Bense, Max/Programmierung des Schönen - Max Bense.pdf",
+  "new": "OneDrive/Max Bense/Programmierung des Schönen (8816)/Programmierung des Schönen - Max Bense.pdf",
+  "old_uniq": 63039,
+  "new_uniq": 63039,
+  "old_total": 270118,
+  "new_total": 270118
+ },
+ {
+  "old": "Authors/Bogost, Ian/Newsgames _ Journalism at Play - Ian Bogost.pdf",
+  "new": "OneDrive/Ian Bogost/Newsgames _ Journalism at Play (8666)/Newsgames _ Journalism at Play - Ian Bogost.pdf",
+  "old_uniq": 380249,
+  "new_uniq": 379081,
+  "old_total": 519624,
+  "new_total": 518456
+ },
+ {
+  "old": "Authors/Bogost, Ian/Persuasive Games - Ian Bogost.pdf",
+  "new": "OneDrive/Ian Bogost/Persuasive Games (7049)/Persuasive Games - Ian Bogost.pdf",
+  "old_uniq": 186241,
+  "new_uniq": 186241,
+  "old_total": 966693,
+  "new_total": 966693
+ },
+ {
+  "old": "Authors/Brenner, Neil/Critique of Urbanization - Neil Brenner.pdf",
+  "new": "OneDrive/Neil Brenner/Critique of Urbanization (7973)/Critique of Urbanization - Neil Brenner.pdf",
+  "old_uniq": 689716,
+  "new_uniq": 692371,
+  "old_total": 722505,
+  "new_total": 725160
+ },
+ {
+  "old": "Authors/Danto, Arthur C/叙述与认识 - Arthur C. Danto.pdf",
+  "new": "OneDrive/Arthur C. Danto/叙述与认识 (6723)/叙述与认识 - Arthur C. Danto.pdf",
+  "old_uniq": 146689,
+  "new_uniq": 234998,
+  "old_total": 218848,
+  "new_total": 307165
+ },
+ {
+  "old": "Authors/Danto, Arthur C/寻常物的嬗变：一种关于艺术的哲学（美）阿瑟·丹托 - Arthur C. Danto.pdf",
+  "new": "OneDrive/Arthur C. Danto/寻常物的嬗变：一种关于艺术的哲学（美）阿瑟·丹托 (1996)/寻常物的嬗变：一种关于艺术的哲学（美）阿瑟·丹托 - Arthur C. Danto.pdf",
+  "old_uniq": 124306,
+  "new_uniq": 303771,
+  "old_total": 212133,
+  "new_total": 428306
+ },
+ {
+  "old": "Authors/Dewey, John/确定性的寻求：关于知行关系的研究 - John Dewey.pdf",
+  "new": "OneDrive/John Dewey/确定性的寻求：关于知行关系的研究 (905)/确定性的寻求：关于知行关系的研究 - John Dewey.pdf",
+  "old_uniq": 0,
+  "new_uniq": 201369,
+  "old_total": 15,
+  "new_total": 201399
+ },
+ {
+  "old": "Authors/Dewey, John/艺术即经验 - John Dewey.pdf",
+  "new": "OneDrive/John Dewey/艺术即经验 (6563)/艺术即经验 - John Dewey.pdf",
+  "old_uniq": 136259,
+  "new_uniq": 138526,
+  "old_total": 273148,
+  "new_total": 275415
+ },
+ {
+  "old": "Authors/Elkins, James/图像的领域 - James Elkins.pdf",
+  "new": "OneDrive/James Elkins/图像的领域 (7616)/图像的领域 - James Elkins.pdf",
+  "old_uniq": 389773,
+  "new_uniq": 419351,
+  "old_total": 429479,
+  "new_total": 459056
+ },
+ {
+  "old": "Authors/Enzensberger, Hans Magnus/Einzelheiten - Hans Magnus Enzensberger.pdf",
+  "new": "OneDrive/Hans Magnus Enzensberger/Einzelheiten (3748)/Einzelheiten - Hans Magnus Enzensberger.pdf",
+  "old_uniq": 147704,
+  "new_uniq": 916665,
+  "old_total": 819292,
+  "new_total": 1638511
+ },
+ {
+  "old": "Authors/Enzensberger, Hans Magnus/Nomaden im Regal - Hans Magnus Enzensberger.pdf",
+  "new": "OneDrive/Hans Magnus Enzensberger/Nomaden im Regal (7717)/Nomaden im Regal - Hans Magnus Enzensberger.pdf",
+  "old_uniq": 53361,
+  "new_uniq": 52656,
+  "old_total": 346150,
+  "new_total": 345445
+ },
+ {
+  "old": "Authors/Ernst, Wolfgang/Sonic Time Machines - Wolfgang Ernst.pdf",
+  "new": "OneDrive/Wolfgang Ernst/Sonic Time Machines (8465)/Sonic Time Machines - Wolfgang Ernst.pdf",
+  "old_uniq": 181722,
+  "new_uniq": 181722,
+  "old_total": 444398,
+  "new_total": 444398
+ },
+ {
+  "old": "Authors/Flusser, Vilem/Does writing have a future - Vilém Flusser.pdf",
+  "new": "OneDrive/Vilém Flusser/Does writing have a future (3726)/Does writing have a future - Vilém Flusser.pdf",
+  "old_uniq": 21010,
+  "new_uniq": 286524,
+  "old_total": 348673,
+  "new_total": 697228
+ },
+ {
+  "old": "Authors/Flusser, Vilem/Into Immaterial Culture - Vilém Flusser.pdf",
+  "new": "OneDrive/Vilém Flusser/Into Immaterial Culture (3721)/Into Immaterial Culture - Vilém Flusser.pdf",
+  "old_uniq": 47,
+  "new_uniq": 49827,
+  "old_total": 58346,
+  "new_total": 116661
+ },
+ {
+  "old": "Authors/Flusser, Vilem/Language and Reality - Vilém Flusser.pdf",
+  "new": "OneDrive/Vilém Flusser/Language and Reality (8554)/Language and Reality - Vilém Flusser.pdf",
+  "old_uniq": 96361,
+  "new_uniq": 96287,
+  "old_total": 378132,
+  "new_total": 378058
+ },
+ {
+  "old": "Authors/Flusser, Vilem/The Shape of Things_ A Philosophy of Design - Vilém Flusser.pdf",
+  "new": "OneDrive/Vilém Flusser/The Shape of Things_ A Philosophy of Design (6277)/The Shape of Things_ A Philosophy of Design - Vilém Flusser.pdf",
+  "old_uniq": 115253,
+  "new_uniq": 115247,
+  "old_total": 222267,
+  "new_total": 222261
+ },
+ {
+  "old": "Authors/Flusser, Vilem/The Surprising Phenomenon of Human Communication - Vilém Flusser.pdf",
+  "new": "OneDrive/Vilém Flusser/The Surprising Phenomenon of Human Communication (4477)/The Surprising Phenomenon of Human Communication - Vilém Flusser.pdf",
+  "old_uniq": 128140,
+  "new_uniq": 129513,
+  "old_total": 166059,
+  "new_total": 167432
+ },
+ {
+  "old": "Authors/Flusser, Vilem/Vom Subjekt zum Projekt. Menschwerdung - Vilém Flusser.pdf",
+  "new": "OneDrive/Vilém Flusser/Vom Subjekt zum Projekt. Menschwerdung (5241)/Vom Subjekt zum Projekt. Menschwerdung - Vilém Flusser.pdf",
+  "old_uniq": 38683,
+  "new_uniq": 38683,
+  "old_total": 541145,
+  "new_total": 541145
+ },
+ {
+  "old": "Authors/Flusser, Vilem/后历史 - Vilém Flusser.pdf",
+  "new": "OneDrive/Vilém Flusser/后历史 (7669)/后历史 - Vilém Flusser.pdf",
+  "old_uniq": 34009,
+  "new_uniq": 34651,
+  "old_total": 106005,
+  "new_total": 106647
+ },
+ {
+  "old": "Authors/Flusser, Vilem/摄影哲学的思考 - Vilém Flusser.pdf",
+  "new": "OneDrive/Vilém Flusser/摄影哲学的思考 (6968)/摄影哲学的思考 - Vilém Flusser.pdf",
+  "old_uniq": 47078,
+  "new_uniq": 49032,
+  "old_total": 58904,
+  "new_total": 60858
+ },
+ {
+  "old": "Authors/Flusser, Vilem/表象的礼赞 - Vilém Flusser.pdf",
+  "new": "OneDrive/Vilém Flusser/表象的礼赞 (7670)/表象的礼赞 - Vilém Flusser.pdf",
+  "old_uniq": 94200,
+  "new_uniq": 95729,
+  "old_total": 213009,
+  "new_total": 214535
+ },
+ {
+  "old": "Authors/Goethe, Johann Wolfgang von/theory of color - Goethe.pdf",
+  "new": "OneDrive/Goethe/theory of color (3331)/theory of color - Goethe.pdf",
+  "old_uniq": 275,
+  "new_uniq": 296852,
+  "old_total": 591070,
+  "new_total": 1173196
+ },
+ {
+  "old": "Authors/Goodman, Nelson/Problems and Projects - Nelson Goodman.pdf",
+  "new": "OneDrive/Nelson Goodman/Problems and Projects (9382)/Problems and Projects - Nelson Goodman.pdf",
+  "old_uniq": 906453,
+  "new_uniq": 909129,
+  "old_total": 957993,
+  "new_total": 960665
+ },
+ {
+  "old": "Authors/Graeber, David/Direct Action An Ethnography - David Graeber.pdf",
+  "new": "OneDrive/David Graeber/Direct Action An Ethnography (674)/Direct Action An Ethnography - David Graeber.pdf",
+  "old_uniq": 480267,
+  "new_uniq": 1741795,
+  "old_total": 1575391,
+  "new_total": 3151408
+ },
+ {
+  "old": "Authors/Groos, Karl/Die Spiele der Tiere - Karl Groos.pdf",
+  "new": "OneDrive/Karl Groos/Die Spiele der Tiere (6308)/Die Spiele der Tiere - Karl Groos.pdf",
+  "old_uniq": 30779,
+  "new_uniq": 30756,
+  "old_total": 581283,
+  "new_total": 581259
+ },
+ {
+  "old": "Authors/Hacker, PMS/Wittgenstein, Meaning and Mind - P. M. S. Hacker.pdf",
+  "new": "OneDrive/P. M. S. Hacker/Wittgenstein, Meaning and Mind (4459)/Wittgenstein, Meaning and Mind - P. M. S. Hacker.pdf",
+  "old_uniq": 177627,
+  "new_uniq": 862452,
+  "old_total": 1595984,
+  "new_total": 3191932
+ },
+ {
+  "old": "Authors/Hacking, Ian/The Taming of Chance - Ian Hacking.pdf",
+  "new": "OneDrive/Ian Hacking/The Taming of Chance (7977)/The Taming of Chance - Ian Hacking.pdf",
+  "old_uniq": 206896,
+  "new_uniq": 206871,
+  "old_total": 758225,
+  "new_total": 758200
+ },
+ {
+  "old": "Authors/Hacking, Ian/科学哲学与实验 - Ian Hacking.pdf",
+  "new": "OneDrive/Ian Hacking/科学哲学与实验 (4060)/科学哲学与实验 - Ian Hacking.pdf",
+  "old_uniq": 225725,
+  "new_uniq": 471038,
+  "old_total": 240389,
+  "new_total": 500069
+ },
+ {
+  "old": "Authors/Hayles, N Katherine/我们何以成为后人类 文学、信息科学和控制论中的虚拟身体 - N. Katherine Hayles.pdf",
+  "new": "OneDrive/N. Katherine Hayles/我们何以成为后人类 文学、信息科学和控制论中的虚拟身体 (3915)/我们何以成为后人类 文学、信息科学和控制论中的虚拟身体 - N. Katherine Hayles.pdf",
+  "old_uniq": 313173,
+  "new_uniq": 654086,
+  "old_total": 362468,
+  "new_total": 744486
+ },
+ {
+  "old": "Authors/Hepp, Andreas/Cultures of Mediatization - Andreas Hepp.pdf",
+  "new": "OneDrive/Andreas Hepp/Cultures of Mediatization (7193)/Cultures of Mediatization - Andreas Hepp.pdf",
+  "old_uniq": 372665,
+  "new_uniq": 735838,
+  "old_total": 372770,
+  "new_total": 736048
+ },
+ {
+  "old": "Authors/Ihde, Don/Consequences of Phenomenology - Don Ihde.pdf",
+  "new": "OneDrive/Don Ihde/Consequences of Phenomenology (8493)/Consequences of Phenomenology - Don Ihde.pdf",
+  "old_uniq": 35724,
+  "new_uniq": 35724,
+  "old_total": 465955,
+  "new_total": 465955
+ },
+ {
+  "old": "Authors/Ihde, Don/Instrumental Realism - Don Ihde.pdf",
+  "new": "OneDrive/Don Ihde/Instrumental Realism (8494)/Instrumental Realism - Don Ihde.pdf",
+  "old_uniq": 95823,
+  "new_uniq": 95823,
+  "old_total": 443771,
+  "new_total": 443771
+ },
+ {
+  "old": "Authors/Ihde, Don/Technics and Praxis - Don Ihde.pdf",
+  "new": "OneDrive/Don Ihde/Technics and Praxis (4163)/Technics and Praxis - Don Ihde.pdf",
+  "old_uniq": 49667,
+  "new_uniq": 290149,
+  "old_total": 454461,
+  "new_total": 908908
+ },
+ {
+  "old": "Authors/Ihde, Don/技术与生活世界 - Don Ihde.pdf",
+  "new": "OneDrive/Don Ihde/技术与生活世界 (8488)/技术与生活世界 - Don Ihde.pdf",
+  "old_uniq": 121963,
+  "new_uniq": 124846,
+  "old_total": 227380,
+  "new_total": 230263
+ },
+ {
+  "old": "Authors/Ihde, Don/物质阐释学 - Don Ihde.pdf",
+  "new": "OneDrive/Don Ihde/物质阐释学 (8489)/物质阐释学 - Don Ihde.pdf",
+  "old_uniq": 142872,
+  "new_uniq": 150628,
+  "old_total": 189945,
+  "new_total": 197701
+ },
+ {
+  "old": "Authors/Ihde, Don/让事物说话 - Don Ihde.pdf",
+  "new": "OneDrive/Don Ihde/让事物说话 (5110)/让事物说话 - Don Ihde.pdf",
+  "old_uniq": 65821,
+  "new_uniq": 68110,
+  "old_total": 76252,
+  "new_total": 78541
+ },
+ {
+  "old": "Authors/Illouz, Eva/The End of Love - Eva Illouz.pdf",
+  "new": "OneDrive/Eva Illouz/The End of Love (6508)/The End of Love - Eva Illouz.pdf",
+  "old_uniq": 211475,
+  "new_uniq": 211471,
+  "old_total": 811459,
+  "new_total": 811459
+ },
+ {
+  "old": "Authors/Jenkins, Henry/Democracy and New Media - Henry Jenkins.pdf",
+  "new": "OneDrive/Henry Jenkins/Democracy and New Media (8514)/Democracy and New Media - Henry Jenkins.pdf",
+  "old_uniq": 177311,
+  "new_uniq": 177311,
+  "old_total": 975081,
+  "new_total": 975081
+ },
+ {
+  "old": "Authors/Jenkins, Henry/文本盗猎者 - Henry Jenkins.pdf",
+  "new": "OneDrive/Henry Jenkins/文本盗猎者 (8294)/文本盗猎者 - Henry Jenkins.pdf",
+  "old_uniq": 293530,
+  "new_uniq": 305237,
+  "old_total": 410055,
+  "new_total": 421722
+ },
+ {
+  "old": "Authors/Kandinsky, Wassily/康定斯基论点线面 - Wassily Kandinsky.pdf",
+  "new": "OneDrive/Wassily Kandinsky/康定斯基论点线面 (2428)/康定斯基论点线面 - Wassily Kandinsky.pdf",
+  "old_uniq": 27236,
+  "new_uniq": 66017,
+  "old_total": 45603,
+  "new_total": 92711
+ },
+ {
+  "old": "Authors/Kandinsky, Wassily/艺术的精神 - Wassily Kandinsky.pdf",
+  "new": "OneDrive/Wassily Kandinsky/艺术的精神 (8920)/艺术的精神 - Wassily Kandinsky.pdf",
+  "old_uniq": 34318,
+  "new_uniq": 34928,
+  "old_total": 62103,
+  "new_total": 62713
+ },
+ {
+  "old": "Authors/Kepes, Gyorgy/Education of vision - Gyorgy Kepes.pdf",
+  "new": "OneDrive/Gyorgy Kepes/Education of vision (8084)/Education of vision - Gyorgy Kepes.pdf",
+  "old_uniq": 110364,
+  "new_uniq": 110355,
+  "old_total": 566729,
+  "new_total": 566720
+ },
+ {
+  "old": "Authors/Kepes, Gyorgy/Graphic Forms - Gyorgy Kepes.pdf",
+  "new": "OneDrive/Gyorgy Kepes/Graphic Forms (8083)/Graphic Forms - Gyorgy Kepes.pdf",
+  "old_uniq": 16840,
+  "new_uniq": 16822,
+  "old_total": 280965,
+  "new_total": 280947
+ },
+ {
+  "old": "Authors/Kepes, Gyorgy/Language of Vision - Gyorgy Kepes.pdf",
+  "new": "OneDrive/Gyorgy Kepes/Language of Vision (7260)/Language of Vision - Gyorgy Kepes.pdf",
+  "old_uniq": 28561,
+  "new_uniq": 28534,
+  "old_total": 271550,
+  "new_total": 271523
+ },
+ {
+  "old": "Authors/Kepes, Gyorgy/Structure in art and in science - Gyorgy Kepes.pdf",
+  "new": "OneDrive/Gyorgy Kepes/Structure in art and in science (8082)/Structure in art and in science - Gyorgy Kepes.pdf",
+  "old_uniq": 46435,
+  "new_uniq": 46431,
+  "old_total": 450270,
+  "new_total": 450266
+ },
+ {
+  "old": "Authors/Kepes, Gyorgy/The New Landscape in Art and Science - Gyorgy Kepes.pdf",
+  "new": "OneDrive/Gyorgy Kepes/The New Landscape in Art and Science (8090)/The New Landscape in Art and Science - Gyorgy Kepes.pdf",
+  "old_uniq": 40462,
+  "new_uniq": 40462,
+  "old_total": 493505,
+  "new_total": 493505
+ },
+ {
+  "old": "Authors/Kepes, Gyorgy/The Visual Arts Today - Gyorgy Kepes.pdf",
+  "new": "OneDrive/Gyorgy Kepes/The Visual Arts Today (8081)/The Visual Arts Today - Gyorgy Kepes.pdf",
+  "old_uniq": 33839,
+  "new_uniq": 33839,
+  "old_total": 578195,
+  "new_total": 578195
+ },
+ {
+  "old": "Authors/Kepes, Gyorgy/The man-made object - Gyorgy Kepes.pdf",
+  "new": "OneDrive/Gyorgy Kepes/The man-made object (8091)/The man-made object - Gyorgy Kepes.pdf",
+  "old_uniq": 68895,
+  "new_uniq": 68895,
+  "old_total": 408014,
+  "new_total": 408014
+ },
+ {
+  "old": "Authors/Kosuth, Joseph/Art After Philosophy and After - Joseph Kosuth.pdf",
+  "new": "OneDrive/Joseph Kosuth/Art After Philosophy and After (7023)/Art After Philosophy and After - Joseph Kosuth.pdf",
+  "old_uniq": 170796,
+  "new_uniq": 170197,
+  "old_total": 763564,
+  "new_total": 762965
+ },
+ {
+  "old": "Authors/Margolis, Joseph/Art and Philosophy - Joseph Margolis.pdf",
+  "new": "OneDrive/Joseph Margolis/Art and Philosophy (8889)/Art and Philosophy - Joseph Margolis.pdf",
+  "old_uniq": 260004,
+  "new_uniq": 260004,
+  "old_total": 899335,
+  "new_total": 899335
+ },
+ {
+  "old": "Authors/Margolis, Joseph/Philosophy looks at the arts - Joseph Margolis.pdf",
+  "new": "OneDrive/Joseph Margolis/Philosophy looks at the arts (6533)/Philosophy looks at the arts - Joseph Margolis.pdf",
+  "old_uniq": 331596,
+  "new_uniq": 331585,
+  "old_total": 1631116,
+  "new_total": 1631105
+ },
+ {
+  "old": "Authors/Moretti, Franco/The Novel, Volume 2 Forms and Themes - Franco Moretti.pdf",
+  "new": "OneDrive/Franco Moretti/The Novel, Volume 2 Forms and Themes (3361)/The Novel, Volume 2 Forms and Themes - Franco Moretti.pdf",
+  "old_uniq": 650754,
+  "new_uniq": 2976442,
+  "old_total": 2485524,
+  "new_total": 4975341
+ },
+ {
+  "old": "Authors/Nail, Thomas/Theory of the Border - Thomas Nail.pdf",
+  "new": "OneDrive/Thomas Nail/Theory of the Border (7520)/Theory of the Border - Thomas Nail.pdf",
+  "old_uniq": 282605,
+  "new_uniq": 282605,
+  "old_total": 747119,
+  "new_total": 747119
+ },
+ {
+  "old": "Authors/Nail, Thomas/Theory of the Earth - Thomas Nail.pdf",
+  "new": "OneDrive/Thomas Nail/Theory of the Earth (8930)/Theory of the Earth - Thomas Nail.pdf",
+  "old_uniq": 73630,
+  "new_uniq": 73598,
+  "old_total": 746520,
+  "new_total": 746488
+ },
+ {
+  "old": "Authors/Nail, Thomas/Theory of the Image - Thomas Nail.pdf",
+  "new": "OneDrive/Thomas Nail/Theory of the Image (7521)/Theory of the Image - Thomas Nail.pdf",
+  "old_uniq": 178064,
+  "new_uniq": 178027,
+  "old_total": 981913,
+  "new_total": 981876
+ },
+ {
+  "old": "Authors/Nail, Thomas/Theory of the Object - Thomas Nail.pdf",
+  "new": "OneDrive/Thomas Nail/Theory of the Object (7154)/Theory of the Object - Thomas Nail.pdf",
+  "old_uniq": 62684,
+  "new_uniq": 141758,
+  "old_total": 624407,
+  "new_total": 703481
+ },
+ {
+  "old": "Authors/Panofsky, Erwin/Galileo as a Critic of the Arts - Erwin Panofsky.pdf",
+  "new": "OneDrive/Erwin Panofsky/Galileo as a Critic of the Arts (3384)/Galileo as a Critic of the Arts - Erwin Panofsky.pdf",
+  "old_uniq": 14631,
+  "new_uniq": 63644,
+  "old_total": 121929,
+  "new_total": 243896
+ },
+ {
+  "old": "Authors/Panofsky, Erwin/Meaning in the Visual Arts - Erwin Panofsky.pdf",
+  "new": "OneDrive/Erwin Panofsky/Meaning in the Visual Arts (3386)/Meaning in the Visual Arts - Erwin Panofsky.pdf",
+  "old_uniq": 51580,
+  "new_uniq": 439633,
+  "old_total": 856013,
+  "new_total": 1712150
+ },
+ {
+  "old": "Authors/Panofsky, Erwin/Perspective as Symbolic Form - Erwin Panofsky.pdf",
+  "new": "OneDrive/Erwin Panofsky/Perspective as Symbolic Form (7478)/Perspective as Symbolic Form - Erwin Panofsky.pdf",
+  "old_uniq": 128446,
+  "new_uniq": 128189,
+  "old_total": 317170,
+  "new_total": 316913
+ },
+ {
+  "old": "Authors/Panofsky, Erwin/哥特式建筑与经院哲学 - Erwin Panofsky.pdf",
+  "new": "OneDrive/Erwin Panofsky/哥特式建筑与经院哲学 (7480)/哥特式建筑与经院哲学 - Erwin Panofsky.pdf",
+  "old_uniq": 59542,
+  "new_uniq": 62800,
+  "old_total": 70320,
+  "new_total": 73562
+ },
+ {
+  "old": "Authors/Panofsky, Erwin/视觉艺术的含义 - Erwin Panofsky.pdf",
+  "new": "OneDrive/Erwin Panofsky/视觉艺术的含义 (6917)/视觉艺术的含义 - Erwin Panofsky.pdf",
+  "old_uniq": 99858,
+  "new_uniq": 197528,
+  "old_total": 119287,
+  "new_total": 216956
+ },
+ {
+  "old": "Authors/Quine, Willard Van Orman/Philosophy of logic - W. V. Quine.pdf",
+  "new": "OneDrive/W. V. Quine/Philosophy of logic (5238)/Philosophy of logic - W. V. Quine.pdf",
+  "old_uniq": 11097,
+  "new_uniq": 11097,
+  "old_total": 264519,
+  "new_total": 264519
+ },
+ {
+  "old": "Authors/Ricoeur, Paul/Memory-History-Forgetting - Paul Ricoeur.pdf",
+  "new": "OneDrive/Paul Ricœur/Memory-History-Forgetting (6271)/Memory-History-Forgetting - Paul Ricoeur.pdf",
+  "old_uniq": 686618,
+  "new_uniq": 686615,
+  "old_total": 1780775,
+  "new_total": 1780772
+ },
+ {
+  "old": "Authors/Rorty, Richard/偶然、反讽与团结 - Richard Rorty.pdf",
+  "new": "OneDrive/Richard Rorty/偶然、反讽与团结 (5177)/偶然、反讽与团结 - Richard Rorty.pdf",
+  "old_uniq": 133801,
+  "new_uniq": 279826,
+  "old_total": 190941,
+  "new_total": 389889
+ },
+ {
+  "old": "Authors/Rorty, Richard/后哲学文化 - Richard Rorty.pdf",
+  "new": "OneDrive/Richard Rorty/后哲学文化 (9146)/后哲学文化 - Richard Rorty.pdf",
+  "old_uniq": 113018,
+  "new_uniq": 115716,
+  "old_total": 177202,
+  "new_total": 179900
+ },
+ {
+  "old": "Authors/Rosa, Hartmut/加速：现代社会中时间结构的改变 - Hartmut Rosa.pdf",
+  "new": "OneDrive/Hartmut Rosa/加速：现代社会中时间结构的改变 (7173)/加速：现代社会中时间结构的改变 - Hartmut Rosa.pdf",
+  "old_uniq": 338194,
+  "new_uniq": 355521,
+  "old_total": 488239,
+  "new_total": 505563
+ },
+ {
+  "old": "Authors/Rosa, Hartmut/新异化的诞生 - Hartmut Rosa.pdf",
+  "new": "OneDrive/Hartmut Rosa/新异化的诞生 (7114)/新异化的诞生 - Hartmut Rosa.pdf",
+  "old_uniq": 65079,
+  "new_uniq": 68001,
+  "old_total": 82734,
+  "new_total": 85656
+ },
+ {
+  "old": "Authors/Scheler, Max/人在宇宙中的地位 - Max Scheler.pdf",
+  "new": "OneDrive/Max Scheler/人在宇宙中的地位 (5174)/人在宇宙中的地位 - Max Scheler.pdf",
+  "old_uniq": 57801,
+  "new_uniq": 58412,
+  "old_total": 62730,
+  "new_total": 63341
+ },
+ {
+  "old": "Authors/Scruton, Roger/The Aesthetics of Music - Roger Scruton.pdf",
+  "new": "OneDrive/Roger Scruton/The Aesthetics of Music (7295)/The Aesthetics of Music - Roger Scruton.pdf",
+  "old_uniq": 259630,
+  "new_uniq": 257644,
+  "old_total": 1287918,
+  "new_total": 1285929
+ },
+ {
+  "old": "Authors/Shields, Rob/The Virtual - Rob Shields.pdf",
+  "new": "OneDrive/Rob Shields/The Virtual (7958)/The Virtual - Rob Shields.pdf",
+  "old_uniq": 9899,
+  "new_uniq": 217570,
+  "old_total": 281761,
+  "new_total": 489432
+ },
+ {
+  "old": "Authors/Shields, Rob/边缘处的地方 - Rob Shields.pdf",
+  "new": "OneDrive/Rob Shields/边缘处的地方 (7957)/边缘处的地方 - Rob Shields.pdf",
+  "old_uniq": 103967,
+  "new_uniq": 184739,
+  "old_total": 247250,
+  "new_total": 328022
+ },
+ {
+  "old": "Authors/Simanowski, Roberto/Data Love_ The Seduction and Betrayal of Digital - Roberto Simanowski.pdf",
+  "new": "OneDrive/Roberto Simanowski/Data Love_ The Seduction and Betrayal of Digital (9119)/Data Love_ The Seduction and Betrayal of Digital - Roberto Simanowski.pdf",
+  "old_uniq": 261486,
+  "new_uniq": 261483,
+  "old_total": 324046,
+  "new_total": 324043
+ },
+ {
+  "old": "Authors/Stiegler, Bernard/Acting Out - Bernard Stiegler.pdf",
+  "new": "OneDrive/Bernard Stiegler/Acting Out (3557)/Acting Out - Bernard Stiegler.pdf",
+  "old_uniq": 15169,
+  "new_uniq": 115260,
+  "old_total": 191889,
+  "new_total": 383758
+ },
+ {
+  "old": "Authors/Stiegler, Bernard/Technics and Time 2 - Bernard Stiegler.pdf",
+  "new": "OneDrive/Bernard Stiegler/Technics and Time 2 (2841)/Technics and Time 2 - Bernard Stiegler.pdf",
+  "old_uniq": 582772,
+  "new_uniq": 1237312,
+  "old_total": 676743,
+  "new_total": 1351777
+ },
+ {
+  "old": "Authors/Stiegler, Bernard/Technics and Time, 1 The Fault - Bernard Stiegler.pdf",
+  "new": "OneDrive/Bernard Stiegler/Technics and Time, 1 The Fault (3755)/Technics and Time, 1 The Fault - Bernard Stiegler.pdf",
+  "old_uniq": 282123,
+  "new_uniq": 879748,
+  "old_total": 732608,
+  "new_total": 1464672
+ },
+ {
+  "old": "Authors/Stiegler, Bernard/Technics and Time, 2 Disorientation - Stiegler.pdf",
+  "new": "OneDrive/Stiegler/Technics and Time, 2 Disorientation (3555)/Technics and Time, 2 Disorientation - Stiegler.pdf",
+  "old_uniq": 613687,
+  "new_uniq": 613439,
+  "old_total": 676743,
+  "new_total": 676495
+ },
+ {
+  "old": "Authors/Thoreau, Henry David/Complete Works of Thoreau Vol 3 - HENRY DAVID THOREAU.pdf",
+  "new": "OneDrive/Henry David Thoreau/Complete Works of Thoreau Vol 3 (3492)/Complete Works of Thoreau Vol 3 - HENRY DAVID THOREAU.pdf",
+  "old_uniq": 247053,
+  "new_uniq": 729240,
+  "old_total": 748918,
+  "new_total": 1491102
+ },
+ {
+  "old": "Authors/Thoreau, Henry David/Complete Works of Thoreau Vol 4 - HENRY DAVID THOREAU.pdf",
+  "new": "OneDrive/Henry David Thoreau/Complete Works of Thoreau Vol 4 (3494)/Complete Works of Thoreau Vol 4 - HENRY DAVID THOREAU.pdf",
+  "old_uniq": 288447,
+  "new_uniq": 802644,
+  "old_total": 781672,
+  "new_total": 1561125
+ },
+ {
+  "old": "Authors/Thoreau, Henry David/Complete Works of Thoreau Vol 5 - HENRY DAVID THOREAU.pdf",
+  "new": "OneDrive/Henry David Thoreau/Complete Works of Thoreau Vol 5 (3491)/Complete Works of Thoreau Vol 5 - HENRY DAVID THOREAU.pdf",
+  "old_uniq": 175790,
+  "new_uniq": 544272,
+  "old_total": 641637,
+  "new_total": 1280978
+ },
+ {
+  "old": "Authors/Thoreau, Henry David/Complete Works of Thoreau Vol 6 - HENRY DAVID THOREAU.pdf",
+  "new": "OneDrive/Henry David Thoreau/Complete Works of Thoreau Vol 6 (3490)/Complete Works of Thoreau Vol 6 - HENRY DAVID THOREAU.pdf",
+  "old_uniq": 296101,
+  "new_uniq": 773468,
+  "old_total": 802723,
+  "new_total": 1597829
+ },
+ {
+  "old": "Authors/Thoreau, Henry David/Complete Works of Thoreau Vol 7 - HENRY DAVID THOREAU.pdf",
+  "new": "OneDrive/Henry David Thoreau/Complete Works of Thoreau Vol 7 (3493)/Complete Works of Thoreau Vol 7 - HENRY DAVID THOREAU.pdf",
+  "old_uniq": 231371,
+  "new_uniq": 687591,
+  "old_total": 763722,
+  "new_total": 1524182
+ },
+ {
+  "old": "Authors/Thoreau, Henry David/Complete Works of Thoreau Vol 8 - HENRY DAVID THOREAU.pdf",
+  "new": "OneDrive/Henry David Thoreau/Complete Works of Thoreau Vol 8 (3489)/Complete Works of Thoreau Vol 8 - HENRY DAVID THOREAU.pdf",
+  "old_uniq": 227555,
+  "new_uniq": 710234,
+  "old_total": 798237,
+  "new_total": 1592913
+ },
+ {
+  "old": "Authors/Thoreau, Henry David/Complete Works of Thoreau Vol 9 - HENRY DAVID THOREAU.pdf",
+  "new": "OneDrive/Henry David Thoreau/Complete Works of Thoreau Vol 9 (3488)/Complete Works of Thoreau Vol 9 - HENRY DAVID THOREAU.pdf",
+  "old_uniq": 219877,
+  "new_uniq": 694370,
+  "old_total": 778693,
+  "new_total": 1553408
+ },
+ {
+  "old": "Authors/中村正直/敬宇文集 1 - 中村正直.pdf",
+  "new": "OneDrive/中村正直/敬宇文集 1 (6632)/敬宇文集 1 - 中村正直.pdf",
+  "old_uniq": 34023,
+  "new_uniq": 3030,
+  "old_total": 34023,
+  "new_total": 3030
+ },
+ {
+  "old": "Authors/中村正直/敬宇文集 2 - 中村正直.pdf",
+  "new": "OneDrive/中村正直/敬宇文集 2 (6634)/敬宇文集 2 - 中村正直.pdf",
+  "old_uniq": 51496,
+  "new_uniq": 3864,
+  "old_total": 51496,
+  "new_total": 3864
+ },
+ {
+  "old": "Authors/中村正直/敬宇文集 3 - 中村正直.pdf",
+  "new": "OneDrive/中村正直/敬宇文集 3 (6633)/敬宇文集 3 - 中村正直.pdf",
+  "old_uniq": 39216,
+  "new_uniq": 3120,
+  "old_total": 39216,
+  "new_total": 3120
+ },
+ {
+  "old": "Authors/中村正直/敬宇文集 4 - 中村正直.pdf",
+  "new": "OneDrive/中村正直/敬宇文集 4 (6629)/敬宇文集 4 - 中村正直.pdf",
+  "old_uniq": 32527,
+  "new_uniq": 2661,
+  "old_total": 32527,
+  "new_total": 2661
+ },
+ {
+  "old": "Authors/中村正直/敬宇文集 5 - 中村正直.pdf",
+  "new": "OneDrive/中村正直/敬宇文集 5 (6630)/敬宇文集 5 - 中村正直.pdf",
+  "old_uniq": 40823,
+  "new_uniq": 2636,
+  "old_total": 40823,
+  "new_total": 2636
+ },
+ {
+  "old": "Authors/中村正直/敬宇文集 6 - 中村正直.pdf",
+  "new": "OneDrive/中村正直/敬宇文集 6 (6631)/敬宇文集 6 - 中村正直.pdf",
+  "old_uniq": 28780,
+  "new_uniq": 3292,
+  "old_total": 28780,
+  "new_total": 3292
+ },
+ {
+  "old": "Authors/川野洋/川野洋_2009_ネットワーク美学の誕生.pdf",
+  "new": "Zotero/川野洋_2009_ネットワーク美学の誕生.pdf",
+  "old_uniq": 174784,
+  "new_uniq": 375840,
+  "old_total": 174784,
+  "new_total": 375840
+ },
+ {
+  "old": "Authors/川野洋/芸術の論理 艺术的逻辑 - 川野洋.pdf",
+  "new": "OneDrive/川野洋/芸術の論理 艺术的逻辑 (8994)/芸術の論理 艺术的逻辑 - 川野洋.pdf",
+  "old_uniq": 196021,
+  "new_uniq": 207378,
+  "old_total": 196021,
+  "new_total": 207378
+ },
+ {
+  "old": "Authors/川野洋/記号としての芸術 - 川野洋.pdf",
+  "new": "OneDrive/川野洋/記号としての芸術 (9254)/記号としての芸術 - 川野洋.pdf",
+  "old_uniq": 59334,
+  "new_uniq": 489534,
+  "old_total": 59334,
+  "new_total": 489534
+ },
+ {
+  "old": "Authors/柄谷行人/世界史的构造 - 柄谷行人.pdf",
+  "new": "OneDrive/柄谷行人/世界史的构造 (1481)/世界史的构造 - 柄谷行人.pdf",
+  "old_uniq": 175819,
+  "new_uniq": 365995,
+  "old_total": 232828,
+  "new_total": 461753
+ },
+ {
+  "old": "Authors/许煜/Art and Cosmotechnics - 许煜.pdf",
+  "new": "OneDrive/许煜/Art and Cosmotechnics (2780)/Art and Cosmotechnics - 许煜.pdf",
+  "old_uniq": 421931,
+  "new_uniq": 990116,
+  "old_total": 656947,
+  "new_total": 1304470
+ },
+ {
+  "old": "Authors/许煜/艺术与宇宙技术 - 许煜.pdf",
+  "new": "OneDrive/许煜/艺术与宇宙技术 (6744)/艺术与宇宙技术 - 许煜.pdf",
+  "old_uniq": 110573,
+  "new_uniq": 114063,
+  "old_total": 158220,
+  "new_total": 161710
+ },
+ {
+  "old": "Authors/郑元者/图腾美学与现代人类 - 郑元者.pdf",
+  "new": "OneDrive/郑元者/图腾美学与现代人类 (538)/图腾美学与现代人类 - 郑元者.pdf",
+  "old_uniq": 296811,
+  "new_uniq": 286238,
+  "old_total": 322682,
+  "new_total": 312195
+ },
+ {
+  "old": "Authors/郑元者/美学心韵 - 郑元者.pdf",
+  "new": "OneDrive/郑元者/美学心韵 (6888)/美学心韵 - 郑元者.pdf",
+  "old_uniq": 154143,
+  "new_uniq": 54701,
+  "old_total": 193979,
+  "new_total": 94537
+ },
+ {
+  "old": "Authors/钱学森/科学的艺术与艺术的科学 - 钱学森.pdf",
+  "new": "OneDrive/钱学森/科学的艺术与艺术的科学 (6828)/科学的艺术与艺术的科学 - 钱学森.pdf",
+  "old_uniq": 171737,
+  "new_uniq": 162450,
+  "old_total": 172445,
+  "new_total": 163138
+ },
+ {
+  "old": "Authors/陈望衡/审美伦理学引论 - 陈望衡.pdf",
+  "new": "OneDrive/陈望衡/审美伦理学引论 (9189)/审美伦理学引论 - 陈望衡.pdf",
+  "old_uniq": 89264,
+  "new_uniq": 89807,
+  "old_total": 202276,
+  "new_total": 202819
+ },
+ {
+  "old": "Authors/陈望衡/科技美学原理 - 陈望衡.pdf",
+  "new": "OneDrive/陈望衡/科技美学原理 (9198)/科技美学原理 - 陈望衡.pdf",
+  "old_uniq": 167350,
+  "new_uniq": 173540,
+  "old_total": 374518,
+  "new_total": 380696
+ },
+ {
+  "old": "Authors/陈望衡/艺术创作美学 - 陈望衡.pdf",
+  "new": "OneDrive/陈望衡/艺术创作美学 (9199)/艺术创作美学 - 陈望衡.pdf",
+  "old_uniq": 110270,
+  "new_uniq": 111450,
+  "old_total": 304375,
+  "new_total": 305555
+ },
+ {
+  "old": "Authors/韩炳哲/非物 - 韩炳哲.pdf",
+  "new": "OneDrive/韩炳哲/非物 (7306)/非物 - 韩炳哲.pdf",
+  "old_uniq": 57976,
+  "new_uniq": 62706,
+  "old_total": 77706,
+  "new_total": 82436
+ }
+]

@@ -1,0 +1,11 @@
+{
+ "rename_legacy_over_clean": 145,
+ "drop_empty_legacy": 527,
+ "both_have_report": 44,
+ "rename_legacy_only": 2,
+ "a_renamed": 145,
+ "b_d_deleted": 527,
+ "e_renamed": 2,
+ "legacy_remaining": 44,
+ "pending_pdf_after": 6235
+}
