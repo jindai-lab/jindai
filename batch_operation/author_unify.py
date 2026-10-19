@@ -78,7 +78,8 @@ CURATED: dict[str, str] = {
     "叔本华": "Arthur Schopenhauer", "埃德蒙·伯克": "Edmund Burke",
     "阿格农": "S. Y. Agnon", "马尔库塞": "Herbert Marcuse",
     # 通译名（无歧义、库里高频）
-    "黑塞": "Hermann Hesse", "韩炳哲": "Byung-Chul Han",
+    "黑塞": "Hermann Hesse",
+    # 韩炳哲(Byung-Chul Han, 韩国人) 不再转原名——2026-10-19 指令：日韩作者一律保留简体中文名
     "宇文所安": "Stephen Owen", "克拉里": "Jonathan Crary",
     "蒙田": "Michel de Montaigne", "马克思": "Karl Marx",
     "恩格斯": "Friedrich Engels", "黑格尔": "G. W. F. Hegel",

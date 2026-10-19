@@ -40,7 +40,7 @@ SELECT_SQL = """
       AND path NOT LIKE '../%'
 """
 
-LATIN_RE = re.compile(r"^[A-Za-z][A-Za-z .'\-]*$")
+LATIN_RE = re.compile(r"^[A-Za-zÀ-ÖØ-öø-ÿŠšŽž][A-Za-zÀ-ÖØ-öø-ÿŠšŽž .'\-]*$")
 CJK_RE = re.compile(r"[一-鿿㐀-䶿]")
 
 
@@ -86,7 +86,7 @@ def toks(s: str) -> list:
 
 
 def is_latin(s: str) -> bool:
-    return bool(re.fullmatch(r"[A-Za-z][A-Za-z .\'-]*", s or ""))
+    return bool(re.fullmatch(r"[A-Za-zÀ-ÖØ-öø-ÿŠšŽž][A-Za-zÀ-ÖØ-öø-ÿŠšŽž .'\-]*", s or ""))
 
 
 def is_cjk(s: str) -> bool:
