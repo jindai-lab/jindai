@@ -419,7 +419,19 @@ def acquire_lock() -> bool:
         try:
             pid = int(open(LOCK_FILE).read().strip())
             os.kill(pid, 0)
-            return False
+            # 僵尸进程（state=Z）：/proc 仍在、os.kill 不抛异常，但它已死，
+            # 不算「有人在跑」——先杀外层 watchdog 时 worker 常变僵尸（2026-10-20 实证），
+            # 不识别会让锁永久卡死，watchdog 空转 60 轮后 rounds exhausted。
+            try:
+                with open(f"/proc/{pid}/stat") as f:
+                    state = f.read().rsplit(")", 1)[1].split()[0]
+                if state == "Z":
+                    log.warning("lock holder %d is a zombie — taking over the lock", pid)
+            except (OSError, IndexError):
+                pass  # /proc 消失 = 进程已退，照常接管
+            else:
+                if state != "Z":
+                    return False
         except (ValueError, ProcessLookupError, PermissionError):
             pass
     with open(LOCK_FILE, "w") as f:
