@@ -198,6 +198,14 @@ async def record_import_state(conn, source_id, pages_total,
                    pages_covered = EXCLUDED.pages_covered,
                    updated_at = now()""",
         source_id, status, int(pages_total), int(pages_covered))
+    # 冗余到 file_metadata.import_state（2026-10-20）：监控/清单直接查这一列，
+    # 不必再做 paragraph 反连接。列不存在（老镜像/未跑迁移）时静默跳过。
+    try:
+        await conn.execute(
+            "UPDATE file_metadata SET import_state = $2 WHERE id = $1::uuid",
+            source_id, status)
+    except Exception as ex:
+        log.warning("[state] import_state 冗余失败（忽略）: %s", str(ex)[:120])
     return status
 
 
@@ -317,8 +325,8 @@ async def scan_disk_upsert(conn, cache_secs: float = 0) -> dict:
            for p in disk if p not in existing]
     if new:
         await conn.executemany(
-            "INSERT INTO file_metadata (path, extension, size_bytes, item_type) "
-            "VALUES ($1, 'pdf', $2, $3) ON CONFLICT (path) DO NOTHING",
+            "INSERT INTO file_metadata (path, extension, size_bytes, item_type, import_state) "
+            "VALUES ($1, 'pdf', $2, $3, 'pending') ON CONFLICT (path) DO NOTHING",
             new,
         )
     # 表里有、磁盘没有的（陈旧路径）单独留档，不在此删行
