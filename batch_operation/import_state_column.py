@@ -43,25 +43,32 @@ def load_disk_paths():
 async def main(apply=False):
     conn = await C.get_conn()
 
-    # ---- ① dataset_id 死值清理（守卫：非空行必须都有 file_dataset 绑定）----
-    n_null = await conn.fetchval("SELECT count(*) FROM file_metadata WHERE dataset_id IS NOT NULL")
-    orphan = await conn.fetchval("""SELECT count(*) FROM file_metadata fm
-        WHERE fm.dataset_id IS NOT NULL
-          AND NOT EXISTS (SELECT 1 FROM file_dataset fd WHERE fd.file_id = fm.id)""")
-    print("dataset_id 非空: %d | 其中无 file_dataset 绑定(孤儿): %d" % (n_null, orphan))
-    if orphan:
-        print("ABORT: 有孤儿行，先人工看")
-        return
+    # ---- ① dataset_id 死值清理（列已于 2026-10-20 删除；此段仅当列仍存在时执行）----
+    has_dsid = await conn.fetchval(
+        "SELECT count(*) FROM information_schema.columns "
+        "WHERE table_name='file_metadata' AND column_name='dataset_id'")
+    if has_dsid:
+        n_null = await conn.fetchval("SELECT count(*) FROM file_metadata WHERE dataset_id IS NOT NULL")
+        orphan = await conn.fetchval("""SELECT count(*) FROM file_metadata fm
+            WHERE fm.dataset_id IS NOT NULL
+              AND NOT EXISTS (SELECT 1 FROM file_dataset fd WHERE fd.file_id = fm.id)""")
+        print("dataset_id 非空: %d | 其中无 file_dataset 绑定(孤儿): %d" % (n_null, orphan))
+        if orphan:
+            print("ABORT: 有孤儿行，先人工看")
+            return
+    else:
+        print("dataset_id 列已删除，跳过清理段")
 
     # ---- ② 建列 + 索引 ----
     if apply:
-        bak = open(REPORTS + "/filemeta_dataset_id_backup.tsv", "w")
-        for r in await conn.fetch(
-                "SELECT id, path, dataset_id::text AS d FROM file_metadata WHERE dataset_id IS NOT NULL"):
-            bak.write("%s\t%s\t%s\n" % (r["id"], r["path"], r["d"]))
-        bak.close()
-        tag = await conn.execute("UPDATE file_metadata SET dataset_id = NULL WHERE dataset_id IS NOT NULL")
-        print("dataset_id 清空:", tag)
+        if has_dsid:
+            bak = open(REPORTS + "/filemeta_dataset_id_backup.tsv", "w")
+            for r in await conn.fetch(
+                    "SELECT id, path, dataset_id::text AS d FROM file_metadata WHERE dataset_id IS NOT NULL"):
+                bak.write("%s\t%s\t%s\n" % (r["id"], r["path"], r["d"]))
+            bak.close()
+            tag = await conn.execute("UPDATE file_metadata SET dataset_id = NULL WHERE dataset_id IS NOT NULL")
+            print("dataset_id 清空:", tag)
         await conn.execute("ALTER TABLE file_metadata ADD COLUMN IF NOT EXISTS import_state text")
         await conn.execute(
             "CREATE INDEX IF NOT EXISTS idx_file_metadata_import_state "

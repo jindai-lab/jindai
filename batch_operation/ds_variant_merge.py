@@ -6,7 +6,7 @@
   ① 与作者目录集（file_metadata path 段2）同名者优先（backfill 规则会重建它）
   ② 其余选带重音/缩写点/连字符的完整形，再看成员数
 成员迁移（INSERT SELECT … ON CONFLICT DO NOTHING → 删旧行绑定 → 删零成员数据集）；
-删行前查三处引用：task_dbo.pipeline、dataset.alias_of（被指）、file_metadata.dataset_id。
+删行前查两处引用：task_dbo.pipeline、dataset.alias_of（被指）。
 零成员的非规范异写数据集一并删。所有删除先备份 TSV。
 """
 from __future__ import annotations
@@ -111,11 +111,9 @@ async def run(apply: bool) -> dict:
                 "SELECT count(*) FROM task_dbo WHERE pipeline::text LIKE '%'||$1||'%' ", name)
             alias_ref = await conn.fetchval(
                 "SELECT count(*) FROM dataset WHERE alias_of=$1::uuid", did)
-            fmeta_ref = await conn.fetchval(
-                "SELECT count(*) FROM file_metadata WHERE dataset_id=$1::uuid", did)
-            if refs or alias_ref or fmeta_ref:
-                log.warning("[keep] %s 仍被引用(task=%d alias=%d fmeta=%d)",
-                            name, refs, alias_ref, fmeta_ref)
+            if refs or alias_ref:
+                log.warning("[keep] %s 仍被引用(task=%d alias=%d)",
+                            name, refs, alias_ref)
                 continue
             tag = await conn.execute("DELETE FROM dataset WHERE id=$1::uuid", did)
             if tag.endswith("1"):

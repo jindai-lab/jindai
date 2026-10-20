@@ -1,6 +1,6 @@
 """清理空数据集（2026-10-20 用户指令：空 dataset 删除，别名除外）。
 
-判空 = 两条绑定路径都为 0：`file_dataset` 0 且 `file_metadata.dataset_id` 0。
+判空 = `file_dataset` 为 0（`file_metadata.dataset_id` 列已于 2026-10-20 删除，成员只此一条路径）。
 保留（不删）三类：
   ① 是别名（alias_of 非空）；
   ② 被别名指向（删它会让别名 ON DELETE SET NULL 变孤儿）；
@@ -25,8 +25,7 @@ async def main(apply=False):
     todo, kept = [], []
     for d in ds:
         fd = await conn.fetchval("SELECT count(*) FROM file_dataset WHERE dataset_id=$1::uuid", d["id"])
-        md = await conn.fetchval("SELECT count(*) FROM file_metadata WHERE dataset_id=$1::uuid", d["id"])
-        if fd or md:
+        if fd:
             continue
         has_alias = await conn.fetchval("SELECT count(*) FROM dataset WHERE alias_of=$1::uuid", d["id"])
         reasons = []
