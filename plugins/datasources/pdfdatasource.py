@@ -13,6 +13,7 @@ Enhanced features:
 - Batched parallel OCR (ocr_workers) fanned out over paddle replicas
 """
 
+import asyncio
 from concurrent.futures import ThreadPoolExecutor
 from typing import Any, Iterator, List, Optional, cast
 
@@ -22,7 +23,7 @@ from sqlalchemy import func, select, text
 from jindai.storage import storage
 from jindai.models import Dataset, FileDataset, FileMetadata, Paragraph, get_db_session
 from jindai.pipeline import DataSourceStage, PipelineStage
-from jindai.pdfutils import open_pdf, render_pdf_page
+from jindai.pdfutils import open_pdf, render_pdf_page, extract_pages_pdf
 from jindai.ocrutils import PaddleOCRClient
 from plugins.pipelines.pdf_stages import TextCleaner, PDFLanguageDetect, CrossPageReparagraphizer
 
@@ -125,6 +126,125 @@ _SKIP_STATE_DDL = """
 _skip_state_ready = False
 
 
+# --- OCR transport ------------------------------------------------------
+# PaddleX /ocr caps one request at `max_num_input_imgs` (default 10, see
+# stacks/mlservices/paddle_ocr/OCR.yaml -> Serving.extra): a longer PDF is
+# silently truncated (dataInfo.numPages=10, fewer ocrResults), so chunks
+# must stay <= 10 pages and results are matched by position.
+OCR_PDF_CHUNK = 10
+# The service renders PDF pages at a FIXED scale=2.0 applied to the page
+# box (not to embedded scan resolutions), so memory grows with page size,
+# not with file size -- the byte cap only guards against absurd payloads
+# (base64 +33%, and starlette has no body-size limit but we still want
+# bounded requests). Measured worst so far: 0.9MiB/page -> 9.1MiB per
+# 10-page chunk, which must NOT fall back (that chunk is exactly where the
+# 1-bit image path lost 59 of 61 lines on a woodblock scan).
+OCR_PDF_MAX_BYTES = 24 * 1024 * 1024
+
+
+def build_ocr_pdf_chunk(doc, pages: List[int]) -> bytes:
+    """Copy `pages` (in order) into one PDF for a single /ocr request.
+
+    Must be called from the CALLING thread, never inside the OCR thread
+    pool: PyMuPDF cannot touch one document from several threads -- doing
+    so produced "code=7: cannot find page" errors and a native segfault
+    that killed an import round (2026-10-16). Page copies cost ~0.01s/page,
+    so serializing them is free; only the HTTP call is parallelized.
+
+    Shipping page bytes (fileType=0) instead of a rendered JPEG (fileType=1)
+    skips ~0.6s/page of client rasterization, shrinks the payload ~10x, and
+    avoids the 1-bit dithering that erased strokes on line-art scans.
+
+    Raises if extraction fails or the chunk exceeds ``OCR_PDF_MAX_BYTES``.
+    """
+    pdf = extract_pages_pdf(doc, pages)
+    if len(pdf) > OCR_PDF_MAX_BYTES:
+        raise RuntimeError(f"chunk is {len(pdf)}B > {OCR_PDF_MAX_BYTES}B")
+    return pdf
+
+
+def pdf_chunk_texts(ocr_client: PaddleOCRClient, pages: List[int], pdf: bytes,
+                    lang: str) -> List[str]:
+    """HTTP-only half: one /ocr request for a pre-built PDF chunk.
+
+    Raises on service errors or a page-count mismatch (mismatch = the
+    service truncated the batch at `max_num_input_imgs`).
+    """
+    texts = ocr_client.ocr_pdf(pdf, lang=lang)
+    if len(texts) != len(pages):
+        raise RuntimeError(f"service returned {len(texts)} pages, sent {len(pages)}")
+    return texts
+
+
+def build_ocr_chunks(doc, pages: List[int], logf) -> List[tuple]:
+    """Split `pages` into (pages, pdf_bytes) pairs, halving on oversize.
+
+    Giant scanned books (e.g. a 1200-page Musil at ~2.4MiB/page) blow the
+    ``OCR_PDF_MAX_BYTES`` guard at 10 pages/request. Rather than dropping
+    the whole chunk to the slower one-request-per-page image transport, we
+    halve the chunk until it fits -- 5 pages/request costs one extra request
+    but keeps the PDF transport's quality and batching.
+
+    Returns:
+        ``[(pages, pdf_bytes), ...]``; a single page that is still too big
+        comes back as ``(pages, None)`` so the caller sends it through the
+        image fallback.
+    """
+    out: List[tuple] = []
+    stack: List[List[int]] = [list(pages)]
+    while stack:
+        chunk = stack.pop(0)
+        if not chunk:
+            continue
+        try:
+            out.append((chunk, build_ocr_pdf_chunk(doc, chunk)))
+        except Exception as ex:
+            if len(chunk) == 1:
+                logf(f"page {chunk[0] + 1} unusable as PDF ({ex}); "
+                     f"image fallback for it")
+                out.append((chunk, None))
+            else:
+                mid = len(chunk) // 2
+                stack.insert(0, chunk[mid:])
+                stack.insert(0, chunk[:mid])
+    return out
+
+
+def ocr_pages_as_images(ocr_client: PaddleOCRClient, stream, pages: List[int],
+                        lang: str, workers: int, logf) -> List[tuple]:
+    """Legacy/fallback transport: render each page -> JPEG -> /ocr.
+
+    Rendering (PyMuPDF) stays SERIAL in the calling thread -- see
+    ``_FITZ_LOCK`` / the 2026-10-16 segfault -- only the HTTP calls run in
+    the pool, which is exactly how the pre-PDF code behaved.
+
+    Returns ``(text, page, failed)`` per page in `pages` order. `failed` is
+    True only on a hard failure (render or request error) -- those pages are
+    recorded as transient OCR failures and retried by page-set resume,
+    whereas a successful-but-empty result stays a plain blank-page skip.
+    """
+    out: dict = {}
+    rendered: List[tuple] = []
+    for p in pages:
+        try:
+            img = render_pdf_page(cast(Any, stream), page_num=p, zoom=2.0)
+            rendered.append((p, img))
+        except Exception as ex:
+            logf(f"render failed for page {p + 1}: {ex}")
+            out[p] = ("", True)
+
+    with ThreadPoolExecutor(max_workers=max(1, workers)) as pool:
+        futs = {p: pool.submit(ocr_client.ocr_image, img, lang=lang)
+                for p, img in rendered}
+        for p, _img in rendered:
+            try:
+                out[p] = (futs[p].result(), False)
+            except Exception as ex:
+                logf(f"OCR failed for page {p + 1}: {ex}")
+                out[p] = ("", True)
+    return [(out[p][0], p, out[p][1]) for p in pages]
+
+
 class PDFDataSource(DataSourceStage):
     """Import paragraphs from PDF documents with enhanced text processing.
     
@@ -171,6 +291,7 @@ class PDFDataSource(DataSourceStage):
         # OCR fallback parameters
         ocr_fallback: bool = False,
         ocr_workers: int = 4,
+        ocr_mode: str = "pdf",
         # Page-set resume: re-import pages lacking a non-empty paragraph
         reimport_gaps: bool = True,
         **params,
@@ -198,6 +319,10 @@ class PDFDataSource(DataSourceStage):
                 no extractable text (default: True).
             ocr_workers: Parallel OCR workers per file, fanned out over
                 paddle replicas round-robin (default: 4).
+            ocr_mode: OCR transport: 'pdf' (default) sends raw page bytes
+                (fileType=0) in batches of up to 10 pages per request;
+                'image' uses the legacy client-side render -> 1-bit JPEG
+                (fileType=1), one request per page.
             reimport_gaps: If True (default), resume by page set: re-import
                 every page without a non-empty, non-metadata paragraph
                 (never imported, dropped by a failed OCR call, or stored
@@ -225,6 +350,11 @@ class PDFDataSource(DataSourceStage):
         self.reparagraphize = reparagraphize
         self.ocr_fallback = ocr_fallback
         self.ocr_workers = max(1, int(ocr_workers))
+        # 'pdf' (default): ship raw page bytes to /ocr in <=10-page batches
+        # (no client rasterization). 'image' = legacy render -> 1-bit JPEG.
+        self.ocr_mode = ('image'
+                         if str(ocr_mode).strip().lower() == 'image'
+                         else 'pdf')
         self.reimport_gaps = bool(reimport_gaps)
         
         # TextCleaner options
@@ -382,6 +512,10 @@ class PDFDataSource(DataSourceStage):
             # 原来这两行在 try 之外：空文件/坏文件（EmptyFileError、
             # FileDataError）会把整个 fetch() 迭代器打死，后面 6 万多个文件
             # 全都轮不到 —— 21:38 那次"又退出"就停在这里（第 5399 个文件）。
+            # 批处理在每个文件导入结束后要盖章（file_import_state.status），
+            # 需要总页数——每个文件一个 ds 实例，把 page_count 留在实例上，
+            # 免得盖章时再开一次 PDF。打不开的文件保持 None（不盖章，下轮重试）。
+            self.last_page_count = None
             try:
                 stream = storage.open(filepath, "rb")
                 doc = open_pdf(cast(Any, stream))
@@ -390,6 +524,7 @@ class PDFDataSource(DataSourceStage):
                     f"[skip] open failed, next file: {filepath} :: {ex!r}"
                 )
                 continue
+            self.last_page_count = doc.page_count
             try:
                 # Determine page range to process
                 page_range = self.page_range
@@ -477,34 +612,80 @@ class PDFDataSource(DataSourceStage):
                     if need:
                         self.log(
                             f"{filepath}: OCR {len(need)}/{len(page_text)} "
-                            f"textless pages, {self.ocr_workers} workers"
+                            f"textless pages, {self.ocr_workers} workers, "
+                            f"{self.ocr_mode} transport"
                         )
-                        for start in range(0, len(need), 12):
-                            chunk = need[start:start + 12]
-                            imgs = []
-                            for p in chunk:
-                                try:
-                                    imgs.append(
-                                        (p, render_pdf_page(cast(Any, stream), page_num=p, zoom=2.0))
-                                    )
-                                except Exception as ex:
-                                    self.log(f"render failed for {filepath} page {p + 1}: {ex}")
-                                    ocr_text[p] = ""
-                                    ocr_failed.add(p)
-                            if not imgs:
-                                continue
-                            with ThreadPoolExecutor(max_workers=self.ocr_workers) as pool:
-                                futs = [
-                                    (p, pool.submit(ocr_client.ocr_image, img, lang=lang))
-                                    for p, img in imgs
-                                ]
-                                for p, fut in futs:
-                                    try:
-                                        ocr_text[p] = fut.result()
-                                    except Exception as ex:
-                                        self.log(f"OCR failed for {filepath} page {p + 1}: {ex}")
-                                        ocr_text[p] = ""
-                                        ocr_failed.add(p)
+                        # Pages that must fall back to the legacy
+                        # render->JPEG transport (pdf transport failed, or
+                        # ocr_mode == 'image' from the start).
+                        retry_pages: List[int] = []
+                        if self.ocr_mode == 'pdf':
+                            # Raw page bytes (fileType=0): no client-side
+                            # rasterization (~0.6s/page), ~10x smaller
+                            # payload, no 1-bit dithering loss -- and up to
+                            # OCR_PDF_CHUNK pages go out in ONE request, so
+                            # the service batches det/rec itself.
+                            chunks = [
+                                need[s:s + OCR_PDF_CHUNK]
+                                for s in range(0, len(need), OCR_PDF_CHUNK)
+                            ]
+                            # Page copies run SERIALLY here (calling thread):
+                            # PyMuPDF + one doc across threads segfaults.
+                            # Oversized chunks are halved (still PDF) instead
+                            # of being dropped wholesale to the image path.
+                            prepared: List[tuple] = []
+                            for chunk in chunks:
+                                for sub, pdf in build_ocr_chunks(
+                                    doc, chunk,
+                                    lambda m: self.log(f"{filepath} {m}"),
+                                ):
+                                    if pdf is None:
+                                        retry_pages.extend(sub)
+                                    else:
+                                        prepared.append((sub, pdf))
+                            if prepared:
+                                # Only the HTTP calls are parallelized.
+                                with ThreadPoolExecutor(max_workers=self.ocr_workers) as pool:
+                                    futs = [
+                                        (chunk, pool.submit(
+                                            pdf_chunk_texts, ocr_client,
+                                            chunk, pdf, lang))
+                                        for chunk, pdf in prepared
+                                    ]
+                                    for chunk, fut in futs:
+                                        try:
+                                            # await 而非同步 result()：阻塞会卡死整个事件循环，
+                                            # 让其余文件 worker 与 progress_watcher 全部饿死（2026-10-20 实证）。
+                                            texts = await asyncio.wrap_future(fut)
+                                        except Exception as ex:
+                                            self.log(
+                                                f"PDF OCR failed for {filepath} "
+                                                f"pages {[p + 1 for p in chunk]}: {ex}"
+                                            )
+                                            retry_pages.extend(chunk)
+                                            continue
+                                        for p, t in zip(chunk, texts):
+                                            ocr_text[p] = t
+                            if retry_pages:
+                                self.log(
+                                    f"... image fallback for "
+                                    f"{len(retry_pages)} pages of {filepath}"
+                                )
+                        else:
+                            retry_pages = list(need)
+
+                        if retry_pages:
+                            # to_thread：该函数内部同步等线程池 OCR，直接调用会卡死事件循环
+                            img_results = await asyncio.to_thread(
+                                ocr_pages_as_images,
+                                ocr_client, stream, retry_pages, lang,
+                                self.ocr_workers,
+                                lambda m: self.log(f"{filepath} {m}"),
+                            )
+                            for ocr_text_out, page_idx, ocr_page_failed in img_results:
+                                ocr_text[page_idx] = ocr_text_out
+                                if ocr_page_failed:
+                                    ocr_failed.add(page_idx)
 
                 for page in page_range:
                     if page >= doc.page_count:
