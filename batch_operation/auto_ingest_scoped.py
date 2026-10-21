@@ -80,8 +80,8 @@ async def main() -> int:
         new = sorted(p for p in disk if p not in existing)
         if new:
             await conn.executemany(
-                "INSERT INTO file_metadata (path, extension, size_bytes, item_type) "
-                "VALUES ($1, 'pdf', $2, $3) ON CONFLICT (path) DO NOTHING",
+                "INSERT INTO file_metadata (path, extension, size_bytes, item_type, import_state) "
+                "VALUES ($1, 'pdf', $2, $3, 'pending') ON CONFLICT (path) DO NOTHING",
                 [(p, disk[p], SCAN_ITEM_TYPE.get(p.split("/")[0], "book"))
                  for p in new])
     finally:

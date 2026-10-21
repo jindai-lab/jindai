@@ -91,8 +91,8 @@ async def main() -> int:
             chunk = rows[i:i + BATCH]
             try:
                 res = await conn.executemany(
-                    "INSERT INTO file_metadata (path, extension, size_bytes, item_type) "
-                    "VALUES ($1, $2, $3, $4) ON CONFLICT (path) DO NOTHING", chunk)
+                    "INSERT INTO file_metadata (path, extension, size_bytes, item_type, import_state) "
+                    "VALUES ($1, $2, $3, $4, 'pending') ON CONFLICT (path) DO NOTHING", chunk)
                 applied["inserted"] += int(res.split()[-1]) if res else 0
             except Exception as ex:
                 applied["failed"] += 1

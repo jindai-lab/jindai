@@ -64,7 +64,7 @@ LIST_SQL = """
       AND path NOT LIKE '.trash/%'
       AND path NOT LIKE '../%'
       {state_filter}
-    ORDER BY CASE split_part(path, '/', 1)
+    ORDER BY {state_order}CASE split_part(path, '/', 1)
                WHEN 'Zotero'              THEN 1
                WHEN 'Series'              THEN 2
                WHEN 'OneDrive'            THEN 3
@@ -79,15 +79,26 @@ LIST_SQL = """
 # 也不跑页集续传查询。缺页/从未导入的文件要么没行、要么 status='partial'，
 # 照旧每轮重试。判断口径与 PDFDataSource 的 reimport_gaps 完全一致：
 # 页有「非空、非 outline 段落」或在 page_skip_state 里 = 已覆盖。
-_STATE_FILTER = """AND NOT EXISTS (
-          SELECT 1 FROM file_import_state s
-          WHERE s.source_id = file_metadata.id AND s.status = 'complete')"""
+# 2026-10-21 用户指令：清单只含 pending + partial（+ 未盖章的 NULL 新行），
+# complete/imported/excluded 一律不进队列；排序 partial 优先（缺页的先补完，
+# 再做从未导入的 pending）。直接查 file_metadata.import_state 列（有部分索引），
+# 比 NOT EXISTS file_import_state 子查询快。
+_STATE_FILTER = """AND (import_state IN ('pending', 'partial')
+                        OR import_state IS NULL)"""
+# partial(0) → pending/NULL(1)；其后仍按目录优先级 Zotero→Series→OneDrive→…
+_STATE_ORDER = "CASE WHEN import_state = 'partial' THEN 0 ELSE 1 END, "
 
 
 def _list_sql(exclude_complete: bool) -> str:
-    """按是否排除「已完成」文件生成清单 SQL。"""
-    return LIST_SQL.format(
-        state_filter=_STATE_FILTER if exclude_complete else "")
+    """按是否启用「导入状态过滤」生成清单 SQL。
+
+    True（默认）= 只含 pending/partial/NULL，partial 排前（2026-10-21）；
+    False = 全量清单（旧行为，无状态过滤与状态排序）。
+    """
+    if exclude_complete:
+        return LIST_SQL.format(state_filter=_STATE_FILTER,
+                               state_order=_STATE_ORDER)
+    return LIST_SQL.format(state_filter="", state_order="")
 EXISTING_ONEDRIVE_SQL = "SELECT path FROM file_metadata WHERE path LIKE $1"
 
 # 工具书（词典/辞书/大部头参考书）——沿用 references/backlog-inventory.md 的关键词表，
@@ -361,10 +372,20 @@ async def build_file_list(conn, disk: dict | None = None,
     toolbooks = [p for p in all_paths if TOOLBOOK_RE.search(p)]
     candidates = [p for p in all_paths if p not in set(toolbooks)]
     done = 0
+    n_partial = n_pending = 0
     if exclude_complete:
         done = int(await conn.fetchval(
             f"SELECT count(*) FROM {IMPORT_STATE_TABLE} "
             f"WHERE status = 'complete'") or 0)
+        n_partial = int(await conn.fetchval(
+            "SELECT count(*) FROM file_metadata "
+            "WHERE import_state = 'partial' "
+            "  AND lower(path) LIKE '%.pdf'") or 0)
+        # IS NULL 必须限定 PDF：webpage/newspaperArticle 行本就 NULL
+        n_pending = int(await conn.fetchval(
+            "SELECT count(*) FROM file_metadata "
+            "WHERE (import_state = 'pending' OR import_state IS NULL) "
+            "  AND lower(path) LIKE '%.pdf'") or 0)
 
     from jindai.storage import storage
     if disk is not None:
@@ -380,6 +401,8 @@ async def build_file_list(conn, disk: dict | None = None,
         "missing_on_disk": len(missing),
         "list_size": len(keep),
         "import_state_complete_excluded": done,
+        "list_partial": n_partial,
+        "list_pending": n_pending,
     }
     os.makedirs("batch_operation/reports", exist_ok=True)
     if toolbooks:

@@ -9,8 +9,8 @@ log = C.setup_logging("register_moved", "batch_operation/reports/register_moved.
 ROWS = sys.argv[1] if len(sys.argv) > 1 else "batch_operation/reports/temp_books_rows.json"
 
 SQL = """
-    INSERT INTO file_metadata (path, extension, size_bytes, item_type, title, authors)
-    VALUES ($1, $2, $3, $4, $5, $6::text[])
+    INSERT INTO file_metadata (path, extension, size_bytes, item_type, title, authors, import_state)
+    VALUES ($1, $2, $3, $4, $5, $6::text[], 'pending')
     ON CONFLICT (path) DO NOTHING
 """
 
