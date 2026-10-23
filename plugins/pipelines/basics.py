@@ -288,6 +288,16 @@ class Reparagraph(PipelineStage):
                 yield ("" if lang[:2] in ("zh", "ja") else " ").join(lines)
                 return
 
+            # 首行即脚注标记（①-⑩）的页：整页按一段输出，不再截断。
+            # 旧逻辑第一行就 break → 整页零输出 → 该页永远盖不满、文件永远
+            # partial、每轮重导（2026-10-23 对《美学原理》页171/182 实证：
+            # 数据源每轮 yield 836/881 字，链上被本函数丢弃，saved=0）。
+            first = next((l.strip() for l in lines if l.strip()), "")
+            if first and re.search(r"^[①-⑩]", first):
+                yield ("" if lang[:2] in ("zh", "ja") else " ").join(
+                    l.strip() for l in lines if l.strip())
+                return
+
             std = abs(statistics.stdev(lens))
             maxl = max(lens)
             text = ""

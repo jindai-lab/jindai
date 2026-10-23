@@ -76,6 +76,11 @@ PDF_PARAMS: dict[str, Any] = {
     "fix_ocr_errors": True,
 }
 
+# 就地续跑上限（2026-10-23 用户指令：完全处理完才换下一个）：文件没盖满页时
+# 原地重跑（reimport_gaps 只补缺页，skip_existed 跳过已有页，代价很小），
+# 盖满记 complete，到顶仍缺页才记 partial 交下轮。防毒页卡死：可用环境变量调。
+MAX_INLINE_ATTEMPTS = int(os.environ.get("IMPORT_MAX_ATTEMPTS", "3"))
+
 # PDFDataSource 每个单文件实例自己会打 "1/1 importing <path>"；
 # worker 已经打过带全局进度的 "N/M importing <path>"，把前者滤掉。
 _FETCH_IMPORTING_RE = re.compile(r"\b1/1 importing ")
@@ -307,6 +312,21 @@ async def worker(wid, files, counter, total, batch, ds_params, args, logfn,
     my_failed_rows = 0
     state_conn: Any = None
 
+    async def flush_stats() -> None:
+        """落库缓冲 + 更新计数。盖章前必须先调用（否则数不到本文件的段落），
+        finally 复用同一份逻辑，多次调用靠 nonlocal 增量计数、不会重复累加。"""
+        nonlocal my_saved, my_failed_rows
+        try:
+            await saver.flush()
+        except Exception as ex:
+            logfn(f"[error] flush failed, dropping buffer "
+                  f"({saver.saved} saved so far): {type(ex).__name__}: {ex}")
+            saver.clear()
+        state["saved"] += saver.saved - my_saved
+        my_saved = saver.saved
+        state["failed_rows"] += saver.failed - my_failed_rows
+        my_failed_rows = saver.failed
+
     while True:
         try:
             path = files.popleft()
@@ -322,27 +342,43 @@ async def worker(wid, files, counter, total, batch, ds_params, args, logfn,
             pass
         try:
             logfn(f"{pos}/{total} importing {path}")
-            pages_total = await import_one(path, head, ds_params, logfn)
-            state["files"] += 1
-            # 盖章：全部页被覆盖（非空段落或 page_skip_state）
-            if store_state and pages_total:
+            pages_total = None
+            for attempt in range(1, MAX_INLINE_ATTEMPTS + 1):
+                pages_total = await import_one(path, head, ds_params, logfn)
+                if not store_state or not pages_total:
+                    break
+                # 必须先 flush 再数覆盖页：缓冲(batch=200)里未落库的段落不算
+                # 覆盖，旧版在 flush 前盖章 → 段落数 < batch 的文件整本被误判
+                # 0/N partial（2026-10-23 实测修复）。
+                await flush_stats()
                 if state_conn is None:
                     state_conn = await C.get_conn()
                 try:
                     sid = await state_conn.fetchval(
                         "SELECT id FROM file_metadata WHERE path = $1", path)
-                    if sid:
-                        covered = await legacy.count_covered_pages(
-                            state_conn, sid)
+                    if not sid:
+                        break
+                    covered = await legacy.count_covered_pages(state_conn, sid)
+                    if covered >= pages_total:
                         st = await legacy.record_import_state(
                             state_conn, sid, pages_total, covered)
                         state[st] = state.get(st, 0) + 1
-                        if st == "partial":
-                            logfn(f"[state] partial {covered}/{pages_total} 页"
-                                  f"（下轮重试）: {path}")
+                        logfn(f"[state] complete {covered}/{pages_total} 页: {path}")
+                        break
+                    if attempt >= MAX_INLINE_ATTEMPTS:
+                        st = await legacy.record_import_state(
+                            state_conn, sid, pages_total, covered)
+                        state[st] = state.get(st, 0) + 1
+                        logfn(f"[state] partial {covered}/{pages_total} 页"
+                              f"（已就地重试 {attempt} 次，下轮续）: {path}")
+                        break
+                    logfn(f"[retry {attempt}/{MAX_INLINE_ATTEMPTS}] "
+                          f"{covered}/{pages_total} 页未盖全，原地续跑: {path}")
                 except Exception as ex:
                     logfn(f"[state] 盖章失败（不影响导入）: {path} :: "
                           f"{type(ex).__name__}: {ex}")
+                    break
+            state["files"] += 1
         except Exception as ex:
             state["failed"] += 1
             logfn(f"[skip] file failed, next file: {path} :: "
@@ -351,16 +387,7 @@ async def worker(wid, files, counter, total, batch, ds_params, args, logfn,
             logfn("".join(traceback.format_exception(type(ex), ex,
                                                      ex.__traceback__)))
         finally:
-            try:
-                await saver.flush()
-            except Exception as ex:
-                logfn(f"[error] flush failed, dropping buffer "
-                      f"({saver.saved} saved so far): {type(ex).__name__}: {ex}")
-                saver.clear()
-            state["saved"] += saver.saved - my_saved
-            my_saved = saver.saved
-            state["failed_rows"] += saver.failed - my_failed_rows
-            my_failed_rows = saver.failed
+            await flush_stats()
             try:
                 os.unlink(marker)
             except OSError:
