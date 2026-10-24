@@ -404,39 +404,57 @@ async def progress_watcher(interval, state, t0, count_secs=1800):
         while True:
             await asyncio.sleep(interval)
             now = time.time()
-            if last_files_left is None or now - last_count_t >= count_secs:
-                last_files_left = await conn.fetchval(
-                    """
-                    SELECT count(*) FROM file_metadata f
-                    WHERE lower(f.path) LIKE '%.pdf'
-                      AND f.path NOT LIKE 'Tool Books/%'
-                      AND f.path NOT LIKE '.trash/%'
-                      AND f.path NOT LIKE '../%'
-                      AND NOT EXISTS (SELECT 1 FROM paragraph p
-                                      WHERE p.source_id = f.id)
-                      AND NOT EXISTS (SELECT 1 FROM file_import_state s
-                                      WHERE s.source_id = f.id
-                                        AND s.status = 'complete')
-                    """
+            # 单轮失败不许杀死整个 watcher（2026-10-24 实证：上一版异常后
+            # 静默死亡，[progress] 断更 9 小时、连接 idle 9h；导入本身不受
+            # 影响，但看板失去心跳）。失败记 traceback，下个 tick 重连再试。
+            try:
+                if last_files_left is None or now - last_count_t >= count_secs:
+                    last_files_left = await conn.fetchval(
+                        """
+                        SELECT count(*) FROM file_metadata f
+                        WHERE lower(f.path) LIKE '%.pdf'
+                          AND f.path NOT LIKE 'Tool Books/%'
+                          AND f.path NOT LIKE '.trash/%'
+                          AND f.path NOT LIKE '../%'
+                          AND NOT EXISTS (SELECT 1 FROM paragraph p
+                                          WHERE p.source_id = f.id)
+                          AND NOT EXISTS (SELECT 1 FROM file_import_state s
+                                          WHERE s.source_id = f.id
+                                            AND s.status = 'complete')
+                        """
+                    )
+                    last_count_t = now
+                    left_str = str(last_files_left)
+                else:
+                    left_str = f"{last_files_left} (cached)"
+                ins = await conn.fetchval(
+                    "SELECT coalesce(sum(n_tup_ins), 0) FROM pg_stat_user_tables "
+                    "WHERE relname LIKE 'paragraph%'"
                 )
-                last_count_t = now
-                left_str = str(last_files_left)
-            else:
-                left_str = f"{last_files_left} (cached)"
-            ins = await conn.fetchval(
-                "SELECT coalesce(sum(n_tup_ins), 0) FROM pg_stat_user_tables "
-                "WHERE relname LIKE 'paragraph%'"
-            )
-            rate = ""
-            if last_ins is not None and now > last_t:
-                rate = f"  paras+{(ins - last_ins) / (now - last_t) * 60:,.0f}/min"
-            last_ins, last_t = ins, now
-            log.info(
-                "[progress] files w/o paragraph=%s%s  files_done=%s failed=%s "
-                "saved=%s  elapsed=%.1fmin",
-                left_str, rate, state["files"], state["failed"],
-                state["saved"], (time.time() - t0) / 60,
-            )
+                # asyncpg 把 sum(bigint) 返回为 Decimal，Decimal / float 会
+                # TypeError 杀掉本 tick（2026-10-24 实证），统一转 int 再算速率。
+                ins = int(ins or 0)
+                rate = ""
+                if last_ins is not None and now > last_t:
+                    rate = f"  paras+{(ins - last_ins) / (now - last_t) * 60:,.0f}/min"
+                last_ins, last_t = ins, now
+                log.info(
+                    "[progress] files w/o paragraph=%s%s  files_done=%s failed=%s "
+                    "saved=%s  elapsed=%.1fmin",
+                    left_str, rate, state["files"], state["failed"],
+                    state["saved"], (time.time() - t0) / 60,
+                )
+            except Exception:
+                log.exception(
+                    "[progress] watcher iteration failed — 重建连接, 下个 tick 重试")
+                try:
+                    await conn.close()
+                except Exception:
+                    pass
+                try:
+                    conn = await C.get_conn()
+                except Exception:
+                    log.exception("[progress] watcher 重连失败, 下个 tick 再试")
     finally:
         await conn.close()
 
@@ -529,6 +547,27 @@ async def main() -> int:
         keep = [p for p in keep if p not in skip]
         if before != len(keep):
             log.warning("skip-file: 从清单剔除 %d 个毒文件", before - len(keep))
+
+    # 暂缓清单（人工维护，与毒文件语义分离）：整目录/整批 OCR-bound
+    # 文件让路时用。每行一个前缀（以 / 结尾）或精确路径；'#' 注释。
+    # 从暂缓恢复 = 删掉对应行，下轮自动回到清单（import_state 不变）。
+    defer_file = "batch_operation/reports/import_defer.txt"
+    if os.path.exists(defer_file):
+        prefixes, exact = [], set()
+        for ln in open(defer_file, encoding="utf-8"):
+            ln = ln.strip()
+            if not ln or ln.startswith("#"):
+                continue
+            if ln.endswith("/"):
+                prefixes.append(ln)
+            else:
+                exact.add(ln)
+        before = len(keep)
+        keep = [p for p in keep
+                if p not in exact and not any(p.startswith(x) for x in prefixes)]
+        if before != len(keep):
+            log.warning("defer-file: 从清单暂缓剔除 %d 个文件（%s）",
+                        before - len(keep), defer_file)
 
     log.info("pre: files without paragraph=%s, paragraph total=%s, import list=%s",
              pre["onedrive_pdfs_without_paragraph"],

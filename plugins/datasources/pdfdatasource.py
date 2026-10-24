@@ -21,6 +21,7 @@ import regex as re
 from sqlalchemy import func, select, text
 
 from jindai.storage import storage
+from jindai.config import config
 from jindai.models import Dataset, FileDataset, FileMetadata, Paragraph, get_db_session
 from jindai.pipeline import DataSourceStage, PipelineStage
 from jindai.pdfutils import open_pdf, render_pdf_page, extract_pages_pdf
@@ -131,7 +132,10 @@ _skip_state_ready = False
 # stacks/mlservices/paddle_ocr/OCR.yaml -> Serving.extra): a longer PDF is
 # silently truncated (dataInfo.numPages=10, fewer ocrResults), so chunks
 # must stay <= 10 pages and results are matched by position.
-OCR_PDF_CHUNK = 10
+# 2026-10-24: 密集版面扫描（《上海府县志辑》类方志，竖排+高密度）单页
+# 长尾耗时高，10 页块经常超过客户端 120s 超时 -> 整块作废重试、反复白烧。
+# 改为 config 可调（ocr_pdf_chunk），默认降到 5 页/请求。
+OCR_PDF_CHUNK = int(getattr(config, 'ocr_pdf_chunk', 5))
 # The service renders PDF pages at a FIXED scale=2.0 applied to the page
 # box (not to embedded scan resolutions), so memory grows with page size,
 # not with file size -- the byte cap only guards against absurd payloads
