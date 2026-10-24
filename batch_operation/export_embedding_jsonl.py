@@ -164,6 +164,8 @@ async def main() -> int:
                     help="hard cap on paragraphs this run (0 = all)")
     ap.add_argument("--limit-chunks", type=int, default=0,
                     help="hard cap on emitted request lines (0 = all)")
+    ap.add_argument("--max-files", type=int, default=0,
+                    help="stop once N output files have been closed (0 = all)")
     ap.add_argument("--extra-body", default="",
                     help="JSON object merged into every request body")
     ap.add_argument("--resume", action="store_true",
@@ -234,28 +236,40 @@ async def main() -> int:
                         if not rows:
                             break
                         last_id = rows[-1]["id"]
+                        page_paras = page_chunks = 0
                         for r in rows:
+                            if args.max_files and writer.index > args.max_files:
+                                break
                             chunks = C.get_chunks(r["content"])
                             if not chunks:
                                 continue
                             file_paras += 1
+                            page_paras += 1
                             for ci, chunk in enumerate(chunks, 1):
                                 writer.write(f"{r['id']}:{ci}", chunk)
                                 file_chunks += 1
+                                page_chunks += 1
                             if args.limit_chunks and chunk_done + file_chunks \
                                     >= args.limit_chunks:
                                 break
-                        para_done += file_paras
-                        chunk_done += file_chunks
+                        para_done += page_paras
+                        chunk_done += page_chunks
                         if args.limit_paragraphs and para_done \
                                 >= args.limit_paragraphs:
                             break
                         if args.limit_chunks and chunk_done >= args.limit_chunks:
                             break
+                        if args.max_files and writer.index > args.max_files:
+                            # writer.index counts OPENED files; index > N means
+                            # file N rolled over to N+1, i.e. N files are full
+                            break
                 except Exception as ex:  # noqa: BLE001 - keep going per file
                     log.error("file failed: %s (%s: %s)", path,
                               type(ex).__name__, str(ex)[:300])
                     continue
+                if args.max_files and writer.index > args.max_files:
+                    log.info("reached --max-files %d, stopping", args.max_files)
+                    break
                 files_done += 1
                 state["done_file_ids"].append(str(fid))
                 if args.resume:
