@@ -351,7 +351,14 @@ class EmbeddingManager:
             )
             return
         logging.info("Embedding Polling Loop started.")
+        # Dynamic inter-cycle sleep: work done -> back almost immediately;
+        # no progress (queue empty, all flushes failed, or exception) ->
+        # exponential backoff to a 60s cap so a dead gateway isn't hammered.
+        base_sleep = 2.0
+        max_sleep = 60.0
+        idle_streak = 0
         while True:
+            added = 0
             try:
                 async with get_db_session() as session:
                     pending = await session.execute(
@@ -360,14 +367,28 @@ class EmbeddingManager:
                     has_pending = pending.first() is not None
                 if has_pending:
                     logging.info("Pending queue not empty")
-                    await maintenance_manager.update_text_embeddings()
+                    added = await maintenance_manager.update_text_embeddings()
             except asyncio.CancelledError:
                 logging.info("Embedding Polling Loop is being cancelled.")
                 return
             except Exception as ex:  # noqa: BLE001 - keep the worker alive
                 logging.exception(
                     f"Embedding polling iteration failed: {type(ex).__name__}: {ex}")
-            await asyncio.sleep(60)
+            if added > 0:
+                if idle_streak:
+                    logging.info(
+                        "embedding cycle made progress again after %d "
+                        "idle cycle(s)", idle_streak)
+                idle_streak = 0
+                sleep_s = base_sleep
+            else:
+                idle_streak += 1
+                sleep_s = min(base_sleep * (2 ** idle_streak), max_sleep)
+                if idle_streak <= 3 or idle_streak % 6 == 0:
+                    logging.info(
+                        "embedding idle cycle %d (no embeddings added), "
+                        "sleeping %.0fs", idle_streak, sleep_s)
+            await asyncio.sleep(sleep_s)
 
     def register_routes(self, router: APIRouter):
         """Register embedding-related routes.
