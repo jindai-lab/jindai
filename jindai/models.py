@@ -1954,16 +1954,43 @@ class TextEmbeddings(Base):
             "input": text.strip(),
         }
 
+        from . import rate_limit
+        limiter = rate_limit.get_limiter()
+
         async with httpx.AsyncClient() as client:
-            response = await client.post(
-                f"{api_base}/embeddings",
-                headers=headers,
-                json=payload,
-                timeout=30.0,
-            )
-            response.raise_for_status()
-            result = response.json()
-            
+            for attempt in range(6):
+                await limiter.acquire(
+                    max(1, len(text.strip()) + 8))  # chars ~= worst-case tokens
+                try:
+                    response = await client.post(
+                        f"{api_base}/embeddings",
+                        headers=headers,
+                        json=payload,
+                        timeout=30.0,
+                    )
+                    if response.status_code == 429:
+                        ra = response.headers.get("Retry-After", "")
+                        try:
+                            wait = min(max(float(ra), 1.0), 120.0)
+                        except ValueError:
+                            wait = min(2.0 ** attempt, 120.0)
+                        logging.warning(
+                            "embedding 429 rate-limited, waiting %.1fs "
+                            "(attempt %d/6)", wait, attempt + 1)
+                        await asyncio.sleep(wait)
+                        continue
+                    response.raise_for_status()
+                    result = response.json()
+                    break
+                except (httpx.HTTPError, asyncio.TimeoutError) as ex:
+                    wait = min(2.0 ** attempt, 60.0)
+                    logging.warning(
+                        "embedding call failed (%s: %s), retry %d/6 in %.0fs",
+                        type(ex).__name__, ex, attempt + 1, wait)
+                    await asyncio.sleep(wait)
+            else:
+                raise RuntimeError("embedding API failed after 6 attempts")
+
         logging.info(f'Got embedding: {str(result)[:20]}...')
 
         # Extract embedding from OpenAI-compatible response
@@ -2045,10 +2072,17 @@ class TextEmbeddings(Base):
         if api_key:
             headers["Authorization"] = f"Bearer {api_key}"
 
-        payload = {
-            "model": model,
-            "input": [text.strip() for text in batch],
-        }
+        texts = [text.strip() for text in batch]
+
+        # Client-side pacing + per-request splitting for the remote
+        # gateway (SiliconFlow/newapi bge-m3: 2000 RPM, 500k TPM,
+        # <=8k tokens/request). We split and reserve budget BEFORE
+        # sending instead of eating 429s; 429s that still slip through
+        # are retried with an adaptive wait (Retry-After aware).
+        from . import rate_limit
+        limiter = rate_limit.get_limiter()
+        max_req_tokens = int(getattr(config, "embedding_max_request_tokens", 8000))
+        groups = limiter.split_by_tokens(texts, max_req_tokens)
 
         # Reuse one client across calls: opening a fresh TCP connection per
         # encode batch cost an extra RTT, and the polling loop fires one
@@ -2056,17 +2090,57 @@ class TextEmbeddings(Base):
         client = TextEmbeddings._encode_client
         if client is None or client.is_closed:
             client = TextEmbeddings._encode_client = httpx.AsyncClient()
-        response = await client.post(
-            f"{api_base}/embeddings",
-            headers=headers,
-            json=payload,
-            timeout=timeout,
-        )
-        response.raise_for_status()
-        result = response.json()
+
+        all_vecs: list = []
+        for sub_texts, ntok in groups:
+            payload = {"model": model, "input": sub_texts}
+            sub_vecs = None
+            for attempt in range(6):
+                await limiter.acquire(ntok)
+                try:
+                    response = await client.post(
+                        f"{api_base}/embeddings",
+                        headers=headers,
+                        json=payload,
+                        timeout=timeout,
+                    )
+                    if response.status_code == 429:
+                        # Gateway still throttled (another consumer, or the
+                        # window closed mid-flight): honor Retry-After when
+                        # present, else exponential backoff.
+                        ra = response.headers.get("Retry-After", "")
+                        try:
+                            wait = min(max(float(ra), 1.0), 120.0)
+                        except ValueError:
+                            wait = min(2.0 ** attempt, 120.0)
+                        logging.warning(
+                            "embedding 429 rate-limited (ntok=%d), "
+                            "waiting %.1fs (attempt %d/6)", ntok, wait,
+                            attempt + 1)
+                        await asyncio.sleep(wait)
+                        continue
+                    response.raise_for_status()
+                    result = response.json()
+                    sub_vecs = [item["embedding"] for item in result["data"]]
+                    break
+                except (httpx.HTTPError, asyncio.TimeoutError) as ex:
+                    wait = min(2.0 ** attempt, 60.0)
+                    logging.warning(
+                        "embedding call failed (%s: %s), retry %d/6 in %.0fs",
+                        type(ex).__name__, ex, attempt + 1, wait)
+                    await asyncio.sleep(wait)
+            if sub_vecs is None:
+                raise RuntimeError(
+                    f"embedding sub-request failed after 6 attempts "
+                    f"(ntok={ntok}, texts={len(sub_texts)})")
+            if len(sub_vecs) != len(sub_texts):
+                raise RuntimeError(
+                    f"embedding API returned {len(sub_vecs)}/"
+                    f"{len(sub_texts)} vectors")
+            all_vecs.extend(sub_vecs)
 
         # Extract embeddings from OpenAI-compatible response
-        return [item["embedding"] for item in result["data"]]
+        return all_vecs
 
 
 # API Key authentication constants
