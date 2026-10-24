@@ -197,8 +197,11 @@ async def main() -> int:
         files = [(fid, paths[fid], n) for fid, n in missing.items() if fid in paths]
         orphans = total_missing - sum(n for _, _, n in files)
         if orphans:
-            log.warning("%s missing paragraphs have no file_metadata row (out of scope)",
-                        f"{orphans:,}")
+            log.info(
+                "%s missing paragraphs belong to files OUTSIDE this scope filter "
+                "(embeddable, just not selected; not orphan rows)",
+                f"{orphans:,}",
+            )
         files.sort(key=lambda x: -x[2])
         est_chunks = int(sum(n for _, _, n in files) * CHUNKS_PER_PARA_EST)
         log.info("scope=%s files=%d est_chunks=%s max_bytes=%s",
