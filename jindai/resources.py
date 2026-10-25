@@ -1433,6 +1433,11 @@ emb_manager = EmbeddingManager()
 from .import_worker import ImportManager  # noqa: E402  (避免顶部循环导入)
 import_manager = ImportManager()
 
+# 常驻回收站清空 supervisor（2026-10-25）：每周一 06:00 清空 /storage/.trash，
+# config.trash_purge_enabled 开关（原 Hermes cronjob 24458a68c589 已退役、勿重建）。
+from .trash_purge import TrashPurgeManager  # noqa: E402
+trash_purge_manager = TrashPurgeManager()
+
 
 # Idempotent index maintenance.  The project has no migration framework, so
 # the indexes below are ensured once at startup; CREATE INDEX IF NOT EXISTS
@@ -1484,6 +1489,11 @@ async def combined_lifespan(app: FastAPI):
     import_manager.polling_task = asyncio.create_task(
         import_manager.polling_loop())
 
+    # Start resident trash purge supervisor (no-op unless
+    # config.trash_purge_enabled)
+    trash_purge_manager.polling_task = asyncio.create_task(
+        trash_purge_manager.polling_loop())
+
     # Start worker
     await worker_manager.start_worker()
 
@@ -1501,6 +1511,12 @@ async def combined_lifespan(app: FastAPI):
     if import_manager.polling_task:
         import_manager.polling_task.cancel()
         await asyncio.gather(import_manager.polling_task, return_exceptions=True)
+
+    # Stop resident trash purge supervisor
+    if trash_purge_manager.polling_task:
+        trash_purge_manager.polling_task.cancel()
+        await asyncio.gather(trash_purge_manager.polling_task,
+                             return_exceptions=True)
 
 
 # Register common CRUD resources

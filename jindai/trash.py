@@ -14,7 +14,9 @@
 * 批次目录里写 ``manifest.json``（原路径/新路径/题名/作者/时间/条目 id）；
   同时向 ``batch_operation/reports/trash_manifest.jsonl`` 追加一行，
   这样回收站被每周清空之后仍然留有可审计的痕迹。
-* 每周清空：``batch_operation/purge_trash.py --apply``（Hermes cron 每周跑一次）。
+* 每周清空：常驻 ``jindai/trash_purge.py``（每周一 06:00，随 app lifespan
+  启动，config ``trash_purge_enabled`` 开关；2026-10-25 起取代原 Hermes
+  cronjob）。手动演练/补跑仍用 ``batch_operation/purge_trash.py [--apply]``。
 
 本模块只碰文件系统、不碰数据库，便于单独测试；“这个路径是否还被别的记录引用”
 的判断放在调用方（bibliography 插件）里，因为它需要 session。

@@ -58,7 +58,12 @@ def _read_json(path) -> Optional[dict]:
 
 
 def _lock_held_by_other() -> bool:
-    """import_fast.lock 被活着的外部进程持有（手工导入/旧看门狗）。"""
+    """import_fast.lock 被活着的外部进程持有（手工导入/旧看门狗）。
+
+    除 os.kill(pid,0) 存活检测外必须核对 cmdline 确是导入引擎：容器重启后
+    PID 会被复用（2026-10-26 实证：锁里残留旧引擎 PID 144 被新的
+    multiprocessing 子进程复用，worker 误判「外部导入器在跑」而永远让路）。
+    """
     try:
         pid = int(open(LOCK_FILE).read().strip())
     except (OSError, ValueError):
@@ -73,8 +78,16 @@ def _lock_held_by_other() -> bool:
     try:
         with open(f"/proc/{pid}/stat") as f:
             state = f.read().rsplit(")", 1)[1].split()[0]
-        return state != "Z"
+        if state == "Z":
+            return False
     except (OSError, IndexError):
+        return False
+    # PID 复用防线：cmdline 必须还是导入引擎本体
+    try:
+        with open(f"/proc/{pid}/cmdline", "rb") as f:
+            cmd = f.read().replace(b"\0", b" ").decode("utf-8", "replace")
+        return "batch_import_direct" in cmd or "import_cli" in cmd
+    except OSError:
         return False
 
 
@@ -160,6 +173,8 @@ class ImportManager:
 
     _pending_cache: Optional[dict] = None
 
+    _embed_queued_cache: Optional[tuple[float, int]] = None  # (ts, count)
+
     async def _refresh_pending(self) -> None:
         from jindai.import_lists import get_conn
         conn = await get_conn()
@@ -169,6 +184,20 @@ class ImportManager:
             log.exception("[worker] pending_counts failed")
         finally:
             await conn.close()
+        # 嵌入队列深度（87M 行 count(*) 秒级但不便宜，60s TTL 缓存）
+        try:
+            now = time.time()
+            c = self._embed_queued_cache
+            if c is None or now - c[0] > 60:
+                conn = await get_conn()
+                try:
+                    n = int(await conn.fetchval(
+                        "SELECT count(*) FROM embedding_pending_queue") or 0)
+                finally:
+                    await conn.close()
+                self._embed_queued_cache = (now, n)
+        except Exception:
+            log.exception("[worker] embed queue count failed")
 
     # ------------------------------------------------------------------ 主循环
     async def polling_loop(self):
@@ -335,6 +364,8 @@ class ImportManager:
             await self._refresh_pending()
             out = self.status()
             out["pending"] = self._pending_cache
+            if self._embed_queued_cache:
+                out["embed_queued"] = self._embed_queued_cache[1]
             return out
 
         @router.post("/import/pause", tags=["Import"])
