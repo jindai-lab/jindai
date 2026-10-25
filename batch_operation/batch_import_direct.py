@@ -336,8 +336,11 @@ async def worker(wid, files, counter, total, batch, ds_params, args, logfn,
             return
         pos = next(counter)
         try:
+            # 行尾必须带换行：看门狗用 `cat w*` 收集在飞集合，
+            # 缺换行会把 4 个 worker 的路径拼成一行，交集拉黑永远匹配不上
+            # （2026-10-25 实证：rounds 2–14 连环段错误、黑名单全是拼接垃圾行）。
             with open(marker, "w", encoding="utf-8") as f:
-                f.write(path)
+                f.write(path + "\n")
         except OSError:
             pass
         try:
