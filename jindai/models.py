@@ -1019,19 +1019,24 @@ class Terms(MBase):  # terms has no `id`, and cannot as_dict()
         ]
         if not data:
             return []
-        async with get_db_session() as session:
-            async with session.begin():  # Start a transaction
+        # asyncpg 单条语句参数上限 32,767：OCR 密集批次（如县志辑）一个
+        # flush 收集的唯一关键词可达数万，整批一次 insert 会抛
+        # InterfaceError 并丢掉整批词表。按 30,000 行分块，逐块插入。
+        for i in range(0, len(data), 30000):
+            chunk = data[i : i + 30000]
+            async with get_db_session() as session:
+                async with session.begin():  # Start a transaction
 
-                # Execute a bulk insert
-                # Note: This assumes 'term' is a unique column.
-                # If not, use standard session.execute(insert(Terms), data)
-                stmt = insert(Terms).values(data)
+                    # Execute a bulk insert
+                    # Note: This assumes 'term' is a unique column.
+                    # If not, use standard session.execute(insert(Terms), data)
+                    stmt = insert(Terms).values(chunk)
 
-                # If you have a UNIQUE constraint on 'term', use this to skip duplicates:
-                stmt = stmt.on_conflict_do_nothing(index_elements=["term"])
+                    # If you have a UNIQUE constraint on 'term', use this to skip duplicates:
+                    stmt = stmt.on_conflict_do_nothing(index_elements=["term"])
 
-                await session.execute(stmt)
-                # No need for manual commit if using 'async with session.begin()'
+                    await session.execute(stmt)
+                    # No need for manual commit if using 'async with session.begin()'
 
         return words
 
