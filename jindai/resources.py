@@ -1428,6 +1428,11 @@ class StorageManager:
 
 emb_manager = EmbeddingManager()
 
+# 常驻 PDF 导入 supervisor（2026-10-25）：与 embedding worker 同构，
+# 子进程方式拉起导入引擎（段错误隔离），config.import_worker_enabled 开关。
+from .import_worker import ImportManager  # noqa: E402  (避免顶部循环导入)
+import_manager = ImportManager()
+
 
 # Idempotent index maintenance.  The project has no migration framework, so
 # the indexes below are ensured once at startup; CREATE INDEX IF NOT EXISTS
@@ -1474,6 +1479,11 @@ async def combined_lifespan(app: FastAPI):
     # Start embedding polling task
     emb_manager.polling_task = asyncio.create_task(emb_manager.polling_loop())
 
+    # Start resident PDF import supervisor (no-op unless
+    # config.import_worker_enabled)
+    import_manager.polling_task = asyncio.create_task(
+        import_manager.polling_loop())
+
     # Start worker
     await worker_manager.start_worker()
 
@@ -1487,6 +1497,11 @@ async def combined_lifespan(app: FastAPI):
         emb_manager.polling_task.cancel()
         await asyncio.gather(emb_manager.polling_task, return_exceptions=True)
 
+    # Stop resident PDF import supervisor
+    if import_manager.polling_task:
+        import_manager.polling_task.cancel()
+        await asyncio.gather(import_manager.polling_task, return_exceptions=True)
+
 
 # Register common CRUD resources
 ResourceRegistry(UserInfo, "/users", ["Users"]).register(
@@ -1498,6 +1513,7 @@ TaskResource().register(router)
 # Register business logic modules
 ContentManager().register_routes(router)
 emb_manager.register_routes(router)
+import_manager.register_routes(router)
 APIKeyManager().register_routes(router)
 StorageManager().register_routes(router)
 
