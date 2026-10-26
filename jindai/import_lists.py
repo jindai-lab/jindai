@@ -312,7 +312,13 @@ async def scan_disk_upsert(conn, cache_secs: float = 0,
     if disk is None:
         disk = await _walk_disk_async()
         _cache_write(DISK_CACHE_FILE, {"ts": time.time(), "sizes": disk})
-    await upsert_disk(conn, disk)
+    out = await upsert_disk(conn, disk)
+    # 站规：任何批量登记后必跑 fill_nontitle（2026-10-26 防再犯：引擎 10:00 登记
+    # 8,234 行后无人回填，空标题挂了一上午——auto_ingest 的 fill 只在它自己登记
+    # 新行时才跑、且只扫 OneDrive/Zotero，兜不住引擎的全盘登记）。
+    if out.get("upserted"):
+        import asyncio
+        await asyncio.to_thread(_run_fill_nontitle)
     return disk
 
 
@@ -320,6 +326,22 @@ async def _walk_disk_async() -> dict[str, int]:
     """在线程池里跑阻塞走盘（web 进程内不许阻塞事件循环）。"""
     import asyncio
     return await asyncio.to_thread(walk_disk)
+
+
+def _run_fill_nontitle() -> None:
+    """登记后回填 title/authors/item_type（幂等，只碰空 title 的 PDF 行）。"""
+    import subprocess
+    import sys
+    try:
+        r = subprocess.run(
+            [sys.executable, "/app/batch_operation/fill_nontitle_rows.py", "--apply"],
+            cwd="/app", capture_output=True, text=True, timeout=1800)
+        log.info("[scan] fill_nontitle rc=%s %s", r.returncode,
+                 (r.stdout or "")[-300:])
+        if r.returncode != 0:
+            log.warning("[scan] fill_nontitle stderr: %s", (r.stderr or "")[-300:])
+    except Exception as ex:  # noqa: BLE001 - 回填失败不阻断导入轮
+        log.warning("[scan] fill_nontitle failed: %s", ex)
 
 
 # --------------------------------------------------------------------------

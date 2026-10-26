@@ -261,6 +261,15 @@ class ImportManager:
 
         self.round_no += 1
         self.round_started_at = time.time()
+        # 无进展轮退避（设计口径=指数退避上限 900s）。此前只有 pending==0 分支
+        # 会睡：pending>0 但轮轮无进展（如死路径撑大队列/ImportError 全文件秒败）
+        # 会 ~2.5 分钟空转一轮（2026-10-26 实证 28 连击）。
+        if self.idle_streak:
+            sleep_s = min(IDLE_BASE_SLEEP * (2 ** min(self.idle_streak, 5)),
+                          IDLE_MAX_SLEEP)
+            log.info("[worker] no-progress backoff %.0fs (streak %d)",
+                     sleep_s, self.idle_streak)
+            await asyncio.sleep(sleep_s)
         env = dict(os.environ)
         env.setdefault("PYTHONUNBUFFERED", "1")
         logf = open(ENGINE_LOG, "a", encoding="utf-8")

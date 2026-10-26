@@ -8,13 +8,25 @@ This module provides functions for:
 - PDF merging operations
 """
 
+from __future__ import annotations
+
 import os
+import threading
 from io import BytesIO
 from typing import Any, cast
 
 import fitz
 from PIL import Image
 from PyPDF2 import PdfReader, PdfWriter
+
+# PyMuPDF/MuPDF is NOT thread-safe for concurrent use of one document (or of
+# two documents built from the same stream): a 2026-10-16 import crash showed
+# 4 OCR worker threads calling insert_pdf/get_pixmap on a shared doc, which
+# produced "code=7: cannot find page" errors and finally a native
+# "Segmentation fault (core dumped)" that killed the whole import round.
+# Every fitz entry point here is therefore serialized. Rendering/extraction
+# is cheap (~0.01s/page for page copies), so this costs nothing in practice.
+_FITZ_LOCK = threading.Lock()
 
 
 def open_pdf(pdf_path: str | bytes):
@@ -72,13 +84,46 @@ def render_pdf_page(pdf_path: str | bytes, page_num: int = 0, zoom: float = 2.0,
     Returns:
         Raw image bytes.
     """
-    doc = open_pdf(pdf_path)
-    try:
-        page = doc.load_page(page_num)
-        pix = page.get_pixmap(matrix=fitz.Matrix(zoom, zoom))
-        return pix.tobytes(format)
-    finally:
-        doc.close()
+    with _FITZ_LOCK:
+        doc = open_pdf(pdf_path)
+        try:
+            page = doc.load_page(page_num)
+            pix = page.get_pixmap(matrix=fitz.Matrix(zoom, zoom))
+            return pix.tobytes(format)
+        finally:
+            doc.close()
+
+
+def extract_pages_pdf(doc: Any, pages: list[int]) -> bytes:
+    """Build a PDF containing just the given pages (in order) of an open doc.
+
+    Used to ship raw page data to the remote OCR service (fileType=0) instead
+    of rasterizing on the client: the service renders with pypdfium2 at the
+    same scale=2.0 we use, and a page copy is ~10x smaller than the rendered
+    JPEG while preserving strokes the 1-bit binarization destroys.
+
+    Args:
+        doc: An open fitz.Document (opened by :func:`open_pdf`).
+        pages: 0-based page indices, kept in the given order.
+
+    Returns:
+        Raw PDF bytes for the extracted pages.
+
+    Raises:
+        RuntimeError: If PyMuPDF cannot copy the requested pages.
+    """
+    if not pages:
+        raise RuntimeError("no pages to extract")
+    with _FITZ_LOCK:
+        out = fitz.open()
+        try:
+            for p in pages:
+                out.insert_pdf(doc, from_page=p, to_page=p)
+            return out.tobytes()
+        except Exception as ex:
+            raise RuntimeError(f"page extraction failed: {ex!r}") from ex
+        finally:
+            out.close()
 
 
 def render_pdf_with_fitz(pdf_path: str | bytes, page_num: int = 0, format: str = "png") -> BytesIO:
