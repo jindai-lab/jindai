@@ -267,13 +267,66 @@ def walk_disk(root: str | None = None) -> dict[str, int]:
     return disk
 
 
+def dedup_key(basename: str) -> str:
+    """登记查重键：文件名 NFC 归一 + 小写。
+
+    ⚠️ **不含字节数**（2026-10-26 用户指令）：同一本书的两份拷贝可能一份加了
+    批注/书签，大小不同，字节数会漏判；文件名（Calibre 式《书名 - 作者》/
+    丛刊卷名）在本库足够唯一。误判方向也有护栏：skipped 只是不登记、文件
+    留在盘上，且全部留档 reports/scan_dedup_skipped.txt 可审计。
+    """
+    import unicodedata
+    return unicodedata.normalize("NFC", basename).lower()
+
+
+async def dedup_new_paths(conn, new_paths):
+    """登记前查重：与库里已有 PDF 行**同文件名**（NFC 小写）→ 判为同一文件的
+    另一份拷贝，跳过登记。返回 (keep[path 列表], skipped[(path, twin_path)])。
+
+    2026-10-26 教训：盘上重复目录树（Journals/<丛刊> ↔ Series/<丛刊>、
+    OneDrive/<中文作者> ↔ OneDrive/<拉丁作者>）被全盘扫描登记出 8,234 条死路径
+    空壳行（正主行早已在库）；有此护栏则整批只留档、不登记。同一次批内互为
+    拷贝的也只登记首个。skipped 落 ``reports/scan_dedup_skipped.txt``，
+    文件留在盘上不删。
+    """
+    rows = await conn.fetch(
+        "SELECT path FROM file_metadata "
+        "WHERE lower(path) LIKE '%.pdf' AND path NOT LIKE 'Tool Books/%' "
+        "AND path NOT LIKE '.trash/%'")
+    seen = {}
+    for r in rows:
+        seen.setdefault(dedup_key(r["path"].split("/")[-1]), r["path"])
+    keep, skipped = [], []
+    for pth in new_paths:
+        k = dedup_key(pth.split("/")[-1])
+        if k in seen:
+            skipped.append((pth, seen[k]))
+        else:
+            keep.append(pth)
+            seen.setdefault(k, pth)
+    if skipped:
+        path = REPORTS / "scan_dedup_skipped.txt"
+        os.makedirs(path.parent, exist_ok=True)
+        with open(path, "w", encoding="utf-8") as f:
+            f.write(f"# {time.strftime('%F %T')} dedup-skipped {len(skipped)} "
+                    "files (basename NFC-lower matched an existing row; "
+                    "size NOT in key per user rule 2026-10-26)\n")
+            for pth, twin in sorted(skipped):
+                f.write(f"{pth}\t<=>\t{twin}\n")
+        log.info("[scan] dedup: skipped %d files already registered under other "
+                 "paths (see reports/scan_dedup_skipped.txt)", len(skipped))
+    return keep, skipped
+
+
 async def upsert_disk(conn, disk: dict[str, int]) -> dict:
-    """把磁盘上有、表里没有的 PDF upsert 进 file_metadata（幂等）。"""
+    """把磁盘上有、表里没有的 PDF upsert 进 file_metadata（幂等，含查重护栏）。"""
     existing = {r["path"] for r in await conn.fetch(
         "SELECT path FROM file_metadata WHERE lower(path) LIKE '%.pdf' "
         "AND path NOT LIKE 'Tool Books/%' AND path NOT LIKE '.trash/%'")}
-    new = [(p, disk[p], SCAN_ITEM_TYPE.get(p.split("/")[0], "book"))
-           for p in disk if p not in existing]
+    candidates = [pth for pth in disk if pth not in existing]
+    keep, dedup_skipped = await dedup_new_paths(conn, candidates)
+    new = [(pth, disk[pth], SCAN_ITEM_TYPE.get(pth.split("/")[0], "book"))
+           for pth in keep]
     if new:
         await conn.executemany(
             "INSERT INTO file_metadata (path, extension, size_bytes, item_type, import_state) "
@@ -288,12 +341,13 @@ async def upsert_disk(conn, disk: dict[str, int]) -> dict:
         with open(path, "w", encoding="utf-8") as f:
             f.write("\n".join(stale) + "\n")
     out = {"disk_pdfs": len(disk), "existing_rows": len(existing),
-           "upserted": len(new), "stale_on_disk": len(stale),
+           "upserted": len(new), "dedup_skipped": len(dedup_skipped),
+           "stale_on_disk": len(stale),
            "new_paths": [p for p, _, _ in new]}
     log.info("[scan] disk pdfs=%d existing rows=%d upserted=%d "
-             "stale-on-disk=%d (see reports/filemeta_stale_paths.txt)",
+             "dedup-skipped=%d stale-on-disk=%d (see reports/filemeta_stale_paths.txt)",
              out["disk_pdfs"], out["existing_rows"], out["upserted"],
-             out["stale_on_disk"])
+             out["dedup_skipped"], out["stale_on_disk"])
     return out
 
 

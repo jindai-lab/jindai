@@ -78,6 +78,14 @@ async def main() -> int:
             "WHERE (path LIKE 'OneDrive/%' OR path LIKE 'Zotero/%') "
             "AND lower(path) LIKE '%.pdf'")}
         new = sorted(p for p in disk if p not in existing)
+        dedup_skipped = 0
+        if new:
+            # 查重护栏（与引擎全盘登记同口径，2026-10-26）：与库里已有 PDF 行
+            # 同文件名（NFC 小写）= 同一文件的另一份拷贝 → 不登记，只留档。
+            from jindai.import_lists import dedup_new_paths
+            keep, skipped = await dedup_new_paths(conn, new)
+            dedup_skipped = len(skipped)
+            new = sorted(keep)
         if new:
             await conn.executemany(
                 "INSERT INTO file_metadata (path, extension, size_bytes, item_type, import_state) "
@@ -86,8 +94,8 @@ async def main() -> int:
                  for p in new])
     finally:
         await conn.close()
-    log.info("[scan] scoped pdfs=%d  existing rows=%d  upserted=%d",
-             len(disk), len(existing), len(new))
+    log.info("[scan] scoped pdfs=%d  existing rows=%d  upserted=%d  dedup-skipped=%d",
+             len(disk), len(existing), len(new), dedup_skipped)
 
     # 3. 新登记行回填 title（站规：任何批量登记后必跑；幂等、只碰空 title 行）
     if new:
