@@ -109,10 +109,15 @@ def _cache_read(path, cache_secs: float) -> dict | None:
 
 
 def _cache_write(path, obj: dict) -> None:
-    """原子写 JSON 缓存（tmp + replace），失败只记日志不致命。"""
+    """原子写 JSON 缓存（tmp + replace），失败只记日志不致命。
+
+    ⚠️ tmp 必须带 pid 后缀：两个并发写者（如引擎轮走盘 + 手动验证走盘）共用
+    同一个 `.tmp` 路径时会互踩句柄，replace 进去的还是截断的混合内容
+    （2026-10-26 实证：缓存 JSON 恒截断在 2.55MB 处，每轮退化成全盘重走）。
+    """
     try:
         os.makedirs(os.path.dirname(path), exist_ok=True)
-        tmp = str(path) + ".tmp"
+        tmp = f"{path}.{os.getpid()}.tmp"
         with open(tmp, "w", encoding="utf-8") as f:
             json.dump(obj, f)
         os.replace(tmp, path)
