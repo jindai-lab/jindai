@@ -33,14 +33,11 @@ import os
 import shutil
 from datetime import datetime
 from typing import Iterable, List, Optional
+from pathlib import Path
 
-from jindai.paths import REPORTS
 from jindai.storage import storage
 
 TRASH_DIRNAME = ".trash"
-# 审计清单：清空回收站后仍保留（bind-mounted，宿主/容器同路径；目录由
-# jindai/paths.py 决定，默认 <项目根>/batch_operation/reports）。
-MANIFEST_LOG = str(REPORTS / "trash_manifest.jsonl")
 
 log = logging.getLogger(__name__)
 
@@ -48,6 +45,9 @@ log = logging.getLogger(__name__)
 def trash_root() -> str:
     """回收站根目录的绝对路径（不自动创建）。"""
     return storage.safe_join(TRASH_DIRNAME)
+
+
+MANIFEST_LOG = str(Path(trash_root()) / "trash_manifest.jsonl")
 
 
 def is_trash_path(rel_path: str) -> bool:

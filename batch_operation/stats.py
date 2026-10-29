@@ -16,6 +16,7 @@ import sys
 import time
 
 import common as C
+from jindai.embedutils import EmbeddingClient
 
 log = C.setup_logging("stats")
 
@@ -32,16 +33,16 @@ async def main() -> int:
     try:
         t = time.time()
         out["embedding_endpoint"] = {
-            "url": C.EMBED_URL,
+            "url": C.EMBED_BASE,
             "model": C.EMBED_MODEL,
             "dims": C.DIMS,
             "key_configured": bool(C.EMBED_KEY),
         }
         # live API check
-        ec = C.EmbeddingClient(timeout=30, retries=1)
+        ec = EmbeddingClient(timeout=30, retries=1)
         try:
             t0 = time.time()
-            vecs = await ec.embed(["ping"])
+            vecs = await ec.encode(["ping"])
             out["api_check"] = {
                 "ok": True, "dims": len(vecs[0]),
                 "latency_ms": int((time.time() - t0) * 1000),

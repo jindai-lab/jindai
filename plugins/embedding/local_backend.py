@@ -2,7 +2,7 @@
 
 Part of the built-in **embedding plugin** (``plugins/embedding``); moved here
 from ``jindai/local_embedding.py`` (2026-10-29) and loaded lazily by
-``jindai.models.TextEmbeddings`` when the config asks for it.
+``jindai.embedutils.EmbeddingClient`` when the config asks for it.
 
 When the config sets ``embedding_api_base`` to the literal value
 ``local``, the app stops POSTing to an OpenAI-compatible

@@ -10,7 +10,6 @@ Host paths: this folder is ~/jindai-lab/jindai/batch_operation (bind of /app).
 """
 from __future__ import annotations
 
-import asyncio
 import json
 import logging
 import os
@@ -26,13 +25,12 @@ if str(APP_ROOT) not in sys.path:
 os.chdir(APP_ROOT)  # jindai.config resolves config.yaml from cwd unless -c given
 
 import asyncpg  # noqa: E402
-import httpx  # noqa: E402
 from jindai.config import config  # noqa: E402
-from plugins.embedding import local_backend  # noqa: E402  (embedding_api_base: local backend)
 from jindai.models import TextEmbeddings  # noqa: E402  (for get_chunks parity)
 
-# --- embedding endpoint (from config.yaml) --------------------------------
-EMBED_URL = config.embedding_api_base.rstrip("/") + "/embeddings"
+# --- embedding endpoint (from config.yaml, reporting only) ----------------
+# The HTTP calls themselves are made by jindai.embedutils.EmbeddingClient.
+EMBED_BASE = config.embedding_api_base
 EMBED_MODEL = config.embedding_model
 EMBED_KEY = config.embedding_api_key
 DIMS = config.embedding_dims
@@ -78,59 +76,6 @@ def setup_logging(name: str, logfile: Optional[str] = None) -> logging.Logger:
         fh.setFormatter(fmt)
         logger.addHandler(fh)
     return logger
-
-
-class EmbeddingClient:
-    """OpenAI-compatible /embeddings client with retry + dims validation."""
-
-    def __init__(self, timeout: float = 300.0, retries: int = 4):
-        self._client = httpx.AsyncClient(timeout=timeout)
-        self._retries = retries
-        self._dims_ok = False
-        self._headers = {"Content-Type": "application/json"}
-        if EMBED_KEY:
-            self._headers["Authorization"] = f"Bearer {EMBED_KEY}"
-
-    async def embed(self, texts: list[str]) -> list[list[float]]:
-        if not texts:
-            return []
-        if local_backend.is_local(config.embedding_api_base):
-            # Same local-GPU backend as the app itself (embedding_api_base:
-            # local) - no HTTP endpoint exists in this mode.
-            return await local_backend.encode([t.strip() for t in texts])
-        payload = {"model": EMBED_MODEL, "input": [t.strip() for t in texts]}
-        last: Exception | None = None
-        for attempt in range(self._retries):
-            try:
-                resp = await self._client.post(
-                    EMBED_URL, json=payload, headers=self._headers
-                )
-                resp.raise_for_status()
-                data = resp.json()["data"]
-                vecs = [item["embedding"] for item in data]
-                if len(vecs) != len(texts):
-                    raise RuntimeError(
-                        f"API returned {len(vecs)} vectors for {len(texts)} inputs"
-                    )
-                if not self._dims_ok:
-                    if len(vecs[0]) != DIMS:
-                        raise RuntimeError(
-                            f"embedding dims {len(vecs[0])} != configured {DIMS}"
-                        )
-                    self._dims_ok = True
-                return vecs
-            except Exception as ex:  # noqa: BLE001 - retry anything transient
-                last = ex
-                delay = min(2 ** attempt, 30)
-                logging.getLogger("embed").warning(
-                    "embed call failed (%s: %s), retry %d/%d in %ss",
-                    type(ex).__name__, ex, attempt + 1, self._retries, delay,
-                )
-                await asyncio.sleep(delay)
-        raise RuntimeError(f"embedding API failed after {self._retries} tries: {last}")
-
-    async def aclose(self) -> None:
-        await self._client.aclose()
 
 
 class Progress:

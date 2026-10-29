@@ -26,6 +26,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from watchdog.events import FileSystemEventHandler
 from watchdog.observers import Observer
 
+from .. import embedutils
 from ..config import config
 from ..models import (Dataset, EmbeddingPendingQueue, FileDataset, FileMetadata,
                      Paragraph, QueryFilters, TaskDBO, Terms, TextEmbeddings,
@@ -677,7 +678,7 @@ class MaintenanceManager:
             vectors = None
             for attempt in range(3):
                 try:
-                    vectors = await TextEmbeddings.batch_encode(
+                    vectors = await embedutils.get_client().encode(
                         [p["content"] for p in sub], timeout=180.0
                     )
                     break
@@ -723,7 +724,7 @@ class MaintenanceManager:
                     "embedding insert failed: "
                     f"{type(ex).__name__}: {str(ex)[:300]}")
                 break
-        logging.info(f"{inserted} added")
+        logging.info(f"embeddings {inserted} added")
         return inserted
 
     async def custom_task(self, task_id: str = "", **params) -> Optional[dict]:

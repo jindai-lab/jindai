@@ -20,12 +20,12 @@ import logging
 import os
 import re
 import time
+from pathlib import Path
 
 import asyncpg
 
-# 报表 / 缓存 / 锁 / 状态目录的**唯一来源**在 ``jindai/paths.py``（默认
-# <项目根>/batch_operation/reports，可用 config.yaml 的 import_reports_dir 覆盖）。
-from ..paths import PROJECT_ROOT, REPORTS  # noqa: F401 - PROJECT_ROOT 供排障用
+# 报表 / 缓存 / 锁 / 状态目录的**唯一来源**
+REPORTS = Path(__file__).resolve().parent[2] / 'importer'
 
 log = logging.getLogger("jindai.import")
 

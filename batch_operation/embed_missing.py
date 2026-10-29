@@ -30,6 +30,7 @@ import json
 import time
 
 import common as C
+from jindai.embedutils import EmbeddingClient
 
 log = C.setup_logging("embed_missing", "batch_operation/reports/embed_missing.log")
 
@@ -104,7 +105,8 @@ async def collect_missing(conn, scope: str, limit_files: int) -> tuple:
     return files, total
 
 
-async def embed_wave(conn, sem, embedder: C.EmbeddingClient, bulk: list, args) -> None:
+async def embed_wave(conn, sem, embedder: EmbeddingClient, bulk: list,
+                     args) -> None:
     """Encode + insert one wave of (pid, sid, chunk_id, text) tuples."""
     if not bulk:
         return
@@ -112,7 +114,7 @@ async def embed_wave(conn, sem, embedder: C.EmbeddingClient, bulk: list, args) -
 
     async def emb(texts):
         async with sem:
-            return await embedder.embed(texts)
+            return await embedder.encode(texts)
 
     vec_lists = await asyncio.gather(*[emb([b[3] for b in bt]) for bt in batches])
     recs = [
@@ -124,7 +126,7 @@ async def embed_wave(conn, sem, embedder: C.EmbeddingClient, bulk: list, args) -
         await conn.executemany(INSERT_SQL, recs)
 
 
-async def process_file(conn, sem, embedder: C.EmbeddingClient, fid, path,
+async def process_file(conn, sem, embedder: EmbeddingClient, fid, path,
                        args, prog: C.Progress) -> tuple:
     """Embed all missing paragraphs of one file (keyset-paged).
 
@@ -206,7 +208,7 @@ async def main() -> int:
                 log.info("  %8d  %s", n, path)
             return 0
 
-        embedder = C.EmbeddingClient()
+        embedder = EmbeddingClient(timeout=300.0)
         sem = asyncio.Semaphore(args.inflight)
         prog = C.Progress(log, unit="chunks")
         prog.set_total(int(total_missing * CHUNKS_PER_PARA_EST))

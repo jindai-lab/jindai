@@ -33,7 +33,6 @@ import sys
 from pathlib import Path
 from typing import Any, Optional
 
-from ..paths import REPORTS
 from .import_lists import get_conn
 
 log = logging.getLogger("jindai.import")
@@ -42,7 +41,6 @@ ITEM_TYPE = {"Journals": "proceedings", "Series": "proceedings",
              "Zotero": "journalArticle", "Albums": "multimedia"}
 YEAR = re.compile(r"^\d{4}$")
 BATCH = 2000
-OUT_FILE = REPORTS / "fill_nontitle.json"
 
 
 def parse_path(path: str) -> dict:
@@ -84,8 +82,8 @@ def parse_path(path: str) -> dict:
 
 
 async def fill_nontitle(
+    out_path: str | Path,
     conn: Any = None, *, apply: bool = False, limit: int = 0,
-    out_path: Optional[str | Path] = None,
 ) -> dict:
     """回填空 title 的 PDF 行。
 
@@ -153,7 +151,7 @@ async def fill_nontitle(
         if own_conn:
             await conn.close()
 
-    target = Path(out_path) if out_path else OUT_FILE
+    target = Path(out_path)
     try:
         target.parent.mkdir(parents=True, exist_ok=True)
         with open(target, "w", encoding="utf-8") as f:
@@ -175,8 +173,9 @@ async def _main() -> int:
     ap.add_argument("--apply", action="store_true",
                     help="真的写库（默认只出计划）")
     ap.add_argument("--limit", type=int, default=0)
+    ap.add_argument("--out", type=str)
     args = ap.parse_args()
-    summary = await fill_nontitle(apply=args.apply, limit=args.limit)
+    summary = await fill_nontitle(out_path=args.out, apply=args.apply, limit=args.limit)
     print(json.dumps(summary, ensure_ascii=False))
     return 0
 

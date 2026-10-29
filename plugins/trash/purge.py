@@ -31,7 +31,7 @@ from typing import Optional
 from jindai.maintenance.import_lists import REPORTS, get_conn
 from jindai.plugin import WorkerPlugin
 
-from .core import TRASH_DIRNAME, trash_root
+from .trash import TRASH_DIRNAME, trash_root
 
 log = logging.getLogger("plugins.trash.purge")
 

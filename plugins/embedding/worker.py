@@ -25,7 +25,7 @@ from fastapi import APIRouter, Body, Depends, HTTPException
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from jindai import diskutils
+from jindai import diskutils, embedutils
 from jindai.config import config
 from jindai.maintenance import maintenance_manager
 from jindai.models import (EmbeddingPendingQueue, Paragraph, TextEmbeddings,
@@ -139,9 +139,8 @@ class EmbeddingWorkerPlugin(WorkerPlugin):
 
     @staticmethod
     def _local_backend_selected() -> bool:
-        """True when embedding_api_base selects this package's local backend."""
-        from .local_backend import is_local
-        return is_local(config.embedding_api_base)
+        """True when embedding_api_base selects the in-process backend."""
+        return embedutils.is_local(config.embedding_api_base)
 
     # -------------------------------------------------------------------- 路由
     def register_routes(self, router: APIRouter) -> None:
@@ -209,17 +208,15 @@ class EmbeddingWorkerPlugin(WorkerPlugin):
             # Get model name (use config if not provided)
             model_name = data.get("model", config.embedding_model)
 
-            # Compute embeddings using the configured model
-            embeddings = []
+            # Validate inputs, then embed the whole batch through the client
+            # (it paces + splits the request to the gateway limits).
             for text in input_texts:
                 if not isinstance(text, str):
                     raise HTTPException(
                         status_code=400,
                         detail=f"Invalid input: expected string, got {type(text).__name__}",
                     )
-                # Use the existing get_embedding method from TextEmbeddings
-                embedding = await TextEmbeddings.get_embedding(text)
-                embeddings.append(embedding)
+            embeddings = await embedutils.get_client().encode(input_texts)
 
             # Determine encoding format (default to float)
             encoding_format = data.get("encoding_format", "float")
@@ -270,7 +267,7 @@ class EmbeddingWorkerPlugin(WorkerPlugin):
             para = await session.get(Paragraph, resource_id)
             if not para or not para.content:
                 raise HTTPException(404)
-            emb_val = await TextEmbeddings.get_embedding(para.content)
+            emb_val = await embedutils.get_client().encode_one(para.content)
             te = (
                 await session.execute(
                     select(TextEmbeddings).filter(TextEmbeddings.id == para.id)

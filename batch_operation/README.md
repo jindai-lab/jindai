@@ -16,7 +16,7 @@ docker exec -w /app jindai /app/.venv/bin/python /app/batch_operation/<script>.p
 | `batch_import_direct.py` | PDF 导入进程入口（引擎实现见 `jindai/maintenance/import_cli.py`；常驻 worker 由 `plugins/importer` 拉起） | `--selftest`、`--dry-run`、`--no-scan`、`--limit N`、`-w 并发数`、`--only 清单` |
 | `embed_missing.py` | 给所有缺 embedding 的段落补向量（分块 200/50 与后端一致，写入 `ON CONFLICT DO NOTHING`，完成后消费队列行） | `--scope all\\|onedrive`、`--dry-run`、`--batch 256`、`--inflight 4`、`--limit-files N`、`--no-queue` |
 | `clean_queue.py` | 清理队列中的 stale（已嵌入）与 orphan（段落已删）行 | `--dry-run`、`--what stale\\|orphan\\|both`、`--batch 20000` |
-| `common.py` | 共享：config/DSN/EmbeddingClient/分块/进度 | — |
+| `common.py` | 共享：config/DSN/分块/进度（embedding 调用统一走 `jindai.embedutils.EmbeddingClient`） | — |
 
 ## 标准流程
 
@@ -47,6 +47,8 @@ docker exec -w /app jindai /app/.venv/bin/python /app/batch_operation/clean_queu
 - **嵌入端点**：`config.yaml` 的 `embedding_api_base: local` → 进程内跑 HF 模型
   `embedding_model`（BAAI/bge-m3，onnxruntime-gpu CUDA EP，1024 维，见
   `plugins/embedding/local_backend.py`）；旧的本机 bge_m3 服务（端口 8090）已于 2026-10-07 删除。
+  HTTP 调用统一由 `jindai/embedutils.py::EmbeddingClient` 发出（含 RPM/TPM 节流与
+  token 切批，批量脚本也走同一个 client）。
   rerank 走 `rerank_api_base`/`rerank_api_key`（云端，代码见 `jindai/models.py`）。
   **精度**：`embedding_onnx_path` 指向低精度 ONNX，现设 `quant/bge-m3-fp16.onnx`（1.06GiB，
   HF 官方 fp32 是 2.11GiB）；留空则回落到官方 fp32 导出。fp16 版转换脚本
@@ -60,7 +62,9 @@ docker exec -w /app jindai /app/.venv/bin/python /app/batch_operation/clean_queu
   stall 兜底（原版会无限重选同 1 万行，最终撞主键崩溃）；`_do` 改为分块/重试/幂等插入；
   新增 `consume_embedding_queue`。
 - `jindai/resources.py::polling_loop`：单轮异常不再杀死整个轮询协程。
-- `jindai/models.py`：`batch_encode(timeout=...)`；rerank 支持独立 `rerank_api_base/key`。
+- `jindai/models.py`：`batch_encode(timeout=...)`（2026-10-30 起 HTTP 客户端整体收进
+  `jindai/embedutils.py::EmbeddingClient`，`TextEmbeddings` 只存向量）；rerank 支持独立
+  `rerank_api_base/key`。
 - `jindai/config.py`：`-c` 参数不再误伤 `python -c`（argv[0]="-c" 时 IndexError）。
 
 ## 本机 bge_m3 服务（2026-09-29 调优定稿；**2026-10-07 已删除**）

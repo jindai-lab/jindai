@@ -2,6 +2,7 @@
 @zhs 话题与分类
 """
 
+import hashlib
 from collections import defaultdict, deque
 from io import BytesIO
 from typing import Any, AsyncGenerator, Dict, cast
@@ -10,7 +11,8 @@ import numpy as np
 from scipy.sparse.csgraph import connected_components
 from sklearn.metrics.pairwise import cosine_similarity
 
-from jindai.models import Paragraph, TextEmbeddings
+from jindai import embedutils
+from jindai.models import Paragraph, redis_auto_renew_cache
 from jindai.pipeline import PipelineStage
 
 from .basics import AccumulateParagraphs, Counter
@@ -122,6 +124,13 @@ class LDA(PipelineStage):
         }
 
 
+@redis_auto_renew_cache(
+    cache_key=lambda text: hashlib.sha1(text.encode("utf-8")).hexdigest())
+def embedding_for(text: str) -> list:
+    """Cached single-text embedding (blocking: pipeline stages are sync)."""
+    return embedutils.get_client().encode_one_sync(text)
+
+
 class TextEmbedding(PipelineStage):
     """Vectorize text, multilingual support
     @zhs 根据不同语言自动进行 TextEmbedding 向量化
@@ -129,9 +138,9 @@ class TextEmbedding(PipelineStage):
 
     def __init__(self) -> None:
         pass
-        
+
     def resolve(self, paragraph: Paragraph) -> Paragraph:
-        paragraph.extdata['vec'] = TextEmbeddings.get_embedding_sync(paragraph.content)
+        paragraph.extdata['vec'] = embedding_for(paragraph.content)
         return paragraph
 
 

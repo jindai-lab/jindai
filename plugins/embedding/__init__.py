@@ -7,7 +7,7 @@
   ``maintenance_manager.update_text_embeddings()`` 分批算向量落库；带磁盘水位
   守卫（pause/resume 滞回）与空闲指数退避；同时提供 ``/embeddings`` 路由。
 * ``local_backend`` —— ``embedding_api_base: local`` 时的本机 ONNX 后端
-  （原 ``jindai/local_embedding.py``），被 ``jindai.models.TextEmbeddings``
+  （原 ``jindai/local_embedding.py``），被 ``jindai.embedutils.EmbeddingClient``
   在运行时按需加载。
 
 worker 的启停由 app lifespan → ``PluginManager.startup()/shutdown()`` 统一管理。

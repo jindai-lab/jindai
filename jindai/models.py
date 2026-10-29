@@ -14,7 +14,6 @@ This module provides SQLAlchemy ORM models for:
 - APIKey: User API key management
 """
 
-import asyncio
 import hashlib
 import json
 import logging
@@ -24,7 +23,7 @@ import uuid
 from contextlib import asynccontextmanager
 from datetime import datetime
 from functools import wraps
-from typing import Any, AsyncIterator, ClassVar, Dict, List, Optional, Union, cast
+from typing import Any, AsyncIterator, Dict, List, Optional, Union, cast
 
 import httpx
 import redis
@@ -43,24 +42,9 @@ from sqlalchemy.orm import (Mapped, declarative_base, mapped_column,
                             relationship, validates)
 from sqlalchemy.sql import func
 
+from . import embedutils
 from .config import config, oidc_validator
 from .helpers import jieba
-
-# The in-process ONNX embedding backend (``embedding_api_base: local``) lives in
-# the built-in embedding plugin (``plugins/embedding/local_backend.py``).  It is
-# imported lazily on first use: importing it here would pull the whole plugin
-# package into the model layer's import time (circular import while jindai and
-# its plugins are still loading).
-_local_backend = None
-
-
-def local_embedding():
-    """Return the local embedding backend module (lazy, cached)."""
-    global _local_backend
-    if _local_backend is None:
-        from importlib import import_module
-        _local_backend = import_module("plugins.embedding.local_backend")
-    return _local_backend
 
 engine = create_async_engine(config.database)
 session_factory = async_sessionmaker(
@@ -898,7 +882,8 @@ class Paragraph(Base):
             if search_term:
                 filters.append(Paragraph.content.ilike(f"%{search_term}%"))
         elif search.startswith(":") or query_filters.embeddings:
-            query_embedding = await TextEmbeddings.get_embedding(search.strip(":"))
+            query_embedding = await embedutils.get_client().encode_one(
+                search.strip(":"))
         else:
             # Parse expression with |, &, () operators
             search_filter = await Paragraph._parse_search_expression(search)
@@ -1843,11 +1828,8 @@ class TextEmbeddings(Base):
     """Text embeddings model for semantic search.
 
     Stores vector embeddings of text chunks for similarity search.
-    Uses external OpenAI-compatible API for embedding generation.
+    Vector generation itself goes through ``jindai.embedutils.EmbeddingClient``.
     """
-
-    # Shared HTTP client for batch_encode (connection reuse across calls).
-    _encode_client: ClassVar[Optional[httpx.AsyncClient]] = None
 
     __tablename__ = "text_embeddings"
     __table_args__ = (
@@ -1908,7 +1890,7 @@ class TextEmbeddings(Base):
         api_base = (
             getattr(config, "rerank_api_base", "") or config.embedding_api_base
         ).rstrip("/")
-        if local_embedding().is_local(api_base):
+        if embedutils.is_local(api_base):
             raise RuntimeError(
                 "embedding_api_base is 'local' and rerank_api_base is empty: "
                 "rerank has no local backend, point rerank_api_base at an "
@@ -1941,93 +1923,6 @@ class TextEmbeddings(Base):
             results = [result["index"] for result in response.json()["results"]]
 
         return [items[i] for i in results]
-
-    @staticmethod
-    async def get_embedding(text: str) -> list:
-        """Get embedding for text asynchronously using external API.
-
-        Args:
-            text: Input text to embed (supports 100+ languages).
-
-        Returns:
-            Embedding as list of floats.
-        """
-        logging.info(f'Get embedding for {text[:10]}...')
-        
-        if local_embedding().is_local(config.embedding_api_base):
-            # embedding_api_base: local -> the HF model (embedding_model) runs
-            # on this machine's GPU inside the app; no HTTP round-trip.
-            return await local_embedding().encode_one(text)
-
-        api_base = config.embedding_api_base.rstrip("/")
-        api_key = config.embedding_api_key
-        model = config.embedding_model
-
-        headers = {
-            "Content-Type": "application/json",
-        }
-        if api_key:
-            headers["Authorization"] = f"Bearer {api_key}"
-
-        payload = {
-            "model": model,
-            "input": text.strip(),
-        }
-
-        from . import embedutils
-        limiter = embedutils.get_limiter()
-
-        async with httpx.AsyncClient() as client:
-            for attempt in range(6):
-                await limiter.acquire(
-                    max(1, len(text.strip()) + 8))  # chars ~= worst-case tokens
-                try:
-                    response = await client.post(
-                        f"{api_base}/embeddings",
-                        headers=headers,
-                        json=payload,
-                        timeout=30.0,
-                    )
-                    if response.status_code == 429:
-                        ra = response.headers.get("Retry-After", "")
-                        try:
-                            wait = min(max(float(ra), 1.0), 120.0)
-                        except ValueError:
-                            wait = min(2.0 ** attempt, 120.0)
-                        logging.warning(
-                            "embedding 429 rate-limited, waiting %.1fs "
-                            "(attempt %d/6)", wait, attempt + 1)
-                        await asyncio.sleep(wait)
-                        continue
-                    response.raise_for_status()
-                    result = response.json()
-                    break
-                except (httpx.HTTPError, asyncio.TimeoutError) as ex:
-                    wait = min(2.0 ** attempt, 60.0)
-                    logging.warning(
-                        "embedding call failed (%s: %s), retry %d/6 in %.0fs",
-                        type(ex).__name__, ex, attempt + 1, wait)
-                    await asyncio.sleep(wait)
-            else:
-                raise RuntimeError("embedding API failed after 6 attempts")
-
-        logging.info(f'Got embedding: {str(result)[:20]}...')
-
-        # Extract embedding from OpenAI-compatible response
-        return result["data"][0]["embedding"]
-
-    @staticmethod
-    @redis_auto_renew_cache()
-    def get_embedding_sync(text: str) -> list:
-        """Get embedding for text synchronously (wrapper for async method).
-
-        Args:
-            text: Input text to embed.
-
-        Returns:
-            Embedding as list of floats.
-        """
-        return asyncio.run(TextEmbeddings.get_embedding(text))
 
     @staticmethod
     def get_chunks(text: str, chunk_length: int, overlap: int) -> list:
@@ -2067,100 +1962,6 @@ class TextEmbeddings(Base):
                 break
 
         return chunks
-
-    @staticmethod
-    async def batch_encode(batch: list, timeout: float = 60.0) -> list:
-        """Encode a batch of texts using external API.
-
-        Args:
-            batch: List of texts to encode.
-
-    Returns:
-            List of embeddings as lists of floats.
-        """
-        if local_embedding().is_local(config.embedding_api_base):
-            # Same local-GPU path as get_embedding (worker / batch route).
-            return await local_embedding().encode([t.strip() for t in batch])
-
-        api_base = config.embedding_api_base.rstrip("/")
-        api_key = config.embedding_api_key
-        model = config.embedding_model
-
-        headers = {
-            "Content-Type": "application/json",
-        }
-        if api_key:
-            headers["Authorization"] = f"Bearer {api_key}"
-
-        texts = [text.strip() for text in batch]
-
-        # Client-side pacing + per-request splitting for the remote
-        # gateway (SiliconFlow/newapi bge-m3: 2000 RPM, 500k TPM,
-        # <=8k tokens/request). We split and reserve budget BEFORE
-        # sending instead of eating 429s; 429s that still slip through
-        # are retried with an adaptive wait (Retry-After aware).
-        from . import embedutils
-        limiter = embedutils.get_limiter()
-        max_req_tokens = int(getattr(config, "embedding_max_request_tokens", 8000))
-        groups = limiter.split_by_tokens(texts, max_req_tokens)
-
-        # Reuse one client across calls: opening a fresh TCP connection per
-        # encode batch cost an extra RTT, and the polling loop fires one
-        # request per flush.
-        client = TextEmbeddings._encode_client
-        if client is None or client.is_closed:
-            client = TextEmbeddings._encode_client = httpx.AsyncClient()
-
-        all_vecs: list = []
-        for sub_texts, ntok in groups:
-            payload = {"model": model, "input": sub_texts}
-            sub_vecs = None
-            for attempt in range(6):
-                await limiter.acquire(ntok)
-                try:
-                    response = await client.post(
-                        f"{api_base}/embeddings",
-                        headers=headers,
-                        json=payload,
-                        timeout=timeout,
-                    )
-                    if response.status_code == 429:
-                        # Gateway still throttled (another consumer, or the
-                        # window closed mid-flight): honor Retry-After when
-                        # present, else exponential backoff.
-                        ra = response.headers.get("Retry-After", "")
-                        try:
-                            wait = min(max(float(ra), 1.0), 120.0)
-                        except ValueError:
-                            wait = min(2.0 ** attempt, 120.0)
-                        logging.warning(
-                            "embedding 429 rate-limited (ntok=%d), "
-                            "waiting %.1fs (attempt %d/6)", ntok, wait,
-                            attempt + 1)
-                        await asyncio.sleep(wait)
-                        continue
-                    response.raise_for_status()
-                    result = response.json()
-                    sub_vecs = [item["embedding"] for item in result["data"]]
-                    break
-                except (httpx.HTTPError, asyncio.TimeoutError) as ex:
-                    wait = min(2.0 ** attempt, 60.0)
-                    logging.warning(
-                        "embedding call failed (%s: %s), retry %d/6 in %.0fs",
-                        type(ex).__name__, ex, attempt + 1, wait)
-                    await asyncio.sleep(wait)
-            if sub_vecs is None:
-                raise RuntimeError(
-                    f"embedding sub-request failed after 6 attempts "
-                    f"(ntok={ntok}, texts={len(sub_texts)})")
-            if len(sub_vecs) != len(sub_texts):
-                raise RuntimeError(
-                    f"embedding API returned {len(sub_vecs)}/"
-                    f"{len(sub_texts)} vectors")
-            all_vecs.extend(sub_vecs)
-
-        # Extract embeddings from OpenAI-compatible response
-        return all_vecs
 
 
 # API Key authentication constants
