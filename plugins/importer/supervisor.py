@@ -4,7 +4,7 @@
 职责（吸收原 import_watchdog_fast.sh + auto_ingest_scoped 的核心逻辑）：
 1. 监测文件夹变动：每轮引擎自带磁盘 upsert（TTL 缓存），新 PDF 自动登记；
 2. 有待导入文件时，以**子进程**方式拉起导入引擎（batch_operation/
-   batch_import_direct.py 进程入口 → jindai.maintenance.import_cli，进程名保持
+   batch_import_direct.py 进程入口 → plugins.importer.import_cli，进程名保持
    兼容监控 grep）；
 3. 崩溃归因：子进程非 0 退出 → 读在飞标记集合，与上一崩溃轮取交集 →
    交集写入毒文件黑名单 import_skip.txt → 重启。段错误隔离必须在子进程：
@@ -27,8 +27,9 @@ from typing import Optional
 
 from jindai.config import config
 from jindai import diskutils
-from jindai.maintenance.import_lists import DEFER_FILE, REPORTS, SKIP_FILE, pending_counts
 from jindai.plugin import WorkerPlugin
+
+from .import_lists import DEFER_FILE, REPORTS, SKIP_FILE, pending_counts
 
 log = logging.getLogger("jindai.import_worker")   # 名字保留：运维日志 grep 依赖
 
@@ -39,7 +40,7 @@ WORKER_STATUS_FILE = REPORTS / "import_worker_status.json"  # 本模块写的 su
 ENGINE_LOG = REPORTS / "import_onedrive.log"      # 子进程 stdout 追加落点
 LAST_SUMMARY = REPORTS / "import_direct.json"     # 引擎每轮 summary
 
-# 引擎 CLI：进程入口只做 `from jindai.maintenance.import_cli import main`，
+# 引擎 CLI：进程入口只做 `from plugins.importer.import_cli import main`，
 # 保留它是因为进程名含 batch_import_direct——gpu_cpu_monitor.py /
 # auto_ingest_scoped.py 的 ps grep 依赖这个进程名，改路径前先改监控。
 ENGINE_CMD = [sys.executable, "/app/batch_operation/batch_import_direct.py"]
@@ -192,7 +193,7 @@ class ImportWorkerPlugin(WorkerPlugin):
     _embed_queued_cache: Optional[tuple[float, int]] = None  # (ts, count)
 
     async def _refresh_pending(self) -> None:
-        from jindai.maintenance.import_lists import get_conn
+        from .import_lists import get_conn
         conn = await get_conn()
         try:
             self._pending_cache = await pending_counts(conn)

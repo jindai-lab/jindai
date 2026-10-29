@@ -1,11 +1,17 @@
-"""按文件名回填 title 为空的 PDF 行（2026-10-09 用户指令；2026-10-29 从
-``batch_operation/fill_nontitle_rows.py`` 迁入本包）。
+"""按文件名回填 title 为空的 PDF 行（2026-10-09 用户指令；原
+``batch_operation/fill_nontitle_rows.py``，2026-10-30 起随导入链归入
+``plugins/importer/``）。
 
-为什么在 jindai 里：磁盘登记钩子（``.import_lists.scan_disk_upsert``）登记完新行
-必须立刻回填空标题（2026-10-26 事故：引擎一次登记 8,234 行后没人回填，空标题挂了
-一上午）。核心包**不能** subprocess 去拉 ``batch_operation/`` 下的脚本——那是运维
-脚本目录（且大部分在 .gitignore 里）；顺带修正：旧实现漏了 ``import sys``，
-``sys.executable`` 必抛 NameError 并被 except 吞掉，该补丁其实一直静默失效。
+为什么属于导入插件：磁盘登记钩子（``.import_lists.scan_disk_upsert``）登记完
+新行必须立刻回填空标题（2026-10-26 事故：引擎一次登记 8,234 行后没人回填，
+空标题挂了一上午）。导入插件**不**在核心包里 subprocess 拉 ``batch_operation/``
+下的脚本——那是运维脚本目录（且大部分在 .gitignore 里）；顺带修正：旧实现漏了
+``import sys``，``sys.executable`` 必抛 NameError 并被 except 吞掉，该补丁其实
+一直静默失效。
+
+2026-10-30 用户指令：``jindai/maintenance/`` 的导入域（``import_lists`` /
+``import_engine`` / ``import_cli`` / 本文件）全部搬到 ``plugins/importer/``，
+核心 ``jindai/maintenance.py`` 退回单文件、只剩库内维护。
 
 item_type（当前为 NULL 才写）：
   Journals / Series → `proceedings`（合订本，暂且这么对应）
@@ -19,7 +25,7 @@ title 解析：
 幂等（谓词 `coalesce(btrim(title), '')=''`）、分批事务；dry-run 默认。
 
 CLI（容器内）：
-    python -m jindai.maintenance.fill_nontitle [--apply] [--limit N]
+    python -m plugins.importer.fill_nontitle [--apply] [--limit N]
 """
 from __future__ import annotations
 
@@ -33,7 +39,7 @@ import sys
 from pathlib import Path
 from typing import Any, Optional
 
-from .import_lists import get_conn
+from .import_lists import REPORTS, get_conn
 
 log = logging.getLogger("jindai.import")
 
@@ -82,7 +88,7 @@ def parse_path(path: str) -> dict:
 
 
 async def fill_nontitle(
-    out_path: str | Path,
+    out_path: Optional[str | Path] = None,
     conn: Any = None, *, apply: bool = False, limit: int = 0,
 ) -> dict:
     """回填空 title 的 PDF 行。
@@ -151,7 +157,7 @@ async def fill_nontitle(
         if own_conn:
             await conn.close()
 
-    target = Path(out_path)
+    target = Path(out_path) if out_path else REPORTS / "fill_nontitle.json"
     try:
         target.parent.mkdir(parents=True, exist_ok=True)
         with open(target, "w", encoding="utf-8") as f:

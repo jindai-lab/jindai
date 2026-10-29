@@ -11,7 +11,7 @@ This module provides functions for:
 - Unlocking "secured" PDFs
 
 它是全站 PDF I/O 的**唯一出口**：``plugins/datasources/pdfdatasource.py``、
-``jindai/storage.py``、``jindai/maintenance/manager.py`` 等调用方只允许 import
+``jindai/storage.py``、``jindai/maintenance.py`` 等调用方只允许 import
 本模块，不要自己再 import fitz / PyPDF2 / pike。
 """
 
@@ -260,7 +260,7 @@ def convert_pdf_to_tiff_group4(pdf, outp) -> None:
     """Convert a PDF to a 1-bit Group-4 raster PDF (historical name: "tiff").
 
     ⚠️ 函数名历史遗留：实际输出 **PDF**（``format="pdf"``），不是 TIFF。改名会
-    牵动 ``jindai/maintenance/manager.py::ocr()`` 的 monochrome 分支，故保留。
+    牵动 ``jindai/maintenance.py::ocr()`` 的 monochrome 分支，故保留。
 
     Args:
         pdf: PDF file object or path.

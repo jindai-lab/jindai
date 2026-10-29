@@ -4,9 +4,13 @@ This module provides:
 - MaintenanceManager: Class for database maintenance operations
 - File metadata synchronization
 - Dataset merging and cleanup
-- Text embedding updates
-- OCR processing
 - Background task management
+
+2026-10-29 曾与导入链一起包化成 ``jindai/maintenance/``；2026-10-30 用户指令
+把导入域（``import_lists`` / ``import_engine`` / ``import_cli`` /
+``fill_nontitle``）全部归到 ``plugins/importer/``，本模块随之退回**单文件**
+（``jindai/maintenance.py``）。这里只留库内维护：``/api/v2/maintenance/*``
+路由、worker 任务表、embedding 补算、OCR 任务。
 """
 
 import asyncio
@@ -26,13 +30,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from watchdog.events import FileSystemEventHandler
 from watchdog.observers import Observer
 
-from .. import embedutils
-from ..config import config
-from ..models import (Dataset, EmbeddingPendingQueue, FileDataset, FileMetadata,
+from . import embedutils
+from .config import config
+from .models import (Dataset, EmbeddingPendingQueue, FileDataset, FileMetadata,
                      Paragraph, QueryFilters, TaskDBO, Terms, TextEmbeddings,
                      get_current_admin, get_db_session)
-from ..pdfutils import get_pdf_page_count
-from ..storage import storage
+from .pdfutils import get_pdf_page_count
+from .storage import storage
 
 
 class MaintenanceManager:
@@ -446,287 +450,6 @@ class MaintenanceManager:
 
         return StorageHandler()
     
-    async def update_text_embeddings(self, filters: Optional[QueryFilters] = None) -> int:
-        """Update text embeddings for paragraphs in the pending queue.
-
-        Processes at most 10000 queued paragraphs per cycle, skips
-        paragraphs that already have embeddings, and removes queue rows
-        once a paragraph's chunks are all present. Without those guards
-        the loop re-selects the same rows forever (queue rows were never
-        consumed) and eventually dies on duplicate primary keys.
-
-        Args:
-            filters: Optional QueryFilters to limit which paragraphs to process.
-
-        Returns:
-            Number of embeddings added.
-        """
-        if isinstance(filters, dict):
-            filters = QueryFilters(**filters)
-
-        if filters:
-            # legacy path: narrow user filter; order by the queue PK so the
-            # merge/index plan is eligible (never ORDER BY paragraph.id alone)
-            stmt = await Paragraph.build_query(filters)
-            stmt = (
-                stmt.join(
-                    EmbeddingPendingQueue,
-                    (EmbeddingPendingQueue.id == Paragraph.id)
-                    & (EmbeddingPendingQueue.source_id == Paragraph.source_id),
-                )
-                .where(~exists(select(1).where(TextEmbeddings.id == Paragraph.id)))
-                .with_only_columns(Paragraph.id, Paragraph.source_id, Paragraph.content)
-                .order_by(EmbeddingPendingQueue.id, EmbeddingPendingQueue.source_id)
-                .limit(10000)
-            )
-
-        added = 0
-        stall_rounds = 0
-        while True:
-
-            if filters:
-                async with get_db_session() as session:
-                    results = await session.execute(stmt)
-                    results = results.mappings().all()
-                stale_ids = []
-            else:
-                # Step 1: 10000 queue keys via PK (index-only, instant).
-                async with get_db_session() as session:
-                    key_rows = (
-                        await session.execute(
-                            select(
-                                EmbeddingPendingQueue.id,
-                                EmbeddingPendingQueue.source_id,
-                            )
-                            .order_by(
-                                EmbeddingPendingQueue.id,
-                                EmbeddingPendingQueue.source_id,
-                            )
-                            .limit(10000)
-                        )
-                    ).all()
-                if not key_rows:
-                    return added
-                keys = [(r[0], r[1]) for r in key_rows]
-
-                # Step 2: fetch contents through a VALUES join. The planner
-                # sees an exact row count (uuid MCV stats otherwise mis-est
-                # the queue x paragraph join as ~1000 rows and it picks a
-                # parallel hash join + sort of tens of millions of rows --
-                # one cycle then ran 8+ minutes and wedged the loop). Measured:
-                # 10000 keys -> paragraph PK probes + anti-join = ~4s.
-                values_sql = ", ".join(
-                    f"(CAST(:p{i} AS UUID), CAST(:s{i} AS UUID))"
-                    for i in range(len(keys))
-                )
-                # already-embedded; the fm INNER JOIN skips paragraphs whose
-                # file_metadata row was deleted (2813 orphan sources sit at the
-                # head of the queue because queue ids are time-ordered; their
-                # inserts violate fk_text_embeddings_source and used to wedge
-                # every cycle). Keys dropped by either join are consumed below.
-                fetch_sql = text(
-                    "SELECT p.id, p.source_id, p.content "
-                    "FROM (VALUES " + values_sql + ") AS v(id, source_id) "
-                    "JOIN paragraph p ON p.id = v.id AND p.source_id = v.source_id "
-                    "JOIN file_metadata fm ON fm.id = p.source_id "
-                    "WHERE NOT EXISTS ("
-                    "  SELECT 1 FROM text_embeddings e WHERE e.id = p.id)"
-                )
-                params = {}
-                for i, (pid, sid) in enumerate(keys):
-                    params[f"p{i}"] = str(pid)
-                    params[f"s{i}"] = str(sid)
-                async with get_db_session() as session:
-                    results = (await session.execute(fetch_sql, params)).mappings().all()
-
-                # keys dropped by the joins (already embedded, or file_metadata
-                # deleted -> FK would reject any embedding row) are consumed so
-                # the queue keeps moving forward.
-                fetched_ids = {r["id"] for r in results}
-                stale_ids = [pid for pid, _sid in keys if pid not in fetched_ids]
-                if stale_ids:
-                    async with get_db_session() as session:
-                        await session.execute(
-                            delete(EmbeddingPendingQueue).where(
-                                EmbeddingPendingQueue.id.in_(stale_ids)
-                            )
-                        )
-
-            results_len = len(results)
-
-            if not results_len:
-                if stale_ids:
-                    logging.info(
-                        f"embedding cycle: all {len(stale_ids)} selected queue "
-                        "rows already embedded, consumed them")
-                    stall_rounds = 0
-                    continue
-                return added
-
-            new_bulk = []
-            expected = {}
-            group = []
-            consumed = 0
-            failed_flushes = 0
-
-            for i, p in enumerate(results, start=1):
-                chunks = TextEmbeddings.get_chunks(p["content"] or "", 200, 50)
-                expected[p["id"]] = len(chunks)
-                group.append(p["id"])
-                for chunk_id, chunk in enumerate(chunks, start=1):
-                    new_bulk.append(
-                        {
-                            "id": str(p["id"]),
-                            "source_id": str(p["source_id"]),
-                            "chunk_id": chunk_id,
-                            "content": chunk,
-                        }
-                    )
-                # Bigger flush groups: each flush costs one API round-trip plus
-                # a queue-consume pass. Benchmarked against the local bge-m3:
-                # 512-text requests run ~3x faster per text than 256, and the
-                # server gains nothing from concurrent requests (it already
-                # fans a single request across its 8 slots).
-                if i % 500 == 0 or i == results_len:
-                    pending = len(new_bulk)
-                    added += await self.update_text_embeddings_do(bulk=new_bulk)
-                    done = await MaintenanceManager.consume_embedding_queue(
-                        group, expected
-                    )
-                    consumed += done
-                    if pending and done == 0:
-                        failed_flushes += 1
-                    new_bulk = []
-                    expected = {}
-                    group = []
-                    if failed_flushes >= 3:
-                        logging.error(
-                            "embedding API unavailable, aborting cycle after "
-                            f"{failed_flushes} failed flushes")
-                        return added
-
-            if consumed == 0:
-                stall_rounds += 1
-                if stall_rounds >= 3:
-                    logging.warning(
-                        f"embedding cycle made no progress ({results_len} queued "
-                        "rows still pending), backing off")
-                    return added
-            else:
-                stall_rounds = 0
-
-    @staticmethod
-    async def consume_embedding_queue(pids: list, expected: dict) -> int:
-        """Remove queue rows for paragraphs whose embeddings are complete.
-
-        A paragraph is complete when it has no chunks to embed (empty
-        content) or when its row count in ``text_embeddings`` has reached
-        the expected chunk count.
-
-        Args:
-            pids: Paragraph ids processed in the last flush group.
-            expected: Mapping of paragraph id -> expected chunk count.
-
-        Returns:
-            Number of queue rows removed.
-        """
-        if not pids:
-            return 0
-        async with get_db_session() as session:
-            rows = await session.execute(
-                select(TextEmbeddings.id, func.count(TextEmbeddings.chunk_id))
-                .where(TextEmbeddings.id.in_(pids))
-                .group_by(TextEmbeddings.id)
-            )
-            counts = {row[0]: row[1] for row in rows}
-            complete = [
-                pid for pid in pids
-                if counts.get(pid, 0) >= expected.get(pid, 0)
-            ]
-            if not complete:
-                return 0
-            result = await session.execute(
-                delete(EmbeddingPendingQueue).where(
-                    EmbeddingPendingQueue.id.in_(complete)
-                )
-            )
-            return result.rowcount or 0
-
-    async def update_text_embeddings_do(self, bulk: list) -> int:
-        """Embed a batch of chunk texts and persist them idempotently.
-
-        The batch is split into bounded API sub-requests, transient
-        failures are retried with backoff, and rows are inserted with
-        ON CONFLICT DO NOTHING so duplicate primary keys (e.g. a second
-        consumer such as batch_operation/embed_missing.py) can never
-        crash the polling loop.
-
-        Args:
-            bulk: List of paragraph chunk data dictionaries.
-
-        Returns:
-            Number of embedding rows inserted (0 on failure).
-        """
-        if not bulk:
-            return 0
-        inserted = 0
-        # 512 per sub-request: measured ~5.9 texts/s vs ~2.0 at 256 against
-        # the local bge-m3 server (single request already saturates it).
-        sub_size = 512
-        for start in range(0, len(bulk), sub_size):
-            sub = bulk[start:start + sub_size]
-            vectors = None
-            for attempt in range(3):
-                try:
-                    vectors = await embedutils.get_client().encode(
-                        [p["content"] for p in sub], timeout=180.0
-                    )
-                    break
-                except (httpx.HTTPError, asyncio.TimeoutError) as ex:
-                    wait = 2 ** attempt
-                    logging.warning(
-                        f"embedding API call failed ({type(ex).__name__}: {ex}), "
-                        f"retry {attempt + 1}/3 in {wait}s")
-                    await asyncio.sleep(wait)
-                except Exception as ex:
-                    logging.error(
-                        f"embedding encode failed: {type(ex).__name__}: {ex}")
-                    break
-            if vectors is None:
-                break
-            if len(vectors) != len(sub):
-                logging.warning(
-                    f"embedding API returned {len(vectors)}/{len(sub)} vectors")
-                sub = sub[:len(vectors)]
-            stmt = (
-                insert(TextEmbeddings)
-                .values(
-                    [
-                        {
-                            "id": p["id"],
-                            "source_id": p["source_id"],
-                            "chunk_id": p["chunk_id"],
-                            "embedding": emb,
-                        }
-                        for p, emb in zip(sub, vectors)
-                    ]
-                )
-                .on_conflict_do_nothing(
-                    index_elements=["id", "source_id", "chunk_id"]
-                )
-            )
-            try:
-                async with get_db_session() as session:
-                    result = await session.execute(stmt)
-                    inserted += result.rowcount or 0
-            except Exception as ex:
-                logging.error(
-                    "embedding insert failed: "
-                    f"{type(ex).__name__}: {str(ex)[:300]}")
-                break
-        logging.info(f"embeddings {inserted} added")
-        return inserted
-
     async def custom_task(self, task_id: str = "", **params) -> Optional[dict]:
         """Execute a custom task.
 
@@ -737,7 +460,7 @@ class MaintenanceManager:
         Returns:
             Task execution result.
         """
-        from ..task import Task
+        from .task import Task
 
         if task_id:
             dbo = await TaskDBO.get(task_id)
@@ -750,88 +473,6 @@ class MaintenanceManager:
             dbo = TaskDBO(**params)
         task = Task.from_dbo(dbo)
         return await task.execute_async()
-
-    async def ocr(
-        self, input_path: str, output_path: str, lang: str, monochrome: bool = False
-    ) -> Optional[str]:
-        """Perform OCR on a PDF file.
-
-        Args:
-            input_path: Path to input PDF file.
-            output_path: Path to output OCR'd PDF file.
-            lang: Language code for OCR.
-            monochrome: Convert to black and white before OCR.
-
-        Returns:
-            Path to the output OCR'd PDF file.
-        """
-        from ..pdfutils import (convert_pdf_to_tiff_group4,
-                               merge_images_from_folder)
-
-        temps = []
-        input_path = storage.safe_join(input_path)
-
-        if os.path.isdir(input_path):
-            fo = tempfile.NamedTemporaryFile("wb", delete=False)
-            images = merge_images_from_folder(input_path, fo)
-            fo.close()
-            temps.append(fo.name)
-
-            if not images:
-                os.unlink(fo.name)
-                for fn in storage.glob(os.path.join(input_path, "*.pdf")):
-                    await self.ocr(
-                        input_path=fn,
-                        output_path=fn[:-4] + "_ocred.pdf",
-                        lang=lang,
-                        monochrome=monochrome,
-                    )
-                return
-            input_path = fo.name
-
-        if monochrome:
-            fo = tempfile.NamedTemporaryFile("wb", delete=False)
-            with open(input_path, "rb") as fi:
-                convert_pdf_to_tiff_group4(fi, fo)
-            fo.close()
-            input_path = fo.name
-            temps.append(fo.name)
-
-        output_path = storage.safe_join(output_path)
-        if output_path.endswith("/"):
-            output_path += os.path.basename(input_path).rsplit(".", 1)[0] + "_ocred"
-        if not output_path.endswith(".pdf"):
-            output_path += ".pdf"
-
-        try:
-            import ocrmypdf
-
-            # ⚠️ 这条 OCR 通道与 ``jindai/ocrutils.py``（客户端 PaddleOCRClient）
-            # 是两套独立实现，故意不合并：这里要产"带 OCR 文本层的 PDF"（离线
-            # 产物），走 ocrmypdf + ocrmypdf_paddleocr_remote 插件；ocrutils 走
-            # 批量抽文本。注意 ocrmypdf 插件只吃单值 ``paddle_remote``，所以本
-            # 通道没有 config.paddle_remotes 的多副本轮询——要提速请改插件侧。
-            await asyncio.to_thread(
-                ocrmypdf.ocr,
-                input_path,
-                output_path,
-                plugins=["ocrmypdf_paddleocr_remote"],
-                language=lang,
-                paddle_remote=config.paddle_remote,
-                jobs=2,
-                force_ocr=True,
-            )
-        finally:
-            for f in temps:
-                if os.path.exists(f):
-                    os.unlink(f)
-        return output_path
-
-    async def test_task(self) -> None:
-        """Test task for debugging."""
-        logging.info("Test Task Started")
-        await asyncio.sleep(10)
-        logging.info("Test Task Ended")
 
     def register_routes(self, target: APIRouter):
         """Get FastAPI router for maintenance endpoints.
@@ -862,8 +503,6 @@ class MaintenanceManager:
             func = {
                 "sync-pdate": self.update_pdate_from_url,
                 "sync-terms": self.sync_terms,
-                "text-embeddings": self.update_text_embeddings,
-                "ocr": self.ocr,
                 "custom": self.custom_task,
                 "sync-sources": self.sync_sources,
                 "cleanup-unused-datasets": self.cleanup_unused_datasets,

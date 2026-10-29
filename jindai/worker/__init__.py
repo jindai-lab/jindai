@@ -27,13 +27,10 @@ worker_manager = manager
 
 tasks_to_reg = [
     (maintenance_manager.custom_task, "custom"),
-    (maintenance_manager.ocr, "ocr"),
-    (maintenance_manager.update_text_embeddings, "text_embedding"),
     (maintenance_manager.sync_terms, "sync_terms"),
     (maintenance_manager.update_pdate_from_url, "sync_pdate"),
     (maintenance_manager.sync_sources, "sync_sources"),
     (maintenance_manager.cleanup_unused_datasets, "cleanup_datasets"),
-    (maintenance_manager.test_task, "test_task"),
 ]
 for func_ref, name in tasks_to_reg:
     worker_manager.register_task(func_ref, name)

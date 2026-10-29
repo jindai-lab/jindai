@@ -1,8 +1,11 @@
 """PDF 导入清单 / 磁盘登记 / 导入状态盖章（2026-10-25 并入主库，
-2026-10-29 收入 ``jindai/maintenance/`` 包）。
+2026-10-30 从 ``jindai/maintenance/`` 移入 ``plugins/importer/``）。
 
 原实现是 batch_operation/import_onedrive_pdfs.py（该文件已删除，其调用方
-classify_imported.py 等现在直接 ``from jindai.maintenance.import_lists import ...``）。
+classify_imported.py 等现在直接 ``from plugins.importer.import_lists import ...``）。
+
+本模块只依赖 asyncpg + ``jindai.config``/``jindai.storage``，**不依赖 FastAPI、
+不依赖 ORM**，所以引擎 CLI 子进程、运维脚本、``plugins/trash`` 都能安全引用。
 
 口径（长期站规，勿改）：
 - 清单只含 import_state IN ('pending','partial') + IS NULL 的 PDF 行，
@@ -24,8 +27,10 @@ from pathlib import Path
 
 import asyncpg
 
-# 报表 / 缓存 / 锁 / 状态目录的**唯一来源**
-REPORTS = Path(__file__).resolve().parent[2] / 'importer'
+# 报表 / 缓存 / 锁 / 状态目录的**唯一来源** = 应用根目录下的 importer/
+# 本文件位于 <app_root>/plugins/importer/，parents[2] 即 <app_root>
+# （与原先 <app_root>/jindai/maintenance/ 的层级深度相同，路径不变）。
+REPORTS = Path(__file__).resolve().parents[2] / 'importer'
 
 log = logging.getLogger("jindai.import")
 
@@ -80,7 +85,7 @@ DISK_CACHE_FILE = REPORTS / "disk_inventory.json"
 # asyncpg 连接（与 batch_operation/common.py::get_conn 同 DSN 口径）
 # --------------------------------------------------------------------------
 def _dsn() -> str:
-    from ..config import config
+    from jindai.config import config
     return config.database.replace("postgresql+asyncpg://", "postgresql://", 1)
 
 
@@ -249,7 +254,7 @@ def walk_disk(root: str | None = None) -> dict[str, int]:
     绝不能直接在事件循环里调用。
     """
     if root is None:
-        from ..storage import storage
+        from jindai.storage import storage
         root = storage.safe_join("OneDrive")[: -len("OneDrive")]
     disk: dict[str, int] = {}
     n_dirs = 0
@@ -390,7 +395,8 @@ def _run_fill_nontitle() -> None:
     """登记后回填 title/authors/item_type（幂等，只碰空 title 的 PDF 行）。
 
     实现在 ``.fill_nontitle``（2026-10-29 从 batch_operation/fill_nontitle_rows.py
-    迁入）：核心包不再 subprocess 拉运维脚本，也不再依赖 cwd=/app。
+    迁入，2026-10-30 随导入链一起归入 ``plugins/importer/``）：不在核心包
+    subprocess 拉运维脚本，也不依赖 cwd=/app。
     """
     from .fill_nontitle import fill_nontitle_sync
 
@@ -430,7 +436,7 @@ async def build_file_list(conn, disk: dict | None = None,
         pc = await pending_counts(conn)
         n_partial, n_pending = pc["partial"], pc["pending"]
 
-    from ..storage import storage
+    from jindai.storage import storage
     if disk is not None:
         missing = [p for p in candidates if p not in disk]
     else:

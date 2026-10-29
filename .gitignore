@@ -22,5 +22,5 @@ docker-compose.yaml
 tests/
 *.lock
 *.bak*
-batch_operation/
+*.tgz
 importer/

@@ -1,14 +1,14 @@
-"""PDF 导入引擎 CLI：``python -m jindai.maintenance.import_cli [args]``。
+"""PDF 导入引擎 CLI：``python -m plugins.importer.import_cli [args]``。
 
 运维/看门狗真正拉起的是 ``batch_operation/batch_import_direct.py``（进程名含
 ``batch_import_direct``，gpu_cpu_monitor / auto_ingest 的 ps grep 依赖它），那个
-脚本只做一件事：``from jindai.maintenance.import_cli import main``。参数与
+脚本只做一件事：``from plugins.importer.import_cli import main``。参数与
 2026-10-18 引擎全兼容：
 
-    python -m jindai.maintenance.import_cli --selftest          # 只构造链，不碰库
-    python -m jindai.maintenance.import_cli --dry-run --no-scan  # 只报清单统计
-    python -m jindai.maintenance.import_cli --limit 8 --no-scan -w 4
-    python -m jindai.maintenance.import_cli                      # 全量（含磁盘登记）
+    python -m plugins.importer.import_cli --selftest          # 只构造链，不碰库
+    python -m plugins.importer.import_cli --dry-run --no-scan  # 只报清单统计
+    python -m plugins.importer.import_cli --limit 8 --no-scan -w 4
+    python -m plugins.importer.import_cli                      # 全量（含磁盘登记）
 """
 from __future__ import annotations
 

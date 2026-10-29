@@ -4,7 +4,7 @@
 
 * ``worker.EmbeddingWorkerPlugin`` —— 常驻补算 worker：轮询
   ``embedding_pending_queue``，有待补段落就调用
-  ``maintenance_manager.update_text_embeddings()`` 分批算向量落库；带磁盘水位
+  ``update_text_embeddings()`` 分批算向量落库；带磁盘水位
   守卫（pause/resume 滞回）与空闲指数退避；同时提供 ``/embeddings`` 路由。
 * ``local_backend`` —— ``embedding_api_base: local`` 时的本机 ONNX 后端
   （原 ``jindai/local_embedding.py``），被 ``jindai.embedutils.EmbeddingClient``

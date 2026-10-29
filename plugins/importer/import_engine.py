@@ -1,8 +1,8 @@
 """PDF 导入引擎：直接按模块构造 stage 链，不读 TaskDBO（2026-10-25 并入主库，
-2026-10-29 收入 ``jindai/maintenance/`` 包）。
+2026-10-30 从 ``jindai/maintenance/`` 移入 ``plugins/importer/``）。
 
 原实现在 batch_operation/batch_import_direct.py（2026-10-18 引擎）。现在那份脚本
-只剩进程入口（``from jindai.maintenance.import_cli import main``），保留它是因为
+只剩进程入口（``from plugins.importer.import_cli import main``），保留它是因为
 进程名含 ``batch_import_direct``，``gpu_cpu_monitor`` / ``auto_ingest_scoped`` 的
 ps grep 依赖它；引擎实现全部在本模块。
 
@@ -554,7 +554,7 @@ async def run_round(keep: list[str], workers: int = 4, batch: int = 200,
         await conn.close()
 
     summary = {
-        "engine": "jindai.maintenance.import_engine (resident worker)",
+        "engine": "plugins.importer.import_engine (resident worker)",
         "workers": workers,
         "batch": batch,
         "list_size": total,
