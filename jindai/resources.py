@@ -40,6 +40,7 @@ from sse_starlette import EventSourceResponse
 # Import existing components
 from .models import get_current_admin, get_current_username, get_current_user
 from .config import config
+from . import disk_guard
 from .maintenance import maintenance_manager
 from .models import (
     APIKey,
@@ -352,12 +353,48 @@ class EmbeddingManager:
             return
         logging.info("Embedding Polling Loop started.")
         # Dynamic inter-cycle sleep: work done -> back almost immediately;
-        # no progress (queue empty, all flushes failed, or exception) ->
-        # exponential backoff to a 60s cap so a dead gateway isn't hammered.
+        # no progress (queue empty, all flushes failed, or exception) -> exponential
+        # backoff to a 60s cap so a dead gateway isn't hammered.
         base_sleep = 2.0
         max_sleep = 60.0
         idle_streak = 0
+        # 磁盘守卫（2026-10-26）：库的大头是 text_embeddings（~6.4KB/条，
+        # 全量外推还要 ~1.25TB），写满盘比慢更糟（WAL/半成品索引难收拾）。
+        # ≥ pause 挂起本 worker，≤ resume 恢复（滞回防抖），无需重启。
+        guard_path = str(getattr(config, "disk_guard_path", "/app"))
+        guard_pause = float(getattr(config, "disk_guard_pause_pct", 85))
+        guard_resume = min(float(getattr(config, "disk_guard_resume_pct", 80)),
+                           guard_pause)
+        disk_paused = False
+        disk_cycles = 0
         while True:
+            pct = disk_guard.used_pct(guard_path)
+            if pct is not None:
+                if disk_paused:
+                    if pct <= guard_resume:
+                        logging.info(
+                            "disk guard: usage %.1f%% <= %.1f%% — resuming "
+                            "embedding worker", pct, guard_resume)
+                        disk_paused = False
+                        disk_cycles = 0
+                    else:
+                        disk_cycles += 1
+                        if disk_cycles == 1 or disk_cycles % 15 == 0:
+                            logging.warning(
+                                "disk guard: usage %.1f%% > %.1f%% — embedding "
+                                "worker still paused (cycle %d)", pct,
+                                guard_resume, disk_cycles)
+                        await asyncio.sleep(120)
+                        continue
+                elif pct >= guard_pause:
+                    logging.warning(
+                        "disk guard: usage %.1f%% >= %.1f%% — pausing embedding "
+                        "worker (auto-resume at <= %.1f%%)", pct, guard_pause,
+                        guard_resume)
+                    disk_paused = True
+                    disk_cycles = 0
+                    await asyncio.sleep(120)
+                    continue
             added = 0
             try:
                 async with get_db_session() as session:

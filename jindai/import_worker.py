@@ -24,6 +24,7 @@ import time
 from typing import Optional
 
 from jindai.config import config
+from jindai import disk_guard
 from jindai.import_lists import DEFER_FILE, REPORTS, SKIP_FILE, pending_counts
 
 log = logging.getLogger("jindai.import_worker")
@@ -206,7 +207,44 @@ class ImportManager:
             log.info("Import Worker disabled (config.import_worker_enabled = false).")
             return
         log.info("Import Worker started.")
+        # 磁盘守卫（2026-10-26）：只在「轮与轮之间」拦，不在轮中杀引擎
+        # （半截页靠 page-set resume 能补，但没必要付这个代价）。阈值比
+        # embedding worker 的（85%）更高——段落增速远小于向量，这里是
+        # 防撞墙的最后闸门。
+        guard_path = str(getattr(config, "disk_guard_path", "/app"))
+        guard_pause = float(getattr(config, "import_disk_guard_pause_pct", 92))
+        guard_resume = min(float(getattr(config, "import_disk_guard_resume_pct", 88)),
+                           guard_pause)
+        disk_paused = False
+        disk_cycles = 0
         while True:
+            pct = disk_guard.used_pct(guard_path)
+            if pct is not None:
+                if disk_paused:
+                    if pct <= guard_resume:
+                        log.info("[worker] disk guard: usage %.1f%% <= %.1f%% "
+                                 "— resuming imports", pct, guard_resume)
+                        disk_paused = False
+                        disk_cycles = 0
+                    else:
+                        disk_cycles += 1
+                        if disk_cycles == 1 or disk_cycles % 10 == 0:
+                            log.warning("[worker] disk guard: usage %.1f%% > "
+                                        "%.1f%% — imports still paused "
+                                        "(cycle %d)", pct, guard_resume,
+                                        disk_cycles)
+                        await self._write_worker_status()
+                        await asyncio.sleep(120)
+                        continue
+                elif pct >= guard_pause:
+                    log.warning("[worker] disk guard: usage %.1f%% >= %.1f%% "
+                                "— pausing new import rounds (auto-resume at "
+                                "<= %.1f%%)", pct, guard_pause, guard_resume)
+                    disk_paused = True
+                    disk_cycles = 0
+                    await self._write_worker_status()
+                    await asyncio.sleep(120)
+                    continue
             try:
                 await self._refresh_pending()
                 pending = (self._pending_cache or {}).get("total", 0) or 0
