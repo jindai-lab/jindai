@@ -25,7 +25,7 @@ from fastapi import APIRouter, Body, Depends, HTTPException
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from jindai import disk_guard
+from jindai import diskutils
 from jindai.config import config
 from jindai.maintenance import maintenance_manager
 from jindai.models import (EmbeddingPendingQueue, Paragraph, TextEmbeddings,
@@ -66,7 +66,7 @@ class EmbeddingWorkerPlugin(WorkerPlugin):
         disk_paused = False
         disk_cycles = 0
         while True:
-            pct = disk_guard.used_pct(guard_path)
+            pct = diskutils.used_pct(guard_path)
             if pct is not None:
                 if disk_paused:
                     if pct <= guard_resume:

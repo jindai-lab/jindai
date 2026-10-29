@@ -1,8 +1,10 @@
-"""PDF 导入引擎（主库版，2026-10-25）：直接按模块构造 stage 链，不读 TaskDBO。
+"""PDF 导入引擎：直接按模块构造 stage 链，不读 TaskDBO（2026-10-25 并入主库，
+2026-10-29 收入 ``jindai/maintenance/`` 包）。
 
-原实现在 batch_operation/batch_import_direct.py（2026-10-18 引擎）；随「导入
-常驻化」并入主库。原脚本退化为 CLI 薄壳（`python batch_operation/
-batch_import_direct.py` 行为不变），供看门狗/监控/手工调用继续使用。
+原实现在 batch_operation/batch_import_direct.py（2026-10-18 引擎）。现在那份脚本
+只剩进程入口（``from jindai.maintenance.import_cli import main``），保留它是因为
+进程名含 ``batch_import_direct``，``gpu_cpu_monitor`` / ``auto_ingest_scoped`` 的
+ps grep 依赖它；引擎实现全部在本模块。
 
 管线（就地构造，不查 task_dbo.pipeline）：
     PDFDataSource(文本层抽取 + 扫描页 OCR + 页集续传)
@@ -34,7 +36,7 @@ from typing import Any
 
 import regex as re2  # \p{Other} 等 Unicode 属性
 
-from jindai.import_lists import (
+from .import_lists import (
     REPORTS, apply_skip_defer, build_file_list, cached_disk_inventory,
     count_covered_pages, get_conn, record_import_state, scan_disk_upsert,
     stats,
@@ -552,7 +554,7 @@ async def run_round(keep: list[str], workers: int = 4, batch: int = 200,
         await conn.close()
 
     summary = {
-        "engine": "jindai.import_engine (resident worker)",
+        "engine": "jindai.maintenance.import_engine (resident worker)",
         "workers": workers,
         "batch": batch,
         "list_size": total,

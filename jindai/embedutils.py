@@ -1,4 +1,5 @@
-"""Client-side sliding-window rate limiter for the remote embedding API.
+"""Embedding 网关客户端侧工具：token 计数 + RPM/TPM 滑窗节流（2026-10-24；
+2026-10-29 由 ``rate_limit.py`` 更名，与 ocrutils / pdfutils 同一命名族）。
 
 The gateway serving BAAI/bge-m3 (SiliconFlow via newapi) enforces
 2000 RPM / 500k TPM / <=8k tokens per request (measured 2026-10-24).
@@ -12,14 +13,18 @@ cannot be loaded.
 
 Usage (async, process-wide singleton):
 
-    limiter = rate_limit.get_limiter()
-    groups = limiter.split_by_tokens(texts)      # [(sub_texts, n_tokens)]
+    limiter = embedutils.get_limiter()
+    groups = limiter.split_by_tokens(texts, max_tokens)  # [(sub_texts, n_tokens)]
     for sub_texts, ntok in groups:
         await limiter.acquire(ntok)              # blocks until RPM+TPM allow
         ... POST ...
 
 Safe for concurrent tasks (asyncio.Lock guards the window; the wait
 happens outside the lock).
+
+注：本模块只管"节奏与切批"，HTTP 调用仍在 ``jindai.models.TextEmbeddings``
+（encode_one / encode_batch）；若日后把 embedding HTTP 客户端也收进来，请一并在
+此文件暴露 ``EmbeddingClient``，保持 "ocrutils:PaddleOCRClient" 对称。
 """
 from __future__ import annotations
 

@@ -19,7 +19,8 @@ from typing import Any, Dict, IO, List, Optional, cast
 from PIL import Image
 from werkzeug.utils import secure_filename
 
-from .pdfutils import get_pdf_page_count, render_pdf_with_fitz
+from .pdfutils import (extract_single_page_pdf, get_pdf_page_count,
+                       render_pdf_with_fitz)
 
 
 class Storage:
@@ -369,17 +370,8 @@ class Storage:
         # Handle PDF pages
         if mime_type == "application/pdf":
             if page:
-                # PDF page download
-                from PyPDF2 import PdfReader, PdfWriter
-
-                reader = PdfReader(target_path)
-                if page < 0 or page >= len(reader.pages):
-                    raise ValueError("Page number out of range")
-                writer = PdfWriter()
-                writer.add_page(reader.pages[page])
-                buf = BytesIO()
-                writer.write(buf)
-                buf.seek(0)
+                # PDF page download：单页抽取统一走 pdfutils（勿在此内联 PyPDF2）
+                buf = BytesIO(extract_single_page_pdf(target_path, page))
                 file_name = f"{file_name}.page{page}.pdf"
 
         if buf is None:

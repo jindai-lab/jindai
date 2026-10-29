@@ -4,7 +4,7 @@
 的行按日期合并成一天一行：
 
   path        → https://virtual/renmin-ribao/YYYY-MM-DD
-  title       → 人民日报 YYYY-MM-DD      （原本全空；不填会被 fill_nontitle_rows 回填成 URL）
+  title       → 人民日报 YYYY-MM-DD      （原本全空；不填会被 fill_nontitle 回填成 URL）
   publication → 人民日报
   date        → YYYY-MM-DD
   extdata     → [{"path": 原路径, "page": 第N版, "column": 栏目, "title": 标题}, ...]

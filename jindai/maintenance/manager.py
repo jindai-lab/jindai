@@ -26,12 +26,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from watchdog.events import FileSystemEventHandler
 from watchdog.observers import Observer
 
-from .config import config
-from .models import (Dataset, EmbeddingPendingQueue, FileDataset, FileMetadata,
+from ..config import config
+from ..models import (Dataset, EmbeddingPendingQueue, FileDataset, FileMetadata,
                      Paragraph, QueryFilters, TaskDBO, Terms, TextEmbeddings,
                      get_current_admin, get_db_session)
-from .pdfutils import get_pdf_page_count
-from .storage import storage
+from ..pdfutils import get_pdf_page_count
+from ..storage import storage
 
 
 class MaintenanceManager:
@@ -736,7 +736,7 @@ class MaintenanceManager:
         Returns:
             Task execution result.
         """
-        from .task import Task
+        from ..task import Task
 
         if task_id:
             dbo = await TaskDBO.get(task_id)
@@ -764,7 +764,7 @@ class MaintenanceManager:
         Returns:
             Path to the output OCR'd PDF file.
         """
-        from .pdfutils import (convert_pdf_to_tiff_group4,
+        from ..pdfutils import (convert_pdf_to_tiff_group4,
                                merge_images_from_folder)
 
         temps = []
@@ -805,6 +805,11 @@ class MaintenanceManager:
         try:
             import ocrmypdf
 
+            # ⚠️ 这条 OCR 通道与 ``jindai/ocrutils.py``（客户端 PaddleOCRClient）
+            # 是两套独立实现，故意不合并：这里要产"带 OCR 文本层的 PDF"（离线
+            # 产物），走 ocrmypdf + ocrmypdf_paddleocr_remote 插件；ocrutils 走
+            # 批量抽文本。注意 ocrmypdf 插件只吃单值 ``paddle_remote``，所以本
+            # 通道没有 config.paddle_remotes 的多副本轮询——要提速请改插件侧。
             await asyncio.to_thread(
                 ocrmypdf.ocr,
                 input_path,

@@ -28,7 +28,7 @@ import time
 from datetime import datetime, timedelta
 from typing import Optional
 
-from jindai.import_lists import REPORTS, get_conn
+from jindai.maintenance.import_lists import REPORTS, get_conn
 from jindai.plugin import WorkerPlugin
 
 from .core import TRASH_DIRNAME, trash_root

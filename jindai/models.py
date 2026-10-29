@@ -1974,8 +1974,8 @@ class TextEmbeddings(Base):
             "input": text.strip(),
         }
 
-        from . import rate_limit
-        limiter = rate_limit.get_limiter()
+        from . import embedutils
+        limiter = embedutils.get_limiter()
 
         async with httpx.AsyncClient() as client:
             for attempt in range(6):
@@ -2099,8 +2099,8 @@ class TextEmbeddings(Base):
         # <=8k tokens/request). We split and reserve budget BEFORE
         # sending instead of eating 429s; 429s that still slip through
         # are retried with an adaptive wait (Retry-After aware).
-        from . import rate_limit
-        limiter = rate_limit.get_limiter()
+        from . import embedutils
+        limiter = embedutils.get_limiter()
         max_req_tokens = int(getattr(config, "embedding_max_request_tokens", 8000))
         groups = limiter.split_by_tokens(texts, max_req_tokens)
 

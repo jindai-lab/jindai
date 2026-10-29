@@ -34,11 +34,13 @@ import shutil
 from datetime import datetime
 from typing import Iterable, List, Optional
 
+from jindai.paths import REPORTS
 from jindai.storage import storage
 
 TRASH_DIRNAME = ".trash"
-# 审计清单：清空回收站后仍保留（bind-mounted，宿主/容器同路径）。
-MANIFEST_LOG = "batch_operation/reports/trash_manifest.jsonl"
+# 审计清单：清空回收站后仍保留（bind-mounted，宿主/容器同路径；目录由
+# jindai/paths.py 决定，默认 <项目根>/batch_operation/reports）。
+MANIFEST_LOG = str(REPORTS / "trash_manifest.jsonl")
 
 log = logging.getLogger(__name__)
 

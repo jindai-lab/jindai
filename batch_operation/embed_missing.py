@@ -14,7 +14,7 @@ Design:
     (embedding_api_base: local -> in-process BAAI/bge-m3 on the GPU), inserts
     ON CONFLICT DO NOTHING, verifies the
     per-paragraph chunk count, then consumes embedding_pending_queue rows
-    (same semantics as jindai/maintenance.py::consume_embedding_queue),
+    (same semantics as jindai/maintenance/manager.py::consume_embedding_queue),
     so the UI queue gauge drains truthfully and re-runs are resumable.
 
 Run (in container, cwd /app):

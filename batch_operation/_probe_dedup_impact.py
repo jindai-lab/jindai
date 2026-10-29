@@ -5,7 +5,7 @@ import sys
 import unicodedata
 
 sys.path.insert(0, "/app")
-from jindai.import_lists import get_conn  # noqa: E402
+from jindai.maintenance.import_lists import get_conn  # noqa: E402
 
 
 def key(p: str) -> str:

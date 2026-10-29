@@ -1,8 +1,8 @@
-"""PDF 导入清单 / 磁盘登记 / 导入状态盖章（主库版，2026-10-25）。
+"""PDF 导入清单 / 磁盘登记 / 导入状态盖章（2026-10-25 并入主库，
+2026-10-29 收入 ``jindai/maintenance/`` 包）。
 
-原实现在 batch_operation/import_onedrive_pdfs.py；随「导入常驻化」并入主库，
-batch_operation 下原文件退化为 re-export shim（classify_imported.py 等旧脚本
-继续 import 它不受影响）。
+原实现是 batch_operation/import_onedrive_pdfs.py（该文件已删除，其调用方
+classify_imported.py 等现在直接 ``from jindai.maintenance.import_lists import ...``）。
 
 口径（长期站规，勿改）：
 - 清单只含 import_state IN ('pending','partial') + IS NULL 的 PDF 行，
@@ -20,15 +20,14 @@ import logging
 import os
 import re
 import time
-from pathlib import Path
 
 import asyncpg
 
-log = logging.getLogger("jindai.import")
+# 报表 / 缓存 / 锁 / 状态目录的**唯一来源**在 ``jindai/paths.py``（默认
+# <项目根>/batch_operation/reports，可用 config.yaml 的 import_reports_dir 覆盖）。
+from ..paths import PROJECT_ROOT, REPORTS  # noqa: F401 - PROJECT_ROOT 供排障用
 
-# 报表/缓存目录：源码树内 batch_operation/reports（容器内 /app/batch_operation/
-# reports ≡ 宿主 ~/jindai-lab/jindai/batch_operation/reports，bind mount 同一目录）。
-REPORTS = Path(__file__).resolve().parents[1] / "batch_operation" / "reports"
+log = logging.getLogger("jindai.import")
 
 MISSING_PDF_SQL = """
     SELECT count(*) FROM file_metadata f
@@ -81,7 +80,7 @@ DISK_CACHE_FILE = REPORTS / "disk_inventory.json"
 # asyncpg 连接（与 batch_operation/common.py::get_conn 同 DSN 口径）
 # --------------------------------------------------------------------------
 def _dsn() -> str:
-    from jindai.config import config
+    from ..config import config
     return config.database.replace("postgresql+asyncpg://", "postgresql://", 1)
 
 
@@ -250,7 +249,7 @@ def walk_disk(root: str | None = None) -> dict[str, int]:
     绝不能直接在事件循环里调用。
     """
     if root is None:
-        from jindai.storage import storage
+        from ..storage import storage
         root = storage.safe_join("OneDrive")[: -len("OneDrive")]
     disk: dict[str, int] = {}
     n_dirs = 0
@@ -388,17 +387,18 @@ async def _walk_disk_async() -> dict[str, int]:
 
 
 def _run_fill_nontitle() -> None:
-    """登记后回填 title/authors/item_type（幂等，只碰空 title 的 PDF 行）。"""
-    import subprocess
-    import sys
+    """登记后回填 title/authors/item_type（幂等，只碰空 title 的 PDF 行）。
+
+    实现在 ``.fill_nontitle``（2026-10-29 从 batch_operation/fill_nontitle_rows.py
+    迁入）：核心包不再 subprocess 拉运维脚本，也不再依赖 cwd=/app。
+    """
+    from .fill_nontitle import fill_nontitle_sync
+
     try:
-        r = subprocess.run(
-            [sys.executable, "/app/batch_operation/fill_nontitle_rows.py", "--apply"],
-            cwd="/app", capture_output=True, text=True, timeout=1800)
-        log.info("[scan] fill_nontitle rc=%s %s", r.returncode,
-                 (r.stdout or "")[-300:])
-        if r.returncode != 0:
-            log.warning("[scan] fill_nontitle stderr: %s", (r.stderr or "")[-300:])
+        summary = fill_nontitle_sync(apply=True)
+        log.info("[scan] fill_nontitle updated=%s failed=%s empty_after=%s",
+                 summary["applied"]["updated"], summary["applied"]["failed"],
+                 summary["empty_title_after"])
     except Exception as ex:  # noqa: BLE001 - 回填失败不阻断导入轮
         log.warning("[scan] fill_nontitle failed: %s", ex)
 
@@ -430,7 +430,7 @@ async def build_file_list(conn, disk: dict | None = None,
         pc = await pending_counts(conn)
         n_partial, n_pending = pc["partial"], pc["pending"]
 
-    from jindai.storage import storage
+    from ..storage import storage
     if disk is not None:
         missing = [p for p in candidates if p not in disk]
     else:

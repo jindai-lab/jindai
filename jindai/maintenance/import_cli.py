@@ -1,12 +1,14 @@
-"""PDF 导入引擎 CLI（主库版）：`python -m jindai.import_cli [args]`。
+"""PDF 导入引擎 CLI：``python -m jindai.maintenance.import_cli [args]``。
 
-batch_operation/batch_import_direct.py 已退化为调用本模块的薄壳（进程名保持
-不变，监控 grep / auto_ingest 拉起路径无需改动）。参数与 2026-10-18 引擎全兼容：
+运维/看门狗真正拉起的是 ``batch_operation/batch_import_direct.py``（进程名含
+``batch_import_direct``，gpu_cpu_monitor / auto_ingest 的 ps grep 依赖它），那个
+脚本只做一件事：``from jindai.maintenance.import_cli import main``。参数与
+2026-10-18 引擎全兼容：
 
-    python -m jindai.import_cli --selftest          # 只构造链，不碰库
-    python -m jindai.import_cli --dry-run --no-scan  # 只报清单统计
-    python -m jindai.import_cli --limit 8 --no-scan -w 4
-    python -m jindai.import_cli                      # 全量（含磁盘登记）
+    python -m jindai.maintenance.import_cli --selftest          # 只构造链，不碰库
+    python -m jindai.maintenance.import_cli --dry-run --no-scan  # 只报清单统计
+    python -m jindai.maintenance.import_cli --limit 8 --no-scan -w 4
+    python -m jindai.maintenance.import_cli                      # 全量（含磁盘登记）
 """
 from __future__ import annotations
 
@@ -17,7 +19,10 @@ import logging
 import os
 import sys
 
-# 容器内直跑时保证 /app 在 sys.path（python -m 方式天然满足，薄壳脚本不满足）
+from .import_lists import REPORTS
+
+# 容器内以脚本方式直跑时保证 /app 在 sys.path（python -m 方式天然满足；
+# batch_operation/batch_import_direct.py 这类入口脚本的 cwd 不一定是 /app）
 if "/app" not in sys.path:
     sys.path.insert(0, "/app")
 
@@ -33,7 +38,6 @@ def _setup_logging() -> logging.Logger:
     sh = logging.StreamHandler(sys.stdout)
     sh.setFormatter(fmt)
     logger.addHandler(sh)
-    from jindai.import_lists import REPORTS
     try:
         REPORTS.mkdir(parents=True, exist_ok=True)
         fh = logging.FileHandler(REPORTS / "import_direct.log", encoding="utf-8")
@@ -63,10 +67,11 @@ async def main() -> int:
     ap.add_argument("--selftest", action="store_true",
                     help="只构造 stage 链并打印，不连库不写数据")
     ap.add_argument("--report",
-                    default="batch_operation/reports/import_direct.json")
+                    default=str(REPORTS / "import_direct.json"),
+                    help="summary 落点（默认 REPORTS/import_direct.json，绝对路径）")
     args = ap.parse_args()
 
-    from jindai import import_engine as E
+    from . import import_engine as E
 
     if args.selftest:
         _cls, pipeline, saver = E.build_chain(args.batch)
@@ -107,7 +112,6 @@ async def main() -> int:
     finally:
         E.release_lock()
 
-    from jindai.import_lists import REPORTS
     report_path = args.report
     try:
         with open(report_path, "w", encoding="utf-8") as f:

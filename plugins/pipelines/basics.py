@@ -17,6 +17,7 @@ from lingua import LanguageDetectorBuilder
 
 from jindai.helpers import WordStemmer as WStemmer, aeval, jieba
 from jindai.models import Paragraph, Terms, FileDataset, get_db_session
+from jindai.pdfutils import unlock_pdf
 from jindai.pipeline import PipelineStage, ResolveReturn
 from jindai.storage import storage
 
@@ -1028,12 +1029,9 @@ class PDFUnlock(PipelineStage):
         :type file: file:pdf
         """
         super().__init__()
-        import pike
-
-        buf = BytesIO()
-        pike_obj = cast(Any, pike)
-        pike_obj.open(storage.open(cast(str, file), "rb")).save(buf)
-        self.data = PipelineStage.return_file("pdf", buf.getvalue())
+        # 实现收在 pdfutils（唯一 PDF 出口）；本 stage 只管把流喂进去
+        buf = unlock_pdf(storage.open(cast(str, file), "rb"))
+        self.data = PipelineStage.return_file("pdf", buf)
 
     async def summarize(self, result) -> dict:
         return self.data

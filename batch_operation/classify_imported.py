@@ -34,7 +34,7 @@ import logging  # noqa: E402
 logging.disable(logging.CRITICAL)
 
 import common as C  # noqa: E402
-from import_onedrive_pdfs import (  # noqa: E402
+from jindai.maintenance.import_lists import (  # noqa: E402
     IMPORT_STATE_TABLE, count_covered_pages, ensure_import_state_table,
     record_import_state,
 )

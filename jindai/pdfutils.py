@@ -1,11 +1,18 @@
 """PDF utilities for Jindai application.
 
 This module provides functions for:
+- Opening PDFs (path / bytes / file-like) and page-level access
+  (page count, page text, page label)
 - PDF page count extraction
 - PDF rendering to images
 - PDF conversion to TIFF
 - Image merging into PDF
 - PDF merging operations
+- Unlocking "secured" PDFs
+
+它是全站 PDF I/O 的**唯一出口**：``plugins/datasources/pdfdatasource.py``、
+``jindai/storage.py``、``jindai/maintenance/manager.py`` 等调用方只允许 import
+本模块，不要自己再 import fitz / PyPDF2 / pike。
 """
 
 from __future__ import annotations
@@ -26,7 +33,11 @@ from PyPDF2 import PdfReader, PdfWriter
 # "Segmentation fault (core dumped)" that killed the whole import round.
 # Every fitz entry point here is therefore serialized. Rendering/extraction
 # is cheap (~0.01s/page for page copies), so this costs nothing in practice.
-_FITZ_LOCK = threading.Lock()
+#
+# RLock (not Lock): `render_pdf_page` opens the doc via `open_pdf` while
+# already holding the lock, and `convert_pdf_to_tiff_group4` re-enters through
+# `page` accessors -- a plain Lock self-deadlocks.
+_FITZ_LOCK = threading.RLock()
 
 
 def open_pdf(pdf_path: str | bytes):
@@ -41,29 +52,80 @@ def open_pdf(pdf_path: str | bytes):
     Returns:
         An open fitz.Document. Caller must close it.
     """
-    if isinstance(pdf_path, str):
-        return fitz.open(pdf_path)
-    if hasattr(pdf_path, 'read'):
-        # File-like object - fitz can read from a stream
-        if hasattr(pdf_path, 'name'):
-            return fitz.open(cast(Any, pdf_path).name)
-        return fitz.open("pdf", cast(Any, pdf_path).read())
-    return fitz.open(stream=pdf_path)
+    with _FITZ_LOCK:
+        if isinstance(pdf_path, str):
+            return fitz.open(pdf_path)
+        if hasattr(pdf_path, 'read'):
+            # File-like object - fitz can read from a stream
+            if hasattr(pdf_path, 'name'):
+                return fitz.open(cast(Any, pdf_path).name)
+            return fitz.open("pdf", cast(Any, pdf_path).read())
+        return fitz.open(stream=pdf_path)
 
 
-def get_pdf_page_count(pdf_path: str) -> int | None:
-    """Get the number of pages in a PDF file.
+def page_count(doc: Any) -> int:
+    """总页数（open_pdf 返回的 doc）。"""
+    return doc.page_count
+
+
+def extract_page_text(doc: Any, page_num: int) -> str:
+    """抽取单页文本层；失败返回空串（坏页不该打断整本导入）。
 
     Args:
-        pdf_path: Path to the PDF file.
+        doc: An open fitz.Document (opened by :func:`open_pdf`).
+        page_num: 0-based page index.
+
+    Returns:
+        UTF-8 清洗后的文本；抽取异常时返回 ""。
+    """
+    with _FITZ_LOCK:
+        try:
+            return str(doc[page_num].get_text()).encode(
+                "utf-8", errors="ignore").decode("utf-8")
+        except Exception:
+            return ""
+
+
+def extract_page_label(doc: Any, page_num: int) -> str:
+    """页标签（如 "i" / "1" / "A-1"）；坏 PDF 返回空串。
+
+    pymupdf 在页树损坏时抛的是 FzErrorFormat（不是 RuntimeError/TypeError），
+    以前会打死整个导入任务，所以这里统一吞掉异常。
+    """
+    with _FITZ_LOCK:
+        try:
+            return doc[page_num].get_label()
+        except Exception:
+            return ""
+
+
+def get_pdf_page_count(pdf_path: str | bytes) -> int | None:
+    """Get the number of pages in a PDF file.
+
+    口径统一走 fitz（与 ``page_count(open_pdf(...))`` 一致），fitz 打不开时
+    才回退 PyPDF2——两套库对坏 PDF 的页数判定可能不同，而盖章 / 页集续传都以
+    这个页数为准，所以同进程内必须只有一个主口径。
+
+    Args:
+        pdf_path: Path to the PDF file (bytes / file-like also accepted).
 
     Returns:
         Number of pages, or None if the file cannot be read.
     """
     try:
-        from PyPDF2 import PdfReader
-
-        with open(pdf_path, "rb") as f:
+        doc = open_pdf(pdf_path)
+        try:
+            return page_count(doc)
+        finally:
+            doc.close()
+    except Exception:
+        pass
+    try:
+        if isinstance(pdf_path, (bytes, bytearray)):
+            return len(PdfReader(BytesIO(pdf_path)).pages)
+        if hasattr(pdf_path, "read"):
+            return len(PdfReader(cast(Any, pdf_path)).pages)
+        with open(cast(str, pdf_path), "rb") as f:
             return len(PdfReader(f).pages)
     except Exception:
         return None
@@ -126,6 +188,58 @@ def extract_pages_pdf(doc: Any, pages: list[int]) -> bytes:
             out.close()
 
 
+def extract_single_page_pdf(pdf_path: str, page_num: int = 0) -> bytes:
+    """Build a one-page PDF from page ``page_num`` of ``pdf_path``.
+
+    下载单页 / 预览用（原先 ``jindai/storage.py`` 内联 PyPDF2 复制了一份，
+    2026-10-29 收口到本模块）。这里刻意走 PyPDF2 而不是 fitz：只需搬运页对象、
+    不渲染，无 MuPDF 线程安全的顾虑。
+
+    Args:
+        pdf_path: PDF 文件路径。
+        page_num: 0-based 页号。
+
+    Returns:
+        Bytes of a single-page PDF.
+
+    Raises:
+        ValueError: page 越界。
+    """
+    reader = PdfReader(pdf_path)
+    if page_num < 0 or page_num >= len(reader.pages):
+        raise ValueError("Page number out of range")
+    writer = PdfWriter()
+    writer.add_page(reader.pages[page_num])
+    buf = BytesIO()
+    writer.write(buf)
+    return buf.getvalue()
+
+
+def unlock_pdf(src) -> bytes:
+    """Remove read protection from a "secured" PDF (原 `PDFUnlock` stage 的实现).
+
+    用 pikepdf（不是 pyproject 里的 ``pike``：实测 venv 内 ``pike 0.2.0`` 是个
+    空包，``dir(pike) == []``，旧实现 ``pike.open(...)`` 必抛 AttributeError，
+    即该 stage 从未真正跑通过）。pikepdf 打开时自动解密"仅属主口令保护"的
+    文档，``save()`` 不带 encryption 参数即重新写出无加密 PDF。
+
+    Args:
+        src: 文件路径 / bytes / file-like（``storage.open(...)`` 返回的流即可）。
+
+    Returns:
+        Unlocked PDF bytes.
+
+    Raises:
+        Exception: 打不开（需要用户口令 / 文件损坏）时原样抛出，由调用方决定跳过。
+    """
+    import pikepdf  # 惰性导入：只有解锁这条路径需要它
+
+    with pikepdf.open(src) as pdf:
+        buf = BytesIO()
+        pdf.save(buf)
+        return buf.getvalue()
+
+
 def render_pdf_with_fitz(pdf_path: str | bytes, page_num: int = 0, format: str = "png") -> BytesIO:
     """Render a PDF page to an image using PyMuPDF (fitz).
 
@@ -143,32 +257,36 @@ def render_pdf_with_fitz(pdf_path: str | bytes, page_num: int = 0, format: str =
 
 
 def convert_pdf_to_tiff_group4(pdf, outp) -> None:
-    """Convert a PDF file to a multi-page Group 4 compressed TIFF file.
+    """Convert a PDF to a 1-bit Group-4 raster PDF (historical name: "tiff").
+
+    ⚠️ 函数名历史遗留：实际输出 **PDF**（``format="pdf"``），不是 TIFF。改名会
+    牵动 ``jindai/maintenance/manager.py::ocr()`` 的 monochrome 分支，故保留。
 
     Args:
         pdf: PDF file object or path.
-        outp: Output file object for the TIFF.
+        outp: Output file object.
     """
-    doc = fitz.open(pdf)
-    image_list = []
+    with _FITZ_LOCK:
+        doc = fitz.open(pdf)
+        image_list = []
+        try:
+            # Process each page
+            for page in doc:
+                # Render page to a pixmap (image representation)
+                # Zoom factor increases resolution (e.g., 2 for 150-200 DPI approx, 4 for 300+ DPI)
+                zoom = 4
+                mat = fitz.Matrix(zoom, zoom)
+                pix = page.get_pixmap(matrix=mat)
 
-    # Process each page
-    for page in doc:
-        # Render page to a pixmap (image representation)
-        # Zoom factor increases resolution (e.g., 2 for 150-200 DPI approx, 4 for 300+ DPI)
-        zoom = 4
-        mat = fitz.Matrix(zoom, zoom)
-        pix = page.get_pixmap(matrix=mat)
+                # Convert pixmap to a Pillow Image
+                img = Image.frombytes("RGB", (pix.width, pix.height), pix.samples)
 
-        # Convert pixmap to a Pillow Image
-        img = Image.frombytes("RGB", (pix.width, pix.height), pix.samples)
-
-        # Convert to black and white (1-bit pixels) for efficient Group 4 compression
-        # This is crucial for Group 4 compression to work effectively
-        img = img.convert("1")
-        image_list.append(img)
-
-    doc.close()
+                # Convert to black and white (1-bit pixels) for efficient Group 4 compression
+                # This is crucial for Group 4 compression to work effectively
+                img = img.convert("1")
+                image_list.append(img)
+        finally:
+            doc.close()
 
     if image_list:
         # Save all pages as a single multi-page TIFF with Group 4 compression

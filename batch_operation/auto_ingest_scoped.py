@@ -8,7 +8,7 @@ Tool Books 不在范围内）。流程：
   2. 与 file_metadata（同前缀）比对，缺行 upsert（INSERT … ON CONFLICT (path)
      DO NOTHING；item_type：Zotero→journalArticle，其余→book，与全库
      scan_disk_upsert 同口径）；
-  3. 有新登记 → fill_nontitle_rows.py --apply 回填 title/authors/item_type；
+  3. 有新登记 → jindai.maintenance.fill_nontitle 回填 title/authors/item_type；
   4. 有新登记且当前无导入进程在跑（batch_import_direct / batch_import_fast /
      import_onedrive_pdfs / import_watchdog_fast）→ 后台拉起
      batch_import_direct.py --no-scan --only batch_operation/reports/auto_ingest_new.txt；
@@ -82,7 +82,7 @@ async def main() -> int:
         if new:
             # 查重护栏（与引擎全盘登记同口径，2026-10-26）：与库里已有 PDF 行
             # 同文件名（NFC 小写）= 同一文件的另一份拷贝 → 不登记，只留档。
-            from jindai.import_lists import dedup_new_paths
+            from jindai.maintenance.import_lists import dedup_new_paths
             keep, skipped = await dedup_new_paths(conn, new)
             dedup_skipped = len(skipped)
             new = sorted(keep)
@@ -99,13 +99,12 @@ async def main() -> int:
 
     # 3. 新登记行回填 title（站规：任何批量登记后必跑；幂等、只碰空 title 行）
     if new:
+        from jindai.maintenance.fill_nontitle import fill_nontitle_sync
         try:
-            r = subprocess.run(
-                ["/app/.venv/bin/python", "/app/batch_operation/fill_nontitle_rows.py",
-                 "--apply"],
-                cwd="/app", capture_output=True, text=True, timeout=1800)
-            log.info("[title] fill_nontitle rc=%s %s", r.returncode,
-                     (r.stdout or "")[-300:])
+            summary = fill_nontitle_sync(apply=True)
+            log.info("[title] fill_nontitle updated=%s failed=%s empty_after=%s",
+                     summary["applied"]["updated"], summary["applied"]["failed"],
+                     summary["empty_title_after"])
         except Exception as ex:
             log.warning("[title] fill_nontitle failed: %s", ex)
 

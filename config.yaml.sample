@@ -3,6 +3,11 @@ concurrent: 3
 storage: /storage
 database: postgresql+psycopg2://postgres:postgres@192.168.1.2:5432/jindai
 
+# 报表 / 锁 / 导入状态 / 回收站审计清单的落点（jindai/paths.py::REPORTS）。
+# 不写就用历史默认 <项目根>/batch_operation/reports；写则必须是绝对路径。
+# 迁移前请先搬走人工维护的 import_skip.txt / import_defer.txt，并同步改监控 grep 的日志路径。
+# import_reports_dir: /app/var/reports
+
 plugins:
 - '*'
 

@@ -13,7 +13,7 @@ docker exec -w /app jindai /app/.venv/bin/python /app/batch_operation/<script>.p
 | 脚本 | 作用 | 常用参数 |
 |---|---|---|
 | `stats.py` | 管道体检：API 健康、缺 paragraph 的 PDF、缺 embedding 的段落、队列总量 | `--deep`（stale/orphan 细分，慢 ~10min）、`--json f.json` |
-| `import_onedrive_pdfs.py` | 导入 OneDrive 下尚无 paragraph 的 PDF（跑存储任务「导入 OneDrive PDF」，断点续跑） | `--dry-run`、`-n 并发数`、`--task 名称` |
+| `batch_import_direct.py` | PDF 导入进程入口（引擎实现见 `jindai/maintenance/import_cli.py`；常驻 worker 由 `plugins/importer` 拉起） | `--selftest`、`--dry-run`、`--no-scan`、`--limit N`、`-w 并发数`、`--only 清单` |
 | `embed_missing.py` | 给所有缺 embedding 的段落补向量（分块 200/50 与后端一致，写入 `ON CONFLICT DO NOTHING`，完成后消费队列行） | `--scope all\\|onedrive`、`--dry-run`、`--batch 256`、`--inflight 4`、`--limit-files N`、`--no-queue` |
 | `clean_queue.py` | 清理队列中的 stale（已嵌入）与 orphan（段落已删）行 | `--dry-run`、`--what stale\\|orphan\\|both`、`--batch 20000` |
 | `common.py` | 共享：config/DSN/EmbeddingClient/分块/进度 | — |
@@ -24,8 +24,8 @@ docker exec -w /app jindai /app/.venv/bin/python /app/batch_operation/<script>.p
 # 0) 状态
 docker exec -w /app jindai /app/.venv/bin/python /app/batch_operation/stats.py
 
-# 1) 导入 OneDrive 缺 paragraph 的 PDF（可中断、可重跑；--dry-run 只看计数）
-docker exec -w /app jindai /app/.venv/bin/python /app/batch_operation/import_onedrive_pdfs.py
+# 1) 导入待处理 PDF（进程入口；--dry-run 只看清单统计）
+docker exec -w /app jindai /app/.venv/bin/python /app/batch_operation/batch_import_direct.py --dry-run
 
 # 2) 补 embedding（先小批试跑，再全量后台跑）
 docker exec -w /app jindai /app/.venv/bin/python /app/batch_operation/embed_missing.py --dry-run
@@ -56,7 +56,7 @@ docker exec -w /app jindai /app/.venv/bin/python /app/batch_operation/clean_queu
 
 ## 配套后端修复（2026-09-29，见 git diff）
 
-- `jindai/maintenance.py::update_text_embeddings`：反连接跳过已嵌入 + 消费队列行 +
+- `jindai/maintenance/manager.py::update_text_embeddings`：反连接跳过已嵌入 + 消费队列行 +
   stall 兜底（原版会无限重选同 1 万行，最终撞主键崩溃）；`_do` 改为分块/重试/幂等插入；
   新增 `consume_embedding_queue`。
 - `jindai/resources.py::polling_loop`：单轮异常不再杀死整个轮询协程。

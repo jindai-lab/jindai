@@ -24,7 +24,9 @@ from jindai.storage import storage
 from jindai.config import config
 from jindai.models import Dataset, FileDataset, FileMetadata, Paragraph, get_db_session
 from jindai.pipeline import DataSourceStage, PipelineStage
-from jindai.pdfutils import open_pdf, render_pdf_page, extract_pages_pdf
+from jindai.pdfutils import (extract_page_label, extract_page_text,
+                             extract_pages_pdf, open_pdf, page_count,
+                             render_pdf_page)
 from jindai.ocrutils import PaddleOCRClient
 from plugins.pipelines.pdf_stages import TextCleaner, PDFLanguageDetect, CrossPageReparagraphizer
 
@@ -528,7 +530,8 @@ class PDFDataSource(DataSourceStage):
                     f"[skip] open failed, next file: {filepath} :: {ex!r}"
                 )
                 continue
-            self.last_page_count = doc.page_count
+            self.last_page_count = page_count(doc)
+            n_pages = self.last_page_count
             try:
                 # Determine page range to process
                 page_range = self.page_range
@@ -555,7 +558,7 @@ class PDFDataSource(DataSourceStage):
                                 "WHERE source_id = :sid"
                             ), {"sid": source.id}
                         )).all()}
-                    gap_all = set(range(doc.page_count)) - have
+                    gap_all = set(range(n_pages)) - have
                     page_range = sorted(gap_all)
                     if page_range:
                         # Dedup only for interior gaps (<= max imported
@@ -585,7 +588,7 @@ class PDFDataSource(DataSourceStage):
                     min_page = existent.get(filepath)
                     min_page = 0 if min_page is None else (min_page + 1)
                     self.log("... from page", min_page)
-                    page_range = range(min_page, doc.page_count)
+                    page_range = range(min_page, n_pages)
 
                 # Accumulate pages for re-paragraphization
                 page_buffer = []
@@ -593,15 +596,11 @@ class PDFDataSource(DataSourceStage):
                 # --- Pre-extract text for the whole range (one pass) ---
                 page_text: dict = {}
                 for page in page_range:
-                    if page >= doc.page_count:
+                    if page >= n_pages:
                         break
                     try:
-                        # Extract text content
-                        page_text[page] = (
-                            str(doc[page].get_text())
-                            .encode("utf-8", errors="ignore")
-                            .decode("utf-8")
-                        )
+                        # Extract text content（pdfutils 统一封装）
+                        page_text[page] = extract_page_text(doc, page)
                     except Exception as ex:
                         self.log(filepath, page + 1, ex)
                         page_text[page] = ""
@@ -692,17 +691,13 @@ class PDFDataSource(DataSourceStage):
                                     ocr_failed.add(page_idx)
 
                 for page in page_range:
-                    if page >= doc.page_count:
+                    if page >= n_pages:
                         break
 
-                    try:
-                        # Get page label (e.g., "i", "1", "A-1")
-                        label = doc[page].get_label()
-                    except Exception:
-                        # pymupdf raises FzErrorFormat (e.g. "cycle in page
-                        # tree") on corrupt PDFs -- not RuntimeError/TypeError,
-                        # it used to kill the whole import task here.
-                        label = ""
+                    # Get page label (e.g., "i", "1", "A-1")；坏 PDF 返回 ""，
+                    # pdfutils 内部已吞掉 pymupdf 的 FzErrorFormat（如 page tree
+                    # 里有环），此前它在导入任务里会直接打断整本。
+                    label = extract_page_label(doc, page)
 
                     content = page_text.get(page, "")
 
