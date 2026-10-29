@@ -1,5 +1,8 @@
 """删除文献记录时，把关联文件移入存储根目录下的回收站 ``.trash``。
 
+内置插件 ``plugins/trash`` 的核心模块（2026-10-29 从 ``jindai`` 核心迁入；
+其它插件直接 ``from plugins.trash import move_to_trash``，不再有旧路径副本）。
+
 约定（与导入器口径配套，2026-10-09）：
 
 * 回收站根 = ``<storage>/.trash``（宿主 ``/misc/Public/jindai-storage/.trash``）。
@@ -14,7 +17,7 @@
 * 批次目录里写 ``manifest.json``（原路径/新路径/题名/作者/时间/条目 id）；
   同时向 ``batch_operation/reports/trash_manifest.jsonl`` 追加一行，
   这样回收站被每周清空之后仍然留有可审计的痕迹。
-* 每周清空：常驻 ``jindai/trash_purge.py``（每周一 06:00，随 app lifespan
+* 每周清空：常驻 ``plugins/trash/purge.py``（每周一 06:00，随 app lifespan
   启动，config ``trash_purge_enabled`` 开关；2026-10-25 起取代原 Hermes
   cronjob）。手动演练/补跑仍用 ``batch_operation/purge_trash.py [--apply]``。
 

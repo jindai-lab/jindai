@@ -1,4 +1,5 @@
-"""常驻回收站清空 worker（2026-10-25）：与 import/embedding worker 同构的后台循环。
+"""常驻回收站清空 worker（built-in plugin: ``plugins/trash``，原
+``jindai/trash_purge.py``）：与 import/embedding worker 同构的后台循环。
 
 背景：删除文献记录时关联文件被搬进 ``<storage>/.trash/<批次>/``（见
 ``jindai/trash.py``），需要定期清空。原方案是 Hermes 侧 cronjob（每周一 06:00
@@ -27,10 +28,12 @@ import time
 from datetime import datetime, timedelta
 from typing import Optional
 
-from jindai.config import config
 from jindai.import_lists import REPORTS, get_conn
+from jindai.plugin import WorkerPlugin
 
-log = logging.getLogger("jindai.trash_purge")
+from .core import TRASH_DIRNAME, trash_root
+
+log = logging.getLogger("plugins.trash.purge")
 
 STATUS_FILE = REPORTS / "trash_purge.json"
 
@@ -130,7 +133,6 @@ async def purge_once(apply: bool = True, min_age_hours: float = 0.0) -> dict:
     ``.trash/`` 路径不会被登记——但只要发生了就绝不制造孤儿记录）。
     汇总写 ``reports/trash_purge.json`` 并返回。
     """
-    from jindai.trash import TRASH_DIRNAME, trash_root
     root = trash_root()
     if not os.path.isdir(root):
         stat = {"mode": "apply" if apply else "dry-run",
@@ -172,26 +174,37 @@ def _write_status(stat: dict) -> None:
         log.debug("[trash-purge] status write failed", exc_info=True)
 
 
-class TrashPurgeManager:
+class TrashPurgeWorkerPlugin(WorkerPlugin):
     """常驻清空 supervisor：每周一 06:00 清一次，随 app lifespan 启停。"""
 
-    def __init__(self):
-        self.polling_task: Optional[asyncio.Task] = None
+    worker_name = "trash purge worker"
+    enabled_key = "trash_purge_enabled"
+    enabled_default = False
+
+    def __init__(self, pmanager=None, **conf):
+        super().__init__(pmanager, **conf)
         self.next_due: Optional[datetime] = None
         self.last_run: Optional[dict] = None
 
     def status(self) -> dict:
         return {
-            "enabled": bool(getattr(config, "trash_purge_enabled", False)),
-            "running": self.polling_task is not None
-                       and not self.polling_task.done(),
+            "enabled": self.worker_enabled,
+            "running": any(not t.done() for t in self.worker_tasks),
             "next_due": self.next_due.isoformat(timespec="seconds")
                         if self.next_due else None,
             "last_run": self.last_run,
         }
 
-    async def polling_loop(self) -> None:
-        if not getattr(config, "trash_purge_enabled", False):
+    def worker_details(self) -> dict:
+        """GET /plugins/workers 额外状态（下次到期时间 + 上一轮汇总）。"""
+        return {
+            "next_due": self.next_due.isoformat(timespec="seconds")
+                        if self.next_due else None,
+            "last_run": self.last_run,
+        }
+
+    async def worker_loop(self) -> None:
+        if not self.worker_enabled:
             log.info("Trash Purge Worker disabled "
                      "(config.trash_purge_enabled = false).")
             return
@@ -216,3 +229,13 @@ class TrashPurgeManager:
                 log.exception("[trash-purge] iteration failed: %s: %s",
                               type(ex).__name__, ex)
                 await asyncio.sleep(RETRY_S)
+
+    def register_routes(self, router) -> None:
+        """注册 /trash/ 状态路由（下次清空时间 + 上一轮汇总）。"""
+
+        @router.get("/trash/", tags=["Trash"])
+        async def trash_status():
+            """回收站清空 worker 的当前状态。"""
+            out = self.status()
+            out["trash_root"] = trash_root()
+            return out

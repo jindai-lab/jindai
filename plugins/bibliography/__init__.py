@@ -39,7 +39,7 @@ from jindai.plugin import Plugin
 from jindai.helpers import get_context, jieba
 from jindai.models import get_db_session, get_db, FileMetadata, redis_client
 from jindai.storage import storage
-from jindai.trash import move_to_trash
+from plugins.trash import move_to_trash
 from jindai.worker import worker_manager
 
 from .authors import (

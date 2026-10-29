@@ -45,7 +45,22 @@ from sqlalchemy.sql import func
 
 from .config import config, oidc_validator
 from .helpers import jieba
-from . import local_embedding
+
+# The in-process ONNX embedding backend (``embedding_api_base: local``) lives in
+# the built-in embedding plugin (``plugins/embedding/local_backend.py``).  It is
+# imported lazily on first use: importing it here would pull the whole plugin
+# package into the model layer's import time (circular import while jindai and
+# its plugins are still loading).
+_local_backend = None
+
+
+def local_embedding():
+    """Return the local embedding backend module (lazy, cached)."""
+    global _local_backend
+    if _local_backend is None:
+        from importlib import import_module
+        _local_backend = import_module("plugins.embedding.local_backend")
+    return _local_backend
 
 engine = create_async_engine(config.database)
 session_factory = async_sessionmaker(
@@ -1893,7 +1908,7 @@ class TextEmbeddings(Base):
         api_base = (
             getattr(config, "rerank_api_base", "") or config.embedding_api_base
         ).rstrip("/")
-        if local_embedding.is_local(api_base):
+        if local_embedding().is_local(api_base):
             raise RuntimeError(
                 "embedding_api_base is 'local' and rerank_api_base is empty: "
                 "rerank has no local backend, point rerank_api_base at an "
@@ -1939,10 +1954,10 @@ class TextEmbeddings(Base):
         """
         logging.info(f'Get embedding for {text[:10]}...')
         
-        if local_embedding.is_local(config.embedding_api_base):
+        if local_embedding().is_local(config.embedding_api_base):
             # embedding_api_base: local -> the HF model (embedding_model) runs
             # on this machine's GPU inside the app; no HTTP round-trip.
-            return await local_embedding.encode_one(text)
+            return await local_embedding().encode_one(text)
 
         api_base = config.embedding_api_base.rstrip("/")
         api_key = config.embedding_api_key
@@ -2063,9 +2078,9 @@ class TextEmbeddings(Base):
     Returns:
             List of embeddings as lists of floats.
         """
-        if local_embedding.is_local(config.embedding_api_base):
+        if local_embedding().is_local(config.embedding_api_base):
             # Same local-GPU path as get_embedding (worker / batch route).
-            return await local_embedding.encode([t.strip() for t in batch])
+            return await local_embedding().encode([t.strip() for t in batch])
 
         api_base = config.embedding_api_base.rstrip("/")
         api_key = config.embedding_api_key

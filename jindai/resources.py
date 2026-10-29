@@ -3,18 +3,19 @@
 This module provides:
 - ResourceRegistry: Base class for CRUD resource endpoints
 - TaskResource: Task resource with shared access support
-- EmbeddingManager: Embedding processing and polling
 - ContentManager: Dataset and paragraph management
 - StorageManager: File upload/download operations
+
+Resident background workers (embedding / PDF import / trash purge) are no longer
+defined here: they are built-in plugins under ``plugins/`` (``plugins/embedding``
+``plugins/importer``, ``plugins/trash``) and are started from the app lifespan
+through ``PluginManager.startup()``.
 """
 
-import asyncio
-import base64
 import json
 import logging
 import os
-import struct
-from contextlib import AsyncExitStack, asynccontextmanager
+from contextlib import asynccontextmanager
 from typing import Any, Dict, List, Optional, Type, cast
 from datetime import datetime
 
@@ -40,13 +41,11 @@ from sse_starlette import EventSourceResponse
 # Import existing components
 from .models import get_current_admin, get_current_username, get_current_user
 from .config import config
-from . import disk_guard
 from .maintenance import maintenance_manager
 from .models import (
     APIKey,
     Base,
     Dataset,
-    EmbeddingPendingQueue,
     FileDataset,
     FileMetadata,
     History,
@@ -335,248 +334,6 @@ class TaskResource(ResourceRegistry):
 
 
 # --- Core business logic managers ---
-
-
-class EmbeddingManager:
-    """Handles embedding statistics and background polling."""
-
-    def __init__(self):
-        self.polling_task: Optional[asyncio.Task] = None
-
-    async def polling_loop(self):
-        """Background loop for processing embedding queue."""
-        if not getattr(config, "embedding_worker_enabled", True):
-            logging.info(
-                "Embedding Polling Loop disabled "
-                "(config.embedding_worker_enabled = false)."
-            )
-            return
-        logging.info("Embedding Polling Loop started.")
-        # Dynamic inter-cycle sleep: work done -> back almost immediately;
-        # no progress (queue empty, all flushes failed, or exception) -> exponential
-        # backoff to a 60s cap so a dead gateway isn't hammered.
-        base_sleep = 2.0
-        max_sleep = 60.0
-        idle_streak = 0
-        # 磁盘守卫（2026-10-26）：库的大头是 text_embeddings（~6.4KB/条，
-        # 全量外推还要 ~1.25TB），写满盘比慢更糟（WAL/半成品索引难收拾）。
-        # ≥ pause 挂起本 worker，≤ resume 恢复（滞回防抖），无需重启。
-        guard_path = str(getattr(config, "disk_guard_path", "/app"))
-        guard_pause = float(getattr(config, "disk_guard_pause_pct", 85))
-        guard_resume = min(float(getattr(config, "disk_guard_resume_pct", 80)),
-                           guard_pause)
-        disk_paused = False
-        disk_cycles = 0
-        while True:
-            pct = disk_guard.used_pct(guard_path)
-            if pct is not None:
-                if disk_paused:
-                    if pct <= guard_resume:
-                        logging.info(
-                            "disk guard: usage %.1f%% <= %.1f%% — resuming "
-                            "embedding worker", pct, guard_resume)
-                        disk_paused = False
-                        disk_cycles = 0
-                    else:
-                        disk_cycles += 1
-                        if disk_cycles == 1 or disk_cycles % 15 == 0:
-                            logging.warning(
-                                "disk guard: usage %.1f%% > %.1f%% — embedding "
-                                "worker still paused (cycle %d)", pct,
-                                guard_resume, disk_cycles)
-                        await asyncio.sleep(120)
-                        continue
-                elif pct >= guard_pause:
-                    logging.warning(
-                        "disk guard: usage %.1f%% >= %.1f%% — pausing embedding "
-                        "worker (auto-resume at <= %.1f%%)", pct, guard_pause,
-                        guard_resume)
-                    disk_paused = True
-                    disk_cycles = 0
-                    await asyncio.sleep(120)
-                    continue
-            added = 0
-            try:
-                async with get_db_session() as session:
-                    pending = await session.execute(
-                        select(EmbeddingPendingQueue).limit(1)
-                    )
-                    has_pending = pending.first() is not None
-                if has_pending:
-                    logging.info("Pending queue not empty")
-                    added = await maintenance_manager.update_text_embeddings()
-            except asyncio.CancelledError:
-                logging.info("Embedding Polling Loop is being cancelled.")
-                return
-            except Exception as ex:  # noqa: BLE001 - keep the worker alive
-                logging.exception(
-                    f"Embedding polling iteration failed: {type(ex).__name__}: {ex}")
-            if added > 0:
-                if idle_streak:
-                    logging.info(
-                        "embedding cycle made progress again after %d "
-                        "idle cycle(s)", idle_streak)
-                idle_streak = 0
-                sleep_s = base_sleep
-            else:
-                idle_streak += 1
-                sleep_s = min(base_sleep * (2 ** idle_streak), max_sleep)
-                if idle_streak <= 3 or idle_streak % 6 == 0:
-                    logging.info(
-                        "embedding idle cycle %d (no embeddings added), "
-                        "sleeping %.0fs", idle_streak, sleep_s)
-            await asyncio.sleep(sleep_s)
-
-    def register_routes(self, router: APIRouter):
-        """Register embedding-related routes.
-
-        Args:
-            router: APIRouter to register routes with.
-        """
-
-        @router.get("/embeddings/", tags=["Embeddings"])
-        async def stat_embeddings(session: AsyncSession = Depends(get_db)):
-            """Get embedding statistics.
-
-            Args:
-                session: Database session.
-
-            Returns:
-                Dictionary with finished and queued counts.
-            """
-            finished = None
-            queued = (
-                await session.execute(
-                    select(EmbeddingPendingQueue).with_only_columns(
-                        func.count(EmbeddingPendingQueue.id)
-                    )
-                )
-            ).scalar()
-            return {"finished": finished, "queued": queued}
-
-        @router.post("/embeddings", tags=["Embeddings"])
-        async def create_embeddings(
-            data: dict = Body(...),
-            session: AsyncSession = Depends(get_db),
-        ):
-            """Create embeddings for input text(s) using configured model.
-
-            This endpoint follows OpenAI's embeddings API style:
-            https://platform.openai.com/docs/api-reference/embeddings
-
-            Args:
-                data: Request body with:
-                    - model: Model name to use for embeddings (optional, uses config model)
-                    - input: Text or list of texts to embed
-                    - encoding_format: Output format ("float" or "base64")
-                session: Database session.
-
-            Returns:
-                Dictionary with embeddings in OpenAI format:
-                {
-                    "object": "list",
-                    "data": [
-                        {
-                            "object": "embedding",
-                            "embedding": [float, float, ...],
-                            "index": 0
-                        }
-                    ],
-                    "model": "model-name",
-                    "usage": {"prompt_tokens": int, "total_tokens": int}
-                }
-            """
-            # Extract input texts (can be string or list of strings)
-            input_data = data.get("input", [])
-            if isinstance(input_data, str):
-                input_texts = [input_data]
-            elif isinstance(input_data, list):
-                input_texts = input_data
-            else:
-                raise HTTPException(
-                    status_code=400,
-                    detail="Invalid input: must be a string or list of strings",
-                )
-
-            if not input_texts:
-                raise HTTPException(status_code=400, detail="Invalid input: empty list")
-
-            # Get model name (use config if not provided)
-            model_name = data.get("model", config.embedding_model)
-
-            # Compute embeddings using the configured model
-            embeddings = []
-            for text in input_texts:
-                if not isinstance(text, str):
-                    raise HTTPException(
-                        status_code=400,
-                        detail=f"Invalid input: expected string, got {type(text).__name__}",
-                    )
-                # Use the existing get_embedding method from TextEmbeddings
-                embedding = await TextEmbeddings.get_embedding(text)
-                embeddings.append(embedding)
-
-            # Determine encoding format (default to float)
-            encoding_format = data.get("encoding_format", "float")
-
-            # Build response in OpenAI format
-            data_entries = []
-            for i, embedding in enumerate(embeddings):
-                # Convert to base64 if requested
-                if encoding_format == "base64":
-                    # Pack floats as binary and encode as base64
-                    packed = struct.pack(f"{len(embedding)}f", *embedding)
-                    embedding_b64 = base64.b64encode(packed).decode("utf-8")
-                    data_entries.append(
-                        {"object": "embedding", "embedding": embedding_b64, "index": i}
-                    )
-                else:
-                    # Default: return as float list
-                    data_entries.append(
-                        {"object": "embedding", "embedding": embedding, "index": i}
-                    )
-
-            # Calculate token usage (approximate: 1 token ~ 4 characters)
-            total_tokens = sum(len(text) // 4 for text in input_texts)
-
-            return {
-                "object": "list",
-                "data": data_entries,
-                "model": model_name,
-                "usage": {"prompt_tokens": total_tokens, "total_tokens": total_tokens},
-            }
-
-        @router.post("/embeddings/{resource_id}", status_code=201, tags=["Embeddings"])
-        async def update_single_embedding(
-            resource_id: str, session: AsyncSession = Depends(get_db)
-        ):
-            """Update embedding for a single paragraph.
-
-            Args:
-                resource_id: Paragraph ID.
-                session: Database session.
-
-            Returns:
-                Dictionary with paragraph ID.
-
-            Raises:
-                HTTPException: If paragraph not found.
-            """
-            para = await session.get(Paragraph, resource_id)
-            if not para or not para.content:
-                raise HTTPException(404)
-            emb_val = await TextEmbeddings.get_embedding(para.content)
-            te = (
-                await session.execute(
-                    select(TextEmbeddings).filter(TextEmbeddings.id == para.id)
-                )
-            ).scalar_one_or_none()
-            if te:
-                te.embedding = cast(Any, emb_val)
-            else:
-                session.add(TextEmbeddings(id=resource_id, embedding=emb_val))
-            await session.commit()
-            return {"id": resource_id}
 
 
 class APIKeyManager:
@@ -1463,17 +1220,10 @@ class StorageManager:
 
 # --- Router assembly and lifecycle binding ---
 
-emb_manager = EmbeddingManager()
-
-# 常驻 PDF 导入 supervisor（2026-10-25）：与 embedding worker 同构，
-# 子进程方式拉起导入引擎（段错误隔离），config.import_worker_enabled 开关。
-from .import_worker import ImportManager  # noqa: E402  (避免顶部循环导入)
-import_manager = ImportManager()
-
-# 常驻回收站清空 supervisor（2026-10-25）：每周一 06:00 清空 /storage/.trash，
-# config.trash_purge_enabled 开关（原 Hermes cronjob 24458a68c589 已退役、勿重建）。
-from .trash_purge import TrashPurgeManager  # noqa: E402
-trash_purge_manager = TrashPurgeManager()
+# Resident background workers (embedding / PDF import / trash purge) are now
+# built-in plugins under ``plugins/``; their status is exposed via
+# GET /api/v2/plugins/workers and they are started/stopped by the lifespan below
+# through ``plugins.startup()`` / ``plugins.shutdown()``.
 
 
 # Idempotent index maintenance.  The project has no migration framework, so
@@ -1510,50 +1260,31 @@ async def ensure_db_indexes() -> None:
         logging.warning(f"Database index check failed: {ex}")
 
 
-# Combined lifespan that runs both embedding polling and worker management.
+# Combined lifespan: database index upkeep, built-in plugin workers (embedding /
+# PDF import / trash purge) and the distributed task worker.
 @asynccontextmanager
 async def combined_lifespan(app: FastAPI):
-    """Combined lifespan for embedding polling and worker management."""
+    """Combined lifespan for plugin background workers and task workers."""
 
     # Make sure the query-supporting indexes exist before serving traffic.
     await ensure_db_indexes()
 
-    # Start embedding polling task
-    emb_manager.polling_task = asyncio.create_task(emb_manager.polling_loop())
-
-    # Start resident PDF import supervisor (no-op unless
-    # config.import_worker_enabled)
-    import_manager.polling_task = asyncio.create_task(
-        import_manager.polling_loop())
-
-    # Start resident trash purge supervisor (no-op unless
-    # config.trash_purge_enabled)
-    trash_purge_manager.polling_task = asyncio.create_task(
-        trash_purge_manager.polling_loop())
+    # Start resident background workers of the built-in plugins (embedding
+    # polling, PDF import supervisor, weekly trash purge).  Each plugin decides
+    # from its config switch whether to start; tasks are created here because
+    # plugin construction happens at import time, without a running loop.
+    await plugins.startup(app)
 
     # Start worker
     await worker_manager.start_worker()
 
     yield
 
+    # Stop plugin background workers (cancel + await their tasks)
+    await plugins.shutdown(app)
+
     # Stop worker
     worker_manager.stop_worker()
-
-    # Stop embedding polling task
-    if emb_manager.polling_task:
-        emb_manager.polling_task.cancel()
-        await asyncio.gather(emb_manager.polling_task, return_exceptions=True)
-
-    # Stop resident PDF import supervisor
-    if import_manager.polling_task:
-        import_manager.polling_task.cancel()
-        await asyncio.gather(import_manager.polling_task, return_exceptions=True)
-
-    # Stop resident trash purge supervisor
-    if trash_purge_manager.polling_task:
-        trash_purge_manager.polling_task.cancel()
-        await asyncio.gather(trash_purge_manager.polling_task,
-                             return_exceptions=True)
 
 
 # Register common CRUD resources
@@ -1565,8 +1296,6 @@ TaskResource().register(router)
 
 # Register business logic modules
 ContentManager().register_routes(router)
-emb_manager.register_routes(router)
-import_manager.register_routes(router)
 APIKeyManager().register_routes(router)
 StorageManager().register_routes(router)
 

@@ -6,7 +6,9 @@ This module provides:
 - prepare_plugins: Function to initialize the plugin system
 """
 
+import asyncio
 import glob
+import inspect
 import logging
 import os
 import shutil
@@ -14,7 +16,7 @@ import sys
 import tempfile
 import zipfile
 from collections import defaultdict
-from typing import Callable, Iterator, cast
+from typing import Any, Callable, Dict, Iterator, List, Optional, cast
 
 from fastapi import APIRouter, Depends
 
@@ -98,6 +100,139 @@ class Plugin:
         """Register routes to target router"""
         pass
 
+    async def startup(self, app: Any = None) -> None:
+        """Lifecycle hook called by PluginManager.startup() (app lifespan).
+
+        Default: no-op.  Override to start background work; see WorkerPlugin.
+        """
+
+    async def shutdown(self, app: Any = None) -> None:
+        """Lifecycle hook called by PluginManager.shutdown() (app lifespan).
+
+        Default: no-op.  Override to release resources started in startup().
+        """
+
+
+class WorkerPlugin(Plugin):
+    """Base class for plugins that own resident background loops (workers).
+
+    A worker plugin only has to implement :meth:`worker_loop` (an ``async def``
+    that runs until cancelled) and declare ``worker_name`` / ``enabled_key``.
+    PluginManager starts it from the FastAPI lifespan and stops it on shutdown,
+    which matters because plugin *construction* happens at import time (there is
+    no event loop yet), so the asyncio tasks must be created in startup().
+
+    Attributes:
+        worker_name: Human readable name used in logs / status endpoints.
+        enabled_key: config.yaml key that switches the worker on/off; the same
+            key can be overridden per plugin with ``enabled:`` in the plugin's
+            own config section (its class name).
+    """
+
+    #: Never instantiate the base class (see PluginManager plugin loading).
+    abstract = True
+    worker_name: str = ""
+    enabled_key: str = ""
+    #: Value used when neither config.yaml nor the plugin's own config section
+    #: defines the switch.
+    enabled_default: bool = True
+
+    #: Restart backoff for a loop that dies on an uncaught exception.
+    restart_base_sleep: float = 10.0
+    restart_max_sleep: float = 600.0
+
+    def __init__(self, pmanager: "PluginManager", **conf) -> None:
+        super().__init__(pmanager, **conf)
+        self.worker_tasks: List[asyncio.Task] = []
+        self.worker_crashes: int = 0
+        self._stopping: bool = False
+
+    # ------------------------------------------------------------------ switch
+    @property
+    def worker_enabled(self) -> bool:
+        """Whether the resident loop should run (config.yaml switch)."""
+        if "enabled" in self.config:
+            return bool(self.config["enabled"])
+        if self.enabled_key:
+            return bool(getattr(config, self.enabled_key, self.enabled_default))
+        return True
+
+    # --------------------------------------------------------------------- loop
+    async def worker_loop(self) -> None:  # pragma: no cover - abstract
+        """The resident loop. Must return/raise for the worker to stop."""
+        raise NotImplementedError(
+            f"{type(self).__name__} must implement worker_loop()")
+
+    async def _run_worker(self) -> None:
+        """Task body: keep the loop alive, restart it after a backoff."""
+        name = self.worker_name or type(self).__name__
+        while not self._stopping:
+            try:
+                await self.worker_loop()
+                return  # clean exit (e.g. disabled at runtime) - do not restart
+            except asyncio.CancelledError:
+                logging.info("%s: background worker cancelled.", name)
+                raise
+            except Exception as ex:  # noqa: BLE001 - a dead loop is worse
+                self.worker_crashes += 1
+                sleep_s = min(
+                    self.restart_base_sleep * (2 ** min(self.worker_crashes - 1, 6)),
+                    self.restart_max_sleep)
+                logging.exception(
+                    "%s: background worker died (%s: %s) - restarting in %.0fs "
+                    "(crash #%d)", name, type(ex).__name__, ex, sleep_s,
+                    self.worker_crashes)
+                await asyncio.sleep(sleep_s)
+
+    # ---------------------------------------------------------------- lifecycle
+    async def startup(self, app: Any = None) -> None:
+        """Start the resident loop in the running event loop (lifespan)."""
+        name = self.worker_name or type(self).__name__
+        if not self.worker_enabled:
+            logging.info(
+                "%s: background worker disabled (config.%s = false).",
+                name, self.enabled_key or self.config.get("enabled"))
+            return
+        if any(not t.done() for t in self.worker_tasks):
+            logging.info("%s: background worker already running.", name)
+            return
+        self._stopping = False
+        self.worker_tasks = [
+            asyncio.create_task(self._run_worker(), name=f"{name}_worker")]
+        logging.info("%s: background worker scheduled.", name)
+
+    async def shutdown(self, app: Any = None) -> None:
+        """Cancel the resident loop(s) and wait for them to unwind."""
+        self._stopping = True
+        tasks = [t for t in self.worker_tasks if not t.done()]
+        self.worker_tasks = []
+        for t in tasks:
+            t.cancel()
+        if tasks:
+            await asyncio.gather(*tasks, return_exceptions=True)
+        logging.info("%s: background worker stopped.",
+                     self.worker_name or type(self).__name__)
+
+    # ------------------------------------------------------------------- status
+    def worker_details(self) -> Dict[str, Any]:
+        """Extra per-plugin status merged into worker_status()."""
+        return {}
+
+    def worker_status(self) -> Dict[str, Any]:
+        """Status payload served by GET /plugins/workers."""
+        out: Dict[str, Any] = {
+            "name": self.worker_name or type(self).__name__,
+            "plugin": type(self).__name__,
+            "enabled": self.worker_enabled,
+            "running": any(not t.done() for t in self.worker_tasks),
+            "crashes": self.worker_crashes,
+        }
+        try:
+            out.update(self.worker_details())
+        except Exception as ex:  # noqa: BLE001 - status must not break the API
+            out["details_error"] = f"{type(ex).__name__}: {ex}"
+        return out
+
 
 class PluginManager:
     """Manager for loading and managing plugins.
@@ -144,6 +279,12 @@ class PluginManager:
                 logging.info(f"Plugin {plugin_name} not found.")
                 continue
 
+            # Base/mixin plugin classes opt out of instantiation by declaring
+            # `abstract = True` in their own body (see WorkerPlugin).
+            if plugin_cls.__dict__.get("abstract", False):
+                logging.debug("Skipping abstract plugin class: %s", plugin_name)
+                continue
+
             try:
                 plugin_instance = plugin_cls(self, **params)
                 self.plugins.append(plugin_instance)
@@ -151,6 +292,50 @@ class PluginManager:
             except Exception as ex:
                 logging.error(f"Error while registering plugin: {plugin_name} {ex}")
                 continue
+
+    async def startup(self, app: Any = None) -> None:
+        """Run every plugin's startup() hook (called from the app lifespan).
+
+        Worker plugins use this to create their asyncio background tasks: plugin
+        construction happens at import time, when no event loop is running yet.
+        A plugin that fails to start must not take the web service down.
+
+        Args:
+            app: The FastAPI application, passed through to the hooks.
+        """
+        for plugin_instance in self.plugins:
+            try:
+                result = plugin_instance.startup(app)
+                if inspect.isawaitable(result):
+                    await result
+            except Exception as ex:  # noqa: BLE001 - keep serving regardless
+                logging.error("Error while starting plugin: %s %s",
+                              type(plugin_instance).__name__, ex)
+
+    async def shutdown(self, app: Any = None) -> None:
+        """Run every plugin's shutdown() hook, in reverse load order.
+
+        Args:
+            app: The FastAPI application, passed through to the hooks.
+        """
+        for plugin_instance in reversed(self.plugins):
+            try:
+                result = plugin_instance.shutdown(app)
+                if inspect.isawaitable(result):
+                    await result
+            except Exception as ex:  # noqa: BLE001 - shutdown must not stall
+                logging.error("Error while stopping plugin: %s %s",
+                              type(plugin_instance).__name__, ex)
+
+    def worker_status(self) -> List[Dict[str, Any]]:
+        """Collect the status of all plugin-owned background workers.
+
+        Returns:
+            One dict per WorkerPlugin (empty when no worker plugin is loaded).
+        """
+        return [pl.worker_status() for pl in self.plugins
+                if isinstance(pl, WorkerPlugin)]
+
 
     def register_routes(self, target: APIRouter):
         """
@@ -172,6 +357,16 @@ class PluginManager:
                 List of plugin class names.
             """
             return [type(pl).__name__ for pl in self.plugins]
+
+        @router.get("/workers", tags=["Plugins"])
+        def plugin_workers():
+            """List the resident background workers owned by plugins.
+
+            Returns:
+                One status dict per WorkerPlugin (enabled/running/details).
+            """
+            return self.worker_status()
+
 
         @router.post("/")
         def plugin_install(url: str):

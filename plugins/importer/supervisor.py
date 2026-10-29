@@ -1,4 +1,5 @@
-"""常驻 PDF 导入 worker（2026-10-25）：与 embedding worker 同构的后台循环。
+"""常驻 PDF 导入 worker（built-in plugin: ``plugins/importer``，原
+``jindai/import_worker.py``）：与 embedding worker 同构的后台循环。
 
 职责（吸收原 import_watchdog_fast.sh + auto_ingest_scoped 的核心逻辑）：
 1. 监测文件夹变动：每轮引擎自带磁盘 upsert（TTL 缓存），新 PDF 自动登记；
@@ -26,8 +27,9 @@ from typing import Optional
 from jindai.config import config
 from jindai import disk_guard
 from jindai.import_lists import DEFER_FILE, REPORTS, SKIP_FILE, pending_counts
+from jindai.plugin import WorkerPlugin
 
-log = logging.getLogger("jindai.import_worker")
+log = logging.getLogger("jindai.import_worker")   # 名字保留：运维日志 grep 依赖
 
 INFLIGHT_DIR = REPORTS / "import_direct_inflight"
 LOCK_FILE = REPORTS / "import_fast.lock"
@@ -124,11 +126,15 @@ def _blacklist(paths: set[str]) -> int:
     return len(new)
 
 
-class ImportManager:
+class ImportWorkerPlugin(WorkerPlugin):
     """常驻导入 supervisor：拉起/监督引擎子进程，维护状态供 /import/ API。"""
 
-    def __init__(self):
-        self.polling_task: Optional[asyncio.Task] = None
+    worker_name = "import worker"
+    enabled_key = "import_worker_enabled"
+    enabled_default = False
+
+    def __init__(self, pmanager=None, **conf):
+        super().__init__(pmanager, **conf)
         self.proc: Optional[asyncio.subprocess.Process] = None
         self.round_no = 0
         self.started_at: Optional[float] = None
@@ -140,7 +146,14 @@ class ImportManager:
         self.blacklisted_total = 0
         self.last_round_summary: Optional[dict] = None
         self.paused_external = False   # 锁被外部占用，worker 让路
-        self._stopping = False
+
+    def worker_details(self) -> dict:
+        """GET /plugins/workers 额外状态（supervisor 视角 + 引擎轮内快照）。"""
+        try:
+            st = self.status()
+        except Exception as ex:  # noqa: BLE001 - status must not break the API
+            return {"error": f"{type(ex).__name__}: {ex}"}
+        return {"supervisor": st.get("supervisor"), "engine": st.get("engine")}
 
     # ------------------------------------------------------------------ 状态
     def status(self) -> dict:
@@ -201,9 +214,9 @@ class ImportManager:
             log.exception("[worker] embed queue count failed")
 
     # ------------------------------------------------------------------ 主循环
-    async def polling_loop(self):
+    async def worker_loop(self):
         """后台循环：空闲探测 → 有待导入则拉起引擎子进程 → 监督其退出。"""
-        if not getattr(config, "import_worker_enabled", False):
+        if not self.worker_enabled:
             log.info("Import Worker disabled (config.import_worker_enabled = false).")
             return
         log.info("Import Worker started.")

@@ -1,5 +1,9 @@
 """Local embedding backend for ``embedding_api_base: local``.
 
+Part of the built-in **embedding plugin** (``plugins/embedding``); moved here
+from ``jindai/local_embedding.py`` (2026-10-29) and loaded lazily by
+``jindai.models.TextEmbeddings`` when the config asks for it.
+
 When the config sets ``embedding_api_base`` to the literal value
 ``local``, the app stops POSTing to an OpenAI-compatible
 ``/v1/embeddings`` server and instead runs the Hugging Face model named
@@ -48,7 +52,7 @@ import threading
 from pathlib import Path
 from typing import Optional
 
-from .config import config
+from jindai.config import config
 
 # Sentinel value: embedding_api_base == "local" selects this backend.
 LOCAL = "local"

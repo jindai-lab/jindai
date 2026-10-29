@@ -1,11 +1,11 @@
-"""手动清空/演练 jindai 回收站 ``/storage/.trash``（薄壳 → jindai.trash_purge）。
+"""手动清空/演练 jindai 回收站 ``/storage/.trash``（薄壳 → plugins.trash.purge）。
 
 背景：`DELETE /bibliography/{id}`（删文献记录）会把该记录关联的文件
 （path / file_attachments / cover）搬进 ``<storage>/.trash/<批次>/<原相对路径>``
-（见 `jindai/trash.py`）。核心清空逻辑已迁入主库 `jindai/trash_purge.py`：
-**常驻每周清空**（每周一 06:00，app lifespan 随容器启动拉起，
-config.trash_purge_enabled 开关，2026-10-25 起取代原 Hermes cronjob）就在那里。
-本 CLI 只用于手动演练/补跑：
+（见 `plugins/trash/core.py`）。清空逻辑现在是内置插件 `plugins/trash` 的一部分
+（`plugins/trash/purge.py`）：**常驻每周清空**（每周一 06:00，app lifespan 经
+PluginManager 拉起，config.trash_purge_enabled 开关，2026-10-25 起取代原 Hermes
+cronjob）就在那里。本 CLI 只用于手动演练/补跑：
 
   docker exec -w /app jindai /app/.venv/bin/python /app/batch_operation/purge_trash.py
   docker exec -w /app jindai /app/.venv/bin/python /app/batch_operation/purge_trash.py --apply
@@ -28,7 +28,7 @@ sys.path.insert(0, "/app")
 
 import common as C
 
-from jindai.trash_purge import purge_once
+from plugins.trash.purge import purge_once
 
 log = C.setup_logging("purge_trash", "batch_operation/reports/trash_purge.log")
 

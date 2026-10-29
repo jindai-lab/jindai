@@ -28,7 +28,7 @@ os.chdir(APP_ROOT)  # jindai.config resolves config.yaml from cwd unless -c give
 import asyncpg  # noqa: E402
 import httpx  # noqa: E402
 from jindai.config import config  # noqa: E402
-from jindai import local_embedding  # noqa: E402  (embedding_api_base: local backend)
+from plugins.embedding import local_backend  # noqa: E402  (embedding_api_base: local backend)
 from jindai.models import TextEmbeddings  # noqa: E402  (for get_chunks parity)
 
 # --- embedding endpoint (from config.yaml) --------------------------------
@@ -94,10 +94,10 @@ class EmbeddingClient:
     async def embed(self, texts: list[str]) -> list[list[float]]:
         if not texts:
             return []
-        if local_embedding.is_local(config.embedding_api_base):
+        if local_backend.is_local(config.embedding_api_base):
             # Same local-GPU backend as the app itself (embedding_api_base:
             # local) - no HTTP endpoint exists in this mode.
-            return await local_embedding.encode([t.strip() for t in texts])
+            return await local_backend.encode([t.strip() for t in texts])
         payload = {"model": EMBED_MODEL, "input": [t.strip() for t in texts]}
         last: Exception | None = None
         for attempt in range(self._retries):

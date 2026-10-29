@@ -42,11 +42,11 @@ docker exec -w /app jindai /app/.venv/bin/python /app/batch_operation/clean_queu
 - **断点续跑**：两个批处理都用 anti-join（没有就做、有就跳过），中断后直接重跑。
 - **队列对账**：`embedding_pending_queue` 每行 = 一个待嵌入段落；脚本嵌入成功后删除对应行，
   UI 的 queued 计数随之下降。触发器在 paragraph 插入时自动入队。
-- **与轮询协程共存**：`jindai/resources.py` 的 Embedding Polling Loop 也是消费者；
+- **与轮询协程共存**：内置插件 `plugins/embedding` 的 EmbeddingWorkerPlugin 也是消费者；
   写入均为 `ON CONFLICT DO NOTHING`，重复消费幂等、不报错。
 - **嵌入端点**：`config.yaml` 的 `embedding_api_base: local` → 进程内跑 HF 模型
   `embedding_model`（BAAI/bge-m3，onnxruntime-gpu CUDA EP，1024 维，见
-  `jindai/local_embedding.py`）；旧的本机 bge_m3 服务（端口 8090）已于 2026-10-07 删除。
+  `plugins/embedding/local_backend.py`）；旧的本机 bge_m3 服务（端口 8090）已于 2026-10-07 删除。
   rerank 走 `rerank_api_base`/`rerank_api_key`（云端，代码见 `jindai/models.py`）。
   **精度**：`embedding_onnx_path` 指向低精度 ONNX，现设 `quant/bge-m3-fp16.onnx`（1.06GiB，
   HF 官方 fp32 是 2.11GiB）；留空则回落到官方 fp32 导出。fp16 版转换脚本

@@ -482,7 +482,8 @@ async def run_round(keep: list[str], workers: int = 4, batch: int = 200,
     """跑一轮导入（给定文件清单）。返回 summary dict。
 
     崩溃隔离：本函数在调用方进程内跑；pymupdf 段错误会杀死整个进程——
-    常驻 ImportManager 以子进程方式调用 CLI 壳获得隔离（见 import_worker.py）。
+    常驻 ImportWorkerPlugin 以子进程方式调用 CLI 壳获得隔离
+    （见 plugins/importer/supervisor.py）。
     """
     if logfn is None:
         logfn = make_logfn()
